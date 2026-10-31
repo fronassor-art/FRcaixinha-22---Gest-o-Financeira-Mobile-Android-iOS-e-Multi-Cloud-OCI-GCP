@@ -181,3 +181,5 @@ M	dist/index.html
 A	package-lock.json
 M	package.json
 ```
+
+PR aberta em modo rascunho, sem merge: https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP/pull/1. O commit `8b2faa20c6189dcfdc38c63a2a0759d6b6847064` é o snapshot sincronizado da árvore que gerou o APK; commits posteriores nesta branch alteram apenas este relatório.
