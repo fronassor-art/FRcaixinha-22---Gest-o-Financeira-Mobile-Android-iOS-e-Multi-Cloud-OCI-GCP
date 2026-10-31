@@ -1,0 +1,6 @@
+{
+  "name": "FRcaixinha 2.2 - Gestão Financeira de Caixinhas",
+  "description": "Sistema completo de automação financeira para caixinhas privadas, com cálculo de amortização Price, rateio Capital-Dias V2, conciliação Pix e isolamento patrimonial auditável.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
