@@ -183,3 +183,5 @@ M	package.json
 ```
 
 PR aberta em modo rascunho, sem merge: https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP/pull/1. O commit `8b2faa20c6189dcfdc38c63a2a0759d6b6847064` é o snapshot sincronizado da árvore que gerou o APK; commits posteriores nesta branch alteram apenas este relatório.
+
+Nota de tempo e ambiente: a primeira leitura explícita do relógio durante o inventário foi **31/10/2026 03:58:57 UTC**; o estado inicial da árvore foi capturado pouco antes, sem carimbo de segundo próprio. O CI usou `ubuntu-latest`, Node 24 configurado por `setup-node` e Java 21 por `setup-java`; a versão exata do npm/Gradle efetivamente executada não foi registrada no log resumido, enquanto o wrapper declara Gradle 8.14.3. A comparação de SHA do APK prova o artefato local, e o build do CI prova compilação a partir da branch; não foi reivindicada igualdade binária entre os dois APKs.
