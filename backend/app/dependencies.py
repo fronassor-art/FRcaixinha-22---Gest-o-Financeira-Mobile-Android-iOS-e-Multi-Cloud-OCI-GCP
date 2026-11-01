@@ -75,7 +75,7 @@ def require_master(session: AuthenticatedSession = Depends(get_current_session))
     """
     Garante acesso exclusivo ao Administrador Master da plataforma.
     """
-    if session.role != "MASTER" and not session.is_master:
+    if session.role != "MASTER" or not session.is_master:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso Proibido: Esta operação exige o papel de Administrador Master da plataforma."
@@ -89,7 +89,7 @@ def require_tenant_access(target_tenant_id: str, session: AuthenticatedSession =
     2. Admin A NÃO acessa caixinha B.
     3. Membro Acessa SOMENTE sua caixinha e seus próprios dados.
     """
-    if session.role == "MASTER":
+    if session.role == "MASTER" or session.is_master:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso Proibido ao Master: O perfil Master gerencia apenas licenças e suporte técnico. "
@@ -97,6 +97,9 @@ def require_tenant_access(target_tenant_id: str, session: AuthenticatedSession =
                    "(Cláusula 2.8 de Segregação Patrimonial e LGPD)."
         )
         
+    if session.role not in ("TENANT_ADMIN", "TENANT_MEMBER"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Papel de acesso inválido.")
+
     if session.role == "TENANT_ADMIN":
         if session.tenant_id != target_tenant_id:
             raise HTTPException(

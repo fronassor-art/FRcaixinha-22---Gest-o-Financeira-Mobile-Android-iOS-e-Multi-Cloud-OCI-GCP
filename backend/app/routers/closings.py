@@ -26,6 +26,10 @@ def to_cents(val) -> Decimal:
         return val.quantize(CENTS, rounding=ROUND_HALF_UP)
     return Decimal(str(val)).quantize(CENTS, rounding=ROUND_HALF_UP)
 
+def capital_days_weight(amount: Decimal, paid_on: date, cycle_end: date) -> Decimal:
+    """Corte na data de encerramento; data de liquidação não estende o ciclo."""
+    return (amount * Decimal(max(0, (cycle_end - paid_on).days))).quantize(WEIGHT_PRECISION)
+
 @router.post("", response_model=CycleClosingResponse)
 async def close_cycle(
     tenant_id: str,
@@ -50,6 +54,10 @@ async def close_cycle(
             detail="Apenas administradores de caixinha podem realizar o fechamento anual de ciclo."
         )
 
+    # A rotina abaixo ainda marca o ciclo como liquidado sem confirmação bancária,
+    # e o histórico de pagamentos parciais não permite apuração completa.
+    raise HTTPException(status_code=503, detail="Fechamento indisponível até validação da apuração e conciliação da liquidação.")
+
     # 1. Busca dados do ciclo
     cycle = await conn.fetchrow("""
         SELECT id, year, start_date, end_date, settlement_date, status
@@ -64,7 +72,7 @@ async def close_cycle(
     if cycle["status"] == "LIQUIDADO":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ciclo já se encontra liquidado.")
 
-    settlement_date = cycle["settlement_date"]
+    cycle_end_date = cycle["end_date"]
 
     # 2. Busca receita realizada na conta contábil canônica 4.1.1 (Receita Realizada de Juros, Mora e Multas)
     acc_receita = await conn.fetchrow("""
@@ -107,8 +115,7 @@ async def close_cycle(
         m_id = str(cr["membership_id"])
         amt = Decimal(str(cr["amount_paid"]))
         p_date = cr["paid_at"].date() if isinstance(cr["paid_at"], datetime) else cr["paid_at"]
-        days_in_cycle = max(0, (settlement_date - p_date).days)
-        weight_item = (amt * Decimal(str(days_in_cycle))).quantize(WEIGHT_PRECISION)
+        weight_item = capital_days_weight(amt, p_date, cycle_end_date)
         member_weights[m_id] = member_weights.get(m_id, Decimal("0.0000")) + weight_item
 
     class MemberCalc:

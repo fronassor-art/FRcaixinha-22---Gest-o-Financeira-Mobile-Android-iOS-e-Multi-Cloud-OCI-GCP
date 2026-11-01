@@ -8,7 +8,7 @@ REGRAS DE SEGURANÇA:
 2. Executável UMA ÚNICA VEZ: aborta com erro se já existir qualquer usuário Master no banco.
 3. Recusa execução se CONFIRM_MASTER_PROVISIONING não estiver explicitamente definido como 'YES'.
 4. NUNCA imprime senha, segredo ou hash em logs ou na saída padrão.
-5. Armazena credencial com hash criptográfico seguro (Argon2id / PBKDF2-SHA256 com salt).
+5. Armazena credencial com hash criptográfico seguro (Argon2id ou bcrypt).
 """
 
 import os
@@ -39,8 +39,8 @@ def main():
     master_email = os.getenv("MASTER_EMAIL")
     master_password = os.getenv("MASTER_PASSWORD")
     master_name = os.getenv("MASTER_NAME", "Administrador Master da Plataforma")
-    master_cpf = os.getenv("MASTER_CPF", "000.000.000-00")
-    master_phone = os.getenv("MASTER_PHONE", "(00) 00000-0000")
+    master_cpf = os.getenv("MASTER_CPF", "").strip()
+    master_phone = os.getenv("MASTER_PHONE", "").strip()
     
     if not master_email or "@" not in master_email:
         print("[ERRO] E-mail do Administrador Master inválido.")
@@ -48,6 +48,10 @@ def main():
         
     if not master_password or len(master_password) < 12:
         print("[ERRO] A senha do Master deve possuir no mínimo 12 caracteres.")
+        sys.exit(1)
+
+    if not master_cpf or not master_phone:
+        print("[ERRO] Informe MASTER_CPF e MASTER_PHONE no ambiente protegido.")
         sys.exit(1)
         
     # Validação 3: Conexão com banco de dados
@@ -60,9 +64,12 @@ def main():
 
     # Execução real contra PostgreSQL (quando DATABASE_URL estiver ativa)
     try:
-        import psycopg2
-        conn = psycopg2.connect(db_url)
+        import psycopg
+        conn = psycopg.connect(db_url)
         cur = conn.cursor()
+
+        # Serializa tentativas concorrentes no mesmo banco durante a transação.
+        cur.execute("SELECT pg_advisory_xact_lock(706719221346)")
         
         # Verificar se já existe Master no banco
         cur.execute("SELECT COUNT(*) FROM users WHERE is_master = TRUE;")
@@ -90,10 +97,11 @@ def main():
         """, (new_user_id, master_email.lower().strip(), master_name, master_cpf, master_phone))
         
         # Inserir credencial criptografada
+        algorithm = 'argon2id' if pwd_hash.startswith('$argon2id$') else 'bcrypt'
         cur.execute("""
             INSERT INTO credentials (user_id, password_hash, algorithm, created_at)
-            VALUES (%s, %s, 'argon2id', NOW());
-        """, (new_user_id, pwd_hash))
+            VALUES (%s, %s, %s, NOW());
+        """, (new_user_id, pwd_hash, algorithm))
         
         # Inserir evento na trilha de auditoria imutável
         cur.execute("""
@@ -111,8 +119,8 @@ def main():
         sys.exit(0)
         
     except ImportError:
-        print("[AVISO] Driver psycopg2 não instalado no ambiente local.")
-        print("Para executar este script contra um PostgreSQL real, instale psycopg2 ou utilize asyncpg.")
+        print("[AVISO] Driver psycopg não instalado no ambiente local.")
+        print("Instale as dependências declaradas em backend/requirements.txt.")
         sys.exit(4)
     except Exception as err:
         print(f"[ERRO DE CONEXÃO] Falha ao executar migração contra banco: {type(err).__name__}")

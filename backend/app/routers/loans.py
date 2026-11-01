@@ -413,6 +413,8 @@ async def disburse_loan(
     """
     require_tenant_access(tenant_id, session)
 
+    raise HTTPException(status_code=503, detail="Desembolso indisponível até integração e confirmação bancária.")
+
     if session.role != "TENANT_ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -483,6 +485,8 @@ async def repay_loan_installment(
     Lançamento contábil atômico: Débito em 1.1.1 (Caixa), Crédito em 1.2.1 (Crédito) e 4.1.1 (Receitas).
     """
     require_tenant_access(tenant_id, session)
+
+    raise HTTPException(status_code=503, detail="Baixa de pagamento indisponível até conciliação bancária.")
 
     loan = await conn.fetchrow("""
         SELECT * FROM loans WHERE id = $1 AND tenant_id = $2 FOR UPDATE;
@@ -618,6 +622,8 @@ async def settle_loan_early(
     Quitação antecipada integral com 100% de desconto nos juros vincendos (Cláusula 8.6).
     """
     require_tenant_access(tenant_id, session)
+
+    raise HTTPException(status_code=503, detail="Quitação indisponível até conciliação bancária.")
 
     loan = await conn.fetchrow("""
         SELECT * FROM loans WHERE id = $1 AND tenant_id = $2 FOR UPDATE;
