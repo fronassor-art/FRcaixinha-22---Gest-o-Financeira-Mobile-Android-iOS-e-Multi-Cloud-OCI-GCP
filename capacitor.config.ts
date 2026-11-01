@@ -10,12 +10,19 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * 3. cleartext desabilitado por padrão (tráfego seguro HTTPS obrigatório).
  * 4. Nenhuma credencial ou URL privada embutida estaticamente no pacote.
  */
+// Variant local de homologação: apenas APK debug e API no próprio celular.
+// O CI exige uma URL exata para impedir empacotar hosts remotos sem TLS.
+const localAndroidTest = process.env.FRCAIXINHA_ANDROID_LOCAL_TEST === '1';
+if (localAndroidTest && process.env.VITE_API_URL !== 'http://127.0.0.1:8000') {
+  throw new Error('Build Android local exige VITE_API_URL=http://127.0.0.1:8000.');
+}
+
 const config: CapacitorConfig = {
   appId: 'com.frcaixinha.app',
   appName: 'FRcaixinha 2.2',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
+    androidScheme: localAndroidTest ? 'http' : 'https',
     cleartext: false,
   },
   plugins: {

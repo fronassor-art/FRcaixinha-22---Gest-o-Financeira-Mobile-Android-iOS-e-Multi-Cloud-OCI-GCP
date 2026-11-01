@@ -40,7 +40,15 @@ function serverUser(user: any): AuthenticatedUser {
 export function getApiBaseUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_API_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/$/, '');
+    const candidate = envUrl.trim().replace(/\/$/, '');
+    try {
+      const parsed = new URL(candidate);
+      // HTTP somente no loopback; acesso remoto exige HTTPS.
+      if (parsed.protocol === 'https:' ||
+          (parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname))) {
+        return candidate;
+      }
+    } catch { /* URL inválida: bloqueio seguro. */ }
   }
   return '';
 }

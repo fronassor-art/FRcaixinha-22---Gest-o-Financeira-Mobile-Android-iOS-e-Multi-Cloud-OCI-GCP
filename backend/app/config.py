@@ -35,7 +35,10 @@ class Settings(BaseModel):
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:8080",
-        os.getenv("APP_URL", "")
+        os.getenv("APP_URL", ""),
+        # WebView local só em homologação explícita: não habilitar em produção.
+        *(["http://localhost"] if os.getenv("FRCAIXINHA_TERMUX_LOCAL_API") == "1"
+          and os.getenv("ENVIRONMENT", "development") != "production" else []),
     ]
     
     # Provedor de envio de e-mails para recuperação de senha (SMTP / SendGrid)

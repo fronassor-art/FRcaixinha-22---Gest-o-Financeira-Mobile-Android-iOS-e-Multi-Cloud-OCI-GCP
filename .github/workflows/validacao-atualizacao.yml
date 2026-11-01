@@ -47,8 +47,15 @@ jobs:
           java-version: '21'
       - name: Instalar dependências
         run: npm ci
-      - name: Build e sincronização Capacitor
+      - name: Build e sincronização Capacitor (FastAPI no loopback do APK debug)
+        env:
+          FRCAIXINHA_ANDROID_LOCAL_TEST: '1'
+          VITE_API_URL: http://127.0.0.1:8000
         run: npm run cap:build
+      - name: Validar URL e esquema Android debug
+        run: |
+          node -e "const c=require('./android/app/src/main/assets/capacitor.config.json'); if(c.server.androidScheme!=='http' || c.server.cleartext!==false) process.exit(1)"
+          grep -RlF 'http://127.0.0.1:8000' dist/assets | grep -q .
       - name: Compilar APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
@@ -81,6 +88,7 @@ jobs:
         run: |
           python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
           python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
+          python -m pytest -q backend/tests/test_termux_local_backend.py
 
   postgres-isolado:
     name: Migrações e testes de RLS em PostgreSQL descartável
@@ -151,6 +159,16 @@ jobs:
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
+
+      - name: Testar prontidão FastAPI com PostgreSQL descartável
+        env:
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          FRCAIXINHA_TEST_AUTH: '1'
+          ENVIRONMENT: homologation
+          AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q backend/tests/test_termux_readiness_ci.py
 
       - name: Testar bootstrap em banco descartável
         env:

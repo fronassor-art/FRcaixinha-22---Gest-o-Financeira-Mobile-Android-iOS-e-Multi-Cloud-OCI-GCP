@@ -3,9 +3,12 @@ FRcaixinha 2.2 — Entrada Principal do Backend FastAPI
 Contrato Técnico Mestre (Cláusulas 1.2, 14.1 e 16.2)
 """
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
+from .dependencies import auth_database_url
+import asyncio
+import asyncpg
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit
 
 app = FastAPI(
@@ -57,3 +60,33 @@ def health_check():
         "database_configured": settings.is_database_configured,
         "environment": "sandbox-development"
     }
+
+
+@app.get("/api/health/ready")
+async def backend_readiness():
+    """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
+    if not settings.is_database_configured:
+        raise HTTPException(status_code=503, detail="PostgreSQL não configurado.")
+    # Jamais marcar pronto em produção: o login atual é somente de homologação.
+    auth_url = auth_database_url()
+    try:
+        finance = await asyncpg.connect(settings.DATABASE_URL, timeout=3, command_timeout=3)
+        try:
+            await finance.fetchval("SELECT 1")
+        finally:
+            await finance.close()
+        auth = await asyncpg.connect(auth_url, timeout=3, command_timeout=3)
+        try:
+            structure_ok = await auth.fetchrow(
+                "SELECT to_regclass('public.users') IS NOT NULL AS users_ok, "
+                "to_regclass('public.credentials') IS NOT NULL AS credentials_ok, "
+                "to_regclass('public.sessions') IS NOT NULL AS sessions_ok, "
+                "to_regprocedure('public.auth_active_memberships(uuid)') IS NOT NULL AS links_ok"
+            )
+        finally:
+            await auth.close()
+        if not structure_ok or not all(structure_ok.values()):
+            raise HTTPException(status_code=503, detail="Estrutura de autenticação ainda não validada.")
+    except (asyncpg.PostgresError, OSError, asyncio.TimeoutError, TimeoutError):
+        raise HTTPException(status_code=503, detail="Banco de homologação indisponível.")
+    return {"status": "READY_FOR_TEST_AUTH", "scope": "LOCAL_HOMOLOGATION_ONLY"}
