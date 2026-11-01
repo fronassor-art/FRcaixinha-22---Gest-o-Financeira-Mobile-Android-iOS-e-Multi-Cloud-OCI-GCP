@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Literal
 import uuid
 from ..dependencies import require_master, AuthenticatedSession
+from ..database import get_rls_db_connection
 
 router = APIRouter(prefix="/master", tags=["Governança Master da Plataforma"])
 
