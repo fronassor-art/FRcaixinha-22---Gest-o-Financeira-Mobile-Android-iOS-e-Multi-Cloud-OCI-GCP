@@ -118,6 +118,30 @@ async def test_application_role_cannot_access_password_hashes_or_rewrite_audit(i
         assert not await conn.fetchval("SELECT has_table_privilege(current_user, 'public.audit_events', $1)", privilege)
 
 
+async def test_contributions_restricted_by_user_and_tenant(isolated_rows):
+    from datetime import date
+    conn, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    cycle, first, second = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    try:
+        await admin.execute("INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) VALUES($1,$2,2027,$3,$4,$5)", cycle, ids['tenant_a'], date(2027,1,1), date(2027,12,31), date(2028,1,10))
+        for item, membership in ((first, ids['membership_a']), (second, ids['membership_a2'])):
+            await admin.execute("INSERT INTO contributions(id,tenant_id,cycle_id,membership_id,competence,due_date,amount_due) VALUES($1,$2,$3,$4,'2027-01',$5,100)", item, ids['tenant_a'], cycle, membership, date(2027,1,10))
+        async def visible(user, tenant, role):
+            async with conn.transaction():
+                await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(user))
+                await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)", str(tenant))
+                await conn.execute("SELECT set_config('app.current_role',$1,true)", role)
+                return {row['id'] for row in await conn.fetch('SELECT id FROM contributions')}
+        assert await visible(ids['admin_a'], ids['tenant_a'], 'TENANT_ADMIN') == {first, second}
+        assert await visible(ids['member_a'], ids['tenant_a'], 'TENANT_MEMBER') == {first}
+        assert await visible(ids['member_b'], ids['tenant_a'], 'TENANT_MEMBER') == set()
+        assert await visible(ids['master'], ids['tenant_a'], 'TENANT_MEMBER') == set()
+        assert not await conn.fetchval("SELECT has_table_privilege(current_user,'public.contributions','UPDATE')")
+    finally:
+        await admin.close()
+
+
 async def test_experimental_login_real_database_roles_and_logout(isolated_rows, monkeypatch):
     from httpx import ASGITransport, AsyncClient
     from app.main import app

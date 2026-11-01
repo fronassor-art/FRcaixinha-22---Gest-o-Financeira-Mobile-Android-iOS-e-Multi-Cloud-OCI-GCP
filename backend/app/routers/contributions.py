@@ -146,6 +146,9 @@ async def pay_contribution(
     """
     require_tenant_access(tenant_id, session)
 
+    # Não apresentar como pagável o código fictício sem provedor configurado.
+    raise HTTPException(status_code=503, detail="Cobrança Pix indisponível até integração com provedor e conciliação autenticada.")
+
     if session.role == "MASTER":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

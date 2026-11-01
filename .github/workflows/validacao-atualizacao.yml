@@ -121,6 +121,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/004_quota_read_isolation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/005_restrict_identity_privileges.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/006_auth_test_access.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/007_contribution_read_isolation.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1

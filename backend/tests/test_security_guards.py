@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.dependencies import AuthenticatedSession, require_master, require_tenant_access
 from app.routers.closings import capital_days_weight, close_cycle
 from app.routers.loans import disburse_loan, repay_loan_installment, settle_loan_early
+from app.routers.contributions import pay_contribution
 from app.main import app
 
 
@@ -52,6 +53,7 @@ async def test_financial_completion_is_blocked_without_bank_reconciliation():
         disburse_loan("tenant", "loan", session(), None),
         repay_loan_installment("tenant", "loan", None, session(), None),
         settle_loan_early("tenant", "loan", session(), None),
+        pay_contribution("tenant", "contribution", None, session(), None),
     ]
     for call in calls:
         with pytest.raises(HTTPException) as exc:
