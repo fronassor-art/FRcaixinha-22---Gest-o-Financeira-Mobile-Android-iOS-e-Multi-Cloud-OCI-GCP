@@ -6,6 +6,8 @@ Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 4.1 e 16.4)
 from fastapi import Request, HTTPException, status, Depends
 from typing import Optional
 import datetime
+import os
+import asyncpg
 from .security import hash_token
 from .config import settings
 
@@ -18,58 +20,64 @@ class AuthenticatedSession:
         self.name = name
         self.is_master = is_master
 
-# Repositório de sessões em memória para verificação no backend
-_active_server_sessions = {}
+def auth_database_url() -> str:
+    """Papel dedicado de autenticação em homologação; nunca o papel financeiro."""
+    url = os.getenv('AUTH_DATABASE_URL', '')
+    if (os.getenv('FRCAIXINHA_TEST_AUTH') != '1'
+            or os.getenv('ENVIRONMENT', 'development') == 'production'
+            or not url.startswith('postgres')):
+        raise HTTPException(status_code=503, detail='Autenticação disponível apenas em homologação configurada.')
+    return url
 
-def get_current_session(request: Request) -> AuthenticatedSession:
-    """
-    Extrai o token do cabeçalho Authorization ou do cookie HttpOnly seguro.
-    O cliente NUNCA determina o próprio papel ou tenant.
-    """
-    token = None
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-    elif settings.SESSION_COOKIE_NAME in request.cookies:
-        token = request.cookies[settings.SESSION_COOKIE_NAME]
-        
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Autenticação necessária. Sessão ausente ou malformada.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-        
-    token_digest = hash_token(token)
-    session_data = _active_server_sessions.get(token_digest)
-    
-    if not session_data:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sessão não encontrada ou revogada.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-        
-    expires_at = session_data.get("expires_at")
-    if not expires_at or datetime.datetime.now(datetime.timezone.utc) > expires_at:
-        _active_server_sessions.pop(token_digest, None)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sua sessão expirou por tempo de inatividade. Faça login novamente.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-        
-    # Deslizar expiração por 15 minutos em caso de atividade legítima
-    session_data["expires_at"] = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS)
-    
-    return AuthenticatedSession(
-        user_id=session_data["user_id"],
-        role=session_data["role"],
-        tenant_id=session_data.get("tenant_id"),
-        email=session_data["email"],
-        name=session_data["name"],
-        is_master=session_data.get("is_master", False)
-    )
+
+def bearer_token(request: Request) -> str:
+    header = request.headers.get('Authorization', '')
+    if header.startswith('Bearer ') and len(header.split(' ', 1)[1]) > 0:
+        return header.split(' ', 1)[1]
+    if settings.SESSION_COOKIE_NAME in request.cookies:
+        return request.cookies[settings.SESSION_COOKIE_NAME]
+    raise HTTPException(status_code=401, detail='Autenticação necessária. Sessão ausente.', headers={'WWW-Authenticate': 'Bearer'})
+
+
+async def get_current_session(request: Request) -> AuthenticatedSession:
+    """Verifica hash, revogação, expiração e vínculo ativo no PostgreSQL."""
+    digest = hash_token(bearer_token(request))
+    try:
+        conn = await asyncpg.connect(auth_database_url(), timeout=5)
+        try:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "SELECT s.user_id,s.active_role,s.active_tenant_id,s.expires_at,s.revoked_at,"
+                    "u.email,u.full_name,u.is_master,u.status "
+                    "FROM public.sessions s JOIN public.users u ON u.id=s.user_id "
+                    "WHERE s.token_hash=$1 FOR UPDATE OF s", digest)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                if (not row or row['revoked_at'] or row['expires_at'] <= now
+                        or row['status'] != 'ACTIVE'):
+                    raise HTTPException(status_code=401, detail='Sessão ausente, revogada ou expirada.')
+                if row['active_role'] == 'MASTER':
+                    valid = row['is_master'] and row['active_tenant_id'] is None
+                else:
+                    links = await conn.fetch(
+                        'SELECT tenant_id,role FROM public.auth_active_memberships($1)', row['user_id'])
+                    valid = any(link['tenant_id'] == row['active_tenant_id'] and
+                                link['role'] == row['active_role'] for link in links)
+                if not valid:
+                    raise HTTPException(status_code=401, detail='Vínculo ativo não encontrado.')
+                await conn.execute(
+                    'UPDATE public.sessions SET expires_at=$2 WHERE token_hash=$1',
+                    digest, now + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS))
+            return AuthenticatedSession(
+                str(row['user_id']), row['active_role'],
+                str(row['active_tenant_id']) if row['active_tenant_id'] else None,
+                row['email'], row['full_name'], row['is_master'])
+        finally:
+            await conn.close()
+    except HTTPException:
+        raise
+    except (asyncpg.PostgresError, OSError, TimeoutError):
+        raise HTTPException(status_code=503, detail='Serviço de autenticação indisponível.')
+
 
 def require_master(session: AuthenticatedSession = Depends(get_current_session)) -> AuthenticatedSession:
     """
@@ -89,7 +97,7 @@ def require_tenant_access(target_tenant_id: str, session: AuthenticatedSession =
     2. Admin A NÃO acessa caixinha B.
     3. Membro Acessa SOMENTE sua caixinha e seus próprios dados.
     """
-    if session.role == "MASTER" or session.is_master:
+    if session.role == "MASTER":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso Proibido ao Master: O perfil Master gerencia apenas licenças e suporte técnico. "

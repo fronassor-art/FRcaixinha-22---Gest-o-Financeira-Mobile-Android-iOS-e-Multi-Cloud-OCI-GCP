@@ -12,6 +12,11 @@ export interface AuthenticatedUser {
   tenantId?: string;
 }
 
+export interface AuthContext {
+  role: AuthenticatedUser['role'];
+  tenant_id: string | null;
+}
+
 export interface AuthStatusResponse {
   status: string;
   configured: boolean;
@@ -80,7 +85,7 @@ class AuthService {
   }
 
   public getToken(): string | null {
-    return this.token;
+    return this.isAuthenticated() ? this.token : null;
   }
 
   public getUser(): AuthenticatedUser | null {
@@ -204,6 +209,36 @@ class AuthService {
     this.notify();
 
     return this.user!;
+  }
+
+  public async listContexts(): Promise<AuthContext[]> {
+    if (!this.isAuthenticated()) return [];
+    const res = await fetch(getApiBaseUrl() + '/api/v1/auth/contexts', {
+      headers: { Authorization: 'Bearer ' + this.token },
+    });
+    if (res.status === 401) { this.invalidateSession(); return []; }
+    if (!res.ok) throw new Error('Não foi possível consultar os vínculos.');
+    return res.json();
+  }
+
+  public async switchContext(context: AuthContext): Promise<AuthenticatedUser> {
+    if (!this.isAuthenticated()) throw new Error('Sessão expirada.');
+    const res = await fetch(getApiBaseUrl() + '/api/v1/auth/switch-context', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token },
+      body: JSON.stringify({ target_role: context.role, target_tenant_id: context.tenant_id }),
+    });
+    if (res.status === 401) { this.invalidateSession(); throw new Error('Sessão expirada.'); }
+    if (!res.ok) throw new Error('Vínculo não autorizado ou indisponível.');
+    this.user = serverUser(await res.json());
+    this.notify();
+    return this.user;
+  }
+
+  public invalidateSession(): void {
+    this.clearSession();
+    this.notify();
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('frcaixinha:session-expired'));
   }
 
   public async logout(): Promise<void> {

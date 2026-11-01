@@ -33,11 +33,12 @@ def test_only_master_context_can_manage_master():
 
 
 def test_unknown_or_master_role_cannot_access_tenant():
-    for candidate in (session("UNKNOWN"), session("MASTER", True), session("TENANT_MEMBER", True)):
+    for candidate in (session("UNKNOWN"), session("MASTER", True)):
         with pytest.raises(HTTPException) as exc:
             require_tenant_access("tenant", candidate)
         assert exc.value.status_code == 403
     assert require_tenant_access("tenant", session("TENANT_MEMBER"))
+    assert require_tenant_access("tenant", session("TENANT_MEMBER", True))
     with pytest.raises(HTTPException):
         require_tenant_access("another", session("TENANT_ADMIN"))
 

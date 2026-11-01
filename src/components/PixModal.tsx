@@ -26,7 +26,7 @@ export const PixModal: React.FC<PixModalProps> = ({
 
   if (!isOpen) return null;
 
-  const pixKeyMock = `00020126580014br.gov.bcb.pix0136${referenceId}5204000053039865406${amount.toFixed(2)}5802BR5925${recipientName.slice(0, 25)}6009SAO PAULO62070503***6304E8A2`;
+  const pixKeyMock = 'DADOS FICTÍCIOS — NÃO É UM CÓDIGO PIX PAGÁVEL';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(pixKeyMock);
@@ -102,7 +102,7 @@ export const PixModal: React.FC<PixModalProps> = ({
           {/* Copia e Cola */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Código Pix Copia e Cola (Demonstração)
+              Identificador ilustrativo, sem pagamento
             </label>
             <div className="flex items-center gap-2">
               <input

@@ -81,7 +81,9 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
   const [moraPendingInput, setMoraPendingInput] = useState<number>(9.60); // Exemplo do documento (2 cotas)
   const [moraDaysInput, setMoraDaysInput] = useState<number>(10);
 
-  const currentCampaign = state.bolaoCampaigns.find(c => c.id === selectedCampaignId) || state.bolaoCampaigns[0];
+  const visibleCampaigns = state.bolaoCampaigns.filter(c => c.tenant_id === state.currentTenantId);
+  const currentCampaign = visibleCampaigns.find(c => c.id === selectedCampaignId) || visibleCampaigns[0];
+  if (!currentCampaign) return <div role="status" className="p-4 text-sm">Nenhum bolão demonstrativo nesta caixinha.</div>;
   const participations = state.bolaoParticipations.filter(p => p.campaign_id === currentCampaign.id);
 
   const isAdminOrMaster = state.currentRole === 'TENANT_ADMIN' || state.currentRole === 'MASTER';
@@ -294,7 +296,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
 
         {/* Seletor das 3 Campanhas Especiais do Calendário Anual (Seção 2) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6 pt-5 border-t border-slate-800/80">
-          {state.bolaoCampaigns.map(camp => {
+          {visibleCampaigns.map(camp => {
             const isSelected = camp.id === selectedCampaignId;
             return (
               <div
@@ -1056,7 +1058,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
                 {currentCampaign.campaign_name}
               </h2>
               <p className="text-xs text-slate-500">
-                Caixinha: <strong>{state.tenants[0]?.display_name}</strong> • Concurso Oficial #{currentCampaign.contest_number || 'A CONFIRMAR'}
+                Caixinha: <strong>{state.tenants.find(t => t.id === state.currentTenantId)?.display_name}</strong> • Concurso Oficial #{currentCampaign.contest_number || 'A CONFIRMAR'}
               </p>
             </div>
 

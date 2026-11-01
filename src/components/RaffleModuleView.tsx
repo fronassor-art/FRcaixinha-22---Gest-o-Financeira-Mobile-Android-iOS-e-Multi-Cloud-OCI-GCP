@@ -79,7 +79,9 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
   const [annualQuotasInput, setAnnualQuotasInput] = useState<number>(20);
   const [annualPrizeInput, setAnnualPrizeInput] = useState<number>(200.00);
 
-  const currentCampaign = state.raffleCampaigns.find(c => c.id === selectedCampaignId) || state.raffleCampaigns[0];
+  const visibleCampaigns = state.raffleCampaigns.filter(c => c.tenant_id === state.currentTenantId);
+  const currentCampaign = visibleCampaigns.find(c => c.id === selectedCampaignId) || visibleCampaigns[0];
+  if (!currentCampaign) return <div role="status" className="p-4 text-sm">Nenhuma rifa demonstrativa nesta caixinha.</div>;
   const campaignCards = state.raffleCards.filter(c => c.campaign_id === currentCampaign.id);
 
   // Se o usuário for membro regular, destacamos ou filtramos suas cartelas
@@ -264,7 +266,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
 
         {/* Calendário Central das 3 Campanhas Anuais (Seção 2 do Documento) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6 pt-5 border-t border-slate-800/80">
-          {state.raffleCampaigns.map(camp => {
+          {visibleCampaigns.map(camp => {
             const isSelected = camp.id === selectedCampaignId;
             return (
               <div

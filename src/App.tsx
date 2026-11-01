@@ -46,13 +46,16 @@ import { MobileInstallModal } from './components/MobileInstallModal';
 import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
-import { authService, AuthenticatedUser } from './services/authService';
+import { authService, AuthenticatedUser, AuthContext } from './services/authService';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
   const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(() => authService.getUser());
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
+  const [contexts, setContexts] = useState<AuthContext[]>([]);
+  const [changingContext, setChangingContext] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
 
   // Modais globais
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -93,6 +96,7 @@ export default function App() {
       if (user) {
         setAuthenticatedUser(user);
         appStore.setAuthenticatedContext(user);
+        authService.listContexts().then(setContexts).catch(() => setContexts([]));
       } else {
         setAuthenticatedUser(null);
         appStore.clearAuthenticatedContext();
@@ -103,6 +107,7 @@ export default function App() {
       const user = authService.getUser();
       setAuthenticatedUser(user);
       if (!user) {
+        setContexts([]);
         appStore.clearAuthenticatedContext();
       }
     });
@@ -122,6 +127,7 @@ export default function App() {
     setAuthenticatedUser(user);
     setSessionExpiredNotice(false);
     appStore.setAuthenticatedContext(user);
+    authService.listContexts().then(setContexts).catch(() => setContexts([]));
     if (user.role === 'MASTER') {
       setActiveTab('DASHBOARD');
     } else if (user.role === 'TENANT_ADMIN') {
@@ -135,6 +141,23 @@ export default function App() {
     await authService.logout();
     setAuthenticatedUser(null);
     appStore.clearAuthenticatedContext();
+    setContexts([]);
+    setActiveTab('DASHBOARD');
+  };
+
+  const handleContextSwitch = async (context: AuthContext) => {
+    setChangingContext(true);
+    setContextError(null);
+    try {
+      const user = await authService.switchContext(context);
+      appStore.clearAuthenticatedContext();
+      appStore.setAuthenticatedContext(user);
+      setActiveTab(user.role === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
+    } catch (error) {
+      setContextError(error instanceof Error ? error.message : 'Falha na troca de vínculo.');
+    } finally {
+      setChangingContext(false);
+    }
   };
 
   // Ajustar aba ativa caso o papel mude
@@ -176,6 +199,10 @@ export default function App() {
         sessionExpiredNotice={sessionExpiredNotice}
       />
     );
+  }
+
+  if (changingContext) {
+    return <div role="status" className="min-h-screen grid place-items-center bg-slate-950 text-white">Validando vínculo no servidor...</div>;
   }
 
   // Itens de navegação conforme papel autenticado (Cláusula 11.1)
@@ -235,6 +262,25 @@ export default function App() {
         onLogout={handleLogout}
       />
 
+      {contexts.length > 1 && (
+        <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+          <label htmlFor="active-context" className="font-semibold">Vínculo ativo</label>
+          <select id="active-context" className="min-h-11 min-w-0 max-w-full rounded-lg border border-slate-300 px-3"
+            value={authenticatedUser.role + ':' + (authenticatedUser.tenantId || '')}
+            onChange={event => {
+              const context = contexts.find(item => item.role + ':' + (item.tenant_id || '') === event.target.value);
+              if (context) void handleContextSwitch(context);
+            }}>
+            {contexts.map(item => <option key={item.role + ':' + (item.tenant_id || '')} value={item.role + ':' + (item.tenant_id || '')}>
+              {item.role} {item.tenant_id || 'Plataforma'}
+            </option>)}
+          </select>
+        </div>
+      )}
+      {contextError && <div role="alert" className="bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
+      <div role="note" className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-xs font-semibold text-amber-950">
+        HOMOLOGAÇÃO — painéis, rifas, bolões, nuvem e valores seed são demonstrativos. Contribuições consultam a API; nenhum Pix ou sorteio real está habilitado.
+      </div>
       {/* Secondary Subnav Bar */}
       <nav className="bg-white border-b border-slate-200 sticky top-16 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto py-2">

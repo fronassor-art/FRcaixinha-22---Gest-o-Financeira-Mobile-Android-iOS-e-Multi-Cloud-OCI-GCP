@@ -60,6 +60,11 @@ class FinancialApiService {
         // Ignora falha de parse
       }
 
+      if (response.status === 401) {
+        authService.invalidateSession();
+        throw new Error('Sessão expirada ou revogada. Faça login novamente.');
+      }
+
       if (response.status === 503) {
         throw new FinancialBackendUnavailableError(
           errBody?.message || 'Backend oficial FastAPI / PostgreSQL não conectado. Operação financeira bloqueada com segurança.',

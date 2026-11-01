@@ -190,3 +190,84 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
     finally:
         await close_db_pool()
         await admin.close()
+
+
+async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows, monkeypatch):
+    """Duas caixinhas reais no PostgreSQL descartável, sem sessão de processo."""
+    from datetime import datetime, timedelta, timezone
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.config import settings
+    from app.database import close_db_pool
+    from app.security import hash_password_secure, hash_token
+
+    app_role, ids = isolated_rows
+    monkeypatch.setattr(settings, 'DATABASE_URL', _ci_dsn('DATABASE_URL'))
+    monkeypatch.setenv('AUTH_DATABASE_URL', _ci_dsn('CI_AUTH_DATABASE_URL'))
+    monkeypatch.setenv('FRCAIXINHA_TEST_AUTH', '1')
+    monkeypatch.setenv('ENVIRONMENT', 'development')
+    admin = await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
+    auth = await asyncpg.connect(_ci_dsn('CI_AUTH_DATABASE_URL'))
+    try:
+        extra = uuid.uuid4()
+        await admin.execute(
+            "INSERT INTO memberships(id,tenant_id,user_id,role) VALUES($1,$2,$3,'TENANT_MEMBER')",
+            extra, ids['tenant_b'], ids['member_a'])
+        password = 'somente-teste-descartavel'
+        for name in ('member_a', 'master'):
+            await admin.execute(
+                'INSERT INTO credentials(user_id,password_hash) VALUES($1,$2)',
+                ids[name], hash_password_secure(password))
+        assert not await app_role.fetchval(
+            "SELECT has_table_privilege(current_user,'public.sessions','SELECT')")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+            member = await client.post('/api/v1/auth/login', json={
+                'usernameOrEmail': f"{ids['member_a']}@example.com", 'password': password})
+            assert member.status_code == 200, member.text
+            token = member.json()['token']
+            headers = {'Authorization': f'Bearer {token}'}
+            stored = await auth.fetchrow(
+                'SELECT user_id,revoked_at,expires_at FROM public.sessions WHERE token_hash=$1',
+                hash_token(token))
+            assert stored['user_id'] == ids['member_a'] and stored['revoked_at'] is None
+            contexts = await client.get('/api/v1/auth/contexts', headers=headers)
+            assert contexts.status_code == 200
+            assert {item['tenant_id'] for item in contexts.json()} == {
+                str(ids['tenant_a']), str(ids['tenant_b'])}
+            denied = await client.post('/api/v1/auth/switch-context', headers=headers,
+                json={'target_role':'TENANT_ADMIN','target_tenant_id':str(ids['tenant_b'])})
+            assert denied.status_code == 403
+            switched = await client.post('/api/v1/auth/switch-context', headers=headers,
+                json={'target_role':'TENANT_MEMBER','target_tenant_id':str(ids['tenant_b'])})
+            assert switched.status_code == 200, switched.text
+            assert switched.json()['tenant_id'] == str(ids['tenant_b'])
+            assert (await client.get(
+                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=headers)).status_code == 403
+            assert (await client.get('/api/v1/auth/me', headers=headers)).json()['tenant_id'] == str(ids['tenant_b'])
+            await admin.execute(
+                "UPDATE memberships SET status='DESLIGADA' WHERE id=$1", extra)
+            assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
+            await admin.execute(
+                "UPDATE memberships SET status='ATIVA' WHERE id=$1", extra)
+            await admin.execute(
+                'UPDATE sessions SET expires_at=$2 WHERE token_hash=$1',
+                hash_token(token), datetime.now(timezone.utc)-timedelta(seconds=1))
+            assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
+
+            master = await client.post('/api/v1/auth/login', json={
+                'usernameOrEmail': f"{ids['master']}@example.com", 'password': password})
+            assert master.status_code == 200, master.text
+            master_headers = {'Authorization': f"Bearer {master.json()['token']}"}
+            assert (await client.get(
+                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 403
+            own_member = await client.post('/api/v1/auth/switch-context', headers=master_headers,
+                json={'target_role':'TENANT_MEMBER','target_tenant_id':str(ids['tenant_a'])})
+            assert own_member.status_code == 200, own_member.text
+            assert (await client.get(
+                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 200
+            assert (await client.post('/api/v1/auth/logout', headers=master_headers)).status_code == 200
+            assert (await client.get('/api/v1/auth/me', headers=master_headers)).status_code == 401
+    finally:
+        await close_db_pool()
+        await auth.close()
+        await admin.close()
