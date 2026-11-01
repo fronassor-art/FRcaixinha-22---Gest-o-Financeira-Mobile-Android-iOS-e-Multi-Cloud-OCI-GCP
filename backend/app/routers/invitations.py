@@ -37,7 +37,9 @@ def create_invitation(payload: InvitationCreateRequest, session: AuthenticatedSe
             detail="Banco de dados PostgreSQL não conectado. Não é possível emitir convites criptográficos."
         )
         
-    return {
-        "success": True,
-        "message": f"Convite para {payload.target_email} como {payload.target_role} processado com sucesso."
-    }
+    # Uma URL configurada não cria convite, token, nem envio. Recusar até o
+    # fluxo transacional e a entrega estarem implementados e testados.
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Convites ainda não implementados. Nenhum convite foi criado ou enviado."
+    )

@@ -360,6 +360,11 @@ async def approve_loan(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Empréstimo com status '{loan['status']}' não pode ser aprovado.")
 
     if loan["is_admin_loan"]:
+        # A contagem de votos abaixo não comprova autorização anual vigente,
+        # unanimidade dos demais membros ou revalidação após revogação.
+        raise HTTPException(status_code=503, detail="Autoempréstimo indisponível até validar a autorização anual dos demais membros.")
+
+    if loan["is_admin_loan"]:
         other_members_count = await conn.fetchval("""
             SELECT COUNT(*) FROM memberships
             WHERE tenant_id = $1 AND status = 'ATIVA' AND id != $2;

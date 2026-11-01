@@ -6,8 +6,11 @@ from fastapi import HTTPException
 
 from app.dependencies import AuthenticatedSession, require_master, require_tenant_access
 from app.routers.closings import capital_days_weight, close_cycle
-from app.routers.loans import disburse_loan, repay_loan_installment, settle_loan_early
+from app.routers.loans import disburse_loan, repay_loan_installment, settle_loan_early, approve_loan
 from app.routers.contributions import pay_contribution
+from app.routers.invitations import create_invitation
+from app.models import InvitationCreateRequest
+from app.config import settings
 from app.main import app
 
 
@@ -43,6 +46,26 @@ def test_capital_days_uses_december_end_not_january_settlement():
     end = date(2027, 12, 31)
     assert capital_days_weight(Decimal("100"), date(2027, 1, 10), end) == Decimal("35500.0000")
     assert capital_days_weight(Decimal("100"), date(2028, 1, 1), end) == Decimal("0.0000")
+
+
+def test_invitation_does_not_claim_success_with_only_database_url(monkeypatch):
+    monkeypatch.setattr(settings, 'DATABASE_URL', 'postgresql://127.0.0.1/frcaixinha_ci')
+    with pytest.raises(HTTPException) as exc:
+        create_invitation(InvitationCreateRequest(target_email='teste@example.com', target_role='TENANT_MEMBER'), session())
+    assert exc.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_admin_self_loan_cannot_be_approved_without_annual_consent():
+    from uuid import uuid4
+    tenant, loan_id = str(uuid4()), str(uuid4())
+    admin = AuthenticatedSession(str(uuid4()), 'TENANT_ADMIN', tenant, 'test@example.com', 'Teste', False)
+    class FakeConn:
+        async def fetchrow(self, *_args):
+            return {'status': 'SOLICITADO', 'is_admin_loan': True}
+    with pytest.raises(HTTPException) as exc:
+        await approve_loan(tenant, loan_id, admin, FakeConn())
+    assert exc.value.status_code == 503
 
 
 @pytest.mark.asyncio
