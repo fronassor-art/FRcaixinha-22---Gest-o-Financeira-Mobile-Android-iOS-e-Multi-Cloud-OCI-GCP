@@ -204,3 +204,56 @@ jobs:
           restored="$(PGDATABASE=frcaixinha_restore_ci psql -tAc "SELECT count(*) FROM users WHERE email='backup-ci@example.invalid'")"
           test "$original" = "1"
           test "$restored" = "$original"
+
+  postgres18-preflight:
+    name: PostgreSQL 18 preflight — transacao unica e RLS Master
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: frcaixinha_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frcaixinha_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencias Python
+        run: python -m pip install -r backend/requirements.txt
+      - name: Migrar 001-011 em UMA transacao no PostgreSQL 18 descartavel
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          scripts=()
+          for i in $(seq 1 11); do
+            printf -v n '%03d' "$i"
+            files=(backend/migrations/"$n"_*.sql)
+            test "${#files[@]}" -eq 1
+            test -f "${files[0]}"
+            scripts+=(-f "${files[0]}")
+          done
+          psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_pg18_app"
+      - name: Verificar RLS do Master e precos com usuarios sinteticos
+        env:
+          PYTHONPATH: backend
+          AI_STUDIO_CI_PG18: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          DATABASE_URL: postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_pg18_preflight.py

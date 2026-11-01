@@ -1,0 +1,138 @@
+"""Preflight SQL do AI Studio com PostgreSQL 18 DESCARTAVEL do GitHub Actions.
+
+Nunca executa contra o Termux. As senhas de CI sao sintéticas.
+Este teste deliberadamente NAO acessa serviços financeiros, Pix ou dados reais.
+"""
+import os
+import uuid
+from urllib.parse import urlparse
+
+import asyncpg
+import pytest
+
+
+def _dsn(env: str) -> str:
+    if os.environ.get("AI_STUDIO_CI_PG18") != "1":
+        pytest.skip("Executar somente no CI PostgreSQL 18 descartavel")
+    value = os.environ[env]
+    p = urlparse(value)
+    if p.hostname not in {"127.0.0.1", "localhost"} or p.path != "/frcaixinha_ci":
+        raise AssertionError("DSN fora do PostgreSQL isolado de CI")
+    return value
+
+
+@pytest.mark.asyncio
+async def test_pg18_migrations_master_rls_and_append_only_price():
+    admin = await asyncpg.connect(_dsn("CI_ADMIN_DATABASE_URL"))
+    application = await asyncpg.connect(_dsn("DATABASE_URL"))
+    user_id = uuid.uuid4()
+    admin_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+    try:
+        version = await admin.fetchval("SELECT current_setting('server_version_num')::integer")
+        assert 180000 <= version < 190000, "Nao e PostgreSQL 18"
+        assert await admin.fetchval("SELECT current_database()") == "frcaixinha_ci"
+        assert not await application.fetchval(
+            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user"
+        )
+        assert await application.fetchval(
+            "SELECT count(*) FROM public.platform_license_plans"
+        ) == 0, "Catalogo Master deve ser invisivel fora de contexto"
+
+        await admin.execute(
+            "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "
+            "VALUES($1,$2,$3,$4,$5,TRUE)",
+            user_id, f"ci-{user_id}@example.invalid", "Master sintetico CI",
+            user_id.hex[:14], "00000000000"
+        )
+        await admin.execute(
+            "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "
+            "VALUES($1,$2,$3,$4,$5,FALSE)",
+            admin_id, f"ci-admin-{admin_id}@example.invalid", "Admin sintetico",
+            admin_id.hex[:14], "00000000000"
+        )
+        await admin.execute(
+            "INSERT INTO public.tenants(id,display_name,contracting_party_id,admin_user_id)"
+            "VALUES($1,'Tenant sintetico CI',$2,$3)", tenant_id, str(uuid.uuid4()), admin_id
+        )
+        await admin.execute(
+            "INSERT INTO public.memberships(id,tenant_id,user_id,role)"
+            "VALUES($1,$2,$3,'TENANT_ADMIN')", member_id, tenant_id, admin_id
+        )
+        await admin.execute(
+            "INSERT INTO public.quotas(tenant_id,membership_id,quota_number)"
+            "VALUES($1,$2,1)", tenant_id, member_id
+        )
+        tx = application.transaction()
+        await tx.start()
+        try:
+            await application.execute(
+                "SELECT set_config('app.current_user_id',$1,true)", str(user_id)
+            )
+            await application.execute(
+                "SELECT set_config('app.current_role','MASTER',true)"
+            )
+            await application.execute(
+                "SELECT set_config('app.current_tenant_id','',true)"
+            )
+            assert await application.fetchval("SELECT count(*) FROM public.tenants") == 1
+            assert await admin.fetchval("SELECT count(*) FROM public.quotas") == 1
+            assert await application.fetchval(
+                "SELECT count(*) FROM public.platform_license_plans"
+            ) == 3
+            assert await application.fetchval(
+                "SELECT count(*) FROM public.platform_license_price_versions"
+            ) == 2
+
+            new_id = await application.fetchval(
+                "INSERT INTO public.platform_license_price_versions"
+                "(plan_tier,monthly_price,changed_by,reason)"
+                " VALUES('ESSENCIAL',99.90,$1,'Revisao sintetica autorizada de catalogo') "
+                "RETURNING id", user_id
+            )
+            assert new_id is not None
+            annual = await application.fetchval(
+                "SELECT annual_price FROM public.platform_license_price_versions "
+                "WHERE id=$1", new_id
+            )
+            assert str(annual) == "999.00"
+            await application.execute(
+                "INSERT INTO public.audit_events"
+                "(actor_id,actor_role,action,object_type,object_id,reason,evidence_ref) "
+                "VALUES($1,'MASTER','SAAS_PRICE_VERSION_CREATED','LICENSE_PRICE',"
+                "$2,'Revisao sintetica autorizada de catalogo','CI_PRE_MIGRATION')",
+                user_id, str(new_id)
+            )
+            assert await application.fetchval(
+                "SELECT count(*) FROM public.quotas"
+            ) == 0, "O Master nao herda quotas de membros"
+        finally:
+            await tx.rollback()
+
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.platform_license_price_versions"
+        ) == 2, "Rollback deve descartar alteracao sintetica"
+
+        tx = application.transaction()
+        await tx.start()
+        try:
+            await application.execute("SELECT set_config('app.current_user_id',$1,true)",str(user_id))
+            await application.execute("SELECT set_config('app.current_role','TENANT_MEMBER',true)")
+            assert await application.fetchval(
+                "SELECT count(*) FROM public.platform_license_price_versions"
+            ) == 0, "Contexto membro nao pode ler precos administrativos"
+            with pytest.raises(asyncpg.PostgresError):
+                await application.execute(
+                    "INSERT INTO public.platform_license_price_versions"
+                    "(plan_tier,monthly_price,changed_by,reason)"
+                    " VALUES('ESSENCIAL',99.90,$1,'Alteracao indevida de preco por membro')",
+                    user_id
+                )
+        finally:
+            await tx.rollback()
+    finally:
+        await application.close()
+        await admin.execute("DELETE FROM public.tenants WHERE id=$1",tenant_id)
+        await admin.execute("DELETE FROM public.users WHERE id=ANY($1::uuid[])",[user_id,admin_id])
+        await admin.close()
