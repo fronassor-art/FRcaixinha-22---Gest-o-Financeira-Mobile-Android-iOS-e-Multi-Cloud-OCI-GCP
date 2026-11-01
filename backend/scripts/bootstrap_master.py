@@ -68,6 +68,24 @@ def main():
         conn = psycopg.connect(db_url)
         cur = conn.cursor()
 
+        # Trava de isolamento: o script original tambem deve recusar outro cluster,
+        # mesmo se chamado diretamente, sem o assistente interativo do AI Studio.
+        cur.execute(
+            "SELECT current_user,current_database(),inet_server_port(),"
+            "current_setting('data_directory')"
+        )
+        identity = cur.fetchone()
+        local_ai_studio = identity == (
+            'frc_ai_owner', 'frcaixinha_aistudio_dev', 5433,
+            '/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18'
+        )
+        disposable_ci = (os.getenv('FRCAIXINHA_CI_ISOLATED') == '1'
+                         and identity[0:3] == ('postgres', 'frcaixinha_ci', 5432))
+        if not (local_ai_studio or disposable_ci):
+            print('[BLOQUEADO] O bootstrap Master nao pode acessar este cluster.')
+            conn.close()
+            sys.exit(2)
+
         # Serializa tentativas concorrentes no mesmo banco durante a transação.
         cur.execute("SELECT pg_advisory_xact_lock(706719221346)")
         
