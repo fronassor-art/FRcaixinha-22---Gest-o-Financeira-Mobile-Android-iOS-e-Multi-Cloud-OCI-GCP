@@ -123,6 +123,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/006_auth_test_access.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/007_contribution_read_isolation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/008_persistent_auth_sessions.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/009_tenant_context_and_references.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -156,3 +157,25 @@ jobs:
           FRCAIXINHA_CI_ISOLATED: '1'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: python -m pytest -q backend/tests/test_bootstrap_ci.py backend/tests/test_tenant_provisioning_ci.py
+
+      - name: Backup cifrado age e restauração descartável
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          age-keygen -o "$RUNNER_TEMP/frcaixinha-ci-identity.txt"
+          recipient="$(age-keygen -y "$RUNNER_TEMP/frcaixinha-ci-identity.txt")"
+          psql -v ON_ERROR_STOP=1 -c "INSERT INTO users(email,full_name,cpf,phone) VALUES('backup-ci@example.invalid','Backup sintético','00000000000000','00000000000')"
+          AGE_RECIPIENT="$recipient" BACKUP_OUTPUT="$RUNNER_TEMP/frcaixinha-ci.dump.age" bash backend/scripts/backup_age.sh
+          createdb frcaixinha_restore_ci
+          PGDATABASE=frcaixinha_restore_ci AGE_IDENTITY_FILE="$RUNNER_TEMP/frcaixinha-ci-identity.txt" BACKUP_INPUT="$RUNNER_TEMP/frcaixinha-ci.dump.age" bash backend/scripts/restore_disposable_ci.sh
+          original="$(psql -tAc "SELECT count(*) FROM users WHERE email='backup-ci@example.invalid'")"
+          restored="$(PGDATABASE=frcaixinha_restore_ci psql -tAc "SELECT count(*) FROM users WHERE email='backup-ci@example.invalid'")"
+          test "$original" = "1"
+          test "$restored" = "$original"

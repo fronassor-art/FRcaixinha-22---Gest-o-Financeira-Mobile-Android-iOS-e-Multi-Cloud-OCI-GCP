@@ -271,3 +271,72 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
         await close_db_pool()
         await auth.close()
         await admin.close()
+
+
+async def test_financial_rows_rls_and_composite_tenant_references(isolated_rows):
+    """Leituras com dados de dois tenants e FKs entre tenant, ciclo e vínculo."""
+    from datetime import date
+    conn, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
+    cycle_a, cycle_b = uuid.uuid4(), uuid.uuid4()
+    policy_a, policy_b = uuid.uuid4(), uuid.uuid4()
+    loan_a, loan_a2, loan_b = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    inst_a, inst_a2, inst_b = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    try:
+        for tenant, cycle, policy, year in (
+            (ids['tenant_a'], cycle_a, policy_a, 2027),
+            (ids['tenant_b'], cycle_b, policy_b, 2027),
+        ):
+            await admin.execute(
+                'INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) '
+                'VALUES($1,$2,$3,$4,$5,$6)', cycle, tenant, year,
+                date(2027,1,1), date(2027,12,31), date(2028,1,10))
+            await admin.execute(
+                'INSERT INTO policies(id,tenant_id,cycle_id) VALUES($1,$2,$3)',
+                policy, tenant, cycle)
+        for loan, tenant, cycle, policy, member in (
+            (loan_a, ids['tenant_a'], cycle_a, policy_a, ids['membership_a']),
+            (loan_a2, ids['tenant_a'], cycle_a, policy_a, ids['membership_a2']),
+            (loan_b, ids['tenant_b'], cycle_b, policy_b, ids['membership_b']),
+        ):
+            await admin.execute(
+                'INSERT INTO loans(id,tenant_id,cycle_id,borrower_membership_id,policy_id,'
+                'principal,monthly_rate,term_months,monthly_payment,last_payment,total_interest) '
+                'VALUES($1,$2,$3,$4,$5,500,0.2,5,167.19,167.20,335.96)',
+                loan, tenant, cycle, member, policy)
+        for inst, tenant, loan in (
+            (inst_a, ids['tenant_a'], loan_a),
+            (inst_a2, ids['tenant_a'], loan_a2),
+            (inst_b, ids['tenant_b'], loan_b),
+        ):
+            await admin.execute(
+                'INSERT INTO loan_installments(id,tenant_id,loan_id,installment_number,due_date,'
+                'principal_due,interest_due,total_due) VALUES($1,$2,$3,1,$4,67.19,100,167.19)',
+                inst, tenant, loan, date(2027,2,10))
+        async def visible(table, user, tenant, role):
+            async with conn.transaction():
+                await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(user))
+                await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)", str(tenant))
+                await conn.execute("SELECT set_config('app.current_role',$1,true)", role)
+                return {row['id'] for row in await conn.fetch('SELECT id FROM public.'+table)}
+        assert await visible('loans', ids['admin_a'], ids['tenant_a'], 'TENANT_ADMIN') == {loan_a, loan_a2}
+        assert await visible('loans', ids['admin_a'], ids['tenant_b'], 'TENANT_ADMIN') == set()
+        assert await visible('loans', ids['member_a'], ids['tenant_a'], 'TENANT_MEMBER') == {loan_a}
+        assert await visible('loans', ids['master'], ids['tenant_a'], 'MASTER') == set()
+        assert await visible('loan_installments', ids['member_a'], ids['tenant_a'], 'TENANT_MEMBER') == {inst_a}
+        assert await visible('loan_installments', ids['member_a'], ids['tenant_b'], 'TENANT_MEMBER') == set()
+        assert await visible('memberships', ids['member_a'], ids['tenant_a'], 'TENANT_MEMBER') == {ids['membership_a']}
+        assert await visible('quotas', ids['master'], ids['tenant_a'], 'MASTER') == set()
+        assert not await conn.fetchval("SELECT has_table_privilege(current_user,'public.ledger_entries','DELETE')")
+        assert not await conn.fetchval("SELECT has_table_privilege(current_user,'public.ledger_transactions','UPDATE')")
+        with pytest.raises(asyncpg.ForeignKeyViolationError):
+            await admin.execute(
+                'INSERT INTO quotas(tenant_id,membership_id,quota_number,value_brl) VALUES($1,$2,99,100)',
+                ids['tenant_a'], ids['membership_b'])
+        with pytest.raises(asyncpg.ForeignKeyViolationError):
+            await admin.execute(
+                'INSERT INTO contributions(tenant_id,cycle_id,membership_id,competence,due_date,amount_due) '
+                "VALUES($1,$2,$3,'2027-01',$4,100)",
+                ids['tenant_a'], cycle_b, ids['membership_a'], date(2027,1,10))
+    finally:
+        await admin.close()
