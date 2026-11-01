@@ -45,10 +45,14 @@ import { MultiCloudView } from './components/MultiCloudView';
 import { MobileInstallModal } from './components/MobileInstallModal';
 import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { LoginView } from './components/LoginView';
+import { authService, AuthenticatedUser } from './services/authService';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
   const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
+  const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(() => authService.getUser());
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
 
   // Modais globais
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -82,10 +86,61 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Monitorar ciclo de vida de autenticação e expiração de sessão
+  useEffect(() => {
+    // Validação compulsória contra o servidor em /api/auth/me na inicialização
+    authService.checkCurrentUser().then(user => {
+      if (user) {
+        setAuthenticatedUser(user);
+        appStore.setAuthenticatedContext(user);
+      } else {
+        setAuthenticatedUser(null);
+        appStore.clearAuthenticatedContext();
+      }
+    });
+
+    const unsubscribeAuth = authService.subscribe(() => {
+      const user = authService.getUser();
+      setAuthenticatedUser(user);
+      if (!user) {
+        appStore.clearAuthenticatedContext();
+      }
+    });
+
+    const handleExpired = () => {
+      setSessionExpiredNotice(true);
+    };
+    window.addEventListener('frcaixinha:session-expired', handleExpired);
+
+    return () => {
+      unsubscribeAuth();
+      window.removeEventListener('frcaixinha:session-expired', handleExpired);
+    };
+  }, []);
+
+  const handleLoginSuccess = (user: AuthenticatedUser) => {
+    setAuthenticatedUser(user);
+    setSessionExpiredNotice(false);
+    appStore.setAuthenticatedContext(user);
+    if (user.role === 'MASTER') {
+      setActiveTab('DASHBOARD');
+    } else if (user.role === 'TENANT_ADMIN') {
+      setActiveTab('DASHBOARD');
+    } else {
+      setActiveTab('MEU_PAINEL');
+    }
+  };
+
+  const handleLogout = async () => {
+    await authService.logout();
+    setAuthenticatedUser(null);
+    appStore.clearAuthenticatedContext();
+  };
+
   // Ajustar aba ativa caso o papel mude
   useEffect(() => {
     if (state.currentRole === 'MASTER') {
-      if (!['DASHBOARD', 'LICENCAS', 'NUVEM', 'SUPORTE', 'BOLOES', 'RIFAS', 'AUDITORIA'].includes(activeTab)) {
+      if (!['DASHBOARD', 'LICENCAS', 'NUVEM', 'SUPORTE', 'AUDITORIA'].includes(activeTab)) {
         setActiveTab('DASHBOARD');
       }
     } else if (state.currentRole === 'TENANT_ADMIN') {
@@ -113,16 +168,24 @@ export default function App() {
     });
   };
 
-  // Itens de navegação conforme papel (Cláusula 11.1)
+  // Se não estiver autenticado, exibe EXCLUSIVAMENTE a tela de login com segurança server-side
+  if (!authenticatedUser) {
+    return (
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+        sessionExpiredNotice={sessionExpiredNotice}
+      />
+    );
+  }
+
+  // Itens de navegação conforme papel autenticado (Cláusula 11.1)
   const renderNavTabs = () => {
     if (state.currentRole === 'MASTER') {
       return [
-        { id: 'DASHBOARD', label: 'Painel Master', icon: LayoutDashboard },
+        { id: 'DASHBOARD', label: 'Painel Master (SaaS)', icon: LayoutDashboard },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
         { id: 'NUVEM', label: 'Multi-Cloud OCI + GCP', icon: Cloud },
         { id: 'SUPORTE', label: 'Suporte e Break-Glass', icon: LifeBuoy },
-        { id: 'RIFAS', label: 'Módulo de Rifas', icon: Ticket },
-        { id: 'BOLOES', label: 'Bolões Oficiais', icon: Ticket },
         { id: 'AUDITORIA', label: 'Suíte AT-01 a AT-50', icon: ShieldCheck },
       ];
     }
@@ -169,6 +232,7 @@ export default function App() {
         onOpenMobilePreview={() => setIsMobilePreviewOpen(true)}
         onNavigateCloud={() => setActiveTab('NUVEM')}
         onOpenGitHub={() => setIsGitHubSyncOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Secondary Subnav Bar */}

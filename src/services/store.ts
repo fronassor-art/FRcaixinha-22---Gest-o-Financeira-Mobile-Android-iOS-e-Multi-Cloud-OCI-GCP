@@ -40,6 +40,8 @@ import {
 import {
   calculatePriceSimulation,
   calculateImputationHierarchy,
+  calculateEarlySettlement,
+  calculateLoanOverdueCharges,
   roundCents,
   calculateRaffleMoraInterest,
   calculateBolaoPricing,
@@ -56,6 +58,7 @@ import {
   SEED_BOLAO_CAMPAIGNS,
   SEED_BOLAO_PARTICIPATIONS
 } from './bolaoData';
+import { financialApi, FinancialBackendUnavailableError } from './financialApiService';
 
 // Chave para persistência local
 const STORAGE_KEY = 'frcaixinha_2_2_app_state_v1';
@@ -574,6 +577,9 @@ export interface AppState {
   rafflePayments: RafflePayment[];
   bolaoCampaigns: BolaoCampaign[];
   bolaoParticipations: BolaoMemberParticipation[];
+  backendStatus: 'CONNECTED' | 'UNCONFIGURED' | 'UNAVAILABLE';
+  isDataLoadedFromServer: boolean;
+  lastFinancialError: { message: string; code?: string; detail?: string } | null;
 }
 
 export class AppStore {
@@ -585,30 +591,10 @@ export class AppStore {
   }
 
   private loadState(): AppState {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (!parsed.raffleCampaigns || parsed.raffleCampaigns.length === 0) {
-          parsed.raffleCampaigns = SEED_RAFFLE_CAMPAIGNS;
-          parsed.raffleCards = SEED_RAFFLE_CARDS;
-          parsed.rafflePrizeHistories = SEED_RAFFLE_PRIZE_HISTORIES;
-          parsed.rafflePayments = SEED_RAFFLE_PAYMENTS;
-        }
-        if (!parsed.bolaoCampaigns || parsed.bolaoCampaigns.length === 0) {
-          parsed.bolaoCampaigns = SEED_BOLAO_CAMPAIGNS;
-          parsed.bolaoParticipations = SEED_BOLAO_PARTICIPATIONS;
-        }
-        return parsed;
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar localStorage:', e);
-    }
-
     return {
-      currentUserId: 'usr-admin-joao',
-      currentRole: 'TENANT_ADMIN',
-      currentTenantId: 'tenant-inaugural',
+      currentUserId: '',
+      currentRole: 'TENANT_MEMBER',
+      currentTenantId: '',
       activeCycleId: 'cycle-2027-inaugural',
       users: SEED_USERS,
       tenants: SEED_TENANTS,
@@ -647,15 +633,37 @@ export class AppStore {
       rafflePayments: SEED_RAFFLE_PAYMENTS,
       bolaoCampaigns: SEED_BOLAO_CAMPAIGNS,
       bolaoParticipations: SEED_BOLAO_PARTICIPATIONS,
+      backendStatus: 'UNCONFIGURED',
+      isDataLoadedFromServer: false,
+      lastFinancialError: null,
     };
   }
 
-  private persist() {
+  public async refreshFinancialDataFromServer(tenantId: string): Promise<boolean> {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
-    } catch (e) {
-      console.warn('Erro ao salvar no localStorage:', e);
+      await Promise.all([
+        financialApi.fetchQuotas(tenantId),
+        financialApi.fetchContributions(tenantId),
+        financialApi.fetchLoans(tenantId),
+        financialApi.fetchLedgerAccounts(tenantId),
+      ]);
+      this.state.backendStatus = 'CONNECTED';
+      this.state.isDataLoadedFromServer = true;
+      this.notify();
+      return true;
+    } catch {
+      this.state.backendStatus = 'UNAVAILABLE';
+      this.state.isDataLoadedFromServer = false;
+      this.notify();
+      return false;
     }
+  }
+
+  private persist() {
+    // CONFORMIDADE CONTRATUAL ESTREITA:
+    // O localStorage NUNCA deve gravar ou restaurar saldos, identidades, cotas, amortizações
+    // ou dados financeiros como se fossem autoritativos do servidor.
+    // A fonte única autoritativa é o backend PostgreSQL.
     this.notify();
   }
 
@@ -674,19 +682,32 @@ export class AppStore {
     return this.state;
   }
 
-  // --- Gestão de Contexto e Papéis ---
-  public switchContext(userId: string, role: UserRole, tenantId?: string) {
-    this.state.currentUserId = userId;
-    this.state.currentRole = role;
-    if (tenantId) {
-      this.state.currentTenantId = tenantId;
-      const cycle = this.state.cycles.find(c => c.tenant_id === tenantId);
+  // --- Gestão de Contexto e Papéis Autorizados pelo Servidor ---
+  public setAuthenticatedContext(user: { id: string; role: UserRole; tenantId?: string }) {
+    this.state.currentUserId = user.id;
+    this.state.currentRole = user.role;
+    this.state.currentTenantId = user.tenantId || '';
+    if (user.tenantId) {
+      const cycle = this.state.cycles.find(c => c.tenant_id === user.tenantId);
       if (cycle) {
         this.state.activeCycleId = cycle.id;
       }
     }
-    this.addAudit('CONTEXT_SWITCH', `Usuário alternou perfil para ${role} em tenant ${tenantId || 'GLOBAL'}`);
-    this.persist();
+    this.addAudit('LOGIN_SUCCESS', `Autenticação confirmada pelo servidor para papel ${user.role}`);
+    this.notify();
+  }
+
+  public clearAuthenticatedContext() {
+    this.state.currentUserId = '';
+    this.state.currentRole = 'TENANT_MEMBER';
+    this.state.currentTenantId = '';
+    this.addAudit('LOGOUT_SUCCESS', 'Sessão encerrada com sucesso');
+    this.notify();
+  }
+
+  // Bloqueio explícito de troca de contexto sem autenticação
+  public switchContext(_userId: string, _role: UserRole, _tenantId?: string) {
+    console.warn('Ação bloqueada: alteração de papel no cliente rejeitada por política de RBAC.');
   }
 
   public addAudit(action: string, reason: string, objectType = 'SYSTEM', objectId = 'GENERAL') {
@@ -744,9 +765,22 @@ export class AppStore {
   }
 
   // --- Contribuições & Pagamentos ---
-  public registerContributionPayment(contributionId: string, amount: number) {
+  public async registerContributionPayment(contributionId: string, amount: number) {
     const contrib = this.state.contributions.find(c => c.id === contributionId);
-    if (!contrib) return;
+    if (!contrib) throw new Error('Contribuição não encontrada.');
+
+    // 1. Chamar o backend oficial FastAPI + PostgreSQL
+    try {
+      await financialApi.payContribution(contrib.tenant_id, contributionId, amount);
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
 
     const newPaid = roundCents(contrib.amount_paid + amount);
     contrib.amount_paid = newPaid;
@@ -790,7 +824,7 @@ export class AppStore {
   }
 
   // --- Empréstimos: Pedido, Aprovação e Desembolso ---
-  public requestLoan(params: {
+  public async requestLoan(params: {
     membershipId: string;
     principal: number;
     termMonths: number;
@@ -813,6 +847,23 @@ export class AppStore {
       if (!hasUnanimous) {
         throw new Error('Autoempréstimo de administrador bloqueado: requer autorização coletiva unânime de todos os demais membros ativos no ciclo.');
       }
+    }
+
+    // 1. Chamar backend oficial FastAPI
+    try {
+      await financialApi.requestLoan(this.state.currentTenantId, {
+        principal: params.principal,
+        term_months: params.termMonths,
+        is_admin_loan: isAdmin,
+      });
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
     }
 
     const sim = calculatePriceSimulation({
@@ -877,18 +928,45 @@ export class AppStore {
     return newLoan;
   }
 
-  public approveLoan(loanId: string) {
+  public async approveLoan(loanId: string) {
     const loan = this.state.loans.find(l => l.id === loanId);
-    if (!loan) return;
+    if (!loan) throw new Error('Empréstimo não encontrado.');
+
+    // 1. Chamar backend oficial FastAPI
+    try {
+      await financialApi.approveLoan(loan.tenant_id, loanId);
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
+
     loan.status = 'APROVADO';
     loan.approved_at = new Date().toISOString();
     this.addAudit('LOAN_APPROVED', `Empréstimo ${loan.id} aprovado pelo administrador`, 'LOAN', loan.id);
     this.persist();
   }
 
-  public disburseLoanPix(loanId: string) {
+  public async disburseLoanPix(loanId: string) {
     const loan = this.state.loans.find(l => l.id === loanId);
-    if (!loan || loan.status !== 'APROVADO') return;
+    if (!loan || loan.status !== 'APROVADO') throw new Error('Empréstimo deve estar aprovado.');
+
+    // 1. Chamar backend oficial FastAPI
+    try {
+      await financialApi.disburseLoan(loan.tenant_id, loanId);
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
 
     // Verificar liquidez em tempo real
     const freeCash = this.getTenantFreeCash(loan.tenant_id);
@@ -931,11 +1009,24 @@ export class AppStore {
   }
 
   // --- Pagamento de Parcela de Empréstimo com Imputação em 4 etapas ---
-  public payLoanInstallment(loanId: string, installmentSeq: number, paymentAmount: number) {
+  public async payLoanInstallment(loanId: string, installmentSeq: number, paymentAmount: number) {
     const loan = this.state.loans.find(l => l.id === loanId);
-    if (!loan) return;
+    if (!loan) throw new Error('Empréstimo não encontrado.');
     const installment = loan.installments.find(i => i.sequence === installmentSeq);
-    if (!installment) return;
+    if (!installment) throw new Error('Parcela não encontrada.');
+
+    // 1. Chamar backend oficial FastAPI
+    try {
+      await financialApi.repayLoan(loan.tenant_id, loanId, paymentAmount);
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
 
     // Calcular imputação contratual obrigatória
     const impResult = calculateImputationHierarchy({
@@ -1008,10 +1099,141 @@ export class AppStore {
     this.persist();
   }
 
+  // --- Quitação Antecipada sem Juros Futuros (Cláusula 8.6) ---
+  public async settleLoanEarly(loanId: string): Promise<{ totalPaid: number; principalPaid: number; futureInterestWaived: number }> {
+    const loan = this.state.loans.find(l => l.id === loanId);
+    if (!loan) throw new Error('Empréstimo não encontrado');
+    if (loan.status === 'QUITADO') throw new Error('Empréstimo já se encontra quitado');
+
+    // 1. Chamar backend oficial FastAPI
+    try {
+      await financialApi.settleLoanEarly(loan.tenant_id, loanId);
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
+
+    // Apurar principal em aberto de todas as parcelas
+    let remainingPrincipal = 0;
+    let overdueInterest = 0;
+    let overdueMora = 0;
+    let overdueFine = 0;
+    let futureUnaccruedInterest = 0;
+
+    const now = new Date();
+
+    loan.installments.forEach(inst => {
+      if (inst.status !== 'QUITADA') {
+        const unpaidPrincipal = roundCents(inst.principal_due - inst.paid_principal);
+        remainingPrincipal = roundCents(remainingPrincipal + unpaidPrincipal);
+
+        const dueDate = new Date(inst.due_date);
+        const isPastDue = dueDate < now;
+
+        if (isPastDue) {
+          // Encargos já vencidos e legítimos
+          overdueInterest = roundCents(overdueInterest + (inst.interest_due - inst.paid_interest));
+          overdueMora = roundCents(overdueMora + (inst.mora_amount - inst.paid_mora));
+          overdueFine = roundCents(overdueFine + (inst.fine_amount - inst.paid_fine));
+        } else {
+          // Juros futuros vincendos NÃO incorridos -> 100% abatidos
+          futureUnaccruedInterest = roundCents(futureUnaccruedInterest + (inst.interest_due - inst.paid_interest));
+        }
+      }
+    });
+
+    const earlyRes = calculateEarlySettlement(
+      remainingPrincipal,
+      overdueInterest,
+      overdueMora,
+      overdueFine,
+      futureUnaccruedInterest
+    );
+
+    // Marcar todas as parcelas como quitadas
+    loan.installments.forEach(inst => {
+      inst.status = 'QUITADA';
+      inst.due_status = 'REGULARIZADA';
+      inst.paid_principal = inst.principal_due;
+      inst.paid_amount = roundCents(inst.principal_due + inst.paid_interest + inst.paid_mora + inst.paid_fine);
+    });
+    loan.status = 'QUITADO';
+
+    // Lançamento contábil no Ledger
+    const caixaAcc = this.state.ledgerAccounts.find(a => a.tenant_id === loan.tenant_id && a.account_code === '1.1.1');
+    const creditoAcc = this.state.ledgerAccounts.find(a => a.tenant_id === loan.tenant_id && a.account_code === '1.2.1');
+    const receitaAcc = this.state.ledgerAccounts.find(a => a.tenant_id === loan.tenant_id && a.account_code === '4.1.1');
+
+    const totalPaidCents = Math.round(earlyRes.totalSettlementAmount * 100);
+    const principalPaidCents = Math.round(earlyRes.remainingPrincipal * 100);
+    const overdueRevenueCents = Math.round(earlyRes.totalOverdueCharges * 100);
+
+    if (caixaAcc && creditoAcc) {
+      caixaAcc.balance_cents += totalPaidCents;
+      creditoAcc.balance_cents -= principalPaidCents;
+      if (receitaAcc && overdueRevenueCents > 0) {
+        receitaAcc.balance_cents += overdueRevenueCents;
+      }
+
+      const entries: LedgerEntry[] = [
+        { id: `le-${Date.now()}-1`, transaction_id: `ltx-${Date.now()}`, account_id: caixaAcc.id, account_name: caixaAcc.account_name, direction: 'DEBIT', amount_cents: totalPaidCents, currency: 'BRL' },
+        { id: `le-${Date.now()}-2`, transaction_id: `ltx-${Date.now()}`, account_id: creditoAcc.id, account_name: creditoAcc.account_name, direction: 'CREDIT', amount_cents: principalPaidCents, currency: 'BRL' },
+      ];
+      if (receitaAcc && overdueRevenueCents > 0) {
+        entries.push({ id: `le-${Date.now()}-3`, transaction_id: `ltx-${Date.now()}`, account_id: receitaAcc.id, account_name: receitaAcc.account_name, direction: 'CREDIT', amount_cents: overdueRevenueCents, currency: 'BRL' });
+      }
+
+      const tx: LedgerTransaction = {
+        id: `ltx-${Date.now()}`,
+        tenant_id: loan.tenant_id,
+        cycle_id: loan.cycle_id,
+        business_type: 'LOAN_EARLY_SETTLEMENT',
+        business_id: loan.id,
+        posted_at: new Date().toISOString(),
+        status: 'POSTED',
+        description: `Quitação antecipada integral do empréstimo de ${loan.borrower_name} (sem juros futuros)`,
+        entries,
+      };
+      this.state.ledgerTransactions.unshift(tx);
+    }
+
+    this.addAudit(
+      'LOAN_EARLY_SETTLED',
+      `Empréstimo ${loan.id} quitado antecipadamente por R$ ${earlyRes.totalSettlementAmount.toFixed(2)} (Juros futuros abatidos: R$ ${earlyRes.futureInterestWaived.toFixed(2)})`,
+      'LOAN',
+      loan.id
+    );
+    this.persist();
+
+    return {
+      totalPaid: earlyRes.totalSettlementAmount,
+      principalPaid: earlyRes.remainingPrincipal,
+      futureInterestWaived: earlyRes.futureInterestWaived,
+    };
+  }
+
   // --- Autorização Anual para Administrador ---
-  public toggleAdminConsentSignature(signerMembershipId: string) {
+  public async toggleAdminConsentSignature(signerMembershipId: string) {
     const consent = this.state.adminSelfConsents.find(c => c.tenant_id === this.state.currentTenantId);
-    if (!consent) return;
+    if (!consent) throw new Error('Registro de consentimento não encontrado.');
+
+    // 1. Chamar backend oficial FastAPI
+    try {
+      await financialApi.voteAdminConsent(this.state.currentTenantId, 'annual-cycle', 'FAVORAVEL');
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
 
     const existingSig = consent.signatures.find(s => s.signer_membership_id === signerMembershipId);
     if (existingSig) {
@@ -1047,6 +1269,28 @@ export class AppStore {
     consent.status = isUnanimous ? 'ATIVO' : 'SUSPENSO_REVOGADO';
 
     this.addAudit('SELF_LOAN_CONSENT_UPDATED', `Assinatura de autorização de autoempréstimo alterada por ${signerMembershipId}. Status: ${consent.status}`, 'CONSENT', consent.id);
+    this.persist();
+  }
+
+  // --- Fechamento de Ciclo Anual (Capital-Dias V2) ---
+  public async closeCycle(cycleId: string) {
+    try {
+      await financialApi.closeCycle(this.state.currentTenantId, cycleId);
+    } catch (err: any) {
+      this.state.lastFinancialError = {
+        message: err.message,
+        code: err.code || 'FINANCIAL_BACKEND_UNAVAILABLE',
+        detail: err.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.',
+      };
+      this.notify();
+      throw err;
+    }
+
+    const cycle = this.state.cycles.find(c => c.id === cycleId);
+    if (cycle) {
+      cycle.status = 'LIQUIDADO';
+    }
+    this.addAudit('CYCLE_CLOSED', `Fechamento anual do ciclo ${cycleId} homologado via FastAPI`, 'CYCLE', cycleId);
     this.persist();
   }
 

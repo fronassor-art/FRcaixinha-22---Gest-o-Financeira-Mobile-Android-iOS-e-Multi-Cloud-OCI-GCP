@@ -52,6 +52,8 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state, onO
     return true;
   });
 
+  const [errorModal, setErrorModal] = useState<{ title: string; message: string; detail?: string } | null>(null);
+
   const handlePayFull = (c: Contribution) => {
     const member = state.memberships.find(m => m.id === c.membership_id);
     const balanceDue = c.amount_due - c.amount_paid;
@@ -62,7 +64,17 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state, onO
       description: `Contribuição vencimento ${formatDateBR(c.due_date)} de ${member?.user_name}`,
       recipientName: currentTenant?.display_name || 'Caixinha',
       referenceId: c.id,
-      onConfirm: () => appStore.registerContributionPayment(c.id, balanceDue),
+      onConfirm: async () => {
+        try {
+          await appStore.registerContributionPayment(c.id, balanceDue);
+        } catch (err: any) {
+          setErrorModal({
+            title: 'Pagamento de Contribuição Bloqueado',
+            message: err?.message || 'Falha ao registrar contribuição no backend.',
+            detail: err?.detail || 'O Contrato Técnico Mestre veda persistência silenciosa em localStorage. A operação requer conexão ativa com o servidor FastAPI/PostgreSQL.'
+          });
+        }
+      },
     });
   };
 
@@ -75,15 +87,47 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state, onO
       description: `Pagamento parcial contribuição de ${member?.user_name}`,
       recipientName: currentTenant?.display_name || 'Caixinha',
       referenceId: c.id,
-      onConfirm: () => {
-        appStore.registerContributionPayment(c.id, customAmount);
-        setPartialAmountModal(null);
+      onConfirm: async () => {
+        try {
+          await appStore.registerContributionPayment(c.id, customAmount);
+          setPartialAmountModal(null);
+        } catch (err: any) {
+          setErrorModal({
+            title: 'Pagamento Parcial Bloqueado',
+            message: err?.message || 'Falha ao registrar pagamento no backend.',
+            detail: err?.detail || 'O Contrato Técnico Mestre veda persistência silenciosa em localStorage.'
+          });
+        }
       },
     });
   };
 
   return (
     <div className="space-y-6">
+      {/* Banner de Estado do Backend Contratual */}
+      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow-xs flex items-start gap-3">
+        <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-950">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="font-bold text-sm text-amber-900">
+              {state.isDataLoadedFromServer
+                ? 'Persistência Autoritativa de Contribuições: FastAPI + PostgreSQL'
+                : 'Ambiente Desconectado do Servidor — Exibição em Modo Demonstração'}
+            </span>
+            {!state.isDataLoadedFromServer && (
+              <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                Dados Didáticos / Sem Efeito Contábil
+              </span>
+            )}
+          </div>
+          <p>
+            {state.isDataLoadedFromServer
+              ? 'O recebimento de contribuições, baixa de cotas e lançamentos em partidas dobradas no Caixa e Capital dos Membros são efetuados exclusivamente pelo backend.'
+              : 'O backend contratual (FastAPI/PostgreSQL) não está conectado. As contribuições exibidas são dados semente didáticos. Operações de baixa financeira, pagamento real e alteração de saldo estão bloqueadas para proteção contábil.'}
+          </p>
+        </div>
+      </div>
+
       {/* Header com Informação Contratual */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -286,6 +330,33 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state, onO
                 className="px-4 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer shadow-xs"
               >
                 Gerar Pix Parcial
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Bloqueio por Backend Não Conectado */}
+      {errorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 text-rose-700">
+              <ShieldAlert className="w-6 h-6 shrink-0" />
+              <h3 className="font-bold text-base text-slate-900">{errorModal.title}</h3>
+            </div>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-950 space-y-1.5">
+              <span className="font-bold block text-rose-900">{errorModal.message}</span>
+              {errorModal.detail && <p className="text-[11px] text-rose-800">{errorModal.detail}</p>}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Para proteger o patrimônio coletivo da caixinha, nenhuma baixa de cota foi salva em contingência local sem confirmação transacional do servidor.
+            </p>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setErrorModal(null)}
+                className="px-5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl cursor-pointer"
+              >
+                Compreendi
               </button>
             </div>
           </div>

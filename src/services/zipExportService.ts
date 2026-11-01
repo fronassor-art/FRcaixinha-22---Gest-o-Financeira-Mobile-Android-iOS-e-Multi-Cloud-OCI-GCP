@@ -44,7 +44,12 @@ export async function generateProjectZip(onProgress?: (percent: number, file: st
     '/src/components/MultiCloudView.tsx',
     '/src/components/PixModal.tsx',
     '/src/components/AdminManualModal.tsx',
-    '/src/components/AuditSuiteModal.tsx',
+    '/capacitor.config.ts',
+    '/docs/BUILD_ANDROID_TERMUX.md',
+    '/docs/ARQUITETURA_FASTAPI_POSTGRES.md',
+    '/backend/migrations/001_initial_schema.sql',
+    '/src/services/authService.ts',
+    '/src/components/LoginView.tsx',
     '/src/components/MobileInstallModal.tsx',
     '/src/components/MobileDevicePreviewModal.tsx',
   ];

@@ -1,24 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Wallet,
   Users,
   ShieldAlert,
-  ChevronDown,
   BookOpen,
   Calendar,
   RotateCcw,
-  UserCheck,
-  Check,
   Building2,
   Lock,
-  Compass,
   Cloud,
   Smartphone,
-  Apple,
-  Github
+  Github,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 import { appStore, AppState } from '../services/store';
-import { UserRole } from '../types';
 
 interface NavbarProps {
   state: AppState;
@@ -28,6 +24,7 @@ interface NavbarProps {
   onOpenMobilePreview: () => void;
   onNavigateCloud: () => void;
   onOpenGitHub: () => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -38,17 +35,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenMobilePreview,
   onNavigateCloud,
   onOpenGitHub,
+  onLogout,
 }) => {
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
-
   const currentUser = state.users.find(u => u.id === state.currentUserId);
   const currentTenant = state.tenants.find(t => t.id === state.currentTenantId);
   const currentSub = state.subscriptions.find(s => s.tenant_id === state.currentTenantId);
-
-  const handleSelectContext = (userId: string, role: UserRole, tenantId?: string) => {
-    appStore.switchContext(userId, role, tenantId);
-    setIsRoleDropdownOpen(false);
-  };
 
   const handleReset = () => {
     if (window.confirm('Deseja redefinir todos os dados para o estado inicial homologado do contrato?')) {
@@ -177,195 +168,40 @@ export const Navbar: React.FC<NavbarProps> = ({
             <RotateCcw className="w-4 h-4" />
           </button>
 
-          {/* Role & Tenant Selector Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 transition-all cursor-pointer text-left"
-            >
+          {/* Perfil Autenticado no Servidor (Sem seletor client-side de troca de papel) */}
+          <div className="flex items-center gap-2 pl-1 border-l border-slate-800">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700">
               <div className="w-7 h-7 rounded-lg bg-emerald-600/30 text-emerald-300 flex items-center justify-center text-xs font-bold shrink-0">
                 {state.currentRole === 'MASTER' ? '👑' : state.currentRole === 'TENANT_ADMIN' ? '💼' : '👤'}
               </div>
               <div className="hidden sm:block">
-                <div className="text-xs font-bold text-white flex items-center gap-1">
-                  <span>{currentUser?.name.split(' ')[0]}</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">({state.currentRole})</span>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>{currentUser?.name || 'Usuário Autenticado'}</span>
+                  <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                    state.currentRole === 'MASTER'
+                      ? 'bg-indigo-900/80 text-indigo-300 border border-indigo-700/60'
+                      : state.currentRole === 'TENANT_ADMIN'
+                      ? 'bg-emerald-900/80 text-emerald-300 border border-emerald-700/60'
+                      : 'bg-blue-900/80 text-blue-300 border border-blue-700/60'
+                  }`}>
+                    {state.currentRole}
+                  </span>
                 </div>
-                <div className="text-[10px] text-slate-400 truncate max-w-[130px]">
-                  {state.currentRole === 'MASTER' ? 'Plataforma Global' : currentTenant?.display_name}
+                <div className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                  {state.currentRole === 'MASTER' ? 'Plataforma Global' : currentTenant?.display_name || 'Caixinha'}
                 </div>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+
+            {/* Botão de Encerramento Seguro de Sessão (Logout) */}
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 text-xs font-semibold rounded-xl border border-rose-800/60 transition-colors cursor-pointer shadow-xs"
+              title="Encerrar sessão de forma segura (Logout)"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden md:inline">Sair</span>
             </button>
-
-            {/* Dropdown Menu */}
-            {isRoleDropdownOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-30"
-                  onClick={() => setIsRoleDropdownOpen(false)}
-                />
-                <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-40 animate-in fade-in zoom-in-95">
-                  <div className="px-3 py-2 border-b border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Alternar Perfil e Contexto
-                    </span>
-                    <p className="text-[11px] text-slate-300">
-                      Identidade única com segregação de permissões (Cláusula 2.3)
-                    </p>
-                  </div>
-
-                  <div className="py-1.5 space-y-1">
-                    {/* Master */}
-                    <button
-                      onClick={() => handleSelectContext('usr-master', 'MASTER')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'MASTER'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">👑</span>
-                        <div>
-                          <div className="font-bold">Master da Plataforma</div>
-                          <div className="text-[10px] opacity-75">Licenciamento, Preços & Suporte</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'MASTER' && <Check className="w-4 h-4" />}
-                    </button>
-
-                    {/* Admin Inaugural (João Silva) */}
-                    <button
-                      onClick={() => handleSelectContext('usr-admin-joao', 'TENANT_ADMIN', 'tenant-inaugural')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'TENANT_ADMIN' && state.currentTenantId === 'tenant-inaugural'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">💼</span>
-                        <div>
-                          <div className="font-bold">Admin: Caixinha Inaugural</div>
-                          <div className="text-[10px] opacity-75">João Silva • 20% a.m. • 85/15</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'TENANT_ADMIN' && state.currentTenantId === 'tenant-inaugural' && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    {/* Admin como Membro (João Silva - Participação Própria) */}
-                    <button
-                      onClick={() => handleSelectContext('usr-admin-joao', 'TENANT_MEMBER', 'tenant-inaugural')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-admin-joao'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">👤</span>
-                        <div>
-                          <div className="font-bold">João Silva (Como Membro)</div>
-                          <div className="text-[10px] opacity-75">1 cota própria • Autoempréstimo Cláusula 2.5</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-admin-joao' && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    {/* Membro Maria Oliveira */}
-                    <button
-                      onClick={() => handleSelectContext('usr-maria', 'TENANT_MEMBER', 'tenant-inaugural')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-maria'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">👤</span>
-                        <div>
-                          <div className="font-bold">Membro: Maria Oliveira</div>
-                          <div className="text-[10px] opacity-75">2 cotas • Adimplente</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-maria' && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    {/* Membro Pedro Santos (Empréstimo ativo) */}
-                    <button
-                      onClick={() => handleSelectContext('usr-pedro', 'TENANT_MEMBER', 'tenant-inaugural')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-pedro'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">👤</span>
-                        <div>
-                          <div className="font-bold">Membro: Pedro Santos</div>
-                          <div className="text-[10px] opacity-75">1 cota • Empréstimo Price em andamento</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-pedro' && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    {/* Membro Ana Costa (3 meses de atraso - Cláusula 6.5) */}
-                    <button
-                      onClick={() => handleSelectContext('usr-ana', 'TENANT_MEMBER', 'tenant-inaugural')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-ana'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">⚠️</span>
-                        <div>
-                          <div className="font-bold">Membro: Ana Costa</div>
-                          <div className="text-[10px] text-amber-400">3 meses vencidos • Sem lucro (Cláusula 6.5)</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'TENANT_MEMBER' && state.currentUserId === 'usr-ana' && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    <div className="border-t border-slate-800 my-1"></div>
-
-                    {/* Outro Tenant: Renata Martins (Tech) */}
-                    <button
-                      onClick={() => handleSelectContext('usr-admin-renata', 'TENANT_ADMIN', 'tenant-tech')}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        state.currentRole === 'TENANT_ADMIN' && state.currentTenantId === 'tenant-tech'
-                          ? 'bg-emerald-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-cyan-400" />
-                        <div>
-                          <div className="font-bold">Admin: Caixinha Tech</div>
-                          <div className="text-[10px] opacity-75">Renata Martins • 10% a.m. • 80/20</div>
-                        </div>
-                      </div>
-                      {state.currentRole === 'TENANT_ADMIN' && state.currentTenantId === 'tenant-tech' && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </div>
       </div>
