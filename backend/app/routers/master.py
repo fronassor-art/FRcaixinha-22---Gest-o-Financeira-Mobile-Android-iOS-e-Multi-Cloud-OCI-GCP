@@ -114,3 +114,33 @@ def request_support_break_glass(payload: SupportBreakGlassRequest, session: Auth
             )
         }
     )
+
+
+
+@router.get("/overview")
+async def get_master_overview(
+    session: AuthenticatedSession = Depends(require_master),
+    conn = Depends(get_rls_db_connection),
+):
+    """Inventario cadastral visivel ao MASTER, sem saldos de caixinhas."""
+    total = await conn.fetchval("SELECT count(*) FROM public.tenants")
+    rows = await conn.fetch(
+        "SELECT id,display_name,status,is_owner_box "
+        "FROM public.tenants ORDER BY created_at DESC,id LIMIT 200"
+    )
+    return {
+        "source": "POSTGRESQL_RLS",
+        "total_tenants": total,
+        "tenants": [
+            {
+                "id": str(r["id"]),
+                "display_name": r["display_name"],
+                "status": r["status"],
+                "is_owner_box": r["is_owner_box"],
+            }
+            for r in rows
+        ],
+        "has_more": total > len(rows),
+        "saas_revenue_status": "NOT_CONNECTED_TO_RECONCILED_BILLING",
+        "subscriptions_status": "NOT_IMPLEMENTED_IN_PERSISTENT_SCHEMA",
+    }
