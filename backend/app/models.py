@@ -7,12 +7,12 @@ Precisão Monetária: Uso de Decimal e centavos auditáveis com ROUND_HALF_UP.
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, AliasChoices
 
 # --- Schemas de Entrada / Saída para Autenticação ---
 
 class LoginRequest(BaseModel):
-    username_or_email: str = Field(..., description="E-mail ou nome de usuário")
+    username_or_email: str = Field(..., validation_alias=AliasChoices('username_or_email', 'usernameOrEmail'), max_length=255, description="E-mail")
     password: str = Field(..., min_length=1, description="Senha de acesso")
 
 class UserResponse(BaseModel):
@@ -29,6 +29,7 @@ class SessionResponse(BaseModel):
     user: UserResponse
     expires_at: datetime
     message: str
+    token: str
 
 class AuthStatusResponse(BaseModel):
     status: str

@@ -22,6 +22,11 @@ export interface AuthStatusResponse {
   serverTime: string;
 }
 
+function serverUser(user: any): AuthenticatedUser {
+  if (!user || !['MASTER', 'TENANT_ADMIN', 'TENANT_MEMBER'].includes(user.role)) throw new Error('Resposta de identidade inválida.');
+  return { id: user.id, name: user.name, email: user.email, role: user.role, tenantId: user.tenant_id ?? user.tenantId };
+}
+
 /**
  * Obtém a URL base do backend de forma explícita e segura.
  * Nunca embute IPs privados fictícios ou credenciais no cliente.
@@ -101,7 +106,7 @@ class AuthService {
     }
 
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/status`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/status`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'include',
       });
@@ -128,6 +133,7 @@ class AuthService {
     if (isNativeMobilePlatform() && !getApiBaseUrl()) {
       return null;
     }
+    if (!this.token) return null;
 
     try {
       const headers: Record<string, string> = {
@@ -137,7 +143,7 @@ class AuthService {
         headers['Authorization'] = `Bearer ${this.token}`;
       }
 
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/me`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/me`, {
         method: 'GET',
         headers,
         credentials: 'include',
@@ -150,9 +156,9 @@ class AuthService {
       }
 
       const data = await res.json();
-      if (data && data.user) {
+      if (data && (data.user || data.id)) {
         const expiration: number = data.expiresAt || (Date.now() + 15 * 60 * 1000);
-        this.user = data.user;
+        this.user = serverUser(data.user || data);
         this.expiresAt = expiration;
         this.armExpirationTimer(expiration);
         this.notify();
@@ -171,7 +177,7 @@ class AuthService {
       throw new Error('Servidor backend móvel não configurado. Defina VITE_API_URL apontando para a API FastAPI antes de gerar o APK.');
     }
 
-    const res = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -184,15 +190,17 @@ class AuthService {
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.message || data.error || 'Falha ao autenticar.');
+      throw new Error(data.detail || data.message || data.error || 'Falha ao autenticar.');
     }
 
     // Armazenamento EXCLUSIVO em memória (RAM transitória)
+    const expiresAt = data.expiresAt ?? Date.parse(data.expires_at);
+    if (!data.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error('Sessão inválida recebida do servidor.');
     this.token = data.token;
-    this.user = data.user;
-    this.expiresAt = data.expiresAt;
+    this.user = serverUser(data.user);
+    this.expiresAt = expiresAt;
 
-    this.armExpirationTimer(data.expiresAt);
+    this.armExpirationTimer(expiresAt);
     this.notify();
 
     return this.user!;
@@ -207,7 +215,7 @@ class AuthService {
         headers['Authorization'] = `Bearer ${this.token}`;
       }
 
-      await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
+      await fetch(`${getApiBaseUrl()}/api/v1/auth/logout`, {
         method: 'POST',
         headers,
         credentials: 'include',

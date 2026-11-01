@@ -241,7 +241,11 @@ app.get(['/api/auth/me', '/api/v1/auth/me'], async (req: AuthenticatedRequest, r
 });
 
 // 4. Logout endpoint (Invalida sessão de forma garantida no servidor)
-app.post(['/api/auth/logout', '/api/v1/auth/logout'], (req, res) => {
+app.post(['/api/auth/logout', '/api/v1/auth/logout'], async (req, res) => {
+  if (process.env.FASTAPI_BACKEND_URL) {
+    const handled = await forwardToFastAPI(req, res, '/api/v1/auth/logout');
+    if (handled) return;
+  }
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];

@@ -116,3 +116,40 @@ async def test_application_role_cannot_access_password_hashes_or_rewrite_audit(i
         assert not await conn.fetchval("SELECT has_table_privilege(current_user, 'public.credentials', $1)", privilege)
     for privilege in ("UPDATE", "DELETE"):
         assert not await conn.fetchval("SELECT has_table_privilege(current_user, 'public.audit_events', $1)", privilege)
+
+
+async def test_experimental_login_real_database_roles_and_logout(isolated_rows, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.config import settings
+    from app.security import hash_password_secure
+    conn, ids = isolated_rows
+    monkeypatch.setattr(settings, "DATABASE_URL", _ci_dsn("DATABASE_URL"))
+    monkeypatch.setenv("AUTH_DATABASE_URL", _ci_dsn("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    try:
+        password = "senha-sintetica-apenas-para-ci"
+        hashed = hash_password_secure(password)
+        for name in ("master", "admin_a", "member_a"):
+            await admin.execute("INSERT INTO credentials(user_id,password_hash) VALUES($1,$2)", ids[name], hashed)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            for name, role in (("master", "MASTER"), ("admin_a", "TENANT_ADMIN"), ("member_a", "TENANT_MEMBER")):
+                email = f"{ids[name]}@example.invalid"
+                bad = await client.post('/api/v1/auth/login', json={'usernameOrEmail': email, 'password': 'senha-incorreta'})
+                assert bad.status_code == 401
+                response = await client.post('/api/v1/auth/login', json={'usernameOrEmail': email, 'password': password})
+                assert response.status_code == 200, response.text
+                body = response.json()
+                assert body['user']['role'] == role
+                token = body['token']
+                assert token and token != password
+                headers = {'Authorization': f'Bearer {token}'}
+                me = await client.get('/api/v1/auth/me', headers=headers)
+                assert me.status_code == 200 and me.json()['role'] == role
+                logout = await client.post('/api/v1/auth/logout', headers=headers)
+                assert logout.status_code == 200
+                assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
+    finally:
+        await admin.close()

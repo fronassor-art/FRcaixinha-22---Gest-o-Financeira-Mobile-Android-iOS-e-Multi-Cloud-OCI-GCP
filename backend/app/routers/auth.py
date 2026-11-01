@@ -5,6 +5,9 @@ Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 14.1 e 16.4)
 
 from fastapi import APIRouter, HTTPException, status, Response, Request, Depends
 import datetime
+import os
+import asyncio
+import asyncpg
 from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPasswordRequest, ContextSwitchRequest, UserResponse
 from ..config import settings
 from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure
@@ -19,19 +22,20 @@ def get_auth_status():
     Declara explicitamente a necessidade do backend contratual FastAPI + PostgreSQL.
     """
     database_url_configured = settings.is_database_configured
+    test_enabled = os.getenv('FRCAIXINHA_TEST_AUTH') == '1' and os.getenv('ENVIRONMENT', 'development') != 'production' and bool(os.getenv('AUTH_DATABASE_URL', '').startswith('postgres'))
     return AuthStatusResponse(
-        status="BLOCKED_PENDING_IMPLEMENTATION" if database_url_configured else "BLOCKED_PENDING_CONFIG",
-        configured=False,
-        provider="NONE",
+        status="TEST_MODE" if test_enabled else ("BLOCKED_PENDING_IMPLEMENTATION" if database_url_configured else "BLOCKED_PENDING_CONFIG"),
+        configured=test_enabled,
+        provider="POSTGRES_TEST" if test_enabled else "NONE",
         architecture_contract="FastAPI / PostgreSQL com RLS (Contrato Técnico Mestre)",
         scaffold_note="A autenticação PostgreSQL ainda não foi implementada; configurar uma URL não habilita o login.",
         requires_authentication=True,
-        message="Autenticação ainda não implementada. Nenhuma sessão foi iniciada." if database_url_configured else "Autenticação ainda não configurada. Nenhuma sessão foi iniciada.",
+        message="Autenticação experimental de homologação." if test_enabled else ("Autenticação ainda não implementada. Nenhuma sessão foi iniciada." if database_url_configured else "Autenticação ainda não configurada. Nenhuma sessão foi iniciada."),
         server_time=datetime.datetime.now(datetime.timezone.utc)
     )
 
 @router.post("/login", response_model=SessionResponse)
-def login(payload: LoginRequest, response: Response):
+async def login(payload: LoginRequest, response: Response):
     """
     Autenticação real no servidor.
     O frontend NUNCA escolhe o papel, tenant ou permissões.
@@ -53,11 +57,39 @@ def login(payload: LoginRequest, response: Response):
             detail="Autenticação ainda não configurada. Nenhuma sessão foi iniciada."
         )
 
-    # Configurar uma URL não implementa a consulta nem verifica uma credencial.
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Autenticação PostgreSQL ainda não implementada. Nenhuma sessão foi iniciada."
-    )
+    # Sessões e limite em memória são apenas para homologação de processo único.
+    auth_url = os.getenv('AUTH_DATABASE_URL', '')
+    if os.getenv('FRCAIXINHA_TEST_AUTH') != '1' or os.getenv('ENVIRONMENT', 'development') == 'production' or not auth_url.startswith('postgres'):
+        raise HTTPException(status_code=503, detail="Login disponível apenas em homologação configurada.")
+    try:
+        conn = await asyncpg.connect(auth_url, timeout=5)
+        try:
+            record = await conn.fetchrow(
+                "SELECT u.id,u.email,u.full_name,u.status,u.is_master,c.password_hash "
+                "FROM public.users u JOIN public.credentials c ON c.user_id=u.id WHERE lower(u.email)=$1", identifier)
+            verified = bool(record and await asyncio.to_thread(verify_password_secure, payload.password, record['password_hash']))
+            if not verified or record['status'] != 'ACTIVE':
+                record_failed_attempt(identifier)
+                raise HTTPException(status_code=401, detail="Credenciais inválidas ou conta indisponível.")
+            if record['is_master']:
+                role, tenant_id = 'MASTER', None
+            else:
+                links = await conn.fetch("SELECT tenant_id,role FROM public.auth_active_memberships($1)", record['id'])
+                if len(links) != 1:
+                    raise HTTPException(status_code=403, detail="Conta sem vínculo único ativo; seleção de contexto ainda não disponível.")
+                role, tenant_id = links[0]['role'], str(links[0]['tenant_id'])
+        finally:
+            await conn.close()
+    except HTTPException:
+        raise
+    except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
+        raise HTTPException(status_code=503, detail="Serviço de autenticação indisponível.")
+    clear_rate_limit(identifier)
+    raw_token, token_hash = generate_session_token()
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS)
+    _active_server_sessions[token_hash] = dict(user_id=str(record['id']), email=record['email'], name=record['full_name'], role=role, tenant_id=tenant_id, is_master=record['is_master'], expires_at=expires_at)
+    user = UserResponse(id=str(record['id']), name=record['full_name'], email=record['email'], cpf='***', role=role, tenant_id=tenant_id, is_master=record['is_master'])
+    return SessionResponse(success=True, user=user, expires_at=expires_at, message="Sessão de homologação iniciada.", token=raw_token)
 
 @router.post("/logout")
 def logout(request: Request, response: Response):
