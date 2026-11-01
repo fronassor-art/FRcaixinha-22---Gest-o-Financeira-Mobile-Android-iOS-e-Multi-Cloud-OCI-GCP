@@ -90,6 +90,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
+          python -m pytest -q backend/tests/test_aistudio_real_panels.py
+          python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k 'not disposable_postgres'
 
   postgres-isolado:
     name: Migrações e testes de RLS em PostgreSQL descartável
@@ -134,6 +136,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/008_persistent_auth_sessions.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/009_tenant_context_and_references.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/010_ledger_integrity.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/011_platform_license_catalog.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -159,7 +162,9 @@ jobs:
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
-        run: python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
+        run: |
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
+          python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k disposable_postgres
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:

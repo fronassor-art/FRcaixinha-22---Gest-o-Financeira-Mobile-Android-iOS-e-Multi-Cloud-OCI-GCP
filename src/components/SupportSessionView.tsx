@@ -26,26 +26,21 @@ export const SupportSessionView: React.FC<SupportSessionViewProps> = ({ state })
   const activeGrants = state.supportGrants.filter(g => g.status === 'ACTIVE');
 
   const handleStartSession = () => {
-    try {
-      appStore.grantSupportAccess(state.currentTenantId, sessionType, supportReason);
-      alert(`Sessão de suporte ${sessionType === 'CONSENTED_NORMAL' ? 'Consentido (60m)' : 'Break-Glass (30m)'} iniciada com sucesso.`);
-    } catch (e: unknown) {
-      if (e instanceof Error) alert(e.message);
-    }
+    alert('Sessão de suporte NÃO iniciada. O servidor ainda não implementa autorização, consentimento e auditoria de acesso excepcional.');
   };
 
-  const handleRevoke = (grantId: string) => {
-    appStore.revokeSupportAccess(grantId);
+  const handleRevoke = (_grantId: string) => {
+    alert('A revogação real depende de uma sessão de suporte registrada no servidor; nenhuma alteração foi efetuada.');
   };
 
   // Simulação dos testes de robustez de webhook (Cláusula 9.8 / AT-11 / AT-28)
   const handleTestWebhookResilience = (scenario: '10x_REPLAY' | 'OUT_OF_ORDER' | 'DIVERGENT_VALUE') => {
     if (scenario === '10x_REPLAY') {
-      setWebhookSimOutput('✅ [TESTE 10x REPLAY]: O mesmo webhook Pix (ID: evt_0928341) foi enviado 10 vezes consecutivas. O backend identificou o idempotency_key estável e realizou 1 único lançamento no ledger. 9 requisições foram marcadas como DUPLICATE_SKIPPED.');
+      setWebhookSimOutput('✅ [DEMONSTRAÇÃO SEM WEBHOOK REAL — 10x REPLAY]: O mesmo webhook Pix (ID: evt_0928341) foi enviado 10 vezes consecutivas. Cenário hipotético de idempotência; nenhuma requisição foi enviada nem lançamento efetuado.');
     } else if (scenario === 'OUT_OF_ORDER') {
-      setWebhookSimOutput('✅ [TESTE FORA DE ORDEM]: Webhook com status CONFIRMADO chegou antes da resposta da API de geração. O backend reteve o estado PENDENTE_CONCILIACAO e conciliou a obrigação sem duplicidade.');
+      setWebhookSimOutput('✅ [DEMONSTRAÇÃO SEM WEBHOOK REAL — FORA DE ORDEM]: Webhook com status CONFIRMADO chegou antes da resposta da API de geração. Cenário hipotético de processamento fora de ordem; nenhum webhook foi processado.');
     } else {
-      setWebhookSimOutput('⚠️ [TESTE VALOR DIVERGENTE]: Webhook informou R$ 95,00 para obrigação esperada de R$ 100,00. O sistema registrou status financeiro PARCIAL e alertou divergência no log de auditoria, preservando o saldo em aberto.');
+      setWebhookSimOutput('⚠️ [DEMONSTRAÇÃO SEM WEBHOOK REAL — VALOR DIVERGENTE]: Webhook informou R$ 95,00 para obrigação esperada de R$ 100,00. Cenário hipotético de divergência; nenhum estado financeiro ou registro de auditoria foi alterado.');
     }
   };
 

@@ -5,6 +5,9 @@ Contrato Técnico Mestre (Cláusulas 1.3, 2.8, 3.2, 5.4, 11.2 e 16.4)
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
+from decimal import Decimal
+from typing import Literal
+import uuid
 from ..dependencies import require_master, AuthenticatedSession
 
 router = APIRouter(prefix="/master", tags=["Governança Master da Plataforma"])
@@ -14,19 +17,78 @@ class SupportBreakGlassRequest(BaseModel):
     justification: str = Field(..., min_length=15, description="Justificativa formal auditável para acesso emergencial de suporte")
     duration_minutes: int = Field(default=30, le=60, description="Duração máxima do acesso excepcional (máx 60 min)")
 
+class LicensePriceChange(BaseModel):
+    tier: Literal['ESSENCIAL', 'INTERMEDIARIO']
+    monthly_price: Decimal = Field(..., gt=Decimal('0'), le=Decimal('999999.99'), decimal_places=2)
+    reason: str = Field(..., min_length=15, max_length=500)
+
+
 @router.get("/licenses")
-def get_platform_licenses(session: AuthenticatedSession = Depends(require_master)):
-    """
-    Gerenciamento de planos SaaS e preços da plataforma.
-    Acesso restrito ao Master.
-    """
+async def get_platform_licenses(
+    session: AuthenticatedSession = Depends(require_master),
+    conn = Depends(get_rls_db_connection),
+):
+    """Catalogo e versoes reais, nao cobrancas ou assinaturas ficticias."""
+    rows = await conn.fetch(
+        "SELECT p.tier,p.display_name,p.members_limit,p.quotas_limit,p.status,"
+        "v.id AS version_id,v.monthly_price,v.annual_price,v.created_at "
+        "FROM public.platform_license_plans p "
+        "LEFT JOIN LATERAL (SELECT id,monthly_price,annual_price,created_at "
+        "FROM public.platform_license_price_versions "
+        "WHERE plan_tier=p.tier ORDER BY created_at DESC,id DESC LIMIT 1) v ON true "
+        "ORDER BY p.tier"
+    )
     return {
+        "source": "POSTGRESQL_RLS",
+        "billing_status": "NOT_CONNECTED_TO_RECONCILED_PROVIDER",
         "plans": [
-            {"tier": "ESSENCIAL", "members_limit": 20, "quotas_limit": 40, "price_monthly": 89.90},
-            {"tier": "INTERMEDIARIO", "members_limit": 50, "quotas_limit": 50, "price_monthly": 109.90},
-            {"tier": "AMPLIADO", "status": "BLOCKED_PENDING_CEILING"}
-        ]
+            {
+                "tier": r["tier"], "name": r["display_name"],
+                "members_limit": r["members_limit"], "quotas_limit": r["quotas_limit"],
+                "status": r["status"], "version_id": str(r["version_id"]) if r["version_id"] else None,
+                "monthly_price": str(r["monthly_price"]) if r["monthly_price"] is not None else None,
+                "annual_price_computed": str(r["annual_price"]) if r["annual_price"] is not None else None,
+                "updated_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+            for r in rows
+        ],
     }
+
+
+@router.post("/license-prices")
+async def change_platform_license_price(
+    payload: LicensePriceChange,
+    session: AuthenticatedSession = Depends(require_master),
+    conn = Depends(get_rls_db_connection),
+):
+    """Apenas o Master registra uma NOVA versao; sem alterar assinaturas ja pagas."""
+    plan = await conn.fetchrow(
+        "SELECT tier,status FROM public.platform_license_plans WHERE tier=$1", payload.tier
+    )
+    if not plan or plan["status"] != "ACTIVE":
+        raise HTTPException(status_code=422, detail="Plano indisponivel para precificacao.")
+    actor = uuid.UUID(session.user_id)
+    row = await conn.fetchrow(
+        "INSERT INTO public.platform_license_price_versions"
+        "(plan_tier,monthly_price,changed_by,reason) VALUES($1,$2,$3,$4) "
+        "RETURNING id,monthly_price,annual_price,created_at",
+        payload.tier, payload.monthly_price, actor, payload.reason.strip()
+    )
+    await conn.execute(
+        "INSERT INTO public.audit_events(actor_id,actor_role,action,object_type,object_id,"
+        "reason,evidence_ref) VALUES($1,'MASTER','SAAS_PRICE_VERSION_CREATED',"
+        "'LICENSE_PRICE',$2,$3,$4)",
+        actor, str(row["id"]), payload.reason.strip(), "SAAS_PRICE_VERSION"
+    )
+    return {
+        "status": "VERSION_PERSISTED_NO_BILLING",
+        "tier": payload.tier,
+        "version_id": str(row["id"]),
+        "monthly_price": str(row["monthly_price"]),
+        "annual_price_computed": str(row["annual_price"]),
+        "created_at": row["created_at"].isoformat(),
+    }
+
 
 @router.post("/support-session")
 def request_support_break_glass(payload: SupportBreakGlassRequest, session: AuthenticatedSession = Depends(require_master)):

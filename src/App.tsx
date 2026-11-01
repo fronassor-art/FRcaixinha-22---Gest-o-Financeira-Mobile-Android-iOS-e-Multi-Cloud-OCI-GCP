@@ -32,7 +32,7 @@ import { AuditSuiteModal } from './components/AuditSuiteModal';
 import { DashboardView } from './components/DashboardView';
 import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
-import { LoansView } from './components/LoansView';
+import { ServerLoansView } from './components/ServerLoansView';
 import { ConsentView } from './components/ConsentView';
 import { LedgerView } from './components/LedgerView';
 import { CycleClosingView } from './components/CycleClosingView';
@@ -342,7 +342,7 @@ export default function App() {
           <ContributionsView state={state} onOpenPixModal={openPixModal} />
         )}
         {activeTab === 'EMPRESTIMOS' && (
-          <LoansView state={state} onOpenPixModal={openPixModal} />
+          <ServerLoansView state={state} />
         )}
         {activeTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
         {activeTab === 'LEDGER' && <LedgerView state={state} />}
@@ -371,7 +371,7 @@ export default function App() {
           <ContributionsView state={state} onOpenPixModal={openPixModal} />
         )}
         {activeTab === 'MEU_EMPRESTIMO' && (
-          <LoansView state={state} onOpenPixModal={openPixModal} />
+          <ServerLoansView state={state} />
         )}
         {activeTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
         {activeTab === 'MEU_RESULTADO' && (

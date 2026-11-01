@@ -83,6 +83,71 @@ class FinancialApiService {
     return response.json();
   }
 
+  // --- Consultas de painéis (somente dados autoritativos, sem seed) ---
+
+  public async fetchMasterOverview(): Promise<{
+    source: 'POSTGRESQL_RLS';
+    total_tenants: number;
+    tenants: Array<{ id: string; display_name: string; status: string; is_owner_box: boolean }>;
+    has_more: boolean;
+    saas_revenue_status: string;
+    subscriptions_status: string;
+  }> {
+    return this.request('/api/v1/master/overview');
+  }
+
+  public async fetchTenantOverview(tenantId: string): Promise<{
+    source: 'POSTGRESQL_RLS';
+    tenant_id: string;
+    role: 'TENANT_ADMIN' | 'TENANT_MEMBER';
+    quota_count_visible: number;
+    contribution_count_visible: number;
+    loan_count_visible: number;
+    member_count_visible?: number;
+    financial_operations: string;
+  }> {
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/dashboard`);
+  }
+
+  public async fetchTenantMembers(tenantId: string): Promise<{
+    source: 'POSTGRESQL_RLS';
+    tenant_id: string;
+    members: Array<{ id: string; name: string; role: string; status: string; joined_at: string }>;
+  }> {
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/members`);
+  }
+
+  // --- Catalogo e precos persistentes do Master (sem cobranca) ---
+
+  public async fetchMasterLicenses(): Promise<{
+    source: 'POSTGRESQL_RLS';
+    billing_status: string;
+    plans: Array<{
+      tier: 'ESSENCIAL' | 'INTERMEDIARIO' | 'AMPLIADO';
+      name: string;
+      members_limit: number | null;
+      quotas_limit: number | null;
+      status: string;
+      version_id: string | null;
+      monthly_price: string | null;
+      annual_price_computed: string | null;
+      updated_at: string | null;
+    }>;
+  }> {
+    return this.request('/api/v1/master/licenses');
+  }
+
+  public async updateMasterLicensePrice(
+    tier: 'ESSENCIAL' | 'INTERMEDIARIO',
+    monthly_price: number,
+    reason: string
+  ): Promise<{ status: string; version_id: string; monthly_price: string;
+    annual_price_computed: string }> {
+    return this.request('/api/v1/master/license-prices', {
+      method: 'POST', body: JSON.stringify({ tier, monthly_price, reason }),
+    });
+  }
+
   // --- Cotas e Contribuições ---
 
   public async fetchQuotas(tenantId: string) {

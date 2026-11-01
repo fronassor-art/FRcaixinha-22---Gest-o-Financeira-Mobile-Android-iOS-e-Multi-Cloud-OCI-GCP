@@ -12,7 +12,9 @@ BEGIN
      OR (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='frc_ai_auth') THEN
     RAISE EXCEPTION 'Usuários técnicos privilegiados indevidamente';
   END IF;
-  IF to_regclass('public.users') IS NULL
+  IF to_regclass('public.platform_license_plans') IS NULL
+     OR to_regclass('public.platform_license_price_versions') IS NULL
+     OR to_regclass('public.users') IS NULL
      OR to_regclass('public.credentials') IS NULL
      OR to_regclass('public.sessions') IS NULL
      OR to_regprocedure('public.auth_active_memberships(uuid)') IS NULL THEN

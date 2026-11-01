@@ -62,7 +62,7 @@ cd ~/frcaixinha-aistudio-mobile || exit 1
 AI_STUDIO_APPLY_MIGRATIONS=YES bash backend/scripts/aistudio_db_local.sh apply
 ```
 
-Exige confirmacao digitada `MIGRAR_SOMENTE_AI_STUDIO`; confirma repo/branch/PGDATA/porta/owner/versao/banco vazio/papeis; usa `psql --single-transaction` e migra SQL `001` ate `010` sem alterar os arquivos legados.
+Exige confirmacao digitada `MIGRAR_SOMENTE_AI_STUDIO`; confirma repo/branch/PGDATA/porta/owner/versao/banco vazio/papeis; usa `psql --single-transaction` e migra SQL `001` ate `011` sem alterar os arquivos legados.
 Na MESMA transacao vincula `frc_ai_app` ao papel `frcaixinha_app_role` e `frc_ai_auth` ao papel `frcaixinha_auth_role`; falhas causam rollback.
 Nao cria usuarios humanos nem disponibiliza transacoes bancarias reais.
 
@@ -108,3 +108,25 @@ Validar `/api/health`, `/api/health/ready`, login, sessao, troca de contexto,
 e autorizacoes negadas entre tenants antes de usar APK.
 
 **Nao baixar/instalar APK nem habilitar Pix/emprestimos/boloes/rifas reais antes de testes e autorizacoes especificas.**
+
+## Evolucao dos motores por perfil — fase de consultas e catalogo (GitHub)
+
+No mesmo repositorio AI Studio, foram integradas:
+- Painel MASTER: leitura de caixinhas cadastradas via `/api/v1/master/overview`, sem acesso ao patrimonio dos tenants.
+- Precos MASTER: `011_platform_license_catalog.sql` cria catalogo e historico de precos SaaS; `/api/v1/master/licenses` le dados persistidos, `POST /api/v1/master/license-prices` anexa versao imutavel com registro na auditoria. Nao registra assinatura paga nem autoriza cobranca.
+- Painel TENANT_ADMIN / TENANT_MEMBER: `GET /api/v1/tenants/{tenant_id}/dashboard` consulta contagens autorizadas por RLS.
+- Lista de membros: `GET /api/v1/tenants/{tenant_id}/members`, exclusiva do ADMIN do tenant, sem CPF/telefone.
+- Livro-razao e emprestimos: telas autenticadas consultam a API; simulacao Price e somente matematica, nunca liberacao ou quitação.
+- Contribuicoes: tela existente consulta API e nao confirma Pix sem reconciliacao.
+
+O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-011 antes de rodar `apply`. Este documento nao constitui comando de execucao.
+
+### Pendencias que nao devem ser apresentadas como prontas
+- Contratacao, renovacao, suspensao e cobranca SaaS; historico de preco nao equivale a receita.
+- Aceite e envio de convites; assinaturas anuais de autoemprestimo.
+- Pix, OAuth, webhooks, conciliacao e transferencias reais.
+- Ledger autoritativo e fechamento com pagamentos reais.
+- Monitoramento e failover Multi-Cloud reais; rifa e bolao somente demonstrativos.
+- Teste real no Android: o GitHub Actions compila o APK, mas nao testa a integracao no aparelho.
+
+O operador deve sincronizar os arquivos pelo git antes de prosseguir, sem restaurar seed como dados financeiros reais. O PostgreSQL local permanece sem migracoes ate nova autorizacao.

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { financialApi } from '../services/financialApiService';
 import {
   Wallet,
   ArrowUpRight,
@@ -36,6 +37,96 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateTab, onOpenPixModal }) => {
   const currentRole = state.currentRole;
+  const scope = [state.currentUserId, currentRole, state.currentTenantId].join(':');
+  type MasterData = Awaited<ReturnType<typeof financialApi.fetchMasterOverview>>;
+  type TenantData = Awaited<ReturnType<typeof financialApi.fetchTenantOverview>>;
+  type Result = {
+    scope: string;
+    status: 'loading' | 'ready' | 'error';
+    master?: MasterData;
+    tenant?: TenantData;
+    error?: string;
+  };
+  const [serverResult, setServerResult] = useState<Result>({ scope: '', status: 'loading' });
+  useEffect(() => {
+    let active = true;
+    setServerResult({ scope, status: 'loading' });
+    const task = currentRole === 'MASTER'
+      ? financialApi.fetchMasterOverview().then(master => {
+          if (master.source !== 'POSTGRESQL_RLS') throw new Error('Fonte de dados inválida');
+          if (active) setServerResult({ scope, status: 'ready', master });
+        })
+      : financialApi.fetchTenantOverview(state.currentTenantId).then(tenant => {
+          if (tenant.source !== 'POSTGRESQL_RLS' || tenant.role !== currentRole ||
+              tenant.tenant_id !== state.currentTenantId) throw new Error('Contexto de dados inválido');
+          if (active) setServerResult({ scope, status: 'ready', tenant });
+        });
+    task.catch(() => {
+      if (active) setServerResult({ scope, status: 'error',
+        error: 'Não foi possível consultar o PostgreSQL. Nenhum dado demonstrativo será apresentado como real.' });
+    });
+    return () => { active = false; };
+  }, [scope]);
+  const currentResult: Result = serverResult.scope === scope
+    ? serverResult : { scope, status: 'loading' };
+  if (currentResult.status !== 'ready') {
+    return (
+      <section className="rounded-2xl border border-slate-300 bg-white p-6" role="status">
+        <h2 className="text-lg font-bold">Painel {currentRole === 'MASTER' ? 'Master SaaS' : 'da Caixinha'}</h2>
+        <p className="mt-2 text-sm text-slate-700">
+          {currentResult.status === 'error' ? currentResult.error : 'Consultando dados autorizados no PostgreSQL...'}
+        </p>
+      </section>
+    );
+  }
+  if (currentRole !== 'MASTER') {
+    const data = currentResult.tenant!;
+    const metrics = [
+      { label: 'Cotas visíveis', value: data.quota_count_visible },
+      { label: 'Contribuições visíveis', value: data.contribution_count_visible },
+      { label: 'Empréstimos visíveis', value: data.loan_count_visible },
+      ...(currentRole === 'TENANT_ADMIN' ? [{
+        label: 'Membros ativos da caixinha', value: data.member_count_visible ?? 0,
+      }] : []),
+    ];
+    return (
+      <section className="space-y-5">
+        <div className="rounded-xl border border-slate-300 bg-white p-5">
+          <h2 className="text-lg font-bold text-slate-900">
+            {currentRole === 'TENANT_ADMIN' ? 'Painel do Administrador' : 'Meu Painel'}
+          </h2>
+          <p className="mt-1 text-sm text-slate-700">
+            Dados reais consultados pelo servidor com isolamento de perfil e caixinha.
+            Nenhuma simulação de capital ou de Pix é apresentada como saldo confirmado.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {metrics.map(metric => (
+            <article key={metric.label} className="rounded-xl border border-slate-200 bg-white p-5">
+              <h3 className="text-sm text-slate-600">{metric.label}</h3>
+              <p className="mt-2 text-3xl font-bold text-slate-900">{metric.value}</p>
+            </article>
+          ))}
+        </div>
+        <p className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          Movimentações financeiras reais ainda dependem de autorização, conciliação bancária
+          e testes completos. Nenhuma movimentação foi realizada nesta consulta.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={() => onNavigateTab('CONTRIBUICOES')}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+            Consultar contribuições
+          </button>
+          {currentRole === 'TENANT_ADMIN' && <button type="button"
+            onClick={() => onNavigateTab('MEMBROS')}
+            className="rounded-lg bg-indigo-900 px-4 py-2 text-sm font-semibold text-white">
+            Consultar membros
+          </button>}
+        </div>
+      </section>
+    );
+  }
+
   const currentTenant = state.tenants.find(t => t.id === state.currentTenantId);
   const currentPolicy = state.policies.find(p => p.tenant_id === state.currentTenantId && p.status === 'ACTIVE');
   const currentSub = state.subscriptions.find(s => s.tenant_id === state.currentTenantId);
@@ -77,11 +168,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
   // Status de autorização anual para crédito próprio do admin
   const selfConsent = state.adminSelfConsents.find(c => c.tenant_id === state.currentTenantId);
 
-  // Se o usuário for MASTER
+  // O painel Master existente usa apenas inventário cadastral autorizado do servidor.
   if (currentRole === 'MASTER') {
-    const totalTenants = state.tenants.length;
-    const activeSubs = state.subscriptions.filter(s => s.status === 'ATIVA').length;
-    const platformRevenue = state.subscriptions.reduce((acc, s) => acc + s.price_paid, 0);
+    const masterData = currentResult.master!;
+    const totalTenants = masterData.total_tenants;
 
     return (
       <div className="space-y-6">
@@ -118,22 +208,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Receita da Plataforma (SaaS)</span>
-            <div className="text-2xl font-black text-emerald-400 mt-2">{formatBRL(platformRevenue)}</div>
-            <p className="text-[11px] text-slate-400 mt-1">Exclusiva de assinaturas, segregada dos fundos</p>
+            <div className="text-2xl font-black text-emerald-400 mt-2">Não integrado</div>
+            <p className="text-[11px] text-slate-400 mt-1">Cobranças de licenças ainda sem registro conciliado no servidor</p>
           </div>
 
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Caixinhas Ativas (Tenants)</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Caixinhas cadastradas</span>
             <div className="text-2xl font-black text-white mt-2">{totalTenants}</div>
-            <p className="text-[11px] text-slate-400 mt-1">{activeSubs} licenças com status ATIVA</p>
+            <p className="text-[11px] text-slate-400 mt-1">Assinaturas SaaS ainda não persistidas</p>
           </div>
 
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Preço Essencial Vigente</span>
             <div className="text-2xl font-black text-white mt-2">
-              R$ {state.priceVersions.find(p => p.plan_tier === 'ESSENCIAL')?.monthly_price.toFixed(2)}/mês
+              Catálogo demonstrativo
             </div>
-            <p className="text-[11px] text-emerald-400 mt-1">Anual calculado: R$ {state.priceVersions.find(p => p.plan_tier === 'ESSENCIAL')?.annual_price_computed.toFixed(2)} (10x)</p>
+            <p className="text-[11px] text-emerald-400 mt-1">Preços não vinculados a cobrança real</p>
           </div>
 
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
@@ -153,11 +243,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
               <div className="flex items-center gap-2">
                 <h4 className="font-bold text-sm text-white">Infraestrutura Multi-Cloud Soberana (GCP + OCI)</h4>
                 <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                  FastConnect 4.1ms • WORM Inviolável
+                  Infraestrutura em demonstração
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Google Cloud (São Paulo) e Oracle Cloud (Vinhedo) com sincronismo contínuo RPO = 0s e RTO &lt; 15s. Operação nativa em Android e iOS.
+                Topologia ilustrativa. Não há medição verificada de disponibilidade, RPO, RTO ou integridade WORM.
               </p>
             </div>
           </div>
@@ -181,42 +271,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
           </div>
 
           <div className="space-y-3">
-            {state.tenants.map(t => {
-              const sub = state.subscriptions.find(s => s.tenant_id === t.id);
-              const plan = state.plans.find(p => p.tier === sub?.plan_tier);
-              const membersCount = state.memberships.filter(m => m.tenant_id === t.id && m.status === 'ATIVA').length;
-              const quotasCount = state.quotas.filter(q => q.tenant_id === t.id && q.status === 'ATIVA').length;
-
-              return (
-                <div key={t.id} className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <strong className="text-white text-sm">{t.display_name}</strong>
-                      {t.is_owner_box && (
-                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-semibold px-2 py-0.5 rounded-full">
-                          Modelo Inaugural
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-0.5">
-                      Plano: {plan?.name} • Vigência até: {formatDateBR(sub?.ends_at || '')} • Dia Âncora: {sub?.anchor_day}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-xs">
-                    <div className="text-right">
-                      <span className="text-slate-400 block">Capacidade Utilizada:</span>
-                      <strong className="text-white">
-                        {membersCount}/{plan?.member_limit} membros • {quotasCount}/{plan?.quota_limit} cotas
-                      </strong>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full font-bold text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      {sub?.status}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+            {masterData.tenants.length === 0 && (
+              <p className="text-sm text-slate-300">Nenhuma caixinha cadastrada no PostgreSQL.</p>
+            )}
+            {masterData.tenants.map(t => (
+              <div key={t.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                <strong className="text-sm text-white">{t.display_name}</strong>
+                <p className="mt-1 text-xs text-slate-300">
+                  Situação: {t.status} {t.is_owner_box ? ' • Caixinha inaugural' : ''}
+                </p>
+              </div>
+            ))}
+            {masterData.has_more && (
+              <p className="text-xs text-slate-300">Mostrando os primeiros 200 registros. Total: {totalTenants}.</p>
+            )}
           </div>
         </div>
       </div>
