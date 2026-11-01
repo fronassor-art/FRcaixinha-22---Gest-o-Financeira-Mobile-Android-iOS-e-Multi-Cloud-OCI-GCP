@@ -245,6 +245,15 @@ async def list_tenant_loans(
     return results
 
 
+async def _read_loan_result(tenant_id: str, loan_id: uuid.UUID | str,
+                            session: AuthenticatedSession, conn) -> LoanResponse:
+    """Retorna só o empréstimo escrito; evita resposta-lista após alteração no banco."""
+    for result in await list_tenant_loans(tenant_id, session, conn):
+        if result.id == str(loan_id):
+            return result
+    raise HTTPException(status_code=500, detail="Empréstimo gravado não ficou visível na transação.")
+
+
 @router.post("/request", response_model=LoanResponse)
 async def request_loan(
     tenant_id: str,
@@ -314,7 +323,7 @@ async def request_loan(
     """, uuid.uuid4(), uuid.UUID(session.user_id), session.role, uuid.UUID(tenant_id),
        str(loan_id), f"Solicitação de empréstimo R$ {sim.principal} em {sim.term_months}x", f"SIM-PMT-{sim.uniform_payment}")
 
-    return await list_tenant_loans(tenant_id, session, conn)
+    return await _read_loan_result(tenant_id, loan_id, session, conn)
 
 
 @router.post("/{loan_id}/approve", response_model=LoanResponse)
@@ -389,7 +398,7 @@ async def approve_loan(
         UPDATE loans SET status = 'APROVADO' WHERE id = $1;
     """, uuid.UUID(loan_id))
 
-    return await list_tenant_loans(tenant_id, session, conn)
+    return await _read_loan_result(tenant_id, loan_id, session, conn)
 
 
 @router.post("/{loan_id}/disburse", response_model=LoanResponse)
@@ -459,7 +468,7 @@ async def disburse_loan(
         UPDATE loans SET status = 'DESEMBOLSADO', disbursed_at = NOW() WHERE id = $1;
     """, uuid.UUID(loan_id))
 
-    return await list_tenant_loans(tenant_id, session, conn)
+    return await _read_loan_result(tenant_id, loan_id, session, conn)
 
 
 @router.post("/{loan_id}/repay", response_model=LoanRepayResponse)

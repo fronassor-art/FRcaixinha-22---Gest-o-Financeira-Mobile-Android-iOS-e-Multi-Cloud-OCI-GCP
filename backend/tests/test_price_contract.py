@@ -48,3 +48,30 @@ def test_zero_rate_and_negative_amortization_guards():
     assert zero.uniform_payment == Decimal('100.00')
     with pytest.raises(ValueError):
         compute_price_schedule(Decimal('500.00'), 5, Decimal('-0.01'))
+
+
+@pytest.mark.asyncio
+async def test_loan_write_returns_only_selected_record_or_fails_closed(monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.models import LoanResponse
+    from app.routers import loans
+
+    one = LoanResponse(
+        id='one', tenant_id='tenant', cycle_id='cycle', borrower_membership_id='member',
+        is_admin_loan=False, principal=Decimal('100.00'), monthly_rate=Decimal('0.20'),
+        term_months=1, monthly_payment=Decimal('120.00'), last_payment=Decimal('120.00'),
+        total_interest=Decimal('20.00'), status='SOLICITADO',
+        created_at=datetime(2027, 1, 1, tzinfo=timezone.utc),
+    )
+    other = one.model_copy(update={'id': 'other'})
+    async def listed(_tenant, _session, _conn):
+        return [other, one]
+    monkeypatch.setattr(loans, 'list_tenant_loans', listed)
+    session = AuthenticatedSession('user', 'TENANT_MEMBER', 'tenant',
+                                   'synthetic@example.invalid', 'Sintético', False)
+    assert await loans._read_loan_result('tenant', 'one', session, None) == one
+    with pytest.raises(HTTPException) as error:
+        await loans._read_loan_result('tenant', 'missing', session, None)
+    assert error.value.status_code == 500
