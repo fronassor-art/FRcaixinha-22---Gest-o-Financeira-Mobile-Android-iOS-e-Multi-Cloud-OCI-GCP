@@ -50,21 +50,3 @@ def get_tenant_members(tenant_id: str, session: AuthenticatedSession = Depends(g
         )
         
     return {"tenant_id": tenant_id, "members": []}
-
-@router.get("/{tenant_id}/loans")
-def get_tenant_loans(tenant_id: str, session: AuthenticatedSession = Depends(get_current_session)):
-    """
-    Empréstimos Tabela Price:
-    - Master: RECUSADO com 403;
-    - Admin: Vê todos os empréstimos da sua caixinha;
-    - Membro: Vê única e exclusivamente o seu próprio empréstimo ativo.
-    """
-    require_tenant_access(tenant_id, session)
-    
-    if not settings.is_database_configured:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Banco de dados PostgreSQL não conectado."
-        )
-        
-    return {"tenant_id": tenant_id, "loans": []}

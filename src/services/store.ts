@@ -648,7 +648,8 @@ export class AppStore {
         financialApi.fetchLedgerAccounts(tenantId),
       ]);
       this.state.backendStatus = 'CONNECTED';
-      this.state.isDataLoadedFromServer = true;
+      // A API respondeu, mas seus resultados ainda não substituem os dados locais.
+      this.state.isDataLoadedFromServer = false;
       this.notify();
       return true;
     } catch {
@@ -782,45 +783,10 @@ export class AppStore {
       throw err;
     }
 
-    const newPaid = roundCents(contrib.amount_paid + amount);
-    contrib.amount_paid = newPaid;
-    contrib.paid_at = new Date().toISOString();
-
-    if (newPaid >= contrib.amount_due) {
-      contrib.payment_status = 'QUITADA';
-      contrib.due_status = 'REGULARIZADA';
-    } else {
-      contrib.payment_status = 'PARCIAL';
-    }
-
-    // Lançamento de partidas dobradas no Ledger
-    const amountCents = Math.round(amount * 100);
-    const caixaAcc = this.state.ledgerAccounts.find(a => a.tenant_id === contrib.tenant_id && a.account_code === '1.1.1');
-    const capitalAcc = this.state.ledgerAccounts.find(a => a.tenant_id === contrib.tenant_id && a.account_code === '2.1.1');
-
-    if (caixaAcc && capitalAcc) {
-      caixaAcc.balance_cents += amountCents;
-      capitalAcc.balance_cents += amountCents;
-
-      const tx: LedgerTransaction = {
-        id: `ltx-${Date.now()}`,
-        tenant_id: contrib.tenant_id,
-        cycle_id: contrib.cycle_id,
-        business_type: 'CONTRIBUTION_PAYMENT',
-        business_id: contrib.id,
-        posted_at: new Date().toISOString(),
-        status: 'POSTED',
-        description: `Recebimento Pix de contribuição comp. ${contrib.competence}`,
-        entries: [
-          { id: `le-${Date.now()}-1`, transaction_id: `ltx-${Date.now()}`, account_id: caixaAcc.id, account_name: caixaAcc.account_name, direction: 'DEBIT', amount_cents: amountCents, currency: 'BRL' },
-          { id: `le-${Date.now()}-2`, transaction_id: `ltx-${Date.now()}`, account_id: capitalAcc.id, account_name: capitalAcc.account_name, direction: 'CREDIT', amount_cents: amountCents, currency: 'BRL' },
-        ],
-      };
-      this.state.ledgerTransactions.unshift(tx);
-    }
-
-    this.addAudit('CONTRIBUTION_PAID', `Pagamento Pix de R$ ${amount.toFixed(2)} registrado para contribuição ${contrib.id}`, 'CONTRIBUTION', contrib.id);
-    this.persist();
+    // A API criou apenas uma intenção pendente; não houve conciliação bancária.
+    // Não altere status, pagamentos, saldos ou lançamentos locais.
+    this.state.lastFinancialError = null;
+    this.notify();
   }
 
   // --- Empréstimos: Pedido, Aprovação e Desembolso ---

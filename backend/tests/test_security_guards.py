@@ -7,6 +7,13 @@ from fastapi import HTTPException
 from app.dependencies import AuthenticatedSession, require_master, require_tenant_access
 from app.routers.closings import capital_days_weight, close_cycle
 from app.routers.loans import disburse_loan, repay_loan_installment, settle_loan_early
+from app.main import app
+
+
+def test_loans_get_route_is_unique_and_uses_financial_router():
+    routes = [route for route in app.routes if route.path == '/api/v1/tenants/{tenant_id}/loans' and 'GET' in (route.methods or set())]
+    assert len(routes) == 1
+    assert routes[0].endpoint.__module__ == 'app.routers.loans'
 
 
 def session(role="TENANT_ADMIN", is_master=False):

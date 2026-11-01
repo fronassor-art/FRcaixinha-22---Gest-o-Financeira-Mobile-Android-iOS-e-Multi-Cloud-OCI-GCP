@@ -26,6 +26,8 @@ jobs:
         run: npm run lint
       - name: Testes TypeScript
         run: npm run test:audit
+      - name: Testes de integração do estado financeiro
+        run: npx tsx src/tests/server_integration.test.ts
       - name: Build web
         run: npm run build
 
