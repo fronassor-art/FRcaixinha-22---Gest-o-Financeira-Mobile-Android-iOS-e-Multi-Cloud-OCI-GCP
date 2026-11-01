@@ -286,7 +286,13 @@ async def request_loan(
             detail="Apenas membros ativos da caixinha podem solicitar empréstimo."
         )
 
-    is_admin_loan = (mem_row["role"] == "TENANT_ADMIN") or payload.is_admin_loan
+    # O papel do vínculo escolhido pode ser MEMBRO mesmo para o administrador.
+    # A identidade do responsável da caixinha prevalece sobre o sinalizador do cliente.
+    admin_user_id = await conn.fetchval(
+        "SELECT admin_user_id FROM tenants WHERE id = $1", uuid.UUID(tenant_id))
+    if admin_user_id is None:
+        raise HTTPException(status_code=404, detail="Caixinha não encontrada.")
+    is_admin_loan = admin_user_id == uuid.UUID(session.user_id)
 
     cycle_row = await conn.fetchrow("""
         SELECT id FROM cycles WHERE tenant_id = $1 AND status = 'ABERTO' LIMIT 1;
@@ -359,7 +365,13 @@ async def approve_loan(
     if loan["status"] != "SOLICITADO":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Empréstimo com status '{loan['status']}' não pode ser aprovado.")
 
-    if loan["is_admin_loan"]:
+    borrower_is_admin = await conn.fetchval("""
+        SELECT EXISTS(
+          SELECT 1 FROM memberships m JOIN tenants t ON t.id = m.tenant_id
+          WHERE m.id = $1 AND m.tenant_id = $2 AND m.user_id = t.admin_user_id
+        )
+    """, loan["borrower_membership_id"], uuid.UUID(tenant_id))
+    if loan["is_admin_loan"] or borrower_is_admin:
         # A contagem de votos abaixo não comprova autorização anual vigente,
         # unanimidade dos demais membros ou revalidação após revogação.
         raise HTTPException(status_code=503, detail="Autoempréstimo indisponível até validar a autorização anual dos demais membros.")

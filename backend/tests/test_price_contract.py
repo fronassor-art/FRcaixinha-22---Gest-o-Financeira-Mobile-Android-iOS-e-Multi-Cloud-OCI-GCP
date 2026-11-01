@@ -106,3 +106,57 @@ async def test_request_rejects_term_above_tenant_policy_without_writing():
                            session, conn)
     assert error.value.status_code == 422
     assert conn.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_admin_member_cannot_hide_self_loan_by_choosing_member_link(monkeypatch):
+    import uuid
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.models import LoanRequestPayload
+    from app.routers import loans
+
+    tenant_id, admin_id, member_link = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    class FakeConn:
+        def __init__(self):
+            self.writes = []
+        async def fetchrow(self, query, *args):
+            if 'FROM memberships' in query:
+                return {'id': member_link, 'role': 'TENANT_MEMBER', 'status': 'ATIVA'}
+            if 'FROM cycles' in query:
+                return {'id': uuid.uuid4()}
+            if 'FROM policies' in query:
+                return {'id': uuid.uuid4(), 'monthly_interest_rate': Decimal('0.20'), 'max_installments': 6}
+            if 'FROM loans' in query:
+                return {'status': 'SOLICITADO', 'is_admin_loan': False,
+                        'borrower_membership_id': member_link}
+            raise AssertionError(query)
+        async def fetchval(self, query, *args):
+            if 'SELECT admin_user_id FROM tenants' in query:
+                return admin_id
+            if 'SELECT EXISTS' in query:
+                return True
+            raise AssertionError(query)
+        async def execute(self, query, *args):
+            self.writes.append((query, args))
+
+    conn = FakeConn()
+    member_context = AuthenticatedSession(str(admin_id), 'TENANT_MEMBER', str(tenant_id),
+                                          'synthetic@example.invalid', 'Sintético', False)
+    async def selected(*_args):
+        return 'pedido-sintetico'
+    monkeypatch.setattr(loans, '_read_loan_result', selected)
+    assert await loans.request_loan(
+        str(tenant_id), LoanRequestPayload(principal=Decimal('500.00'), term_months=5,
+                                           is_admin_loan=False), member_context, conn
+    ) == 'pedido-sintetico'
+    loan_insert = next(args for query, args in conn.writes if 'INSERT INTO loans' in query)
+    assert loan_insert[5] is True
+
+    admin_context = AuthenticatedSession(str(admin_id), 'TENANT_ADMIN', str(tenant_id),
+                                         'synthetic@example.invalid', 'Sintético', False)
+    blocked = FakeConn()
+    with pytest.raises(HTTPException) as error:
+        await loans.approve_loan(str(tenant_id), str(uuid.uuid4()), admin_context, blocked)
+    assert error.value.status_code == 503
+    assert blocked.writes == []
