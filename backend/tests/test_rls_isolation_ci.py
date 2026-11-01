@@ -144,8 +144,10 @@ async def test_contributions_restricted_by_user_and_tenant(isolated_rows):
 
 async def test_experimental_login_real_database_roles_and_logout(isolated_rows, monkeypatch):
     from httpx import ASGITransport, AsyncClient
+    from datetime import date
     from app.main import app
     from app.config import settings
+    from app.database import close_db_pool
     from app.security import hash_password_secure
     conn, ids = isolated_rows
     monkeypatch.setattr(settings, "DATABASE_URL", _ci_dsn("DATABASE_URL"))
@@ -158,6 +160,10 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
         hashed = hash_password_secure(password)
         for name in ("master", "admin_a", "member_a"):
             await admin.execute("INSERT INTO credentials(user_id,password_hash) VALUES($1,$2)", ids[name], hashed)
+        cycle = uuid.uuid4()
+        await admin.execute("INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) VALUES($1,$2,2027,$3,$4,$5)", cycle, ids['tenant_a'], date(2027,1,1), date(2027,12,31), date(2028,1,10))
+        for membership in (ids['membership_a'], ids['membership_a2']):
+            await admin.execute("INSERT INTO contributions(id,tenant_id,cycle_id,membership_id,competence,due_date,amount_due) VALUES($1,$2,$3,$4,'2027-01',$5,100)", uuid.uuid4(), ids['tenant_a'], cycle, membership, date(2027,1,10))
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             for name, role in (("master", "MASTER"), ("admin_a", "TENANT_ADMIN"), ("member_a", "TENANT_MEMBER")):
                 email = f"{ids[name]}@example.com"
@@ -172,8 +178,15 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
                 headers = {'Authorization': f'Bearer {token}'}
                 me = await client.get('/api/v1/auth/me', headers=headers)
                 assert me.status_code == 200 and me.json()['role'] == role
+                contributions = await client.get(f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=headers)
+                if role == 'MASTER':
+                    assert contributions.status_code == 403
+                else:
+                    assert contributions.status_code == 200, contributions.text
+                    assert len(contributions.json()) == (2 if role == 'TENANT_ADMIN' else 1)
                 logout = await client.post('/api/v1/auth/logout', headers=headers)
                 assert logout.status_code == 200
                 assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
     finally:
+        await close_db_pool()
         await admin.close()
