@@ -32,10 +32,13 @@ def test_separate_admin_and_member_credentials():
                 row = conn.execute("SELECT c.password_hash, u.is_master, m.role, m.tenant_id FROM users u JOIN credentials c ON c.user_id=u.id JOIN memberships m ON m.user_id=u.id WHERE m.id=%s", (membership_id,)).fetchone()
                 assert row and row[0] != password and verify_password_secure(password, row[0])
                 assert row[1:] == (False, role, tenant)
+                audit = conn.execute("SELECT actor_id,actor_role FROM audit_events WHERE tenant_id=%s AND object_id=%s AND action='LOCAL_ACCOUNT_PROVISIONED'", (tenant, str(membership_id))).fetchone()
+                assert audit == (None, "SYSTEM")
                 with pytest.raises(ValueError, match="já cadastrado"):
                     create_tenant_account(conn, **values)
             count = conn.execute("SELECT count(*) FROM memberships WHERE tenant_id=%s", (tenant,)).fetchone()[0]
             assert count == 2
         finally:
+            conn.execute("DELETE FROM audit_events WHERE tenant_id=%s", (tenant,))
             conn.execute("DELETE FROM tenants WHERE id=%s", (tenant,))
             conn.execute("DELETE FROM users WHERE id = ANY(%s::uuid[])", ([owner, *created],))

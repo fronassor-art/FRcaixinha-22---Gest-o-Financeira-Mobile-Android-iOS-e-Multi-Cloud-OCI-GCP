@@ -42,4 +42,10 @@ def create_tenant_account(conn, *, email, full_name, cpf, phone, password, tenan
                 "INSERT INTO memberships (id,tenant_id,user_id,role) VALUES (%s,%s,%s,%s)",
                 (membership_id, tenant_id, user_id, role),
             )
+            # O comando é executado por operador de banco; não inventa identidade autenticada.
+            cur.execute(
+                "INSERT INTO audit_events (actor_id,actor_role,tenant_id,action,object_type,object_id,reason,evidence_ref) "
+                "VALUES (NULL,'SYSTEM',%s,'LOCAL_ACCOUNT_PROVISIONED','MEMBERSHIP',%s,%s,%s)",
+                (tenant_id, str(membership_id), "Provisionamento local por operador do banco", "LOCAL_OPERATOR_UNIDENTIFIED"),
+            )
     return user_id, membership_id
