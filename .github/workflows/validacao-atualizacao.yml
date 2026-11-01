@@ -80,7 +80,7 @@ jobs:
           PYTHONPATH: backend
         run: |
           python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
-          python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
 
   postgres-isolado:
     name: Migrações e testes de RLS em PostgreSQL descartável
