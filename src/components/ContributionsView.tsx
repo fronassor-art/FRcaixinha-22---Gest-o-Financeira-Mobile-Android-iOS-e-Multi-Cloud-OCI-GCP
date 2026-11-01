@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
-import { DisplayContribution, normalizeContributions } from '../services/contributionsData';
+import { DisplayContribution, normalizeContributions, contributionScopeKey } from '../services/contributionsData';
 import { formatBRL } from '../services/financialEngine';
 
 interface ContributionsViewProps {
@@ -16,7 +16,8 @@ interface ContributionsViewProps {
 type Result = { key: string; status: 'loading' | 'ready' | 'error'; items: DisplayContribution[]; message?: string };
 
 export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) => {
-  const key = `${state.currentUserId}:${state.currentTenantId}`;
+  // O papel integra a chave: uma resposta do perfil administrador nunca pode ser exibida no perfil membro.
+  const key = contributionScopeKey(state.currentUserId, state.currentTenantId, state.currentRole);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', items: [] });
 

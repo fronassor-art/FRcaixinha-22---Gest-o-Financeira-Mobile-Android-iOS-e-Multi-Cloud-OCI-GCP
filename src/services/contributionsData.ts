@@ -4,6 +4,11 @@ export interface DisplayContribution extends Contribution {
   member_name?: string | null;
 }
 
+/** Uma consulta financeira é exclusiva da identidade, da caixinha e do papel ativo. */
+export function contributionScopeKey(userId: string, tenantId: string, role: string): string {
+  return JSON.stringify([userId, tenantId, role]);
+}
+
 /** Valida os dados recebidos antes de mostrá-los no contexto autenticado. */
 export function normalizeContributions(value: unknown, tenantId: string): DisplayContribution[] {
   if (!Array.isArray(value)) throw new Error('Resposta de contribuições inválida.');
