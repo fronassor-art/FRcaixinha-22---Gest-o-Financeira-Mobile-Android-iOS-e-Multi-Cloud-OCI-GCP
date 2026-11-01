@@ -340,3 +340,57 @@ async def test_financial_rows_rls_and_composite_tenant_references(isolated_rows)
                 ids['tenant_a'], cycle_b, ids['membership_a'], date(2027,1,10))
     finally:
         await admin.close()
+
+
+async def test_ledger_atomic_balance_idempotence_and_rollback(isolated_rows):
+    """Invariantes PostgreSQL com lançamentos sintéticos, sem operação financeira."""
+    _, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
+    try:
+        account_a = await admin.fetchval(
+            "SELECT id FROM ledger_accounts WHERE tenant_id=$1 AND account_code='1.1.1'",
+            ids['tenant_a'])
+        equity_a = await admin.fetchval(
+            "SELECT id FROM ledger_accounts WHERE tenant_id=$1 AND account_code='2.1.1'",
+            ids['tenant_a'])
+        account_b = await admin.fetchval(
+            "SELECT id FROM ledger_accounts WHERE tenant_id=$1 AND account_code='1.1.1'",
+            ids['tenant_b'])
+        assert account_a and equity_a and account_b
+        reference = str(uuid.uuid4())
+        tx = uuid.uuid4()
+        async with admin.transaction():
+            await admin.execute(
+                "INSERT INTO ledger_transactions(id,tenant_id,description,reference_id) VALUES($1,$2,'CI sintético',$3)",
+                tx, ids['tenant_a'], reference)
+            for account, kind in ((account_a, 'DR'), (equity_a, 'CR')):
+                await admin.execute(
+                    'INSERT INTO ledger_entries(tenant_id,transaction_id,account_id,entry_type,amount_cents) '
+                    'VALUES($1,$2,$3,$4,10000)',
+                    ids['tenant_a'], tx, account, kind)
+        assert await admin.fetchval(
+            'SELECT count(*) FROM ledger_entries WHERE transaction_id=$1', tx) == 2
+        with pytest.raises(asyncpg.UniqueViolationError):
+            await admin.execute(
+                "INSERT INTO ledger_transactions(tenant_id,description,reference_id) VALUES($1,'duplicado',$2)",
+                ids['tenant_a'], reference)
+
+        unbalanced = uuid.uuid4()
+        with pytest.raises(asyncpg.PostgresError):
+            async with admin.transaction():
+                await admin.execute(
+                    "INSERT INTO ledger_transactions(id,tenant_id,description,reference_id) VALUES($1,$2,'falha',$3)",
+                    unbalanced, ids['tenant_a'], str(uuid.uuid4()))
+                await admin.execute(
+                    "INSERT INTO ledger_entries(tenant_id,transaction_id,account_id,entry_type,amount_cents) "
+                    "VALUES($1,$2,$3,'DR',10000)",
+                    ids['tenant_a'], unbalanced, account_a)
+        assert await admin.fetchval(
+            'SELECT count(*) FROM ledger_transactions WHERE id=$1', unbalanced) == 0
+        with pytest.raises(asyncpg.ForeignKeyViolationError):
+            await admin.execute(
+                "INSERT INTO ledger_entries(tenant_id,transaction_id,account_id,entry_type,amount_cents) "
+                "VALUES($1,$2,$3,'DR',100)",
+                ids['tenant_a'], tx, account_b)
+    finally:
+        await admin.close()
