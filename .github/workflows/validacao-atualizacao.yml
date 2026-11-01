@@ -114,6 +114,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/001_initial_schema.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/002_financial_extensions.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/003_canonical_ledger_and_pix.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/004_quota_read_isolation.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1

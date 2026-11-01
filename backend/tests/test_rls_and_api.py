@@ -57,6 +57,19 @@ class TestFastAPIApiEndpoints:
         response = self.client.post("/api/v1/auth/login", json={})
         assert response.status_code == 422
 
+    def test_database_url_does_not_claim_login_is_implemented(self, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "DATABASE_URL", "postgresql://127.0.0.1/frcaixinha_ci")
+        response = self.client.get("/api/v1/auth/status")
+        assert response.status_code == 200
+        assert response.json()["configured"] is False
+        assert response.json()["status"] == "BLOCKED_PENDING_IMPLEMENTATION"
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={"username_or_email": "teste@example.invalid", "password": "teste-sintetico"},
+        )
+        assert login.status_code == 503
+
     def test_break_glass_is_disabled_by_contract(self):
         """Garante que a rota de suporte emergencial Break-Glass permaneça desabilitada (HTTP 403)."""
         response = self.client.post(

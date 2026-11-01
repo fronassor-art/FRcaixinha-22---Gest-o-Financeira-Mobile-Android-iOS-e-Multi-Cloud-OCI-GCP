@@ -107,3 +107,4 @@ async def test_member_sees_only_own_quota_in_same_tenant(isolated_rows):
 async def test_master_context_cannot_read_member_quotas(isolated_rows):
     conn, ids = isolated_rows
     assert await _visible_quotas(conn, ids["master"], ids["tenant_a"], "MASTER") == set()
+    assert await _visible_quotas(conn, ids["master"], ids["tenant_a"], "TENANT_MEMBER") == set()

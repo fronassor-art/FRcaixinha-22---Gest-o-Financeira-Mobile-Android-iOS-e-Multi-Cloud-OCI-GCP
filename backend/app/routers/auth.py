@@ -18,15 +18,15 @@ def get_auth_status():
     Informa o estado da infraestrutura de autenticação.
     Declara explicitamente a necessidade do backend contratual FastAPI + PostgreSQL.
     """
-    configured = settings.is_database_configured
+    database_url_configured = settings.is_database_configured
     return AuthStatusResponse(
-        status="ONLINE_CONFIGURED" if configured else "BLOCKED_PENDING_CONFIG",
-        configured=configured,
-        provider="FASTAPI_POSTGRESQL" if configured else "NONE",
+        status="BLOCKED_PENDING_IMPLEMENTATION" if database_url_configured else "BLOCKED_PENDING_CONFIG",
+        configured=False,
+        provider="NONE",
         architecture_contract="FastAPI / PostgreSQL com RLS (Contrato Técnico Mestre)",
-        scaffold_note="Backend FastAPI em conformidade com o Contrato Mestre. Se o banco PostgreSQL não estiver conectado, o acesso permanece bloqueado por segurança.",
+        scaffold_note="A autenticação PostgreSQL ainda não foi implementada; configurar uma URL não habilita o login.",
         requires_authentication=True,
-        message="Autenticação pronta e conectada ao banco." if configured else "Autenticação ainda não configurada. Nenhuma sessão foi iniciada.",
+        message="Autenticação ainda não implementada. Nenhuma sessão foi iniciada." if database_url_configured else "Autenticação ainda não configurada. Nenhuma sessão foi iniciada.",
         server_time=datetime.datetime.now(datetime.timezone.utc)
     )
 
@@ -53,12 +53,10 @@ def login(payload: LoginRequest, response: Response):
             detail="Autenticação ainda não configurada. Nenhuma sessão foi iniciada."
         )
 
-    # 3. Validação Real contra Banco de Dados (quando DATABASE_URL estiver configurada)
-    # Por segurança, sem conexão de banco confirmada, nenhuma conta é simulada.
-    record_failed_attempt(identifier)
+    # Configurar uma URL não implementa a consulta nem verifica uma credencial.
     raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciais inválidas. Verifique seu usuário e senha."
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Autenticação PostgreSQL ainda não implementada. Nenhuma sessão foi iniciada."
     )
 
 @router.post("/logout")
@@ -108,16 +106,10 @@ def forgot_password(payload: ForgotPasswordRequest):
     - Se provedor de envio não estiver configurado, informa claramente a indisponibilidade.
     - Se configurado, retorna mensagem genérica para não revelar existência de contas.
     """
-    if not settings.is_email_provider_configured:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Serviço de envio de e-mails para recuperação de senha não configurado neste ambiente."
-        )
-        
-    return {
-        "success": True,
-        "message": "Se o e-mail estiver cadastrado no sistema, as instruções foram despachadas."
-    }
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Recuperação de senha por e-mail ainda não implementada."
+    )
 
 @router.post("/switch-context")
 def switch_context(payload: ContextSwitchRequest, session: AuthenticatedSession = Depends(get_current_session)):
@@ -133,8 +125,8 @@ def switch_context(payload: ContextSwitchRequest, session: AuthenticatedSession 
             detail="Autenticação ainda não configurada. Não é possível alternar vínculos sem banco de dados ativo."
         )
         
-    # Verificação estrita contra banco no ambiente de produção...
+    # Não houve consulta de vínculos ao banco; mantenha a operação bloqueada.
     raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Acesso negado: vínculo solicitado não autorizado para este usuário."
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Alternância de vínculos ainda não implementada."
     )
