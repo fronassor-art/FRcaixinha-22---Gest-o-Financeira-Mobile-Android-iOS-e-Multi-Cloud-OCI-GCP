@@ -37,11 +37,12 @@ class TestFastAPIApiEndpoints:
 
     def test_health_check_contract(self):
         """Verifica se o endpoint de saúde declara a arquitetura oficial do Contrato."""
-        response = self.client.get("/api/v1/health")
+        response = self.client.get("/api/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ONLINE"
-        assert data["architectureContract"] == "FastAPI / PostgreSQL (Contrato Técnico Mestre)"
+        assert data["framework"] == "FastAPI (Python)"
+        assert data["database_backend"] == "PostgreSQL com Row-Level Security (RLS)"
 
     def test_auth_status_reports_unconfigured_when_no_db(self):
         """Verifica que o backend bloqueia com segurança sem banco configurado."""
@@ -135,7 +136,7 @@ class TestPostgreSQLRowLevelSecurityCRUD:
         async with conn.transaction():
             await conn.execute(f"SET LOCAL app.current_user_id = '{test_user_id}';")
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{test_tenant_id}';")
-            await conn.execute("SET LOCAL app.current_role = 'TENANT_MEMBER';")
+            await conn.execute("SELECT set_config('app.current_role', 'TENANT_MEMBER', true);")
 
             # Esta consulta falharia com erro de recursão infinita na modelagem anterior
             rows = await conn.fetch("SELECT * FROM memberships WHERE tenant_id = $1;", uuid.UUID(test_tenant_id))
@@ -148,11 +149,14 @@ class TestPostgreSQLRowLevelSecurityCRUD:
         """
         conn = setup_db
         result = await conn.fetch("""
-            SELECT tablename, rowsecurity, forcerowsecurity
-            FROM pg_tables
-            WHERE schemaname = 'public'
-              AND tablename IN ('tenants', 'memberships', 'loans', 'ledger_accounts');
+            SELECT c.relname AS tablename, c.relrowsecurity AS rowsecurity,
+                   c.relforcerowsecurity AS forcerowsecurity
+            FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname IN ('tenants', 'memberships', 'loans', 'ledger_accounts');
         """)
+        assert len(result) == 4, "Tabelas esperadas não foram encontradas"
         for row in result:
             assert row["rowsecurity"] is True, f"RLS não habilitado em {row['tablename']}"
             assert row["forcerowsecurity"] is True, f"FORCE RLS não habilitado em {row['tablename']}"
@@ -170,7 +174,7 @@ class TestPostgreSQLRowLevelSecurityCRUD:
             # Usuário A tenta apontar a sessão para o Tenant B (onde ele não possui membership)
             await conn.execute(f"SET LOCAL app.current_user_id = '{user_a}';")
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{tenant_b}';")
-            await conn.execute("SET LOCAL app.current_role = 'TENANT_ADMIN';")
+            await conn.execute("SELECT set_config('app.current_role', 'TENANT_ADMIN', true);")
 
             # O motor RLS deve descartar todas as linhas porque rls_user_active_tenants(user_a) não inclui tenant_b
             rows = await conn.fetch("SELECT * FROM loans WHERE tenant_id = $1;", uuid.UUID(tenant_b))
@@ -188,7 +192,7 @@ class TestPostgreSQLRowLevelSecurityCRUD:
         async with conn.transaction():
             await conn.execute(f"SET LOCAL app.current_user_id = '{user_malicious}';")
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{victim_tenant}';")
-            await conn.execute("SET LOCAL app.current_role = 'TENANT_ADMIN';")
+            await conn.execute("SELECT set_config('app.current_role', 'TENANT_ADMIN', true);")
 
             with pytest.raises(Exception) as exc_info:
                 await conn.execute("""
@@ -210,7 +214,7 @@ class TestPostgreSQLRowLevelSecurityCRUD:
         async with conn.transaction():
             await conn.execute(f"SET LOCAL app.current_user_id = '{user_attacker}';")
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{target_tenant}';")
-            await conn.execute("SET LOCAL app.current_role = 'TENANT_MEMBER';")
+            await conn.execute("SELECT set_config('app.current_role', 'TENANT_MEMBER', true);")
 
             # UPDATE não afeta linhas devido ao filtro USING do RLS
             result = await conn.execute("""
@@ -229,7 +233,7 @@ class TestPostgreSQLRowLevelSecurityCRUD:
         async with conn.transaction():
             await conn.execute(f"SET LOCAL app.current_user_id = '{user_attacker}';")
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{target_tenant}';")
-            await conn.execute("SET LOCAL app.current_role = 'TENANT_ADMIN';")
+            await conn.execute("SELECT set_config('app.current_role', 'TENANT_ADMIN', true);")
 
             result = await conn.execute("""
                 DELETE FROM memberships WHERE tenant_id = $1;
@@ -248,7 +252,7 @@ class TestPostgreSQLRowLevelSecurityCRUD:
         async with conn.transaction():
             await conn.execute(f"SET LOCAL app.current_user_id = '{master_user}';")
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{tenant_target}';")
-            await conn.execute("SET LOCAL app.current_role = 'MASTER';")
+            await conn.execute("SELECT set_config('app.current_role', 'MASTER', true);")
 
             rows = await conn.fetch("SELECT * FROM ledger_accounts WHERE tenant_id = $1;", uuid.UUID(tenant_target))
             assert len(rows) == 0

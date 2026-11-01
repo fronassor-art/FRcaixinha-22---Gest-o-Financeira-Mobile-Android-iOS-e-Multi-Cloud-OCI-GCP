@@ -1,9 +1,6 @@
 name: Validação da atualização AI Studio
 
 on:
-  push:
-    branches:
-      - atualizacao-ai-studio-9b46a63187
   pull_request:
     branches:
       - main
