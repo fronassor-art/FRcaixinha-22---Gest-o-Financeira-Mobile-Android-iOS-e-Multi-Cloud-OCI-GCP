@@ -439,4 +439,7 @@ async def test_admin_member_loan_is_marked_and_blocked_in_real_postgres(isolated
             assert error.value.status_code == 503
             assert await conn.fetchval('SELECT status FROM loans WHERE id=$1', uuid.UUID(result.id)) == 'SOLICITADO'
     finally:
+        # audit_events preserva a referência por FK; limpar só os eventos sintéticos
+        # deste tenant descartável antes do teardown do fixture.
+        await admin.execute("DELETE FROM audit_events WHERE tenant_id=$1", ids['tenant_a'])
         await admin.close()
