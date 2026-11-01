@@ -108,3 +108,11 @@ async def test_master_context_cannot_read_member_quotas(isolated_rows):
     conn, ids = isolated_rows
     assert await _visible_quotas(conn, ids["master"], ids["tenant_a"], "MASTER") == set()
     assert await _visible_quotas(conn, ids["master"], ids["tenant_a"], "TENANT_MEMBER") == set()
+
+
+async def test_application_role_cannot_access_password_hashes_or_rewrite_audit(isolated_rows):
+    conn, _ = isolated_rows
+    for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+        assert not await conn.fetchval("SELECT has_table_privilege(current_user, 'public.credentials', $1)", privilege)
+    for privilege in ("UPDATE", "DELETE"):
+        assert not await conn.fetchval("SELECT has_table_privilege(current_user, 'public.audit_events', $1)", privilege)
