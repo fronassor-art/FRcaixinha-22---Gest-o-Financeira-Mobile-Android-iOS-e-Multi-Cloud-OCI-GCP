@@ -6,3 +6,13 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Chaves de assinatura, material de recuperação e backups locais
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.dump.age
+android/keystore.properties
+backend/.secrets/
+backups/

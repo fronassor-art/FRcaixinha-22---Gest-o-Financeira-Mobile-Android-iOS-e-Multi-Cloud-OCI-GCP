@@ -29,6 +29,12 @@ def to_cents(val) -> Decimal:
         return val.quantize(CENTS, rounding=ROUND_HALF_UP)
     return Decimal(str(val)).quantize(CENTS, rounding=ROUND_HALF_UP)
 
+def _next_tenth(day: date) -> date:
+    year = day.year + (1 if day.month == 12 else 0)
+    month = 1 if day.month == 12 else day.month + 1
+    return date(year, month, 10)
+
+
 def compute_price_schedule(
     principal: Decimal,
     term_months: int,
@@ -36,90 +42,70 @@ def compute_price_schedule(
     disbursement_date: Optional[date] = None,
     first_due_date: Optional[date] = None
 ) -> LoanSimulateResponse:
-    """
-    Tabela Price com amortização decrescente de juros e absorção do resíduo de centavos na última parcela.
-    Suporta 1º período irregular pró-rata die (Cláusula 8.4 e 8.5).
-    Precisão decimal pura via Decimal e ROUND_HALF_UP.
-    """
+    """Price com taxas por período e desconto composto, sem desembolso real."""
     P = to_cents(principal)
     n = term_months
     i = Decimal(str(monthly_rate))
-
-    is_irregular = False
-    first_period_days = None
-    effective_first_rate = i
-
-    if disbursement_date and first_due_date:
-        diff_days = (first_due_date - disbursement_date).days
-        first_period_days = diff_days
-        if diff_days != 30 and diff_days > 0:
-            is_irregular = True
-            # Taxa diária contratual: i * (dias / 30)
-            effective_first_rate = (i * Decimal(str(diff_days)) / Decimal("30")).quantize(RATE_PRECISION, rounding=ROUND_HALF_UP)
-
-    # Cálculo da prestação uniforme padrão: PMT = P * [i / (1 - (1+i)^-n)]
-    if n > 0:
-        # (1+i)^-n = 1 / (1+i)^n
-        one_plus_i = Decimal("1.0") + i
-        pow_val = one_plus_i ** n
-        factor = Decimal("1.0") / pow_val
-        pmt_regular = (P * (i / (Decimal("1.0") - factor))).quantize(CENTS, rounding=ROUND_HALF_UP)
+    if P <= 0 or n < 1 or n > 6 or i < 0 or not i.is_finite():
+        raise ValueError('Principal, taxa ou prazo inválido.')
+    if first_due_date and not disbursement_date:
+        raise ValueError('Primeiro vencimento exige data de liberação.')
+    if disbursement_date:
+        expected_due = _next_tenth(disbursement_date)
+        due = first_due_date or expected_due
+        if due != expected_due:
+            raise ValueError('Primeiro vencimento deve ser dia 10 do mês seguinte à liberação.')
+        days = (due - disbursement_date).days
+        if days <= 0:
+            raise ValueError('Primeiro período inválido.')
+        first_rate = i * Decimal(days) / Decimal(30)
+        cycle_end = date(disbursement_date.year, 12, 31)
     else:
-        pmt_regular = P
+        due = date(2027, 1, 10)  # Exemplo indicativo do ciclo informado pelo proprietário.
+        days = None
+        first_rate = i
+        cycle_end = date(2027, 12, 31)
 
+    rates = [first_rate] + [i] * (n - 1)
+    discount = Decimal(1)
+    discount_sum = Decimal(0)
+    for rate in rates:
+        discount /= Decimal(1) + rate
+        discount_sum += discount
+    payment = (P / discount_sum).quantize(CENTS, rounding=ROUND_HALF_UP)
+
+    balance = P
+    total_interest = Decimal('0.00')
     schedule: List[InstallmentScheduleItem] = []
-    current_balance = P
-    total_interest = Decimal("0.00")
-
-    current_due = first_due_date or (date.today() + timedelta(days=30))
-
-    for k in range(1, n + 1):
-        rate_k = effective_first_rate if (k == 1 and is_irregular) else i
-        interest_k = (current_balance * rate_k).quantize(CENTS, rounding=ROUND_HALF_UP)
-
-        if k == n:
-            # Última parcela: amortização absorve exatamente o saldo devedor restante
-            amort_k = current_balance
-            payment_k = to_cents(amort_k + interest_k)
-            is_adjusted = (payment_k != pmt_regular)
-            closing = Decimal("0.00")
+    for index, rate in enumerate(rates, start=1):
+        if due > cycle_end:
+            raise ValueError('Parcela ultrapassa 31/12 do ciclo.')
+        interest = (balance * rate).quantize(CENTS, rounding=ROUND_HALF_UP)
+        if index == n:
+            amortization = balance
+            installment = to_cents(balance + interest)
+            closing = Decimal('0.00')
         else:
-            payment_k = pmt_regular
-            amort_k = to_cents(payment_k - interest_k)
-            if amort_k < Decimal("0.00"):
-                amort_k = Decimal("0.00")
-            closing = to_cents(current_balance - amort_k)
-            is_adjusted = False
-
-        total_interest = to_cents(total_interest + interest_k)
-
+            installment = payment
+            amortization = to_cents(installment - interest)
+            if amortization <= 0:
+                raise ValueError('Prestação inferior aos juros ou amortização inválida.')
+            closing = to_cents(balance - amortization)
+        total_interest = to_cents(total_interest + interest)
         schedule.append(InstallmentScheduleItem(
-            installment_number=k,
-            due_date=current_due.isoformat(),
-            opening_balance=current_balance,
-            monthly_payment=payment_k,
-            interest_portion=interest_k,
-            amortization_portion=amort_k,
-            closing_balance=closing,
-            is_cents_adjusted=is_adjusted
-        ))
-
-        current_balance = closing
-        current_due = current_due + timedelta(days=30)
-
-    last_payment = schedule[-1].monthly_payment if schedule else pmt_regular
-
+            installment_number=index, due_date=due.isoformat(),
+            opening_balance=balance, monthly_payment=installment,
+            interest_portion=interest, amortization_portion=amortization,
+            closing_balance=closing, is_cents_adjusted=index == n and installment != payment))
+        balance = closing
+        due = _next_tenth(due)
     return LoanSimulateResponse(
-        principal=P,
-        monthly_rate=i,
-        term_months=n,
-        uniform_payment=pmt_regular,
-        last_payment=last_payment,
-        total_interest=total_interest,
+        principal=P, monthly_rate=i, term_months=n, uniform_payment=payment,
+        last_payment=schedule[-1].monthly_payment, total_interest=total_interest,
         total_payable=to_cents(P + total_interest),
-        is_irregular_first_period=is_irregular,
-        first_period_days=first_period_days,
-        effective_first_rate=effective_first_rate,
+        is_irregular_first_period=days is not None and days != 30,
+        first_period_days=days,
+        effective_first_rate=first_rate.quantize(Decimal('0.00000001'), rounding=ROUND_HALF_UP),
         schedule=schedule
     )
 
@@ -143,13 +129,16 @@ def simulate_loan_price(
             detail="Acesso Proibido: Master não simula nem gerencia empréstimos de caixinhas."
         )
 
-    return compute_price_schedule(
-        principal=payload.principal,
-        term_months=payload.term_months,
-        monthly_rate=payload.monthly_rate,
-        disbursement_date=payload.disbursement_date,
-        first_due_date=payload.first_due_date
-    )
+    try:
+        return compute_price_schedule(
+            principal=payload.principal,
+            term_months=payload.term_months,
+            monthly_rate=payload.monthly_rate,
+            disbursement_date=payload.disbursement_date,
+            first_due_date=payload.first_due_date
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("", response_model=List[LoanResponse])
