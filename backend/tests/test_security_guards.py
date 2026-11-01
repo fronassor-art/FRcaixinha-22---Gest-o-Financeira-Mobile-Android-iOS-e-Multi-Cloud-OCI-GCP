@@ -63,7 +63,9 @@ async def test_admin_self_loan_cannot_be_approved_without_annual_consent():
     admin = AuthenticatedSession(str(uuid4()), 'TENANT_ADMIN', tenant, 'test@example.com', 'Teste', False)
     class FakeConn:
         async def fetchrow(self, *_args):
-            return {'status': 'SOLICITADO', 'is_admin_loan': True}
+            return {'status': 'SOLICITADO', 'is_admin_loan': True, 'borrower_membership_id': uuid4()}
+        async def fetchval(self, *_args):
+            return False
     with pytest.raises(HTTPException) as exc:
         await approve_loan(tenant, loan_id, admin, FakeConn())
     assert exc.value.status_code == 503

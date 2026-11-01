@@ -394,3 +394,49 @@ async def test_ledger_atomic_balance_idempotence_and_rollback(isolated_rows):
                 ids['tenant_a'], tx, account_b)
     finally:
         await admin.close()
+
+
+async def test_admin_member_loan_is_marked_and_blocked_in_real_postgres(isolated_rows):
+    """O vínculo de membro do admin não transforma crédito próprio em crédito comum."""
+    from datetime import date
+    from decimal import Decimal
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.models import LoanRequestPayload
+    from app.routers.loans import request_loan, approve_loan
+
+    conn, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
+    cycle, policy, member_link = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    try:
+        await admin.execute(
+            "INSERT INTO memberships(id,tenant_id,user_id,role) VALUES($1,$2,$3,'TENANT_MEMBER')",
+            member_link, ids['tenant_a'], ids['admin_a'])
+        await admin.execute(
+            "INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) VALUES($1,$2,2027,$3,$4,$5)",
+            cycle, ids['tenant_a'], date(2027,1,1), date(2027,12,31), date(2028,1,10))
+        await admin.execute("INSERT INTO policies(id,tenant_id,cycle_id) VALUES($1,$2,$3)",
+                            policy, ids['tenant_a'], cycle)
+        member = AuthenticatedSession(str(ids['admin_a']), 'TENANT_MEMBER', str(ids['tenant_a']),
+                                      'synthetic@example.invalid', 'Administrador sintético', False)
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(ids['admin_a']))
+            await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)", str(ids['tenant_a']))
+            await conn.execute("SELECT set_config('app.current_role',$1,true)", 'TENANT_MEMBER')
+            result = await request_loan(
+                str(ids['tenant_a']), LoanRequestPayload(principal=Decimal('500.00'), term_months=5),
+                member, conn)
+            assert result.is_admin_loan is True
+            assert result.status == 'SOLICITADO'
+        tenant_admin = AuthenticatedSession(str(ids['admin_a']), 'TENANT_ADMIN', str(ids['tenant_a']),
+                                            'synthetic@example.invalid', 'Administrador sintético', False)
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(ids['admin_a']))
+            await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)", str(ids['tenant_a']))
+            await conn.execute("SELECT set_config('app.current_role',$1,true)", 'TENANT_ADMIN')
+            with pytest.raises(HTTPException) as error:
+                await approve_loan(str(ids['tenant_a']), result.id, tenant_admin, conn)
+            assert error.value.status_code == 503
+            assert await conn.fetchval('SELECT status FROM loans WHERE id=$1', uuid.UUID(result.id)) == 'SOLICITADO'
+    finally:
+        await admin.close()

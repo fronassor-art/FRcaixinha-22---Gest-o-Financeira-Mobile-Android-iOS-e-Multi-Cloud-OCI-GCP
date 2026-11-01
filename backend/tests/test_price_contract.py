@@ -96,6 +96,8 @@ async def test_request_rejects_term_above_tenant_policy_without_writing():
             if 'FROM policies' in query:
                 return {'id': uuid.uuid4(), 'monthly_interest_rate': Decimal('0.20'), 'max_installments': 3}
             raise AssertionError(query)
+        async def fetchval(self, *_args):
+            return uuid.uuid4()
         async def execute(self, *_args):
             self.writes += 1
     conn = PolicyOnlyConnection()
