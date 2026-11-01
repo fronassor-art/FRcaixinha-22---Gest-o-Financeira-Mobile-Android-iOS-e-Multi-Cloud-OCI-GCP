@@ -225,6 +225,9 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
 
   return (
     <div className="space-y-6">
+      <div role="note" className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+        DEMONSTRAÇÃO — dados fictícios e ações locais. Não há bilhete, aposta, sorteio, cobrança ou pagamento real neste módulo.
+      </div>
       {/* Banner Principal com Identidade dos Prints de 30/10/2026 */}
       <div
         className={`bg-gradient-to-r ${modalityTheme.primaryColor} rounded-2xl p-6 text-white border ${modalityTheme.borderColor} shadow-xl relative overflow-hidden`}
@@ -235,10 +238,10 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
-                <Ticket className="w-3.5 h-3.5" /> Módulo de Bolões Oficiais
+                <Ticket className="w-3.5 h-3.5" /> Bolões — demonstração
               </span>
               <span className="text-xs bg-slate-800/80 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/40">
-                SITUAÇÃO: AUTORIZADO (Revisão 1.1)
+                DEMONSTRAÇÃO SEM APOSTA
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
@@ -340,7 +343,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
                   {currentCampaign.special_edition}
                 </span>
                 <span className="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded">
-                  Concurso Oficial #{currentCampaign.contest_number || 'A CONFIRMAR'}
+                  Concurso de referência #{currentCampaign.contest_number || 'A CONFIRMAR'}
                 </span>
               </div>
               <h2 className="text-lg font-black text-slate-900">
@@ -459,7 +462,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
               </div>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
-                  Resultado Oficial Homologado
+                  Resultado simulado, sem homologação
                 </span>
                 <h3 className="text-lg font-black text-slate-900 mt-1">
                   Dezenas Sorteadas: {currentCampaign.drawn_numbers?.map(n => n.toString().padStart(2, '0')).join(' • ')}
@@ -697,7 +700,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
                           onClick={() => handlePayParticipationDirectly(p)}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] cursor-pointer"
                         >
-                          Pagar Pix
+                          Ver Pix demonstrativo
                         </button>
                       ) : (
                         <span className="text-emerald-600 font-bold flex items-center justify-end gap-1">
@@ -1058,7 +1061,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
                 {currentCampaign.campaign_name}
               </h2>
               <p className="text-xs text-slate-500">
-                Caixinha: <strong>{state.tenants.find(t => t.id === state.currentTenantId)?.display_name}</strong> • Concurso Oficial #{currentCampaign.contest_number || 'A CONFIRMAR'}
+                Caixinha: <strong>{state.tenants.find(t => t.id === state.currentTenantId)?.display_name}</strong> • Concurso de referência #{currentCampaign.contest_number || 'A CONFIRMAR'}
               </p>
             </div>
 
@@ -1183,7 +1186,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
                   type="submit"
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs"
                 >
-                  Homologar Registro Oficial
+                  Simular registro de recibo
                 </button>
               </div>
             </form>
