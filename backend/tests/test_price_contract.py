@@ -75,3 +75,34 @@ async def test_loan_write_returns_only_selected_record_or_fails_closed(monkeypat
     with pytest.raises(HTTPException) as error:
         await loans._read_loan_result('tenant', 'missing', session, None)
     assert error.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_request_rejects_term_above_tenant_policy_without_writing():
+    import uuid
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.models import LoanRequestPayload
+    from app.routers.loans import request_loan
+
+    tenant_id, user_id = uuid.uuid4(), uuid.uuid4()
+    class PolicyOnlyConnection:
+        writes = 0
+        async def fetchrow(self, query, *args):
+            if 'FROM memberships' in query:
+                return {'id': uuid.uuid4(), 'role': 'TENANT_MEMBER', 'status': 'ATIVA'}
+            if 'FROM cycles' in query:
+                return {'id': uuid.uuid4()}
+            if 'FROM policies' in query:
+                return {'id': uuid.uuid4(), 'monthly_interest_rate': Decimal('0.20'), 'max_installments': 3}
+            raise AssertionError(query)
+        async def execute(self, *_args):
+            self.writes += 1
+    conn = PolicyOnlyConnection()
+    session = AuthenticatedSession(str(user_id), 'TENANT_MEMBER', str(tenant_id),
+                                   'synthetic@example.invalid', 'Sintético', False)
+    with pytest.raises(HTTPException) as error:
+        await request_loan(str(tenant_id), LoanRequestPayload(principal=Decimal('500.00'), term_months=5),
+                           session, conn)
+    assert error.value.status_code == 422
+    assert conn.writes == 0

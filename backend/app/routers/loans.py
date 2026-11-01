@@ -301,6 +301,8 @@ async def request_loan(
     if not policy_row:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Política financeira não configurada.")
 
+    if payload.term_months > policy_row["max_installments"]:
+        raise HTTPException(status_code=422, detail="Prazo excede a política vigente da caixinha.")
     rate = Decimal(str(policy_row["monthly_interest_rate"]))
 
     # Cálculo da simulação Price com Decimal

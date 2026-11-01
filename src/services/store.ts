@@ -591,7 +591,7 @@ export class AppStore {
   }
 
   private loadState(): AppState {
-    return {
+    return structuredClone({
       currentUserId: '',
       currentRole: 'TENANT_MEMBER',
       currentTenantId: '',
@@ -636,7 +636,7 @@ export class AppStore {
       backendStatus: 'UNCONFIGURED',
       isDataLoadedFromServer: false,
       lastFinancialError: null,
-    };
+    });
   }
 
   public async refreshFinancialDataFromServer(tenantId: string): Promise<boolean> {
@@ -685,6 +685,7 @@ export class AppStore {
 
   // --- Gestão de Contexto e Papéis Autorizados pelo Servidor ---
   public setAuthenticatedContext(user: { id: string; role: UserRole; tenantId?: string }) {
+    this.state = this.loadState();
     this.state.currentUserId = user.id;
     this.state.currentRole = user.role;
     this.state.currentTenantId = user.tenantId || '';
@@ -699,6 +700,7 @@ export class AppStore {
   }
 
   public clearAuthenticatedContext() {
+    this.state = this.loadState();
     this.state.currentUserId = '';
     this.state.currentRole = 'TENANT_MEMBER';
     this.state.currentTenantId = '';

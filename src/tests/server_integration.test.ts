@@ -31,6 +31,19 @@ async function main() {
   financialApi.fetchLedgerAccounts = async () => [];
   assert.equal(await store.refreshFinancialDataFromServer('tenant-de-teste'), true);
   assert.equal(store.getState().isDataLoadedFromServer, false, 'Resposta da API sem integração não torna os dados locais autoritativos');
+  const isolated = new AppStore();
+  isolated.setAuthenticatedContext({ id: 'user-a', role: 'TENANT_MEMBER', tenantId: 'tenant-inaugural' });
+  const originalTitle = isolated.getState().raffleCampaigns[0].title;
+  isolated.getState().raffleCampaigns[0].title = 'Edição fictícia da sessão anterior';
+  isolated.setAuthenticatedContext({ id: 'user-b', role: 'TENANT_MEMBER', tenantId: 'tenant-tech' });
+  assert.equal(isolated.getState().raffleCampaigns[0].title, originalTitle,
+    'Troca de usuário deve descartar mutações locais anteriores');
+  isolated.getState().raffleCampaigns[0].title = 'Outra edição fictícia';
+  isolated.clearAuthenticatedContext();
+  assert.equal(isolated.getState().raffleCampaigns[0].title, originalTitle,
+    'Logout deve descartar mutações locais anteriores');
+  assert.equal(new AppStore().getState().raffleCampaigns[0].title, originalTitle,
+    'Seed global não deve ser alterado por uma sessão');
   console.log('PASS: intenção pendente não altera saldos; conectividade não valida dados locais.');
 }
 
