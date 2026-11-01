@@ -43,7 +43,7 @@ async def isolated_rows():
             uid = ids[name]
             await admin.execute(
                 "INSERT INTO users (id,email,full_name,cpf,phone,is_master) VALUES ($1,$2,$3,$4,$5,$6)",
-                uid, f"{uid}@example.invalid", f"Teste {name}", uid.hex[:14], "00000000000", name == "master",
+                uid, f"{uid}@example.com", f"Teste {name}", uid.hex[:14], "00000000000", name == "master",
             )
         for suffix in ("a", "b"):
             await admin.execute(
@@ -136,7 +136,7 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
             await admin.execute("INSERT INTO credentials(user_id,password_hash) VALUES($1,$2)", ids[name], hashed)
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             for name, role in (("master", "MASTER"), ("admin_a", "TENANT_ADMIN"), ("member_a", "TENANT_MEMBER")):
-                email = f"{ids[name]}@example.invalid"
+                email = f"{ids[name]}@example.com"
                 bad = await client.post('/api/v1/auth/login', json={'usernameOrEmail': email, 'password': 'senha-incorreta'})
                 assert bad.status_code == 401
                 response = await client.post('/api/v1/auth/login', json={'usernameOrEmail': email, 'password': password})

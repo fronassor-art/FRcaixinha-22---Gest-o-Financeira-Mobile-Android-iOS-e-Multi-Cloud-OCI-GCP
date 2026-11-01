@@ -139,6 +139,7 @@ jobs:
 
       - name: Testar isolamento com registros sintéticos
         env:
+          PYTHONPATH: backend
           FRCAIXINHA_CI_ISOLATED: '1'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
