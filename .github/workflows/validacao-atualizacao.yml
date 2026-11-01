@@ -129,3 +129,10 @@ jobs:
           PYTHONPATH: backend
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_and_api.py -k TestPostgreSQLRowLevelSecurityCRUD
+
+      - name: Testar isolamento com registros sintéticos
+        env:
+          FRCAIXINHA_CI_ISOLATED: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
