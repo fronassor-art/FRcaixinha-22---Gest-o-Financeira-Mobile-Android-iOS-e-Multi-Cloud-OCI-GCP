@@ -1,0 +1,134 @@
+name: Validação da atualização AI Studio
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend e regras locais
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci
+      - name: Tipagem
+        run: npm run lint
+      - name: Testes TypeScript
+        run: npm run test:audit
+      - name: Build web
+        run: npm run build
+
+  android:
+    name: Compilar APK debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Instalar dependências
+        run: npm ci
+      - name: Build e sincronização Capacitor
+        run: npm run cap:build
+      - name: Compilar APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Disponibilizar APK debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: frcaixinha-ai-studio-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-sem-banco:
+    name: API sem banco configurado
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências Python
+        run: python -m pip install -r backend/requirements.txt
+      - name: Verificar importação do FastAPI
+        env:
+          PYTHONPATH: backend
+        run: python -c "from app.main import app; print('FastAPI importado')"
+      - name: Executar testes de API
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
+
+  postgres-isolado:
+    name: Migrações e testes de RLS em PostgreSQL descartável
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: frcaixinha_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frcaixinha_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências Python
+        run: python -m pip install -r backend/requirements.txt
+      - name: Aplicar migrações no banco descartável
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/001_initial_schema.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/002_financial_extensions.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/003_canonical_ledger_and_pix.sql
+      - name: Criar usuário de aplicação para teste
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_ci LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_ci"
+      - name: Executar testes existentes de RLS
+        env:
+          PYTHONPATH: backend
+          DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_and_api.py -k TestPostgreSQLRowLevelSecurityCRUD
