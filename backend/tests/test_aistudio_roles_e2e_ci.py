@@ -151,123 +151,113 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
                 transport=ASGITransport(app=app),base_url="http://ci"
             ) as client:
                 assert (await client.get("/api/v1/auth/me")).status_code == 401
+
+                # Tres identidades distintas: cada login fixa o papel requerido.
                 for email,password,role in zip(
                     emails,passwords,("MASTER","TENANT_ADMIN","TENANT_MEMBER")
                 ):
-                    login=await client.post("/api/v1/auth/login",json={
-                        "usernameOrEmail":email,"password":password})
+                    login = await client.post("/api/v1/auth/login", json={
+                        "usernameOrEmail":email,
+                        "password":password,
+                        "requestedRole":role,
+                    })
                     assert login.status_code == 200,(role,login.text)
-                    body=login.json()
+                    body = login.json()
                     assert body["user"]["role"] == role
                     headers={"Authorization":"Bearer "+body["token"]}
-                    # O login inicial escolhe deterministicamente um dos vinculos;
-                    # com mais de um tenant, selecionamos explicitamente o
-                    # contexto da caixinha testada antes de consultar seus dados.
-                    if role != "MASTER":
-                        selected = await client.post(
-                            "/api/v1/auth/switch-context", headers=headers,
-                            json={"target_role":role,
-                                  "target_tenant_id":str(first["tenant_id"])},
-                        )
-                        assert selected.status_code == 200,(role,selected.text)
-                        assert selected.json()["id"] == body["user"]["id"]
-                    assert (await client.get("/api/v1/auth/me",headers=headers)).status_code == 200
-                    overview=await client.get("/api/v1/master/overview",headers=headers)
-                    assert overview.status_code == (200 if role=="MASTER" else 403),(
-                        role,overview.text)
-                    members=await client.get(
-                        f"/api/v1/tenants/{first['tenant_id']}/members",headers=headers)
-                    assert members.status_code == (200 if role=="TENANT_ADMIN" else 403),(
-                        role,members.text)
-                    dashboard=await client.get(
-                        f"/api/v1/tenants/{first['tenant_id']}/dashboard",headers=headers)
-                    assert dashboard.status_code == (403 if role=="MASTER" else 200),(
-                        role,dashboard.text)
-                    contexts=await client.get("/api/v1/auth/contexts",headers=headers)
-                    assert contexts.status_code == 200,contexts.text
-                    assert len(contexts.json()) == (3 if role=="MASTER" else 2)
-                    if role == "TENANT_MEMBER":
-                        closing = await client.get(
-                            f"/api/v1/tenants/{first['tenant_id']}/closings/"
-                            f"{uuid4()}", headers=headers,
-                        )
-                        assert closing.status_code == 403, closing.text
-                        assert "member_count_visible" not in dashboard.json()
-                    if role == "MASTER":
-                        # Testar tres contextos simultaneos sob o MESMO token
-                        # e MESMO UUID de identidade, sem login repetido.
-                        expected_contexts = {
-                            ("MASTER",None),
-                            ("TENANT_ADMIN",str(owner["tenant_id"])),
-                            ("TENANT_MEMBER",str(owner["tenant_id"])),
-                        }
-                        assert {
-                            (item["role"],item["tenant_id"])
-                            for item in contexts.json()
-                        } == expected_contexts
+                    selected_tenant=body["user"]["tenant_id"]
+                    if role!="MASTER":
+                        assert selected_tenant is not None
+                    else:
+                        assert selected_tenant is None
+                    current=await client.get("/api/v1/auth/me",headers=headers)
+                    assert current.status_code==200
+                    assert current.json()["role"]==role
+                    listed=await client.get("/api/v1/auth/contexts",headers=headers)
+                    assert listed.status_code==200
+                    assert len(listed.json())==1
+                    assert listed.json()[0]["role"]==role
+                    assert listed.json()[0]["tenant_id"]==selected_tenant
 
-                        for target_role in (
-                            "TENANT_ADMIN","TENANT_MEMBER","MASTER"
-                        ):
-                            target_id = (None if target_role == "MASTER"
-                                         else str(owner["tenant_id"]))
-                            switched = await client.post(
-                                "/api/v1/auth/switch-context",headers=headers,
-                                json={"target_role":target_role,
-                                      "target_tenant_id":target_id},
-                            )
-                            assert switched.status_code == 200,(
-                                target_role,switched.text)
-                            assert switched.json()["id"] == str(master_id)
-                            assert switched.json()["role"] == target_role
-                            me = await client.get(
-                                "/api/v1/auth/me",headers=headers)
-                            assert me.status_code == 200, me.text
-                            assert me.json()["id"] == str(master_id)
-                            assert me.json()["role"] == target_role
-                            assert me.json()["is_master"] is True
-                            # Os endpoints nao podem confundir o atributo
-                            # is_master com o papel ATIVO da sessao.
-                            platform = await client.get(
-                                "/api/v1/master/overview",headers=headers)
-                            assert platform.status_code == (
-                                200 if target_role=="MASTER" else 403
-                            ),(target_role,platform.text)
-                            own_members = await client.get(
-                                f"/api/v1/tenants/{owner['tenant_id']}/members",
+                    platform=await client.get("/api/v1/master/overview",headers=headers)
+                    assert platform.status_code == (200 if role=="MASTER" else 403)
+                    if selected_tenant:
+                        own_members=await client.get(
+                            f"/api/v1/tenants/{selected_tenant}/members",headers=headers)
+                        assert own_members.status_code==(200 if role=="TENANT_ADMIN" else 403)
+                        overview=await client.get(
+                            f"/api/v1/tenants/{selected_tenant}/dashboard",headers=headers)
+                        assert overview.status_code==200
+                        if role=="TENANT_MEMBER":
+                            assert "member_count_visible" not in overview.json()
+                            closing=await client.get(
+                                f"/api/v1/tenants/{selected_tenant}/closings/{uuid4()}",
                                 headers=headers)
-                            assert own_members.status_code == (
-                                200 if target_role=="TENANT_ADMIN" else 403
-                            ),(target_role,own_members.text)
-                            own_dashboard = await client.get(
-                                f"/api/v1/tenants/{owner['tenant_id']}/dashboard",
-                                headers=headers)
-                            assert own_dashboard.status_code == (
-                                403 if target_role=="MASTER" else 200
-                            ),(target_role,own_dashboard.text)
-                            own_contexts = await client.get(
-                                "/api/v1/auth/contexts",headers=headers)
-                            assert own_contexts.status_code == 200
-                            assert {
-                                (item["role"],item["tenant_id"])
-                                for item in own_contexts.json()
-                            } == expected_contexts
-                            if target_role == "TENANT_MEMBER":
-                                forbidden = await client.post(
-                                    "/api/v1/auth/switch-context",headers=headers,
-                                    json={"target_role":"TENANT_ADMIN",
-                                          "target_tenant_id":str(first["tenant_id"])},
-                                )
-                                assert forbidden.status_code == 403
-                                still_member = await client.get(
-                                    "/api/v1/auth/me",headers=headers)
-                                assert still_member.json()["role"] == "TENANT_MEMBER"
-                        # Master so retorna ao contexto de plataforma apos
-                        # revalidacao da sessao no servidor.
-                    logout=await client.post("/api/v1/auth/logout",headers=headers)
-                    assert logout.status_code == 200,logout.text
-                    assert (await client.get("/api/v1/auth/me",
-                                             headers=headers)).status_code == 401
+                            assert closing.status_code==403
+                    # Ate escolher o mesmo papel por switch-context e proibido:
+                    # novo acesso exige logout e senha novamente.
+                    forbidden=await client.post(
+                        "/api/v1/auth/switch-context",headers=headers,
+                        json={"target_role":"MASTER","target_tenant_id":None})
+                    assert forbidden.status_code==403,(role,forbidden.text)
+                    still=await client.get("/api/v1/auth/me",headers=headers)
+                    assert still.json()["role"]==role
+                    assert (await client.post(
+                        "/api/v1/auth/logout",headers=headers)).status_code==200
+                    assert (await client.get(
+                        "/api/v1/auth/me",headers=headers)).status_code==401
+
+                # A mesma identidade Master possui os 3 vinculos ja existentes.
+                # Cada papel requer NOVO login com senha, nunca troca de sessao.
+                for role in ("MASTER","TENANT_ADMIN","TENANT_MEMBER"):
+                    login=await client.post("/api/v1/auth/login",json={
+                        "usernameOrEmail":emails[0],
+                        "password":passwords[0],
+                        "requestedRole":role})
+                    assert login.status_code==200,(role,login.text)
+                    body=login.json()
+                    assert body["user"]["id"]==str(master_id)
+                    assert body["user"]["role"]==role
+                    assert body["user"]["tenant_id"]==(
+                        None if role=="MASTER" else str(owner["tenant_id"]))
+                    headers={"Authorization":"Bearer "+body["token"]}
+                    listed=await client.get("/api/v1/auth/contexts",headers=headers)
+                    assert listed.status_code==200
+                    assert {(item["role"],item["tenant_id"]) for item in
+                            listed.json()}=={(role,body["user"]["tenant_id"])}
+                    platform=await client.get("/api/v1/master/overview",headers=headers)
+                    assert platform.status_code==(200 if role=="MASTER" else 403)
+                    members=await client.get(
+                        f"/api/v1/tenants/{owner['tenant_id']}/members",
+                        headers=headers)
+                    assert members.status_code==(200 if role=="TENANT_ADMIN" else 403)
+                    dashboard=await client.get(
+                        f"/api/v1/tenants/{owner['tenant_id']}/dashboard",
+                        headers=headers)
+                    assert dashboard.status_code==(403 if role=="MASTER" else 200)
+                    target_role=("MASTER" if role!="MASTER" else "TENANT_MEMBER")
+                    target_id=(None if target_role=="MASTER"
+                               else str(owner["tenant_id"]))
+                    switch=await client.post(
+                        "/api/v1/auth/switch-context",headers=headers,
+                        json={"target_role":target_role,
+                              "target_tenant_id":target_id})
+                    assert switch.status_code==403,(role,switch.text)
+                    me=await client.get("/api/v1/auth/me",headers=headers)
+                    assert me.status_code==200 and me.json()["role"]==role
+                    assert (await client.post(
+                        "/api/v1/auth/logout",headers=headers)).status_code==200
+                    assert (await client.get(
+                        "/api/v1/auth/me",headers=headers)).status_code==401
+
+                # Um usuario Admin nao pode autenticar como Master, mesmo
+                # escolhendo o botao Master do cliente.
+                denied=await client.post("/api/v1/auth/login",json={
+                    "usernameOrEmail":emails[1],
+                    "password":passwords[1],
+                    "requestedRole":"MASTER",
+                })
+                assert denied.status_code==401
         finally:
             await close_db_pool()
             if tenants:
