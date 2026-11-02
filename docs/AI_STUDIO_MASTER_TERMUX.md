@@ -245,3 +245,22 @@ status efetivo de expiração; suspensão e retomada continuam **CI-only**.
 Apenas `git fetch`, `git merge --ff-only` e `check` de leitura são
 permitidos até autorização específica. Detalhes:
 `docs/PACOTE_EXPANDIDO_ACESSO_SESSOES_LICENCAS_AI_STUDIO_2026-11-01.md`.
+
+
+## Checkpoint geral de pendências — 147 cláusulas (01/11/2026)
+
+A auditoria consolidada do commit `dfb5978`, com todas as frentes
+de autenticação, conta única, contrato, licenças SaaS, financeiro, RLS,
+Android, operação e conformidade, está em:
+
+- `docs/CHECKPOINT_EXECUTIVO_PENDENCIAS_AI_STUDIO_2026-11-01.md`:
+  checkpoint executivo, 37 atividades pendentes por prioridade e gates.
+- `docs/MATRIZ_147_PENDENCIAS_AI_STUDIO_2026-11-01.md`:
+  inventário cláusula a cláusula, mantendo a classificação histórica e
+  acrescentando evidência posterior, sem declarar cumprimento sem prova.
+
+O GitHub Actions no commit `dfb5978` foi 5/5 PASS; a PR #2 permanece
+em rascunho. O PostgreSQL exclusivo do AI Studio, conforme o último
+relatório do operador no Termux, continua com zero tabelas e **sem
+autorização para migrar**. Este checkpoint é documental; não executar
+nenhum comando de escrita, não habilitar e-mails nem cobranças.
