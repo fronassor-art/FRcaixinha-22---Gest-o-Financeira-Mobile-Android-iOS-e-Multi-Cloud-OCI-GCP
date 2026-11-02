@@ -47,18 +47,14 @@ import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
 import { SessionSecurityPanel } from './components/SessionSecurityPanel';
 import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
-import { authService, AuthenticatedUser, AuthContext, contextLabel } from './services/authService';
+import { authService, AuthenticatedUser } from './services/authService';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
   const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(() => authService.getUser());
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
-  const [contexts, setContexts] = useState<AuthContext[]>([]);
-  const [changingContext, setChangingContext] = useState(false);
-  const [contextError, setContextError] = useState<string | null>(null);
   const [securityOpen, setSecurityOpen] = useState(false);
-  const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Modais globais
@@ -100,7 +96,6 @@ export default function App() {
       if (user) {
         setAuthenticatedUser(user);
         appStore.setAuthenticatedContext(user);
-        authService.listContexts().then(setContexts).catch(() => setContexts([]));
       } else {
         setAuthenticatedUser(null);
         appStore.clearAuthenticatedContext();
@@ -111,7 +106,6 @@ export default function App() {
       const user = authService.getUser();
       setAuthenticatedUser(user);
       if (!user) {
-        setContexts([]);
         setSecurityOpen(false);
         appStore.clearAuthenticatedContext();
       }
@@ -132,46 +126,18 @@ export default function App() {
     setAuthenticatedUser(user);
     setSessionExpiredNotice(false);
     appStore.setAuthenticatedContext(user);
-    authService.listContexts().then(list => {
-      setContexts(list);
-      if (list.length > 1) setProfilePickerOpen(true);
-    }).catch(() => setContexts([]));
-    if (user.role === 'MASTER') {
-      setActiveTab('DASHBOARD');
-    } else if (user.role === 'TENANT_ADMIN') {
-      setActiveTab('DASHBOARD');
-    } else {
-      setActiveTab('MEU_PAINEL');
-    }
+    setSecurityOpen(false);
+    setMoreOpen(false);
+    setActiveTab(user.role === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
   };
 
   const handleLogout = async () => {
     await authService.logout();
     setAuthenticatedUser(null);
     appStore.clearAuthenticatedContext();
-    setContexts([]);
     setActiveTab('DASHBOARD');
     setSecurityOpen(false);
     setMoreOpen(false);
-    setProfilePickerOpen(false);
-  };
-
-  const handleContextSwitch = async (context: AuthContext) => {
-    setChangingContext(true);
-    setContextError(null);
-    try {
-      const user = await authService.switchContext(context);
-      appStore.clearAuthenticatedContext();
-      appStore.setAuthenticatedContext(user);
-      setActiveTab(user.role === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
-      setProfilePickerOpen(false);
-      setMoreOpen(false);
-      setSecurityOpen(false);
-    } catch (error) {
-      setContextError(error instanceof Error ? error.message : 'Falha na troca de vínculo.');
-    } finally {
-      setChangingContext(false);
-    }
   };
 
   // Papel ativo validado no servidor; bloqueia renderizacoes de outras funcoes.
@@ -203,10 +169,6 @@ export default function App() {
         sessionExpiredNotice={sessionExpiredNotice}
       />
     );
-  }
-
-  if (changingContext) {
-    return <div role="status" className="min-h-screen grid place-items-center bg-slate-950 text-white">Validando vínculo no servidor...</div>;
   }
 
   // Itens de navegação conforme papel autenticado (Cláusula 11.1)
@@ -258,25 +220,18 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Uma identidade, escolhas de perfil conferidas pelo servidor. */}
-      <div className="bg-[#073c2c] border-b border-[#a88a4c]/40 px-4 py-2">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
-          <button type="button" onClick={() => setProfilePickerOpen(value => !value)}
-            disabled={contexts.length <= 1 || changingContext}
-            aria-expanded={profilePickerOpen}
-            aria-haspopup="dialog"
-            className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 text-left text-sm text-[#fff2cf] disabled:cursor-default">
+      {/* Sessao de papel imutavel: para outra area, sair e autenticar de novo. */}
+      <div className="border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <div aria-label="Perfil autenticado" className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 text-sm text-[#fff2cf]">
             {state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
               state.currentRole === 'TENANT_ADMIN' ? <BriefcaseBusiness className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
                 <UserRound className="h-4 w-4 shrink-0 text-[#f0ce78]"/>}
-            <span className="truncate max-w-[230px] sm:max-w-md">
-              {state.currentRole === 'MASTER' ? 'Master — Plataforma' :
-                state.currentRole === 'TENANT_ADMIN' ? 'Administrador — Minha caixinha' :
-                  'Membro — Minha caixinha'}
+            <span className="truncate">
+              {state.currentRole === 'MASTER' ? 'Administrador Master — Plataforma' :
+                state.currentRole === 'TENANT_ADMIN' ? 'Administrador — Minha caixinha' : 'Membro — Minha caixinha'}
             </span>
-            {contexts.length > 1 && <ChevronDown className="h-4 w-4 shrink-0"/>}
-          </button>
-          <span className="hidden sm:block text-xs text-[#d2e2cf]">Acesso único</span>
+          </div>
           <button type="button" onClick={() => setSecurityOpen(value => !value)}
             aria-expanded={securityOpen}
             className="min-h-10 shrink-0 px-2 text-xs text-[#f1d58d] underline underline-offset-4">
@@ -284,46 +239,6 @@ export default function App() {
           </button>
         </div>
       </div>
-      {contextError && <div role="alert" className="border-b border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
-      {profilePickerOpen && contexts.length > 1 && (
-        <div role="dialog" aria-modal="true" aria-label="Escolher perfil de acesso" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
-          <section className="w-full max-w-sm rounded-[24px] border border-[#c6a05c] bg-[#073c2d] p-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-[#f5d586]">Acessar como</h2>
-              <button type="button" onClick={() => setProfilePickerOpen(false)} aria-label="Fechar seleção de perfil"
-                className="rounded-lg p-2 text-[#fae9c3]"><X className="h-5 w-5"/></button>
-            </div>
-            <p className="mb-4 mt-1 text-sm text-emerald-100/75">Escolha um perfil autorizado.</p>
-            <div className="grid gap-3">
-              {contexts.map(item => {
-                const selected = authenticatedUser.role === item.role &&
-                  (authenticatedUser.tenantId || '') === (item.tenant_id || '');
-                const Icon = item.role === 'MASTER' ? Crown : item.role === 'TENANT_ADMIN' ? BriefcaseBusiness : UserRound;
-                return (
-                  <button type="button" key={item.role + ':' + (item.tenant_id || '')}
-                    onClick={() => { if (!selected) void handleContextSwitch(item); else setProfilePickerOpen(false); }}
-                    className={'flex min-h-16 w-full items-center gap-3 rounded-xl border p-3 text-left ' +
-                      (selected ? 'border-[#ebc874] bg-[#165b3e]' : 'border-[#4f805e] bg-[#084532]')}>
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#cda75c] text-[#f4d689]">
-                      <Icon className="h-5 w-5"/>
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <strong className="block truncate text-sm text-white">
-                        {item.role === 'MASTER' ? 'Administrador Master' :
-                          item.role === 'TENANT_ADMIN' ? 'Administrador' : 'Membro'}
-                      </strong>
-                      <span className="block truncate text-xs text-emerald-100/75">
-                        {item.role === 'MASTER' ? 'Plataforma' : item.tenant_name || 'Caixinha'}
-                      </span>
-                    </span>
-                    {selected && <span className="text-xs font-semibold text-[#f4d689]">Ativo</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      )}
       {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
       <div role="note" className="bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
         Ambiente de homologação · operações financeiras reais indisponíveis
@@ -484,11 +399,6 @@ export default function App() {
                 <Icon className="h-5 w-5 text-[#f0ca72]"/>{item.label}
               </button>;
             })}
-            {contexts.length > 1 && <button type="button"
-              onClick={() => { setMoreOpen(false); setProfilePickerOpen(true); }}
-              className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
-              <UserRound className="h-5 w-5 text-[#f0ca72]"/>Trocar perfil
-            </button>}
             <button type="button" onClick={() => { setMoreOpen(false); setSecurityOpen(true); }}
               className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
               <ShieldCheck className="h-5 w-5 text-[#f0ca72]"/>Segurança e sessões

@@ -120,7 +120,6 @@ class AuthService {
   private listeners: (() => void)[] = [];
   private expirationTimer: number | null = null;
   private sessionGeneration = 0;
-  private switchingContext = false;
 
   constructor() {
     // Inicialização segura: sem sessão ativa por padrão
@@ -259,7 +258,7 @@ class AuthService {
     }
   }
 
-  public async login(usernameOrEmail: string, password: string): Promise<AuthenticatedUser> {
+  public async login(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role']): Promise<AuthenticatedUser> {
     if (isNativeMobilePlatform() && !getApiBaseUrl()) {
       throw new Error('Servidor backend móvel não configurado. Defina VITE_API_URL apontando para a API FastAPI antes de gerar o APK.');
     }
@@ -272,7 +271,7 @@ class AuthService {
         'X-Requested-With': 'XMLHttpRequest',
       },
       credentials: 'include',
-      body: JSON.stringify({ usernameOrEmail, password }),
+      body: JSON.stringify({ usernameOrEmail, password, requestedRole }),
     });
 
     const data = await res.json();
@@ -286,8 +285,12 @@ class AuthService {
     // Armazenamento EXCLUSIVO em memória (RAM transitória)
     const expiresAt = data.expiresAt ?? Date.parse(data.expires_at);
     if (!data.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error('Sessão inválida recebida do servidor.');
+    const authenticated = serverUser(data.user);
+    if (requestedRole && authenticated.role !== requestedRole) {
+      throw new Error('O servidor não confirmou o perfil de acesso solicitado.');
+    }
     this.token = data.token;
-    this.user = serverUser(data.user);
+    this.user = authenticated;
     this.expiresAt = expiresAt;
     this.sessionGeneration++;
 
@@ -358,41 +361,9 @@ class AuthService {
     return data.current_revoked;
   }
 
-  public async switchContext(context: AuthContext): Promise<AuthenticatedUser> {
-    if (!this.isAuthenticated()) throw new Error('Sessão expirada.');
-    if (this.switchingContext) throw new Error('Uma troca de vínculo já está em andamento.');
-    parseServerContexts([context]); // valida papel e identificador antes de chamar o backend
-    this.switchingContext = true;
-    const token = this.token;
-    const generation = this.sessionGeneration;
-    try {
-      const res = await fetch(getApiBaseUrl() + '/api/v1/auth/switch-context', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store' },
-        body: JSON.stringify({ target_role: context.role, target_tenant_id: context.tenant_id }),
-      });
-      if (generation !== this.sessionGeneration || token !== this.token) {
-        throw new Error('A sessão foi alterada durante a troca de vínculo.');
-      }
-      if (res.status === 401) { this.invalidateSession(); throw new Error('Sessão expirada.'); }
-      if (!res.ok) throw new Error('Vínculo não autorizado ou indisponível.');
-      const next = serverUser(await res.json());
-      if (generation !== this.sessionGeneration || token !== this.token) {
-        throw new Error('Sessão alterada antes de concluir a troca.');
-      }
-      if (next.id !== this.user?.id || next.role !== context.role ||
-          (next.tenantId ?? null) !== context.tenant_id) {
-        this.invalidateSession();
-        throw new Error('O servidor retornou um contexto incompatível.');
-      }
-      this.user = next;
-      this.sessionGeneration++;
-      this.notify();
-      return next;
-    } finally {
-      this.switchingContext = false;
-    }
+  /** Troca entre Master, Admin e Membro proibida dentro da mesma sessao. */
+  public async switchContext(_context: AuthContext): Promise<AuthenticatedUser> {
+    throw new Error('Saia da conta e entre novamente para acessar outro perfil.');
   }
 
   public invalidateSession(): void {
