@@ -35,7 +35,6 @@ import { ContributionsView } from './components/ContributionsView';
 import { ServerLoansView } from './components/ServerLoansView';
 import { ConsentView } from './components/ConsentView';
 import { LedgerView } from './components/LedgerView';
-import { CycleClosingView } from './components/CycleClosingView';
 import { MasterLicensingView } from './components/MasterLicensingView';
 import { SupportSessionView } from './components/SupportSessionView';
 import { LotteryDemoView } from './components/LotteryDemoView';
@@ -164,22 +163,17 @@ export default function App() {
     }
   };
 
-  // Ajustar aba ativa caso o papel mude
+  // Quando o papel muda, descartar qualquer aba herdada de outro perfil.
   useEffect(() => {
-    if (state.currentRole === 'MASTER') {
-      if (!['DASHBOARD', 'LICENCAS', 'NUVEM', 'SUPORTE', 'AUDITORIA'].includes(activeTab)) {
-        setActiveTab('DASHBOARD');
-      }
-    } else if (state.currentRole === 'TENANT_ADMIN') {
-      if (!['DASHBOARD', 'MEMBROS', 'CONTRIBUICOES', 'EMPRESTIMOS', 'NUVEM', 'CONSENTIMENTO', 'LEDGER', 'FECHAMENTO', 'LICENCA', 'RIFAS', 'BOLOES'].includes(activeTab)) {
-        setActiveTab('DASHBOARD');
-      }
-    } else {
-      if (!['MEU_PAINEL', 'MINHAS_CONTRIBUICOES', 'MEU_EMPRESTIMO', 'NUVEM', 'AUTORIZACAO_ADMIN', 'MEU_RESULTADO', 'MINHAS_RIFAS', 'MEUS_BOLOES'].includes(activeTab)) {
-        setActiveTab('MEU_PAINEL');
-      }
+    const allowed = state.currentRole === 'MASTER'
+      ? ['DASHBOARD', 'LICENCAS', 'SUPORTE', 'AUDITORIA']
+      : state.currentRole === 'TENANT_ADMIN'
+        ? ['DASHBOARD', 'MEMBROS', 'CONTRIBUICOES', 'EMPRESTIMOS', 'FECHAMENTO']
+        : ['MEU_PAINEL', 'MINHAS_CONTRIBUICOES', 'MEU_EMPRESTIMO', 'MEU_RESULTADO'];
+    if (!allowed.includes(activeTab)) {
+      setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
     }
-  }, [state.currentRole]);
+  }, [state.currentRole, activeTab]);
 
   const openPixModal = (params: {
     title: string;
@@ -213,9 +207,8 @@ export default function App() {
   const renderNavTabs = () => {
     if (state.currentRole === 'MASTER') {
       return [
-        { id: 'DASHBOARD', label: 'Painel Master (SaaS)', icon: LayoutDashboard },
+        { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
-        { id: 'NUVEM', label: 'Multi-Cloud OCI + GCP', icon: Cloud },
         { id: 'SUPORTE', label: 'Suporte e Break-Glass', icon: LifeBuoy },
         { id: 'AUDITORIA', label: 'Suíte AT-01 a AT-50', icon: ShieldCheck },
       ];
@@ -225,15 +218,9 @@ export default function App() {
       return [
         { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
         { id: 'MEMBROS', label: 'Membros e Cotas', icon: Users },
-        { id: 'CONTRIBUICOES', label: 'Contribuições (Dia 10)', icon: Wallet },
-        { id: 'EMPRESTIMOS', label: 'Crédito Price', icon: TrendingUp },
-        { id: 'RIFAS', label: 'Rifas da Caixinha', icon: Ticket },
-        { id: 'BOLOES', label: 'Bolões Oficiais', icon: Ticket },
-        { id: 'NUVEM', label: 'Multi-Cloud OCI + GCP', icon: Cloud },
-        { id: 'CONSENTIMENTO', label: 'Autorização Anual Admin', icon: ShieldCheck },
-        { id: 'LEDGER', label: 'Livro-Razão (Partidas Dobradas)', icon: FileSpreadsheet },
-        { id: 'FECHAMENTO', label: 'Fechamento e Capital-Dias', icon: Coins },
-        { id: 'LICENCA', label: 'Políticas & Licença', icon: Sliders },
+        { id: 'CONTRIBUICOES', label: 'Contribuições', icon: Wallet },
+        { id: 'EMPRESTIMOS', label: 'Empréstimos', icon: TrendingUp },
+        { id: 'FECHAMENTO', label: 'Fechamento', icon: Coins },
       ];
     }
 
@@ -242,15 +229,12 @@ export default function App() {
       { id: 'MEU_PAINEL', label: 'Meu Painel', icon: LayoutDashboard },
       { id: 'MINHAS_CONTRIBUICOES', label: 'Minhas Contribuições', icon: Wallet },
       { id: 'MEU_EMPRESTIMO', label: 'Meu Empréstimo', icon: TrendingUp },
-      { id: 'MINHAS_RIFAS', label: 'Minhas Rifas & Cartelas', icon: Ticket },
-      { id: 'MEUS_BOLOES', label: 'Meus Bolões', icon: Ticket },
-      { id: 'NUVEM', label: 'Nuvem & Segurança (OCI + GCP)', icon: Cloud },
-      { id: 'AUTORIZACAO_ADMIN', label: 'Termo Coletivo Admin', icon: ShieldCheck },
-      { id: 'MEU_RESULTADO', label: 'Meu Fechamento Anual', icon: Coins },
+      { id: 'MEU_RESULTADO', label: 'Meu Resultado', icon: Coins },
     ];
   };
 
   const navItems = renderNavTabs();
+  const visibleTab = navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16 md:pb-0">
@@ -285,17 +269,17 @@ export default function App() {
         </div>
       )}
       {contextError && <div role="alert" className="bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
-      <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+      <div className="bg-slate-50 px-4 py-1 border-b border-slate-200 text-right">
         <button type="button" onClick={() => setSecurityOpen(open => !open)}
           aria-expanded={securityOpen}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">
-          {securityOpen ? 'Ocultar segurança da conta' : 'Segurança da conta e sessões'}
+          {securityOpen ? 'Ocultar segurança da conta' : 'Segurança e sessões'}
         </button>
       </div>
       {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
 
-      <div role="note" className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-xs font-semibold text-amber-950">
-        HOMOLOGAÇÃO — painéis, rifas, bolões, nuvem e valores seed são demonstrativos. Contribuições consultam a API; nenhum Pix ou sorteio real está habilitado.
+      <div role="note" className="bg-amber-50 border-b border-amber-200 px-4 py-1 text-[11px] font-medium text-amber-900">
+        Ambiente de homologação. Nenhuma movimentação financeira real está habilitada.
       </div>
       {/* Secondary Subnav Bar */}
       <nav className="bg-white border-b border-slate-200 sticky top-16 z-30 shadow-2xs">
@@ -330,76 +314,90 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Master Views */}
-        {activeTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
+        {visibleTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
           <DashboardView
             state={state}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
         )}
-        {activeTab === 'LICENCAS' && (
+        {visibleTab === 'LICENCAS' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
         )}
-        {activeTab === 'SUPORTE' && <SupportSessionView state={state} />}
-        {(activeTab === 'BOLOES' || activeTab === 'MEUS_BOLOES') && (
+        {visibleTab === 'SUPORTE' && <SupportSessionView state={state} />}
+        {(visibleTab === 'BOLOES' || visibleTab === 'MEUS_BOLOES') && (
           <BolaoModuleView state={state} onOpenPixModal={openPixModal} />
         )}
 
         {/* Admin Views */}
-        {activeTab === 'DASHBOARD' && state.currentRole === 'TENANT_ADMIN' && (
+        {visibleTab === 'DASHBOARD' && state.currentRole === 'TENANT_ADMIN' && (
           <DashboardView
             state={state}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
         )}
-        {activeTab === 'MEMBROS' && <MembersView state={state} />}
-        {activeTab === 'CONTRIBUICOES' && (
+        {visibleTab === 'MEMBROS' && <MembersView state={state} />}
+        {visibleTab === 'CONTRIBUICOES' && (
           <ContributionsView state={state} onOpenPixModal={openPixModal} />
         )}
-        {activeTab === 'EMPRESTIMOS' && (
+        {visibleTab === 'EMPRESTIMOS' && (
           <ServerLoansView state={state} />
         )}
-        {activeTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
-        {activeTab === 'LEDGER' && <LedgerView state={state} />}
-        {activeTab === 'FECHAMENTO' && (
-          <CycleClosingView state={state} onOpenPixModal={openPixModal} />
+        {visibleTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
+        {visibleTab === 'LEDGER' && <LedgerView state={state} />}
+        {visibleTab === 'FECHAMENTO' && state.currentRole === 'TENANT_ADMIN' && (
+          <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
+            <h2 className="text-lg font-bold">Fechamento</h2>
+            <p className="text-sm text-slate-700">
+              Apuração consolidada ainda não disponível nesta interface.
+              Os dados serão exibidos somente após confirmação pelo servidor.
+              Nenhuma liquidação financeira foi autorizada por esta tela.
+            </p>
+          </section>
         )}
-        {activeTab === 'LICENCA' && (
+        {visibleTab === 'LICENCA' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
         )}
-        {(activeTab === 'RIFAS' || activeTab === 'MINHAS_RIFAS') && (
+        {(visibleTab === 'RIFAS' || visibleTab === 'MINHAS_RIFAS') && (
           <RaffleModuleView state={state} onOpenPixModal={openPixModal} />
         )}
 
         {/* Multi-Cloud View (GCP + OCI) - Accessible across all roles */}
-        {activeTab === 'NUVEM' && <MultiCloudView />}
+        {visibleTab === 'NUVEM' && <MultiCloudView />}
 
         {/* Member Views */}
-        {activeTab === 'MEU_PAINEL' && (
+        {visibleTab === 'MEU_PAINEL' && (
           <DashboardView
             state={state}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
         )}
-        {activeTab === 'MINHAS_CONTRIBUICOES' && (
+        {visibleTab === 'MINHAS_CONTRIBUICOES' && (
           <ContributionsView state={state} onOpenPixModal={openPixModal} />
         )}
-        {activeTab === 'MEU_EMPRESTIMO' && (
+        {visibleTab === 'MEU_EMPRESTIMO' && (
           <ServerLoansView state={state} />
         )}
-        {activeTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
-        {activeTab === 'MEU_RESULTADO' && (
-          <CycleClosingView state={state} onOpenPixModal={openPixModal} />
+        {visibleTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
+        {visibleTab === 'MEU_RESULTADO' && state.currentRole === 'TENANT_MEMBER' && (
+          <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
+            <h2 className="text-lg font-bold">Meu resultado anual</h2>
+            <p className="text-sm text-slate-700">
+              Seu demonstrativo individual ainda não está disponível no servidor.
+              Informações de outros membros e resultados administrativos
+              não são exibidos neste perfil.
+            </p>
+          </section>
         )}
       </main>
 
       {/* Footer com Aviso Legal Homologado */}
-      <footer className="bg-white border-t border-slate-200 mt-auto py-6 mb-14 md:mb-0">
+      <footer className="hidden md:block bg-white border-t border-slate-200 mt-auto py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <span className="font-bold text-slate-700">FRcaixinha 2.2</span> • Solução Mobile & Multi-Cloud para automação de caixinhas privadas.
+            <span className="font-bold text-slate-700">FRcaixinha AI Studio</span> • Ambiente de homologação.
             <div className="text-[11px] text-slate-400 mt-0.5">
               Não atua como instituição bancária nem detém custódia de depósitos de terceiros (Cláusula 1.1 e 1.7).
             </div>
@@ -429,66 +427,26 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Mobile Sticky Bottom Navigation Dock (md:hidden) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around py-1.5 px-2 text-[10px] text-slate-400 select-none shadow-2xl">
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['DASHBOARD', 'MEU_PAINEL'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <LayoutDashboard className="w-4 h-4" />
-          <span>Início</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MINHAS_CONTRIBUICOES' : 'CONTRIBUICOES')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['CONTRIBUICOES', 'MINHAS_CONTRIBUICOES'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <Wallet className="w-4 h-4" />
-          <span>Cotas</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEU_EMPRESTIMO' : 'EMPRESTIMOS')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['EMPRESTIMOS', 'MEU_EMPRESTIMO'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          <span>Price</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEUS_BOLOES' : 'BOLOES')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['BOLOES', 'MEUS_BOLOES', 'RIFAS', 'MINHAS_RIFAS'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <Ticket className="w-4 h-4" />
-          <span>Bolões</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('NUVEM')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            activeTab === 'NUVEM' ? 'text-cyan-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <Cloud className="w-4 h-4" />
-          <span>Nuvem</span>
-        </button>
-
-        <button
-          onClick={() => setIsMobileInstallOpen(true)}
-          className="flex flex-col items-center gap-0.5 p-1 rounded-xl text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
-        >
-          <Smartphone className="w-4 h-4" />
-          <span>App</span>
-        </button>
-      </div>
+      {/* Menu inferior compacto, derivado das abas autorizadas do perfil. */}
+      <nav aria-label="Navegação do aplicativo" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 flex justify-around gap-1 px-2 py-2">
+        {navItems.slice(0,4).map(item => {
+          const Icon = item.icon;
+          const shortLabel = item.id === 'MEU_RESULTADO' ? 'Resultado'
+            : item.id === 'MINHAS_CONTRIBUICOES' ? 'Contrib.'
+            : item.id === 'MEU_EMPRESTIMO' ? 'Crédito'
+            : item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
+            : item.id === 'CONTRIBUICOES' ? 'Contrib.'
+            : item.id === 'EMPRESTIMOS' ? 'Crédito' : item.label;
+          return (
+            <button key={item.id} type="button" onClick={() => setActiveTab(item.id)}
+              aria-current={activeTab === item.id ? 'page' : undefined}
+              className={'min-w-0 flex-1 rounded-lg px-1 py-1 text-[11px] flex flex-col items-center gap-1 ' + (activeTab === item.id ? 'text-emerald-300 font-bold' : 'text-slate-300')}>
+              <Icon className="h-5 w-5" />
+              <span className="truncate max-w-full">{shortLabel}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Modais Globais */}
       <PixModal
