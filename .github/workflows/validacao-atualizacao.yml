@@ -38,6 +38,8 @@ jobs:
         run: npx tsx src/tests/role_scope_ui.test.ts
       - name: Validar caminhos de primeiro acesso sem auto-cadastro
         run: npx tsx src/tests/login_first_access_ui.test.ts
+      - name: Validar identidade visual e separacao por perfil
+        run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
