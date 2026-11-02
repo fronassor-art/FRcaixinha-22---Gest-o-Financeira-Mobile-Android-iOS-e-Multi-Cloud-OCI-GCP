@@ -1,7 +1,9 @@
--- Execucao na mesma transacao das migracoes versionadas 001-024.
+-- Execucao na mesma transacao das migracoes versionadas 001-025.
 -- MASTER e um papel de aplicativo, jamais um SUPERUSER PostgreSQL.
 GRANT frcaixinha_app_role TO frc_ai_app;
 GRANT frcaixinha_auth_role TO frc_ai_auth;
+-- A credencial separada do verificador sera provisionada SOMENTE na fase
+-- autorizada. Nao conceder este papel a frc_ai_auth nem a frc_ai_app.
 DO $verify$
 BEGIN
   IF NOT pg_has_role('frc_ai_app','frcaixinha_app_role','member')
@@ -79,6 +81,16 @@ BEGIN
     OR has_table_privilege('frc_ai_auth','public.password_reset_tokens','SELECT')
   THEN
     RAISE EXCEPTION 'BLOQUEADO: motor de convites/recuperacao nao protegido';
+  END IF;
+  IF has_column_privilege('frc_ai_auth','public.credentials','password_hash','SELECT')
+     OR has_table_privilege('frc_ai_auth','public.sessions','INSERT')
+     OR has_table_privilege('frc_ai_auth','public.auth_login_proofs','INSERT')
+     OR NOT has_function_privilege('frc_ai_auth',
+        'public.auth_issue_pending_session(uuid,text,text)','EXECUTE')
+     OR pg_has_role('frc_ai_auth','frcaixinha_verifier_role','member')
+     OR pg_has_role('frc_ai_app','frcaixinha_verifier_role','member')
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: papel Auth pode forjar prova sem verificador';
   END IF;
   IF has_column_privilege('frc_ai_auth','public.sessions','expires_at','UPDATE')
     OR has_column_privilege('frc_ai_auth','public.sessions','revoked_at','UPDATE')
