@@ -83,15 +83,14 @@ async def login(payload: LoginRequest, response: Response):
                 else:
                     record_failed_attempt(identifier)
                     raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
-                expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-                    seconds=settings.SESSION_EXPIRE_SECONDS)
-                updated = await conn.execute(
-                    "UPDATE public.sessions SET active_role=$2,active_tenant_id=$3,"
-                    "expires_at=$4 WHERE token_hash=$1 AND user_id=$5 "
-                    "AND active_role='PENDING_CONTEXT' AND revoked_at IS NULL "
-                    "AND expires_at>NOW()",
-                    token_hash, role, tenant_id, expires_at, record['id'])
-                if updated != 'UPDATE 1':
+                # Role Auth não pode UPDATE direto em perfil/tenant.
+                # A função PostgreSQL valida token, identidade e vínculo
+                # na mesma transação; retorna a expiração real da sessão.
+                expires_at = await conn.fetchval(
+                    "SELECT public.auth_promote_pending_session("
+                    "$1::text,$2::varchar,$3::uuid)",
+                    raw_token, role, tenant_id)
+                if expires_at is None:
                     raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
         finally:
             await conn.close()
@@ -326,12 +325,11 @@ async def switch_context(payload: ContextSwitchRequest, request: Request,
                 elif not any(row['tenant_id'] == target_tenant and
                              row['role'] == payload.target_role for row in links):
                     raise HTTPException(status_code=403, detail='Vínculo não autorizado.')
-                result = await conn.execute(
-                    'UPDATE public.sessions SET active_role=$2,active_tenant_id=$3 '
-                    'WHERE token_hash=$1 AND user_id=$4 '
-                    'AND revoked_at IS NULL AND expires_at>NOW()',
-                    digest, payload.target_role, target_tenant, actor_id)
-                if result != 'UPDATE 1':
+                updated = await conn.fetchval(
+                    "SELECT public.auth_switch_session_context("
+                    "$1::text,$2::varchar,$3::uuid)",
+                    bearer_token(request), payload.target_role, target_tenant)
+                if not updated:
                     raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
         finally:
             await conn.close()
