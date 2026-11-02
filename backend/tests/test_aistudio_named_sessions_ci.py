@@ -170,6 +170,24 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 ("TENANT_ADMIN",str(b),"Caixinha Maranhão"),
             }
             assert "Caixinha Privada" not in contexts.text
+            # O timeout de inatividade desliza, mas nunca passa do teto
+            # absoluto de 8 horas desde a criação da sessão.
+            await admin.execute(
+                "UPDATE public.sessions SET created_at=NOW()-INTERVAL '7 hours 58 minutes',"
+                "expires_at=NOW()+INTERVAL '1 minute' WHERE id=$1",
+                ids[0],
+            )
+            assert (await client.get(
+                "/api/v1/auth/me", headers=headers)).status_code == 200
+            limits = await admin.fetchrow(
+                "SELECT created_at,expires_at FROM public.sessions WHERE id=$1",
+                ids[0],
+            )
+            assert limits["expires_at"] <= (
+                limits["created_at"] + __import__("datetime").timedelta(hours=8)
+            ), "Refresh prolongou a sessão além do teto absoluto"
+            assert limits["expires_at"] > limits["created_at"]
+
             assert not await auth.fetchval(
                 "SELECT has_table_privilege(current_user,'public.tenants','SELECT')")
 
