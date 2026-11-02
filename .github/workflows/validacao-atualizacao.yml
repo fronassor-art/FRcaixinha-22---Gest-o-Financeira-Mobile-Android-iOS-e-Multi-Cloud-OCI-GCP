@@ -28,6 +28,8 @@ jobs:
         run: npm run test:audit
       - name: Testes de integração do estado financeiro
         run: npx tsx src/tests/server_integration.test.ts
+      - name: Testes de identidade única, contexto e concorrência no cliente
+        run: npx tsx src/tests/auth_context_security.test.ts
       - name: Build web
         run: npm run build
 
@@ -94,6 +96,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_price_policy_authority.py
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k 'not disposable_postgres'
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
+          python -m pytest -q backend/tests/test_auth_context_security_headers.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py
           python -m pytest -q backend/tests/test_platform_provider_adapters.py backend/tests/test_aistudio_live_status_api.py
 

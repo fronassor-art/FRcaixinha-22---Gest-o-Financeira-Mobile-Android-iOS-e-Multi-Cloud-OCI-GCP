@@ -207,3 +207,16 @@ bloqueio de produção; documentação em
 `docs/PACOTE_ROBUSTEZ_CONVITES_SAAS_2026-11-01.md`.
 Não reclassificar as 147 cláusulas sem auditoria individual e não
 executar migrações no Termux.
+
+
+## 14. Revisão de acesso único, troca de papéis e sessões
+
+A interface e os serviços de autenticação foram reforçados para
+contexto único por identidade, múltiplas caixinhas e perfis, sem
+autorizar escalada de privilégios. A troca server-side é novamente
+validada sob row lock, frontend descarta requisições atrasadas,
+logout local é imediato, recuperação de senha usa URL correta e
+respostas de API incluem no-store/no-referrer. Testes no CI e
+documentação em `docs/PACOTE_ACESSO_UNICO_SESSOES_AI_STUDIO_2026-11-01.md`.
+Ainda não foi aplicada migração local e os serviços reais de convites,
+e-mails e cobranças permanecem desabilitados.

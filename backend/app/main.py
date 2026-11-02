@@ -27,6 +27,12 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Tokens de sessão, convites e dados SaaS nunca devem ser guardados por
+    # proxies, navegadores compartilhados ou previews externos.
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if request.url.path.startswith(("/api/v1/", "/api/health/ready")):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     return response
 
 # CORS restrito

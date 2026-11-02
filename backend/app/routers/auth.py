@@ -186,30 +186,65 @@ def forgot_password(payload: ForgotPasswordRequest):
 @router.post("/switch-context", response_model=UserResponse)
 async def switch_context(payload: ContextSwitchRequest, request: Request,
                          session: AuthenticatedSession = Depends(get_current_session)):
+    """Troca o papel do MESMO usuário somente após revalidar a sessão e o vínculo.
+
+    Verificação e UPDATE compartilham a mesma transação/row lock; um logout
+    concorrente, suspensão de usuário ou revogação de vínculo falha fechado.
+    """
     target_tenant = None
     if payload.target_role == 'MASTER':
-        if not session.is_master or payload.target_tenant_id is not None:
+        if payload.target_tenant_id is not None:
             raise HTTPException(status_code=403, detail='Contexto não autorizado.')
     else:
         try:
             target_tenant = uuid.UUID(payload.target_tenant_id or '')
-        except ValueError:
+        except (ValueError, TypeError):
             raise HTTPException(status_code=422, detail='Caixinha inválida.')
     try:
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
             async with conn.transaction():
-                if target_tenant:
-                    links = await conn.fetch(
-                        'SELECT tenant_id,role FROM public.auth_active_memberships($1)',
-                        uuid.UUID(session.user_id))
-                    if not any(row['tenant_id'] == target_tenant and
-                               row['role'] == payload.target_role for row in links):
-                        raise HTTPException(status_code=403, detail='Vínculo não autorizado.')
+                actor_id = uuid.UUID(session.user_id)
+                digest = hash_token(bearer_token(request))
+                current = await conn.fetchrow(
+                    "SELECT s.user_id,s.active_role,s.active_tenant_id," 
+                    "s.revoked_at,s.expires_at,u.is_master,u.status "
+                    "FROM public.sessions s JOIN public.users u ON u.id=s.user_id "
+                    "WHERE s.token_hash=$1 FOR UPDATE OF s", digest)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                if (not current or current['user_id'] != actor_id
+                        or current['revoked_at'] is not None
+                        or current['expires_at'] <= now
+                        or current['status'] != 'ACTIVE'):
+                    raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
+                # O contexto ATUAL também precisa permanecer válido. Uma
+                # suspensão entre a dependência HTTP e o row lock da troca
+                # não pode ser usada para migrar um token revogado de papel.
+                links = await conn.fetch(
+                    'SELECT tenant_id,role FROM public.auth_active_memberships($1)',
+                    actor_id)
+                if current['active_role'] == 'MASTER':
+                    authorized_current = (
+                        current['is_master'] and current['active_tenant_id'] is None
+                    )
+                else:
+                    authorized_current = any(
+                        row['tenant_id'] == current['active_tenant_id'] and
+                        row['role'] == current['active_role'] for row in links
+                    )
+                if not authorized_current:
+                    raise HTTPException(status_code=401, detail='Vínculo ativo não encontrado.')
+                if payload.target_role == 'MASTER':
+                    if not current['is_master']:
+                        raise HTTPException(status_code=403, detail='Contexto não autorizado.')
+                elif not any(row['tenant_id'] == target_tenant and
+                             row['role'] == payload.target_role for row in links):
+                    raise HTTPException(status_code=403, detail='Vínculo não autorizado.')
                 result = await conn.execute(
                     'UPDATE public.sessions SET active_role=$2,active_tenant_id=$3 '
-                    'WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>NOW()',
-                    hash_token(bearer_token(request)), payload.target_role, target_tenant)
+                    'WHERE token_hash=$1 AND user_id=$4 '
+                    'AND revoked_at IS NULL AND expires_at>NOW()',
+                    digest, payload.target_role, target_tenant, actor_id)
                 if result != 'UPDATE 1':
                     raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
         finally:

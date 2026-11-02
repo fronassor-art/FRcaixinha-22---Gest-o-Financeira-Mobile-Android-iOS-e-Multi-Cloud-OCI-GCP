@@ -215,3 +215,17 @@ Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
 - **Somente código e testes no GitHub**. Continua proibido executar
   `apply`, criar contas reais, enviar e-mails ou ativar pagamentos.
 - Detalhes: `docs/PACOTE_ROBUSTEZ_CONVITES_SAAS_2026-11-01.md`.
+
+
+## Acesso único e sessões — pacote sem novas migrações
+
+O seletor de contexto da interface foi reforçado para uma identidade
+com múltiplos papéis e caixinhas. O frontend valida os dados recebidos do
+servidor, evita respostas atrasadas após logout ou troca, mantém o TTL
+sem estendê-lo apenas por um GET e corrige o caminho da recuperação de
+senha para `/api/v1/auth/forgot-password` (ainda bloqueada em 503).
+O backend atualiza perfil e tenant em uma transação com revalidação do
+vínculo e bloqueio da sessão. A API define headers no-store/no-referrer.
+
+**Sem novas migrações. Não executar `apply`.** Relatório:
+`docs/PACOTE_ACESSO_UNICO_SESSOES_AI_STUDIO_2026-11-01.md`.

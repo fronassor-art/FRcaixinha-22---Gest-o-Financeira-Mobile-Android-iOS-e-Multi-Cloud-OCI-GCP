@@ -17,6 +17,38 @@ export interface AuthContext {
   tenant_id: string | null;
 }
 
+/** O servidor decide qual vínculo existe; nunca confiar no texto de um <select>. */
+export function parseServerContexts(value: unknown): AuthContext[] {
+  if (!Array.isArray(value) || value.length > 200) throw new Error('Lista de vínculos inválida.');
+  const result: AuthContext[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') throw new Error('Vínculo inválido.');
+    const role = (item as Record<string, unknown>).role;
+    const tenantId = (item as Record<string, unknown>).tenant_id;
+    if (!['MASTER', 'TENANT_ADMIN', 'TENANT_MEMBER'].includes(String(role))) {
+      throw new Error('Papel inválido recebido do servidor.');
+    }
+    if (role === 'MASTER') {
+      if (tenantId !== null) throw new Error('O Master não pertence a uma caixinha por este perfil.');
+    } else if (typeof tenantId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) {
+      throw new Error('Identificador da caixinha inválido.');
+    }
+    const key = String(role) + ':' + String(tenantId ?? '');
+    if (seen.has(key)) throw new Error('Vínculo duplicado na resposta.');
+    seen.add(key);
+    result.push({ role: role as AuthenticatedUser['role'], tenant_id: tenantId as string | null });
+  }
+  return result;
+}
+
+export function contextLabel(context: AuthContext): string {
+  if (context.role === 'MASTER') return 'Administrador Master — Plataforma';
+  const label = context.role === 'TENANT_ADMIN' ? 'Administrador' : 'Membro';
+  return label + ' — Caixinha ' + (context.tenant_id || '').slice(0, 8).toUpperCase();
+}
+
 export interface AuthStatusResponse {
   status: string;
   configured: boolean;
@@ -64,6 +96,8 @@ class AuthService {
   private expiresAt: number | null = null;
   private listeners: (() => void)[] = [];
   private expirationTimer: number | null = null;
+  private sessionGeneration = 0;
+  private switchingContext = false;
 
   constructor() {
     // Inicialização segura: sem sessão ativa por padrão
@@ -147,6 +181,8 @@ class AuthService {
       return null;
     }
     if (!this.token) return null;
+    const originalToken = this.token;
+    const generation = this.sessionGeneration;
 
     try {
       const headers: Record<string, string> = {
@@ -162,6 +198,9 @@ class AuthService {
         credentials: 'include',
       });
 
+      if (generation !== this.sessionGeneration || originalToken !== this.token) {
+        return null; // Logout ou troca de sessão enquanto o GET estava pendente.
+      }
       if (!res.ok) {
         this.clearSession();
         this.notify();
@@ -169,8 +208,18 @@ class AuthService {
       }
 
       const data = await res.json();
+      if (generation !== this.sessionGeneration || originalToken !== this.token) return null;
       if (data && (data.user || data.id)) {
-        const expiration: number = data.expiresAt || (Date.now() + 15 * 60 * 1000);
+        // /me não retorna TTL. Não prorrogar indefinidamente a validade
+        // local, que deve continuar limitada ao token original do login.
+        const candidateExpiration = data.expiresAt
+          ? (typeof data.expiresAt === 'number' ? data.expiresAt : Date.parse(data.expiresAt))
+          : this.expiresAt;
+        const expiration = Math.min(this.expiresAt ?? 0, candidateExpiration ?? 0);
+        if (!Number.isFinite(expiration) || expiration <= Date.now()) {
+          this.invalidateSession();
+          return null;
+        }
         this.user = serverUser(data.user || data);
         this.expiresAt = expiration;
         this.armExpirationTimer(expiration);
@@ -179,8 +228,10 @@ class AuthService {
       }
       return null;
     } catch {
-      this.clearSession();
-      this.notify();
+      if (generation === this.sessionGeneration && originalToken === this.token) {
+        this.clearSession();
+        this.notify();
+      }
       return null;
     }
   }
@@ -190,6 +241,7 @@ class AuthService {
       throw new Error('Servidor backend móvel não configurado. Defina VITE_API_URL apontando para a API FastAPI antes de gerar o APK.');
     }
 
+    const generation = this.sessionGeneration;
     const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/login`, {
       method: 'POST',
       headers: {
@@ -201,7 +253,9 @@ class AuthService {
     });
 
     const data = await res.json();
-
+    if (generation !== this.sessionGeneration) {
+      throw new Error('Operação de login cancelada: a sessão foi alterada.');
+    }
     if (!res.ok) {
       throw new Error(data.detail || data.message || data.error || 'Falha ao autenticar.');
     }
@@ -212,6 +266,7 @@ class AuthService {
     this.token = data.token;
     this.user = serverUser(data.user);
     this.expiresAt = expiresAt;
+    this.sessionGeneration++;
 
     this.armExpirationTimer(expiresAt);
     this.notify();
@@ -221,26 +276,54 @@ class AuthService {
 
   public async listContexts(): Promise<AuthContext[]> {
     if (!this.isAuthenticated()) return [];
+    const token = this.token;
+    const generation = this.sessionGeneration;
     const res = await fetch(getApiBaseUrl() + '/api/v1/auth/contexts', {
-      headers: { Authorization: 'Bearer ' + this.token },
+      headers: { Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store' },
     });
+    if (generation !== this.sessionGeneration || token !== this.token) return [];
     if (res.status === 401) { this.invalidateSession(); return []; }
     if (!res.ok) throw new Error('Não foi possível consultar os vínculos.');
-    return res.json();
+    const raw = await res.json();
+    if (generation !== this.sessionGeneration || token !== this.token) return [];
+    return parseServerContexts(raw);
   }
 
   public async switchContext(context: AuthContext): Promise<AuthenticatedUser> {
     if (!this.isAuthenticated()) throw new Error('Sessão expirada.');
-    const res = await fetch(getApiBaseUrl() + '/api/v1/auth/switch-context', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token },
-      body: JSON.stringify({ target_role: context.role, target_tenant_id: context.tenant_id }),
-    });
-    if (res.status === 401) { this.invalidateSession(); throw new Error('Sessão expirada.'); }
-    if (!res.ok) throw new Error('Vínculo não autorizado ou indisponível.');
-    this.user = serverUser(await res.json());
-    this.notify();
-    return this.user;
+    if (this.switchingContext) throw new Error('Uma troca de vínculo já está em andamento.');
+    parseServerContexts([context]); // valida papel e identificador antes de chamar o backend
+    this.switchingContext = true;
+    const token = this.token;
+    const generation = this.sessionGeneration;
+    try {
+      const res = await fetch(getApiBaseUrl() + '/api/v1/auth/switch-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ target_role: context.role, target_tenant_id: context.tenant_id }),
+      });
+      if (generation !== this.sessionGeneration || token !== this.token) {
+        throw new Error('A sessão foi alterada durante a troca de vínculo.');
+      }
+      if (res.status === 401) { this.invalidateSession(); throw new Error('Sessão expirada.'); }
+      if (!res.ok) throw new Error('Vínculo não autorizado ou indisponível.');
+      const next = serverUser(await res.json());
+      if (generation !== this.sessionGeneration || token !== this.token) {
+        throw new Error('Sessão alterada antes de concluir a troca.');
+      }
+      if (next.id !== this.user?.id || next.role !== context.role ||
+          (next.tenantId ?? null) !== context.tenant_id) {
+        this.invalidateSession();
+        throw new Error('O servidor retornou um contexto incompatível.');
+      }
+      this.user = next;
+      this.sessionGeneration++;
+      this.notify();
+      return next;
+    } finally {
+      this.switchingContext = false;
+    }
   }
 
   public invalidateSession(): void {
@@ -250,29 +333,30 @@ class AuthService {
   }
 
   public async logout(): Promise<void> {
+    // Primeiro revoga LOCALMENTE, sem esperar rede. Uma resposta tardia da
+    // sessão antiga não pode ressuscitar o perfil nem apagar novo login.
+    const token = this.token;
+    this.clearSession();
+    this.notify();
+    if (!token) return;
     try {
-      const headers: Record<string, string> = {
-        'X-Requested-With': 'XMLHttpRequest',
-      };
-      if (this.token) {
-        headers['Authorization'] = `Bearer ${this.token}`;
-      }
-
       await fetch(`${getApiBaseUrl()}/api/v1/auth/logout`, {
         method: 'POST',
-        headers,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-store',
+        },
         credentials: 'include',
       });
-    } catch (e) {
-      console.warn('Erro ao notificar logout ao servidor:', e);
-    } finally {
-      this.clearSession();
-      this.notify();
+    } catch {
+      // Sessão já está encerrada no cliente; backend pode ter ficado
+      // indisponível. Nunca reativar acesso local.
     }
   }
 
   public async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${getApiBaseUrl()}/api/auth/forgot-password`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
@@ -280,7 +364,7 @@ class AuthService {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.message || data.error || 'Erro ao processar solicitação de recuperação.');
+      throw new Error(data.detail || data.message || data.error || 'Recuperação de senha indisponível.');
     }
 
     return data;
@@ -307,6 +391,7 @@ class AuthService {
     this.token = null;
     this.user = null;
     this.expiresAt = null;
+    this.sessionGeneration++;
     if (this.expirationTimer) {
       clearTimeout(this.expirationTimer);
       this.expirationTimer = null;

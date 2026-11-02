@@ -232,6 +232,8 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
             assert stored['user_id'] == ids['member_a'] and stored['revoked_at'] is None
             contexts = await client.get('/api/v1/auth/contexts', headers=headers)
             assert contexts.status_code == 200
+            assert contexts.headers['cache-control'] == 'no-store'
+            assert contexts.headers['referrer-policy'] == 'no-referrer'
             assert {item['tenant_id'] for item in contexts.json()} == {
                 str(ids['tenant_a']), str(ids['tenant_b'])}
             denied = await client.post('/api/v1/auth/switch-context', headers=headers,
@@ -247,6 +249,14 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
             await admin.execute(
                 "UPDATE memberships SET status='DESLIGADA' WHERE id=$1", extra)
             assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
+            assert (await client.post('/api/v1/auth/switch-context', headers=headers,
+                json={'target_role':'TENANT_MEMBER',
+                      'target_tenant_id':str(ids['tenant_a'])})).status_code == 401
+            stored_after = await auth.fetchrow(
+                'SELECT active_tenant_id,active_role FROM public.sessions WHERE token_hash=$1',
+                hash_token(token))
+            assert stored_after['active_tenant_id'] == ids['tenant_b']
+            assert stored_after['active_role'] == 'TENANT_MEMBER'
             await admin.execute(
                 "UPDATE memberships SET status='ATIVA' WHERE id=$1", extra)
             await admin.execute(
@@ -265,6 +275,14 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
             assert own_member.status_code == 200, own_member.text
             assert (await client.get(
                 f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 200
+            restored = await client.post('/api/v1/auth/switch-context',
+                headers=master_headers,
+                json={'target_role':'MASTER','target_tenant_id':None})
+            assert restored.status_code == 200, restored.text
+            assert restored.json()['role'] == 'MASTER'
+            assert restored.json()['tenant_id'] is None
+            assert (await client.get(
+                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 403
             assert (await client.post('/api/v1/auth/logout', headers=master_headers)).status_code == 200
             assert (await client.get('/api/v1/auth/me', headers=master_headers)).status_code == 401
     finally:

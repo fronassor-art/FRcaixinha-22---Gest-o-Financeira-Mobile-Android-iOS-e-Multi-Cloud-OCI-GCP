@@ -46,7 +46,7 @@ import { MobileInstallModal } from './components/MobileInstallModal';
 import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
-import { authService, AuthenticatedUser, AuthContext } from './services/authService';
+import { authService, AuthenticatedUser, AuthContext, contextLabel } from './services/authService';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
@@ -264,17 +264,20 @@ export default function App() {
 
       {contexts.length > 1 && (
         <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
-          <label htmlFor="active-context" className="font-semibold">Vínculo ativo</label>
-          <select id="active-context" className="min-h-11 min-w-0 max-w-full rounded-lg border border-slate-300 px-3"
+          <label htmlFor="active-context" className="font-semibold">Meu acesso único — vínculo ativo</label>
+          <select id="active-context" aria-label="Selecionar perfil e caixinha autorizados"
+            disabled={changingContext}
+            className="min-h-11 min-w-0 max-w-full rounded-lg border border-slate-300 px-3 disabled:opacity-60"
             value={authenticatedUser.role + ':' + (authenticatedUser.tenantId || '')}
             onChange={event => {
               const context = contexts.find(item => item.role + ':' + (item.tenant_id || '') === event.target.value);
               if (context) void handleContextSwitch(context);
             }}>
             {contexts.map(item => <option key={item.role + ':' + (item.tenant_id || '')} value={item.role + ':' + (item.tenant_id || '')}>
-              {item.role} {item.tenant_id || 'Plataforma'}
+              {contextLabel(item)}
             </option>)}
           </select>
+          {changingContext && <span role="status" className="text-slate-600">Validando novo vínculo no servidor...</span>}
         </div>
       )}
       {contextError && <div role="alert" className="bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
