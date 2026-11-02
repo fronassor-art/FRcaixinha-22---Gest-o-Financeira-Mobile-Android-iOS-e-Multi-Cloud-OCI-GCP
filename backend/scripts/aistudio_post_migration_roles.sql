@@ -1,4 +1,4 @@
--- Execucao na mesma transacao das migracoes versionadas 001-023.
+-- Execucao na mesma transacao das migracoes versionadas 001-024.
 -- MASTER e um papel de aplicativo, jamais um SUPERUSER PostgreSQL.
 GRANT frcaixinha_app_role TO frc_ai_app;
 GRANT frcaixinha_auth_role TO frc_ai_auth;
@@ -79,6 +79,19 @@ BEGIN
     OR has_table_privilege('frc_ai_auth','public.password_reset_tokens','SELECT')
   THEN
     RAISE EXCEPTION 'BLOQUEADO: motor de convites/recuperacao nao protegido';
+  END IF;
+  IF has_column_privilege('frc_ai_auth','public.sessions','expires_at','UPDATE')
+    OR has_column_privilege('frc_ai_auth','public.sessions','revoked_at','UPDATE')
+    OR NOT has_function_privilege('frc_ai_auth',
+       'public.auth_refresh_session(text)','EXECUTE')
+    OR NOT has_function_privilege('frc_ai_auth',
+       'public.auth_revoke_all_sessions(text)','EXECUTE')
+    OR NOT has_function_privilege('frc_ai_auth',
+       'public.auth_revoke_owned_session(text,uuid)','EXECUTE')
+    OR has_function_privilege('frc_ai_app',
+       'public.auth_revoke_all_sessions(text)','EXECUTE')
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: Auth pode renovar ou revogar sessao arbitraria';
   END IF;
   IF has_column_privilege('frc_ai_auth','public.sessions','active_role','UPDATE')
     OR has_column_privilege('frc_ai_auth','public.sessions','active_tenant_id','UPDATE')
