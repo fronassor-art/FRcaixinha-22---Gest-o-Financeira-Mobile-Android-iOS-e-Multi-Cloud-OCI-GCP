@@ -564,3 +564,46 @@ async def test_user_identity_rls_isolated_by_role_and_tenant(isolated_rows):
         )
     finally:
         await auth.close()
+
+
+async def test_unlinked_existing_account_does_not_reveal_identity_or_create_session(monkeypatch):
+    """Identidade criada sem vinculo ativo: erro de login generico, sem token ou sessao."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.config import settings
+    from app.security import hash_password_secure, clear_rate_limit
+
+    monkeypatch.setattr(settings, "DATABASE_URL", _ci_dsn("DATABASE_URL"))
+    monkeypatch.setenv("AUTH_DATABASE_URL", _ci_dsn("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    user_id = uuid.uuid4()
+    email = f"isolated-unlinked-{user_id}@example.invalid"
+    password = "senha-sintetica-ci-sem-vinculo"
+    admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    try:
+        await admin.execute(
+            "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "
+            "VALUES($1,$2,'Conta sem vinculo',$3,'00000000000',false)",
+            user_id, email, user_id.hex[:14],
+        )
+        await admin.execute(
+            "INSERT INTO public.credentials(user_id,password_hash) VALUES($1,$2)",
+            user_id, hash_password_secure(password),
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={"usernameOrEmail": email, "password": password},
+            )
+            assert response.status_code == 401
+            assert response.json()["detail"] == "Credenciais inválidas ou conta indisponível."
+            assert "token" not in response.json()
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.sessions WHERE user_id=$1", user_id
+        ) == 0
+    finally:
+        clear_rate_limit(email)
+        await admin.execute("DELETE FROM public.users WHERE id=$1", user_id)
+        await admin.close()

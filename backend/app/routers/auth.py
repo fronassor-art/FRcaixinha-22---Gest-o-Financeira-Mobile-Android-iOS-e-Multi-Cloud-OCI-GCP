@@ -62,7 +62,13 @@ async def login(payload: LoginRequest, response: Response):
             elif links:
                 role, tenant_id = links[0]['role'], links[0]['tenant_id']
             else:
-                raise HTTPException(status_code=403, detail='Conta sem vínculo ativo.')
+                # Não revelar se o endereço pertence a conta cadastrada, mas
+                # ainda sem vínculo. Também aplicar rate limit a esse caso.
+                record_failed_attempt(identifier)
+                raise HTTPException(
+                    status_code=401,
+                    detail='Credenciais inválidas ou conta indisponível.'
+                )
             raw_token, token_hash = generate_session_token()
             expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
                 seconds=settings.SESSION_EXPIRE_SECONDS)

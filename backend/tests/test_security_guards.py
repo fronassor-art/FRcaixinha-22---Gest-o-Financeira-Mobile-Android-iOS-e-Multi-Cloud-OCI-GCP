@@ -56,6 +56,37 @@ def test_invitation_does_not_claim_success_with_only_database_url(monkeypatch):
     assert exc.value.status_code == 503
 
 
+
+def test_invitation_role_scopes_are_denied_before_database_access(monkeypatch):
+    monkeypatch.setattr(settings, 'DATABASE_URL', 'postgresql://127.0.0.1/frcaixinha_ci')
+    requests = [
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_MEMBER"),
+         session("TENANT_MEMBER"), 403),
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_ADMIN"),
+         session("TENANT_ADMIN"), 403),
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_MEMBER"),
+         session("MASTER", True), 403),
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_ADMIN"),
+         session("MASTER", False), 403),
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_MEMBER", tenant_id="outra-caixinha"),
+         session("TENANT_ADMIN"), 403),
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_MEMBER", tenant_id="tenant"),
+         session("TENANT_ADMIN"), 503),
+        (InvitationCreateRequest(target_email="x@example.invalid",
+                                 target_role="TENANT_ADMIN"),
+         session("MASTER", True), 503),
+    ]
+    for payload, actor, expected in requests:
+        with pytest.raises(HTTPException) as caught:
+            create_invitation(payload, actor)
+        assert caught.value.status_code == expected
+
 @pytest.mark.asyncio
 async def test_admin_self_loan_cannot_be_approved_without_annual_consent():
     from uuid import uuid4

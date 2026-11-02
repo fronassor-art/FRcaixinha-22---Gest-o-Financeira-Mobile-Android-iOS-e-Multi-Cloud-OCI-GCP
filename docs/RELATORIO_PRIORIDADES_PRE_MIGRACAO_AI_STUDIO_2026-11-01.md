@@ -130,3 +130,24 @@ não tocar em nenhum outro projeto e **não migrar o banco do Termux**.
 O acesso técnico a `public.users` estava limitado a colunas pela migração 012, mas a linha ainda era global: mesmo não podendo ler CPF/e-mail, uma consulta direta poderia listar nomes de outras caixinhas. Preparada a migração 013 para impor RLS em `users`, com política para a autenticação dedicada e outra para o ADMIN somente dos membros ativos de sua caixinha; membro e MASTER veem sua própria identidade. Testes de integração sintéticos exigem isolamento entre dois tenants. Este resultado **não equivale a homologação em produção**, nem libera onboarding real.
 
 **Atualizar o checkpoint de 147 requisitos apenas depois de verificar testes concluídos e cada cláusula individual. Nenhuma migração local autorizada nesta rodada.**
+
+
+## 9. Nova revisão do fluxo de identidade e convites (GitHub; sem migração local)
+
+- Confirmação local: commit e65feda sincronizado; PostgreSQL exclusivo do AI Studio
+  18.6 em 127.0.0.1:5433, com **zero tabelas** e sem migrações executadas.
+- Convites permanecem retornando 503 (nenhum token, vínculo ou e-mail emitido),
+  mas o backend passa a recusar ANTES disso tentativas de hierarquia não
+  autorizadas: membro não convida; administrador somente membro da própria
+  caixinha; Master somente administradores. Sem permissão implícita por
+  identidade com múltiplos papéis: vale o papel ativo da sessão.
+- Login em ambiente de homologação não revela que uma conta ativa sem
+  vínculo existe: HTTP 401 genérico, a tentativa conta para rate limit,
+  e nenhuma sessão é criada. Testes com PostgreSQL descartável.
+- **P0 ainda aberto:** token criptográfico de convite, destinatário,
+  aceite transacional, expiração/revogação, prova de titularidade do e-mail,
+  recuperação de senha e rate limit distribuído. Nenhuma destas funções
+  está liberada para cadastro público.
+- A implementação do Caderno Mestre do Master SaaS não será duplicada.
+  A migração 013 permanece apenas versionada; o dono não autorizou
+  nenhuma alteração no banco local.

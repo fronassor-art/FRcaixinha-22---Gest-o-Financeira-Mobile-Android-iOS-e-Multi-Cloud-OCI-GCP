@@ -19,18 +19,32 @@ def create_invitation(payload: InvitationCreateRequest, session: AuthenticatedSe
     - Administrador de Caixinha pode convidar Membros para o seu próprio tenant;
     - Membros NUNCA podem criar convites nem conceder papéis.
     """
-    if session.role == "TENANT_MEMBER":
+    # Confere a hierarquia já prevista ANTES de qualquer execução futura.
+    # Ainda não há emissão de token, aceite nem envio de e-mail.
+    if session.role not in ('MASTER', 'TENANT_ADMIN'):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso Proibido: Membros não possuem autorização para convidar ou criar contas."
+            detail="Somente Master ou administrador de caixinha podem solicitar convites."
         )
-        
-    if payload.target_role == "TENANT_ADMIN" and session.role != "MASTER":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas o Administrador Master pode convidar ou autorizar novos Administradores de Caixinha."
-        )
-        
+
+    if session.role == 'MASTER':
+        if not session.is_master or payload.target_role != 'TENANT_ADMIN':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="O Master somente pode convidar administradores de caixinha."
+            )
+    else:
+        if payload.target_role != 'TENANT_MEMBER' or not session.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="O administrador somente pode convidar membros de sua caixinha."
+            )
+        if payload.tenant_id is not None and payload.tenant_id != session.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Não é permitido emitir convites para outra caixinha."
+            )
+
     if not settings.is_database_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
