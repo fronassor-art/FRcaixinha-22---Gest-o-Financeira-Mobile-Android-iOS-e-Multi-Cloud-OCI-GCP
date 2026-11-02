@@ -168,125 +168,59 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
   // Status de autorização anual para crédito próprio do admin
   const selfConsent = state.adminSelfConsents.find(c => c.tenant_id === state.currentTenantId);
 
-  // O painel Master existente usa apenas inventário cadastral autorizado do servidor.
+  // Master: inventario cadastral do PostgreSQL, sem dados financeiros das caixinhas.
+  // Os detalhes tecnicos e simuladores nao aparecem no painel cotidiano.
   if (currentRole === 'MASTER') {
     const masterData = currentResult.master!;
-    const totalTenants = masterData.total_tenants;
-
     return (
-      <div className="space-y-6">
-        {/* Master Alert Bar */}
-        <div className="p-4 rounded-2xl bg-indigo-900/40 border border-indigo-700/50 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white text-sm">Painel Central do Proprietário (Master)</h3>
-              <p className="text-xs text-indigo-200">
-                Supervisão de Licenças e Operação Técnica • Sem acesso financeiro ou Pix das caixinhas (Cláusula 2.8)
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onNavigateTab('LICENCAS')}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs"
-            >
-              Gerenciar Preços e Licenças
-            </button>
-            <button
-              onClick={() => onNavigateTab('SUPORTE')}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer border border-slate-700"
-            >
-              Suporte & Break-Glass
+      <div className="space-y-4">
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="text-xl font-bold text-slate-900">Visão geral da plataforma</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Gerencie as caixinhas e licenças. As informações financeiras
+            pertencem a cada caixinha e não são mostradas no perfil Master.
+          </p>
+        </section>
+        <div className="grid grid-cols-2 gap-3">
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="text-xs font-semibold text-slate-600">Caixinhas</h3>
+            <p className="mt-2 text-3xl font-bold text-slate-900">{masterData.total_tenants}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="text-xs font-semibold text-slate-600">Cobrança de licenças</h3>
+            <p className="mt-2 text-sm font-bold text-amber-800">Em homologação</p>
+          </article>
+        </div>
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="font-bold text-slate-900">Caixinhas cadastradas</h3>
+            <button type="button" onClick={() => onNavigateTab('LICENCAS')}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+              Licenças
             </button>
           </div>
-        </div>
-
-        {/* Master Metrics Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Receita da Plataforma (SaaS)</span>
-            <div className="text-2xl font-black text-emerald-400 mt-2">Não integrado</div>
-            <p className="text-[11px] text-slate-400 mt-1">Cobranças de licenças ainda sem registro conciliado no servidor</p>
-          </div>
-
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Caixinhas cadastradas</span>
-            <div className="text-2xl font-black text-white mt-2">{totalTenants}</div>
-            <p className="text-[11px] text-slate-400 mt-1">Assinaturas SaaS ainda não persistidas</p>
-          </div>
-
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Preço Essencial Vigente</span>
-            <div className="text-2xl font-black text-white mt-2">
-              Catálogo demonstrativo
-            </div>
-            <p className="text-[11px] text-emerald-400 mt-1">Preços não vinculados a cobrança real</p>
-          </div>
-
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xs">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Demonstrador Regulatório</span>
-            <div className="text-2xl font-black text-amber-400 mt-2">Bolões CAIXA</div>
-            <p className="text-[11px] text-amber-300/80 mt-1">Demonstração sem dinheiro real (Seção 14)</p>
-          </div>
-        </div>
-
-        {/* Multi-Cloud Soberana OCI + GCP & Mobile Status */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950/80 border border-slate-700/80 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 text-white shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center font-bold text-xs">
-              <Cloud className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="font-bold text-sm text-white">Infraestrutura Multi-Cloud Soberana (GCP + OCI)</h4>
-                <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                  Infraestrutura em demonstração
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Topologia ilustrativa. Não há medição verificada de disponibilidade, RPO, RTO ou integridade WORM.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigateTab('NUVEM')}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition-colors flex items-center gap-1.5"
-          >
-            <Cloud className="w-3.5 h-3.5 text-cyan-300" />
-            <span>Ver Topologia Multi-Cloud</span>
-          </button>
-        </div>
-
-        {/* Lista de Caixinhas Contratadas */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-bold text-white text-sm flex items-center gap-2">
-              <Building className="w-4 h-4 text-emerald-400" />
-              <span>Caixinhas Clientes e Capacidade Agregada</span>
-            </h4>
-            <span className="text-xs text-slate-400">Dados cadastrais e técnicos minimizados (LGPD)</span>
-          </div>
-
-          <div className="space-y-3">
+          <div className="mt-4 divide-y divide-slate-100">
             {masterData.tenants.length === 0 && (
-              <p className="text-sm text-slate-300">Nenhuma caixinha cadastrada no PostgreSQL.</p>
+              <p className="py-3 text-sm text-slate-600">Nenhuma caixinha cadastrada.</p>
             )}
-            {masterData.tenants.map(t => (
-              <div key={t.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-                <strong className="text-sm text-white">{t.display_name}</strong>
-                <p className="mt-1 text-xs text-slate-300">
-                  Situação: {t.status} {t.is_owner_box ? ' • Caixinha inaugural' : ''}
+            {masterData.tenants.slice(0,10).map(t => (
+              <div key={t.id} className="py-3">
+                <p className="font-semibold text-slate-900">{t.display_name}</p>
+                <p className="text-sm text-slate-600">
+                  {t.status}{t.is_owner_box ? ' • Inaugural' : ''}
                 </p>
               </div>
             ))}
-            {masterData.has_more && (
-              <p className="text-xs text-slate-300">Mostrando os primeiros 200 registros. Total: {totalTenants}.</p>
+            {(masterData.tenants.length > 10 || masterData.has_more) && (
+              <p className="py-3 text-sm text-slate-600">
+                Exibindo até 10 caixinhas. Total cadastrado: {masterData.total_tenants}.
+              </p>
             )}
           </div>
-        </div>
+        </section>
+        <p className="text-xs text-slate-600">
+          Ambiente de homologação: nenhuma receita SaaS ou pagamento real foi confirmado aqui.
+        </p>
       </div>
     );
   }
