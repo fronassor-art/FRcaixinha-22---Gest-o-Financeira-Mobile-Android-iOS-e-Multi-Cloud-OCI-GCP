@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { authService, UserSessionInfo } from '../services/authService';
 
 /** Segurança das sessões da própria identidade; não exibe IP, token ou hash. */
-export function SessionSecurityPanel({ onClose }: { onClose: () }) {
+export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
   const [sessions, setSessions] = useState<UserSessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
