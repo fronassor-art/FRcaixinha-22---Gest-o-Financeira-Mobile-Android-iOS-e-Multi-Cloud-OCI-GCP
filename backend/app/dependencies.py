@@ -41,7 +41,8 @@ def bearer_token(request: Request) -> str:
 
 async def get_current_session(request: Request) -> AuthenticatedSession:
     """Verifica hash, revogação, expiração e vínculo ativo no PostgreSQL."""
-    digest = hash_token(bearer_token(request))
+    raw_token = bearer_token(request)
+    digest = hash_token(raw_token)
     try:
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
@@ -59,7 +60,7 @@ async def get_current_session(request: Request) -> AuthenticatedSession:
                     valid = row['is_master'] and row['active_tenant_id'] is None
                 else:
                     links = await conn.fetch(
-                        'SELECT tenant_id,role FROM public.auth_active_memberships($1)', row['user_id'])
+                        'SELECT tenant_id,role FROM public.auth_active_memberships($1::text)', raw_token)
                     valid = any(link['tenant_id'] == row['active_tenant_id'] and
                                 link['role'] == row['active_role'] for link in links)
                 if not valid:
