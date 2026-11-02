@@ -99,8 +99,15 @@ def _account(conn, details):
 
 
 def onboard_tenant_with_roles(conn, *, master_email, master_password,
-                             tenant_name, contracting_party_id, admin, member):
-    """Tudo ou nada: valida Master, vincula identidades e registra auditoria."""
+                             tenant_name, contracting_party_id, admin, member,
+                             owner_box=False):
+    """Tudo ou nada: uma identidade pode ter Master/Admin/Membro no mesmo tenant.
+
+    owner_box e opcao EXPLICITA somente para a caixinha inaugural do Master;
+    nao concede acesso financeiro no contexto MASTER.
+    """
+    if type(owner_box) is not bool:
+        raise OnboardingDenied("Indicador de caixinha do proprietario invalido")
     _guard_database(conn)
     tenant_name = " ".join(str(tenant_name).split())
     party = str(contracting_party_id).strip()
@@ -129,13 +136,24 @@ def onboard_tenant_with_roles(conn, *, master_email, master_password,
         actor_id = actor[0]
         admin_id = _account(conn, admin)
         member_id = _account(conn, member)
+        if owner_box:
+            # Nao confundir uma caixinha gerenciada por terceiros com a
+            # caixinha pessoal inaugural do proprietario da plataforma.
+            if admin_id != actor_id or member_id != actor_id:
+                raise OnboardingDenied(
+                    "Caixinha inaugural exige o Master nos vinculos Admin e Membro"
+                )
+            if conn.execute(
+                "SELECT EXISTS(SELECT 1 FROM public.tenants WHERE is_owner_box=TRUE)"
+            ).fetchone()[0]:
+                raise OnboardingDenied("Caixinha inaugural do proprietario ja existente")
 
         tenant_id = uuid4()
         conn.execute(
             "INSERT INTO public.tenants(id,display_name,contracting_party_id,"
             "admin_user_id,status,is_owner_box) "
-            "VALUES(%s,%s,%s,%s,'ATIVO',FALSE)",
-            (tenant_id, tenant_name, party, admin_id),
+            "VALUES(%s,%s,%s,%s,'ATIVO',%s)",
+            (tenant_id, tenant_name, party, admin_id, owner_box),
         )
         members = []
         for user_id, role in ((admin_id, "TENANT_ADMIN"),
@@ -163,8 +181,9 @@ def onboard_tenant_with_roles(conn, *, master_email, master_password,
             "VALUES(%s,'MASTER',%s,'AI_STUDIO_LOCAL_TENANT_CREATED',"
             "'TENANT',%s,%s,'LOCAL_HOMOLOGATION_OPERATOR_APPROVED')",
             (actor_id, tenant_id, str(tenant_id),
-             "Caixinha criada para homologar 3 perfis com Master"),
+             ("Caixinha inaugural do proprietario: tres perfis em uma identidade"
+              if owner_box else "Caixinha criada para homologar os perfis")),
         )
     return {"tenant_id": tenant_id, "admin_id": admin_id,
             "member_id": member_id, "admin_membership_id": members[0],
-            "member_membership_id": members[1]}
+            "member_membership_id": members[1], "is_owner_box": owner_box}

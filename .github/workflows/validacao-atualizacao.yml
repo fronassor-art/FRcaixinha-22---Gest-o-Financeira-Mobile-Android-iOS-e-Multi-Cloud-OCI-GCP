@@ -32,6 +32,8 @@ jobs:
         run: npx tsx src/tests/auth_context_security.test.ts
       - name: Testar cliente dos tres perfis no APK
         run: npx tsx src/tests/mobile_three_profiles.test.ts
+      - name: Testar uma identidade com Master Admin e Membro no cliente
+        run: npx tsx src/tests/mobile_master_multi_role.test.ts
       - name: Build web
         run: npm run build
 

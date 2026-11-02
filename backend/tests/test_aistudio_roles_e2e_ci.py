@@ -53,11 +53,12 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
             db.execute("INSERT INTO public.credentials(user_id,password_hash) "
                        "VALUES(%s,%s)",(master_id,hash_password_secure(passwords[0])))
 
-            def onboard(name,admin,member,master_password=passwords[0]):
+            def onboard(name,admin,member,master_password=passwords[0],
+                        owner_box=False):
                 return onboard_tenant_with_roles(
                     db,master_email=emails[0],master_password=master_password,
                     tenant_name=name,contracting_party_id=str(uuid4()),
-                    admin=admin,member=member)
+                    admin=admin,member=member,owner_box=owner_box)
             first=onboard("Caixinha Principal CI",
                           new(emails[1],"99988877765",passwords[1]),
                           new(emails[2],"99988877764",passwords[2]))
@@ -87,6 +88,65 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
             with pytest.raises(OnboardingDenied,match="nao comprovada"):
                 onboard("Senha admin errada",existing(emails[1],"invalida"),
                         existing(emails[2],passwords[2]))
+            # O mesmo usuario Master recebe os DOIS vinculos para a mesma
+            # caixinha, sem gerar novo usuario, CPF, credencial ou e-mail.
+            owner = onboard(
+                "Caixinha Inaugural CI",
+                existing(emails[0], passwords[0]),
+                existing(emails[0], passwords[0]),
+                owner_box=True,
+            )
+            tenants.append(owner["tenant_id"])
+            assert owner["is_owner_box"] is True
+            assert owner["admin_id"] == owner["member_id"] == master_id
+            assert db.execute(
+                "SELECT count(*) FROM public.users WHERE lower(email)=%s",
+                (emails[0],),
+            ).fetchone()[0] == 1
+            assert db.execute(
+                "SELECT count(*) FROM public.credentials WHERE user_id=%s",
+                (master_id,),
+            ).fetchone()[0] == 1
+            assert db.execute(
+                "SELECT is_owner_box,admin_user_id FROM public.tenants WHERE id=%s",
+                (owner["tenant_id"],),
+            ).fetchone() == (True, master_id)
+            assert db.execute(
+                "SELECT count(*) FROM public.memberships "
+                "WHERE tenant_id=%s AND user_id=%s AND status='ATIVA'",
+                (owner["tenant_id"],master_id),
+            ).fetchone()[0] == 2
+            assert set(
+                r[0] for r in db.execute(
+                    "SELECT role FROM public.memberships WHERE tenant_id=%s "
+                    "AND user_id=%s",
+                    (owner["tenant_id"],master_id),
+                ).fetchall()
+            ) == {"TENANT_ADMIN","TENANT_MEMBER"}
+            assert db.execute(
+                "SELECT count(*) FROM public.tenants WHERE is_owner_box=TRUE"
+            ).fetchone()[0] == 1
+            before = db.execute(
+                "SELECT count(*) FROM public.tenants"
+            ).fetchone()[0]
+            with pytest.raises(OnboardingDenied,match="ja existente"):
+                onboard(
+                    "Outra inaugural nao autorizada",
+                    existing(emails[0],passwords[0]),
+                    existing(emails[0],passwords[0]),
+                    owner_box=True,
+                )
+            with pytest.raises(OnboardingDenied,match="exige o Master"):
+                onboard(
+                    "Falsa inaugural",
+                    existing(emails[1],passwords[1]),
+                    existing(emails[2],passwords[2]),
+                    owner_box=True,
+                )
+            assert db.execute(
+                "SELECT count(*) FROM public.tenants"
+            ).fetchone()[0] == before
+
             async with AsyncClient(
                 transport=ASGITransport(app=app),base_url="http://ci"
             ) as client:
@@ -114,7 +174,78 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
                         role,dashboard.text)
                     contexts=await client.get("/api/v1/auth/contexts",headers=headers)
                     assert contexts.status_code == 200,contexts.text
-                    assert len(contexts.json()) == (1 if role=="MASTER" else 2)
+                    assert len(contexts.json()) == (3 if role=="MASTER" else 2)
+                    if role == "MASTER":
+                        # Testar tres contextos simultaneos sob o MESMO token
+                        # e MESMO UUID de identidade, sem login repetido.
+                        expected_contexts = {
+                            ("MASTER",None),
+                            ("TENANT_ADMIN",str(owner["tenant_id"])),
+                            ("TENANT_MEMBER",str(owner["tenant_id"])),
+                        }
+                        assert {
+                            (item["role"],item["tenant_id"])
+                            for item in contexts.json()
+                        } == expected_contexts
+
+                        for target_role in (
+                            "TENANT_ADMIN","TENANT_MEMBER","MASTER"
+                        ):
+                            target_id = (None if target_role == "MASTER"
+                                         else str(owner["tenant_id"]))
+                            switched = await client.post(
+                                "/api/v1/auth/switch-context",headers=headers,
+                                json={"target_role":target_role,
+                                      "target_tenant_id":target_id},
+                            )
+                            assert switched.status_code == 200,(
+                                target_role,switched.text)
+                            assert switched.json()["id"] == str(master_id)
+                            assert switched.json()["role"] == target_role
+                            me = await client.get(
+                                "/api/v1/auth/me",headers=headers)
+                            assert me.status_code == 200, me.text
+                            assert me.json()["id"] == str(master_id)
+                            assert me.json()["role"] == target_role
+                            assert me.json()["is_master"] is True
+                            # Os endpoints nao podem confundir o atributo
+                            # is_master com o papel ATIVO da sessao.
+                            platform = await client.get(
+                                "/api/v1/master/overview",headers=headers)
+                            assert platform.status_code == (
+                                200 if target_role=="MASTER" else 403
+                            ),(target_role,platform.text)
+                            own_members = await client.get(
+                                f"/api/v1/tenants/{owner['tenant_id']}/members",
+                                headers=headers)
+                            assert own_members.status_code == (
+                                200 if target_role=="TENANT_ADMIN" else 403
+                            ),(target_role,own_members.text)
+                            own_dashboard = await client.get(
+                                f"/api/v1/tenants/{owner['tenant_id']}/dashboard",
+                                headers=headers)
+                            assert own_dashboard.status_code == (
+                                403 if target_role=="MASTER" else 200
+                            ),(target_role,own_dashboard.text)
+                            own_contexts = await client.get(
+                                "/api/v1/auth/contexts",headers=headers)
+                            assert own_contexts.status_code == 200
+                            assert {
+                                (item["role"],item["tenant_id"])
+                                for item in own_contexts.json()
+                            } == expected_contexts
+                            if target_role == "TENANT_MEMBER":
+                                forbidden = await client.post(
+                                    "/api/v1/auth/switch-context",headers=headers,
+                                    json={"target_role":"TENANT_ADMIN",
+                                          "target_tenant_id":str(first["tenant_id"])},
+                                )
+                                assert forbidden.status_code == 403
+                                still_member = await client.get(
+                                    "/api/v1/auth/me",headers=headers)
+                                assert still_member.json()["role"] == "TENANT_MEMBER"
+                        # Master so retorna ao contexto de plataforma apos
+                        # revalidacao da sessao no servidor.
                     logout=await client.post("/api/v1/auth/logout",headers=headers)
                     assert logout.status_code == 200,logout.text
                     assert (await client.get("/api/v1/auth/me",
