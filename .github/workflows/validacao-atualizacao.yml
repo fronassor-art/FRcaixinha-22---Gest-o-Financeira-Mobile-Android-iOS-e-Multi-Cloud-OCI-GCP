@@ -30,6 +30,8 @@ jobs:
         run: npx tsx src/tests/server_integration.test.ts
       - name: Testes de identidade única, contexto e concorrência no cliente
         run: npx tsx src/tests/auth_context_security.test.ts
+      - name: Testar cliente dos tres perfis no APK
+        run: npx tsx src/tests/mobile_three_profiles.test.ts
       - name: Build web
         run: npm run build
 
@@ -207,6 +209,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_login_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_roles_e2e_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
