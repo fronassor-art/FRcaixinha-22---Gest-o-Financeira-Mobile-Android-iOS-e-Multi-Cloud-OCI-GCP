@@ -29,6 +29,7 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
 
     admin = await asyncpg.connect(_ci_url("CI_ADMIN_DATABASE_URL"))
     auth = await asyncpg.connect(_ci_url("CI_AUTH_DATABASE_URL"))
+    verifier = await asyncpg.connect(_ci_url("CI_VERIFIER_DATABASE_URL"))
     app_db = await asyncpg.connect(_ci_url("DATABASE_URL"))
     actor, outsider = uuid.uuid4(), uuid.uuid4()
     a,b,c = uuid.uuid4(),uuid.uuid4(),uuid.uuid4()
@@ -36,6 +37,7 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
     ids = [uuid.uuid4() for _ in range(3)]
     monkeypatch.setattr(settings, "DATABASE_URL", _ci_url("DATABASE_URL"))
     monkeypatch.setenv("AUTH_DATABASE_URL", _ci_url("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv("AUTH_VERIFIER_DATABASE_URL", _ci_url("CI_VERIFIER_DATABASE_URL"))
     monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
     monkeypatch.setenv("ENVIRONMENT", "homologation")
     try:
@@ -74,6 +76,28 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 "now()+interval '20 minutes')",
                 sid,hash_token(raw),user,role,tenant,
             )
+        assert not await auth.fetchval(
+            "SELECT has_column_privilege(current_user,'public.credentials',"
+            "'password_hash','SELECT')")
+        assert await verifier.fetchval(
+            "SELECT has_column_privilege(current_user,'public.credentials',"
+            "'password_hash','SELECT')")
+        assert not await auth.fetchval(
+            "SELECT has_table_privilege(current_user,'public.sessions','INSERT')")
+        assert not await verifier.fetchval(
+            "SELECT has_table_privilege(current_user,'public.sessions','INSERT')")
+        assert not await verifier.fetchval(
+            "SELECT has_function_privilege(current_user,"
+            "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE')")
+
+        with pytest.raises(asyncpg.PostgresError) as forged_pending:
+            await auth.execute(
+                "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+                "active_tenant_id,expires_at) VALUES($1,$2,$3,"
+                "'PENDING_CONTEXT',NULL,NOW()+INTERVAL '90 seconds')",
+                uuid.uuid4(),hash_token("ci-forge-"+uuid.uuid4().hex),actor)
+        assert forged_pending.value.sqlstate == '42501'
+
         # Emissão de sessão ATIVA pelo papel Auth deve ser recusada por RLS.
         # Não há autenticação nem concessão implícita apenas pela posse do DSN.
         with pytest.raises(asyncpg.PostgresError) as invalid_active:
@@ -136,11 +160,18 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
         # A transição só aceita token bruto e verifica vínculo do usuário.
         transition_token = "ci-transition-" + uuid.uuid4().hex
         transition_id = uuid.uuid4()
-        await auth.execute(
-            "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
-            "active_tenant_id,expires_at) VALUES($1,$2,$3,"
-            "'PENDING_CONTEXT',NULL,NOW()+INTERVAL '90 seconds')",
-            transition_id,hash_token(transition_token),actor)
+        proof = "ci-proof-" + uuid.uuid4().hex
+        await verifier.execute(
+            "INSERT INTO public.auth_login_proofs(proof_hash,user_id,expires_at)"
+            " VALUES($1,$2,NOW()+INTERVAL '60 seconds')",
+            hash_token(proof),actor)
+        assert await auth.fetchval(
+            "SELECT public.auth_issue_pending_session($1::uuid,$2::text,$3::text)",
+            actor,transition_token,proof) is True
+        assert await auth.fetchval(
+            "SELECT public.auth_issue_pending_session($1::uuid,$2::text,$3::text)",
+            actor,"ci-new-token-"+uuid.uuid4().hex,proof) is False,
+            "A mesma prova nao pode ser reutilizada"
         assert await auth.fetchval(
             "SELECT public.auth_promote_pending_session("
             "$1::text,$2::varchar,$3::uuid)",
@@ -325,6 +356,7 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
     finally:
         await close_db_pool()
         await auth.close()
+        await verifier.close()
         await app_db.close()
         await admin.execute(
             "DELETE FROM public.tenants WHERE id=ANY($1::uuid[])",[a,b,c])
