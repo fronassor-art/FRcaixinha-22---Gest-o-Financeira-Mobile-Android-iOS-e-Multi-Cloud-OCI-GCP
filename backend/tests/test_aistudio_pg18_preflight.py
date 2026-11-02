@@ -40,11 +40,18 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT count(*) FROM public.platform_license_plans"
         ) == 0, "Catalogo Master deve ser invisivel fora de contexto"
         assert await admin.fetchval(
-            "SELECT to_regprocedure('public.auth_active_membership_contexts(uuid)') IS NOT NULL"
+            "SELECT to_regprocedure('public.auth_active_membership_contexts(text)') IS NOT NULL"
         ), "Acesso único nomeado precisa existir"
+        assert await admin.fetchval(
+            "SELECT to_regprocedure('public.auth_active_membership_contexts(uuid)') IS NULL"
+        ), "A função anterior por UUID não pode continuar exposta"
+        assert await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_auth_role',"
+            "'public.auth_active_membership_contexts(text)','EXECUTE')"
+        ), "O papel de autenticação deve possuir o acesso mínimo necessário"
         assert not await application.fetchval(
             "SELECT has_function_privilege(current_user,"
-            "'public.auth_active_membership_contexts(uuid)','EXECUTE')"
+            "'public.auth_active_membership_contexts(text)','EXECUTE')"
         ), "App financeiro não pode consultar nomes de vínculos via Auth"
         assert not await application.fetchval(
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')"
