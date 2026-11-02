@@ -66,7 +66,8 @@ async def get_current_session(request: Request) -> AuthenticatedSession:
                 if not valid:
                     raise HTTPException(status_code=401, detail='Vínculo ativo não encontrado.')
                 await conn.execute(
-                    'UPDATE public.sessions SET expires_at=$2 WHERE token_hash=$1',
+                    "UPDATE public.sessions SET expires_at=LEAST("
+                    "created_at + INTERVAL '8 hours',$2) WHERE token_hash=$1",
                     digest, now + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS))
             return AuthenticatedSession(
                 str(row['user_id']), row['active_role'],
