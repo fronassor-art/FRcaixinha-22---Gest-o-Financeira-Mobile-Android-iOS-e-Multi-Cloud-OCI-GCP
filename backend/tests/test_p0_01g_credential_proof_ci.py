@@ -86,7 +86,9 @@ async def test_p0_01g_single_use_expiry_user_binding_and_password_rotation():
 
         expired = await insert_proof("expired")
         await admin.execute(
-            "UPDATE public.auth_login_proofs SET expires_at=NOW()-INTERVAL '1 second' "
+            "UPDATE public.auth_login_proofs "
+            "SET created_at=NOW()-INTERVAL '120 seconds', "
+            "expires_at=NOW()-INTERVAL '60 seconds' "
             "WHERE proof_hash=$1", digest(expired),
         )
         assert await auth.fetchval(
