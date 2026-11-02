@@ -156,6 +156,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/021_session_bound_memberships.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/022_auth_session_issuance_limits.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/023_session_context_guarded_transition.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/024_token_bound_session_lifecycle.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -253,7 +254,7 @@ jobs:
           python-version: '3.11'
       - name: Dependencias Python
         run: python -m pip install -r backend/requirements.txt
-      - name: Migrar 001-023 em UMA transacao no PostgreSQL 18 descartavel
+      - name: Migrar 001-024 em UMA transacao no PostgreSQL 18 descartavel
         env:
           PGHOST: 127.0.0.1
           PGPORT: '5432'
@@ -263,7 +264,7 @@ jobs:
         run: |
           set -euo pipefail
           scripts=()
-          for i in $(seq 1 23); do
+          for i in $(seq 1 24); do
             printf -v n '%03d' "$i"
             files=(backend/migrations/"$n"_*.sql)
             test "${#files[@]}" -eq 1
