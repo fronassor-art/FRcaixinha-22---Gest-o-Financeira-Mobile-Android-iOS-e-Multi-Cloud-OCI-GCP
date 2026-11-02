@@ -6,7 +6,7 @@ Contrato Técnico Mestre (Cláusulas 1.2, 14.1 e 16.2)
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .dependencies import auth_database_url
+from .dependencies import auth_database_url, auth_verifier_database_url
 import asyncio
 import asyncpg
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit
@@ -75,6 +75,7 @@ async def backend_readiness():
         raise HTTPException(status_code=503, detail="PostgreSQL não configurado.")
     # Jamais marcar pronto em produção: o login atual é somente de homologação.
     auth_url = auth_database_url()
+    verifier_url = auth_verifier_database_url()
     try:
         finance = await asyncpg.connect(settings.DATABASE_URL, timeout=3, command_timeout=3)
         try:
@@ -87,10 +88,22 @@ async def backend_readiness():
                 "SELECT to_regclass('public.users') IS NOT NULL AS users_ok, "
                 "to_regclass('public.credentials') IS NOT NULL AS credentials_ok, "
                 "to_regclass('public.sessions') IS NOT NULL AS sessions_ok, "
-                "to_regprocedure('public.auth_active_memberships(text)') IS NOT NULL AS links_ok"
+                "to_regprocedure('public.auth_active_memberships(text)') IS NOT NULL AS links_ok, "
+                "to_regprocedure('public.auth_issue_pending_session(uuid,text,text)') IS NOT NULL AS issuer_ok"
             )
         finally:
             await auth.close()
+        verifier = await asyncpg.connect(verifier_url, timeout=3, command_timeout=3)
+        try:
+            verifier_ok = await verifier.fetchrow(
+                "SELECT has_column_privilege(current_user,'public.credentials',"
+                "'password_hash','SELECT') AS can_verify, "
+                "has_table_privilege(current_user,'public.sessions','INSERT') AS can_issue"
+            )
+        finally:
+            await verifier.close()
+        if not verifier_ok or not verifier_ok['can_verify'] or verifier_ok['can_issue']:
+            raise HTTPException(status_code=503, detail='Verificador de senha nao segregado.')
         if not structure_ok or not all(structure_ok.values()):
             raise HTTPException(status_code=503, detail="Estrutura de autenticação ainda não validada.")
     except (asyncpg.PostgresError, OSError, asyncio.TimeoutError, TimeoutError):
