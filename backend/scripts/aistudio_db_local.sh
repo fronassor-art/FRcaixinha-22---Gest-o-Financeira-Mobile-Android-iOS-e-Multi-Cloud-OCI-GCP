@@ -67,7 +67,7 @@ apply)
   fi
 
   args=(-f "$root/backend/scripts/aistudio_migration_guard.sql")
-  for n in 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020; do
+  for n in 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021; do
     files=("$root"/backend/migrations/"$n"_*.sql)
     if [[ "${#files[@]}" != 1 ]] || [[ ! -f "${files[0]}" ]]; then
       echo "BLOQUEADO: arquivo da migracao $n ausente ou duplicado" >&2
@@ -76,7 +76,7 @@ apply)
     args+=(-f "${files[0]}")
   done
   args+=(-f "$root/backend/scripts/aistudio_post_migration_roles.sql")
-  echo "Aplicando 001-020 + papeis na MESMA transacao PostgreSQL; falhas causam ROLLBACK."
+  echo "Aplicando 001-021 + papeis na MESMA transacao PostgreSQL; falhas causam ROLLBACK."
   "${psql_base[@]}" --single-transaction "${args[@]}"
   echo "AI_STUDIO_MIGRATIONS=APPLIED (execute verify antes do login)"
   ;;
@@ -88,7 +88,7 @@ SELECT count(*) AS tabelas_public FROM pg_catalog.pg_tables WHERE schemaname='pu
 SELECT to_regclass('public.users') AS users,
        to_regclass('public.credentials') AS credentials,
        to_regclass('public.sessions') AS sessions,
-       to_regprocedure('public.auth_active_memberships(uuid)') AS vinculos;
+       to_regprocedure('public.auth_active_memberships(text)') AS vinculos;
 SELECT pg_has_role('frc_ai_app','frcaixinha_app_role','member') AS app_role,
        pg_has_role('frc_ai_auth','frcaixinha_auth_role','member') AS auth_role;
 SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity
