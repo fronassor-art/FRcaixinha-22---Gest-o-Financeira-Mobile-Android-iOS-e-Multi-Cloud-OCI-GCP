@@ -42,7 +42,7 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
             "SELECT has_table_privilege(current_user,'public.tenants','SELECT')")
         assert not await app_db.fetchval(
             "SELECT has_function_privilege(current_user,"
-            "'public.auth_active_membership_contexts(uuid)','EXECUTE')")
+            "'public.auth_active_membership_contexts(text)','EXECUTE')")
         for user,name in ((actor,"Pessoa única"),(outsider,"Pessoa distinta")):
             await admin.execute(
                 "INSERT INTO public.users(id,email,full_name,cpf,phone)"
@@ -73,6 +73,35 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 "now()+interval '20 minutes')",
                 sid,hash_token(raw),user,role,tenant,
             )
+        # Serviço Auth não enumera outros usuários usando UUID arbitrário
+        # nem usando hash armazenado como se fosse o token bruto.
+        assert await auth.fetch(
+            "SELECT * FROM public.auth_active_membership_contexts($1::text)",
+            str(outsider),
+        ) == []
+        assert await auth.fetch(
+            "SELECT * FROM public.auth_active_membership_contexts($1::text)",
+            hash_token(tokens[2]),
+        ) == []
+        assert await auth.fetch(
+            "SELECT * FROM public.auth_active_membership_contexts($1::text)",
+            "ci-invalid-" + uuid.uuid4().hex,
+        ) == []
+        actor_rows = await auth.fetch(
+            "SELECT * FROM public.auth_active_membership_contexts($1::text)",
+            tokens[0],
+        )
+        assert {(x["role"], x["tenant_id"], x["tenant_name"]) for x in actor_rows} == {
+            ("TENANT_MEMBER", a, "Caixinha Pará"),
+            ("TENANT_ADMIN", b, "Caixinha Maranhão"),
+        }
+        outsider_rows = await auth.fetch(
+            "SELECT * FROM public.auth_active_membership_contexts($1::text)",
+            tokens[2],
+        )
+        assert {(x["role"], x["tenant_id"]) for x in outsider_rows} == {
+            ("TENANT_MEMBER", b), ("TENANT_ADMIN", c),
+        }
         headers = {"Authorization":"Bearer "+tokens[0]}
         async with AsyncClient(transport=ASGITransport(app=app),
                                base_url="http://ci") as client:
@@ -107,6 +136,10 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
             other = await client.post(
                 f"/api/v1/auth/sessions/{ids[1]}/revoke",headers=headers)
             assert other.status_code == 200 and not other.json()["current_revoked"]
+            assert await auth.fetch(
+                "SELECT * FROM public.auth_active_membership_contexts($1::text)",
+                tokens[1],
+            ) == []
             assert (await client.get("/api/v1/auth/me",
                 headers={"Authorization":"Bearer "+tokens[1]})).status_code==401
             assert (await client.get("/api/v1/auth/me",headers=headers)).status_code==200
