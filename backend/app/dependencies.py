@@ -7,6 +7,7 @@ from fastapi import Request, HTTPException, status, Depends
 from typing import Optional
 import datetime
 import os
+from urllib.parse import urlparse
 import asyncpg
 from .security import hash_token
 from .config import settings
@@ -27,6 +28,19 @@ def auth_database_url() -> str:
             or os.getenv('ENVIRONMENT', 'development') == 'production'
             or not url.startswith('postgres')):
         raise HTTPException(status_code=503, detail='Autenticação disponível apenas em homologação configurada.')
+    return url
+
+
+def auth_verifier_database_url() -> str:
+    """Credencial independente: so comprova senha; nao emite sessao."""
+    session_url = auth_database_url()
+    url = os.getenv('AUTH_VERIFIER_DATABASE_URL', '')
+    if not url.startswith('postgres'):
+        raise HTTPException(status_code=503, detail='Verificador separado nao configurado.')
+    a, b = urlparse(session_url), urlparse(url)
+    if (not a.username or not b.username or a.username == b.username
+            or (a.hostname, a.port, a.path) != (b.hostname, b.port, b.path)):
+        raise HTTPException(status_code=503, detail='Credenciais tecnicas nao segregadas.')
     return url
 
 
