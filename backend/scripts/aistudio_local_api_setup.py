@@ -10,7 +10,6 @@ from pathlib import Path
 import secrets
 import shlex
 import sys
-import tempfile
 from urllib.parse import quote
 
 import psycopg
@@ -43,6 +42,26 @@ def dsn(username, password):
     return f"postgresql://{username}:{quote(password, safe='')}@{HOST}:{PORT}/{DB}"
 
 
+def write_env_exclusively(env):
+    """Criacao exclusiva com O_EXCL: funciona no Android mesmo sem os.link."""
+    CONFIG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if CONFIG.parent.is_symlink():
+        raise ValueError("pasta de configuracao nao pode ser symlink")
+    CONFIG.parent.chmod(0o700)
+    fd = os.open(CONFIG, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            os.fchmod(output.fileno(), 0o600)
+            for key, value in env.items():
+                output.write(f"{key}={shlex.quote(value)}\n")
+            output.flush()
+            os.fsync(output.fileno())
+    except BaseException:
+        # Exclusivo: so apaga o arquivo criado por esta chamada.
+        CONFIG.unlink(missing_ok=True)
+        raise
+
+
 def main():
     if os.getenv("AI_STUDIO_LOCAL_API_SETUP") != "YES":
         return deny("AI_STUDIO_LOCAL_API_SETUP=YES necessario")
@@ -62,8 +81,11 @@ def main():
 
     if CONFIG.exists() or CONFIG.is_symlink() or CONFIG.parent.is_symlink():
         return deny("api.env ja existe ou symlink; nunca sobrescrever")
-    confirmation=input("Digite CONFIGURAR_VERIFICADOR_AI_STUDIO: ").strip()
-    if confirmation!="CONFIGURAR_VERIFICADOR_AI_STUDIO":
+    recovery = os.getenv("AI_STUDIO_LOCAL_API_RECOVER") == "YES"
+    phrase = ("RECUPERAR_VERIFICADOR_AI_STUDIO" if recovery
+              else "CONFIGURAR_VERIFICADOR_AI_STUDIO")
+    confirmation = input(f"Digite {phrase}: ").strip()
+    if confirmation != phrase:
         return deny("sem confirmacao")
 
     owner_password=getpass.getpass("Senha PostgreSQL frc_ai_owner: ")
@@ -89,10 +111,16 @@ def main():
                 (APP,AUTH)).fetchone()
             if not all(schema):
                 return deny("schema 001-027 ou grants nao preparados")
-            if admin.execute(
-                "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=%s)",
-                (VERIFIER,)).fetchone()[0]:
-                return deny("frc_ai_verifier ja existe; nao sobrescrever role/senha")
+            role_attrs = admin.execute(
+                "SELECT rolcanlogin,rolsuper,rolbypassrls,rolcreatedb,"
+                "rolcreaterole,rolreplication FROM pg_roles WHERE rolname=%s",
+                (VERIFIER,)).fetchone()
+            if role_attrs is not None and not recovery:
+                return deny("verificador existente; nao repetir setup; use recuperação explícita")
+            if role_attrs is None and recovery:
+                return deny("recuperacao exige role verifier existente e api.env ausente")
+            if recovery and role_attrs != (True,False,False,False,False,False):
+                return deny("verificador tem atributos inesperados; recuperacao negada")
 
             for role,password in ((APP,app_password),(AUTH,auth_password)):
                 with conn_as(role,password) as check:
@@ -104,14 +132,23 @@ def main():
 
             verifier_password=secrets.token_urlsafe(48)
             with admin.transaction():
-                admin.execute(sql.SQL(
-                    "CREATE ROLE {} LOGIN INHERIT NOSUPERUSER NOBYPASSRLS "
-                    "NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD {}"
-                ).format(sql.Identifier(VERIFIER),sql.Literal(verifier_password)))
-                admin.execute(sql.SQL("GRANT frcaixinha_verifier_role TO {}").format(
-                    sql.Identifier(VERIFIER)))
-                admin.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
-                    sql.Identifier(DB),sql.Identifier(VERIFIER)))
+                if recovery:
+                    # A senha antiga aleatoria se perdeu antes de escrever api.env.
+                    # Verificar isolamento da role antes de qualquer ALTER ROLE.
+                    member = admin.execute(
+                        "SELECT pg_has_role(%s,'frcaixinha_verifier_role','member')",
+                        (VERIFIER,)).fetchone()[0]
+                    if not member:
+                        raise ValueError("papel verifier existente sem membership esperado")
+                else:
+                    admin.execute(sql.SQL(
+                        "CREATE ROLE {} LOGIN INHERIT NOSUPERUSER NOBYPASSRLS "
+                        "NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD {}"
+                    ).format(sql.Identifier(VERIFIER),sql.Literal(verifier_password)))
+                    admin.execute(sql.SQL("GRANT frcaixinha_verifier_role TO {}").format(
+                        sql.Identifier(VERIFIER)))
+                    admin.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                        sql.Identifier(DB),sql.Identifier(VERIFIER)))
                 can=admin.execute(
                     "SELECT has_column_privilege(%s,'public.credentials','password_hash','SELECT'),"
                     "has_table_privilege(%s,'public.sessions','INSERT'),"
@@ -120,6 +157,10 @@ def main():
                     (VERIFIER,VERIFIER,VERIFIER)).fetchone()
                 if can != (True,False,False):
                     raise ValueError("verificador nao segregado")
+                if recovery:
+                    # Atualiza somente a credencial tecnica existente e aprovada.
+                    admin.execute(sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                        sql.Identifier(VERIFIER), sql.Literal(verifier_password)))
 
         with conn_as(VERIFIER,verifier_password) as check:
             if check.execute("SELECT current_user").fetchone()[0] != VERIFIER:
@@ -135,23 +176,11 @@ def main():
             "AUTH_RATE_LIMIT_HMAC_KEY": secrets.token_urlsafe(48),
             "AUTH_SECRET": secrets.token_urlsafe(48),
         }
-        CONFIG.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
-        CONFIG.parent.chmod(0o700)
-        if CONFIG.exists() or CONFIG.is_symlink():
-            return deny("api.env apareceu: configuracao cancelada")
-        fd,temp_name=tempfile.mkstemp(prefix=".api-env-",dir=CONFIG.parent)
-        try:
-            os.fchmod(fd,0o600)
-            with os.fdopen(fd,"w",encoding="utf-8") as output:
-                for key,value in env.items():
-                    output.write(f"{key}={shlex.quote(value)}\n")
-                output.flush()
-                os.fsync(output.fileno())
-            # Link exclusivo: nao sobrescrever config de outro processo.
-            os.link(temp_name,CONFIG)
-        finally:
-            os.unlink(temp_name)
+        # Nao sobrescreve nenhum arquivo existente. O_EXCL impede race/symlink.
+        write_env_exclusively(env)
         print("VERIFIER=ISOLATED; API_ENV=CREATED_0600; nenhum segredo exibido.")
+        if recovery:
+            print("VERIFIER_RECOVERY=PASS; senha anterior invalidada.")
         print("Conta Master nao criada. Proximo passo: validar FastAPI readiness.")
         return 0
     except (psycopg.Error,ValueError,OSError):
