@@ -292,7 +292,7 @@ async def switch_context(payload: ContextSwitchRequest, request: Request,
                     "SELECT s.user_id,s.active_role,s.active_tenant_id," 
                     "s.revoked_at,s.expires_at,u.is_master,u.status "
                     "FROM public.sessions s JOIN public.users u ON u.id=s.user_id "
-                    "WHERE s.token_hash=$1 FOR UPDATE OF s", digest)
+                    "WHERE s.token_hash=$1 FOR SHARE OF s", digest)
                 now = datetime.datetime.now(datetime.timezone.utc)
                 if (not current or current['user_id'] != actor_id
                         or current['revoked_at'] is not None
