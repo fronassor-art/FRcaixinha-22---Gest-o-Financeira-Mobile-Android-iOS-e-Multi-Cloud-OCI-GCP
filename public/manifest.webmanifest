@@ -1,49 +1,25 @@
 {
   "id": "/",
-  "name": "FRcaixinha 2.2 - Gestão Financeira Mobile",
+  "name": "FRcaixinha — Gestão de Caixinhas",
   "short_name": "FRcaixinha",
-  "description": "Aplicativo mobile oficial para Android e iPhone: Gestão de Caixinhas, Empréstimo Price, Rifas, Bolões Oficiais e Arquitetura Multi-Cloud (GCP + OCI).",
+  "description": "Gestão de caixinhas com identidade única e permissões por perfil.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f172a",
-  "theme_color": "#047857",
+  "background_color": "#03291f",
+  "theme_color": "#073d2c",
   "lang": "pt-BR",
-  "dir": "ltr",
-  "categories": ["finance", "productivity", "utilities"],
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icon.svg",
-      "sizes": "512x512 192x192 128x128 64x64",
+      "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Meu Painel",
-      "short_name": "Painel",
-      "url": "/?tab=DASHBOARD",
-      "icons": [{ "src": "/icon.svg", "sizes": "96x96" }]
-    },
-    {
-      "name": "Rifas & Bolões",
-      "short_name": "Bolões",
-      "url": "/?tab=BOLOES",
-      "icons": [{ "src": "/icon.svg", "sizes": "96x96" }]
-    },
-    {
-      "name": "Multi-Cloud OCI + GCP",
-      "short_name": "Nuvem",
-      "url": "/?tab=NUVEM",
-      "icons": [{ "src": "/icon.svg", "sizes": "96x96" }]
+      "purpose": "any maskable"
     }
   ]
 }

@@ -1,41 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">FRcaixinha — monograma dourado com folhas verdes</title>
   <defs>
-    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#064e3b" />
-      <stop offset="50%" stop-color="#047857" />
-      <stop offset="100%" stop-color="#0f172a" />
-    </linearGradient>
-    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34d399" />
-      <stop offset="100%" stop-color="#10b981" />
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#10b981" flood-opacity="0.35" />
-    </filter>
+    <radialGradient id="forest" cx=".28" cy=".14" r=".95"><stop stop-color="#08754b"/><stop offset=".45" stop-color="#06432f"/><stop offset="1" stop-color="#00251d"/></radialGradient>
+    <linearGradient id="gold" x1=".08" y1="0" x2=".92" y2="1"><stop stop-color="#ffe9a1"/><stop offset=".22" stop-color="#d9a036"/><stop offset=".47" stop-color="#fff3b7"/><stop offset=".66" stop-color="#b77915"/><stop offset=".85" stop-color="#f8d773"/><stop offset="1" stop-color="#9b650d"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d1fb73"/><stop offset=".5" stop-color="#42b333"/><stop offset="1" stop-color="#087a47"/></linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#001e18" flood-opacity=".8"/></filter>
+    <filter id="shine" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3"/></filter>
   </defs>
-
-  <!-- Background with rounded squircle -->
-  <rect width="512" height="512" rx="112" fill="url(#bg-grad)" />
-  <rect x="12" y="12" width="488" height="488" rx="100" fill="none" stroke="#10b981" stroke-width="3" stroke-opacity="0.4" />
-
-  <!-- Shield / Vault Symbol -->
-  <g filter="url(#glow)">
-    <path d="M256 80 L390 135 C390 260 256 360 256 360 C256 360 122 260 122 135 Z" 
-          fill="#065f46" stroke="url(#accent-grad)" stroke-width="14" stroke-linejoin="round" />
-    
-    <!-- Wallet / Safe Icon inside -->
-    <rect x="190" y="180" width="132" height="96" rx="16" fill="#10b981" />
-    <path d="M190 205 L322 205" stroke="#047857" stroke-width="6" />
-    <circle cx="282" cy="235" r="12" fill="#064e3b" stroke="#34d399" stroke-width="4" />
-    <circle cx="282" cy="235" r="4" fill="#ffffff" />
+  <rect width="512" height="512" rx="108" fill="url(#forest)"/>
+  <rect x="17" y="17" width="478" height="478" rx="94" fill="none" stroke="#8b5d1d" stroke-width="19"/>
+  <rect x="20" y="20" width="472" height="472" rx="92" fill="none" stroke="url(#gold)" stroke-width="11"/>
+  <rect x="38" y="38" width="436" height="436" rx="77" fill="none" stroke="#ffe28b" stroke-width="2" opacity=".38"/>
+  <ellipse cx="256" cy="251" rx="203" ry="78" fill="none" stroke="#e9b24b" stroke-width="4" opacity=".55" transform="rotate(-13 256 251)"/>
+  <ellipse cx="256" cy="251" rx="189" ry="69" fill="none" stroke="#a1dd42" stroke-width="2" opacity=".36" transform="rotate(-13 256 251)"/>
+  <g filter="url(#shadow)">
+    <text x="256" y="330" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="302" font-weight="bold" font-style="italic" fill="#5e3b09" stroke="#683f07" stroke-width="8">R</text>
+    <text x="254" y="322" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="302" font-weight="bold" font-style="italic" fill="url(#gold)" stroke="#ffe7a0" stroke-width="1.7">R</text>
+    <path d="M111 301 C167 318 255 242 362 175" fill="none" stroke="#81521a" stroke-width="27" stroke-linecap="round"/>
+    <path d="M111 294 C176 310 260 225 366 170" fill="none" stroke="url(#gold)" stroke-width="20" stroke-linecap="round"/>
+    <path d="M198 255 C172 222 192 188 253 167 C253 208 234 237 198 255Z" fill="url(#leaf)" stroke="#d0e987" stroke-width="2"/>
+    <path d="M198 255 L241 182" stroke="#e7ffb1" stroke-width="2" fill="none" opacity=".8"/>
+    <path d="M279 200 C280 161 317 139 364 143 C344 184 317 203 279 200Z" fill="url(#leaf)" stroke="#daf38b" stroke-width="2"/>
+    <path d="M279 200 L350 151" stroke="#deffa8" stroke-width="2" fill="none" opacity=".8"/>
   </g>
-
-  <!-- FRcaixinha 2.2 Text -->
-  <text x="256" y="420" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">
-    FRcaixinha
-  </text>
-  <rect x="210" y="440" width="92" height="28" rx="8" fill="#10b981" />
-  <text x="256" y="460" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="800" fill="#064e3b" text-anchor="middle">
-    2.2 MOBILE
-  </text>
+  <path d="M84 365 Q256 390 428 360" stroke="#f3ca76" stroke-width="2" fill="none" opacity=".5"/>
+  <text x="256" y="418" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="61" font-weight="bold" fill="url(#gold)" stroke="#fff0b9" stroke-width=".45">FRcaixinha</text>
+  <path d="M166 437 H346" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
 </svg>

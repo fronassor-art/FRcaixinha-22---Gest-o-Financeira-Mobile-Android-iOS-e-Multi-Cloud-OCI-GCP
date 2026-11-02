@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Desenho seguro do monograma na zona central da adaptive icon. -->
+    <path android:fillColor="#DDAE4B" android:pathData="M29,30 L29,77 L38,77 L38,57 L51,57 L68,77 L80,77 L60,54 C84,47 75,30 57,30 Z M38,38 L55,38 C66,38 66,48 55,48 L38,48 Z"/>
+    <path android:fillColor="#FFF0AD" android:pathData="M30,30 L31.8,30 L31.8,74 L30,74 Z M38,31 L56,31 C68,31 75,38 72,44 C71,37 66,33 56,33 L38,33 Z M51,57 L55,57 L70,74 L67,74 Z"/>
+    <path android:fillColor="#F6CC67" android:pathData="M24,68 C35,67 48,57 65,45 C73,39 79,38 83,37 C71,49 49,67 28,72 Z"/>
+    <path android:fillColor="#6DCE43" android:pathData="M48,54 C43,48 46,40 58,37 C56,47 53,51 48,54 Z"/>
+    <path android:fillColor="#B8EE62" android:pathData="M59,46 C61,37 70,32 79,33 C75,42 67,46 59,46 Z"/>
+    <path android:strokeColor="#F9E9A8" android:strokeWidth="1"
+        android:fillColor="#00000000" android:pathData="M50,52 L56,40 M61,45 L75,35"/>
+    <path android:strokeColor="#ECC36A" android:strokeWidth="1.6"
+        android:fillColor="#00000000" android:pathData="M24,70 Q53,84 84,68"/>
+</vector>

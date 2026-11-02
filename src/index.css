@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+:root {
+  --fr-forest: #032d21;
+  --fr-emerald: #065b3d;
+  --fr-gold: #f2ce75;
+  --fr-gold-dark: #a46c15;
+  --fr-cream: #fff8df;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+html, body, #root { min-width: 0; width: 100%; margin: 0; overflow-x: hidden; }
+body { background: #052a20; }
+button { touch-action: manipulation; }
+.fr-page { background: radial-gradient(ellipse at top left, #0b6441 0, #063c2d 35%, #03251e 78%); color: #fff7e6; }
+.fr-sheen { position: relative; isolation: isolate; overflow: hidden; }
+.fr-sheen::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: -1; background: radial-gradient(ellipse at top right, rgba(245,204,101,.12), transparent 50%); }
+.fr-gold-text { color: #f4d689; }
+.fr-gold-button { color: #17391f; background: linear-gradient(110deg, #e0aa42, #fff0ac 53%, #c38c29); border: 1px solid #f8dc91; box-shadow: 0 4px 16px rgba(172, 115, 19, .18); font-weight: 800; }
+.fr-gold-button:focus-visible, .fr-outline:focus-visible { outline: 3px solid #fef08a; outline-offset: 3px; }
+.fr-outline { border: 1px solid rgba(243, 203, 114, .5); background: rgba(4, 52, 37, .7); color: #fff4cf; }
+.fr-input { background: #074432; border: 1px solid #377d5e; color: #ffffff; }
+.fr-input::placeholder { color: #bdcfbf; }
+.fr-input:focus { outline: 2px solid #f3d589; outline-offset: 1px; }
+.fr-green-card { background: linear-gradient(145deg, #0d6745, #06382a 67%, #032b22); border: 1px solid rgba(243, 202, 110, .45); box-shadow: 0 8px 30px rgba(0, 37, 26, .13); }
+.fr-light-card { background: #ffffff; border: 1px solid #dce6df; box-shadow: 0 6px 20px rgba(8, 47, 34, .04); }
+.fr-mobile-nav { background: linear-gradient(180deg,#073e2d,#03291f); border-top: 1px solid rgba(239, 196, 98, .28); padding-bottom: max(.5rem, env(safe-area-inset-bottom)); }
+.fr-ornament { background: radial-gradient(circle at 65% 15%, rgba(248,214,125,.22),transparent 34%), linear-gradient(165deg,rgba(31,130,78,.35),transparent 55%); }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
