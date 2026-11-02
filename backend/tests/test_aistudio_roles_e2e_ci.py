@@ -23,7 +23,7 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
     assert (parsed.username,parsed.hostname,parsed.port,parsed.path) == (
         "postgres","127.0.0.1",5432,"/frcaixinha_ci")
     tag = uuid4().hex
-    emails = [f"{role}-{tag}@example.invalid" for role in ("master","admin","member")]
+    emails = [f"{role}-{tag}@example.com" for role in ("master","admin","member")]
     passwords = ["ci-pass-master-0123456789", "ci-pass-admin-0123456789",
                  "ci-pass-member-0123456789"]
     master_id = uuid4()
