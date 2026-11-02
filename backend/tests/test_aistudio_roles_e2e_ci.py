@@ -160,6 +160,17 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
                     body=login.json()
                     assert body["user"]["role"] == role
                     headers={"Authorization":"Bearer "+body["token"]}
+                    # O login inicial escolhe deterministicamente um dos vinculos;
+                    # com mais de um tenant, selecionamos explicitamente o
+                    # contexto da caixinha testada antes de consultar seus dados.
+                    if role != "MASTER":
+                        selected = await client.post(
+                            "/api/v1/auth/switch-context", headers=headers,
+                            json={"target_role":role,
+                                  "target_tenant_id":str(first["tenant_id"])},
+                        )
+                        assert selected.status_code == 200,(role,selected.text)
+                        assert selected.json()["id"] == body["user"]["id"]
                     assert (await client.get("/api/v1/auth/me",headers=headers)).status_code == 200
                     overview=await client.get("/api/v1/master/overview",headers=headers)
                     assert overview.status_code == (200 if role=="MASTER" else 403),(

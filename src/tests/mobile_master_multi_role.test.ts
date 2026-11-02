@@ -82,7 +82,7 @@ try{
         authService.switchContext({
           role:'TENANT_ADMIN',tenant_id:other,
           tenant_name:'Caixinha sem vinculo',
-        }),/nao autorizado|indisponivel/i);
+        }),/não autorizado|indisponível/i);
       assert.equal(authService.getUser()?.role,'TENANT_MEMBER');
     }
   }
