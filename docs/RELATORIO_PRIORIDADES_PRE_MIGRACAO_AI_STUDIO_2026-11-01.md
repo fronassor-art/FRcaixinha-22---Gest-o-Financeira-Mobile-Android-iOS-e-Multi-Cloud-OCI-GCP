@@ -123,3 +123,10 @@ aplicacao e **ainda nao foi aplicada** no PostgreSQL local.
 **Regras invariáveis:** não merge na main, não usar credenciais reais no CI,
 não ativar cobrança/Pix/transferência, não criar novo painel Master,
 não tocar em nenhum outro projeto e **não migrar o banco do Termux**.
+
+
+## 8. Investigação P0 adicional — usuários e isolamento de nomes
+
+O acesso técnico a `public.users` estava limitado a colunas pela migração 012, mas a linha ainda era global: mesmo não podendo ler CPF/e-mail, uma consulta direta poderia listar nomes de outras caixinhas. Preparada a migração 013 para impor RLS em `users`, com política para a autenticação dedicada e outra para o ADMIN somente dos membros ativos de sua caixinha; membro e MASTER veem sua própria identidade. Testes de integração sintéticos exigem isolamento entre dois tenants. Este resultado **não equivale a homologação em produção**, nem libera onboarding real.
+
+**Atualizar o checkpoint de 147 requisitos apenas depois de verificar testes concluídos e cada cláusula individual. Nenhuma migração local autorizada nesta rodada.**

@@ -12,6 +12,12 @@ BEGIN
      OR (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='frc_ai_auth') THEN
     RAISE EXCEPTION 'Usuários técnicos privilegiados indevidamente';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid='public.users'::regclass AND relrowsecurity AND relforcerowsecurity
+  ) THEN
+    RAISE EXCEPTION 'BLOQUEADO: FORCE RLS em users ausente';
+  END IF;
   IF has_column_privilege('frcaixinha_app_role','public.users','cpf','SELECT')
     OR has_column_privilege('frcaixinha_app_role','public.users','email','SELECT')
     OR has_column_privilege('frc_ai_app','public.credentials','SELECT')

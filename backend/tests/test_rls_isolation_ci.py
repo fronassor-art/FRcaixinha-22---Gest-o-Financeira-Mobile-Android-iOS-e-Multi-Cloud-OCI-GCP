@@ -514,3 +514,53 @@ async def test_policy_price_simulation_uses_live_tenant_cycle_and_rejects_cross_
             assert invalid.value.status_code == 422
     finally:
         await admin.close()
+
+
+async def test_user_identity_rls_isolated_by_role_and_tenant(isolated_rows):
+    """RLS REAL: nao basta esconder colunas; ADMIN nao enxerga nomes de outro tenant."""
+    conn, ids = isolated_rows
+
+    async def visible(user, tenant, role):
+        async with conn.transaction():
+            await conn.execute(
+                "SELECT set_config('app.current_user_id',$1,true)",str(user))
+            await conn.execute(
+                "SELECT set_config('app.current_tenant_id',$1,true)",
+                str(tenant) if tenant else "")
+            await conn.execute(
+                "SELECT set_config('app.current_role',$1,true)",role)
+            return {r['id'] for r in await conn.fetch("SELECT id,full_name FROM public.users")}
+
+    assert await visible(ids['admin_a'],ids['tenant_a'],'TENANT_ADMIN') == {
+        ids['admin_a'],ids['member_a'],ids['member_a2'],ids['master']
+    }
+    assert await visible(ids['admin_a'],ids['tenant_b'],'TENANT_ADMIN') == {
+        ids['admin_a']
+    }, "Admin nao pode inferir membros da caixinha B"
+    assert await visible(ids['admin_b'],ids['tenant_b'],'TENANT_ADMIN') == {
+        ids['admin_b'],ids['member_b']
+    }
+    assert await visible(ids['member_a'],ids['tenant_a'],'TENANT_MEMBER') == {
+        ids['member_a']
+    }
+    assert await visible(ids['master'],None,'MASTER') == {ids['master']}
+    assert await conn.fetchval("SELECT count(*) FROM public.users") == 0, (
+        "Sem contexto de sessao, nao pode enumerar identidades"
+    )
+    for column in ("email","cpf","phone","is_master"):
+        assert not await conn.fetchval(
+            "SELECT has_column_privilege(current_user,'public.users',$1,'SELECT')",
+            column
+        )
+
+    auth = await asyncpg.connect(_ci_dsn("CI_AUTH_DATABASE_URL"))
+    try:
+        assert await auth.fetchval(
+            "SELECT count(*) FROM public.users "
+            "WHERE id=$1 AND email=$2",ids['member_a'], f"{ids['member_a']}@example.com"
+        ) == 1, "Papel AUTH precisa continuar encontrando a conta para login"
+        assert not await auth.fetchval(
+            "SELECT has_column_privilege(current_user,'public.users','cpf','SELECT')"
+        )
+    finally:
+        await auth.close()
