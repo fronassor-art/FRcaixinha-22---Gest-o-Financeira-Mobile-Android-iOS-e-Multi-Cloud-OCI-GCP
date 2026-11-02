@@ -157,6 +157,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/022_auth_session_issuance_limits.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/023_session_context_guarded_transition.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/024_token_bound_session_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/025_verifier_bound_session_issuance.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -169,6 +170,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_ci"
           psql -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_auth_ci LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frcaixinha_auth_ci"
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_verifier_ci LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO frcaixinha_verifier_ci"
       - name: Executar testes existentes de RLS
         env:
           PYTHONPATH: backend
@@ -181,6 +184,7 @@ jobs:
           FRCAIXINHA_CI_ISOLATED: '1'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: |
           python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
@@ -197,6 +201,7 @@ jobs:
           FRCAIXINHA_TEST_AUTH: '1'
           ENVIRONMENT: homologation
           AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: python -m pytest -q backend/tests/test_termux_readiness_ci.py
 
@@ -254,7 +259,7 @@ jobs:
           python-version: '3.11'
       - name: Dependencias Python
         run: python -m pip install -r backend/requirements.txt
-      - name: Migrar 001-024 em UMA transacao no PostgreSQL 18 descartavel
+      - name: Migrar 001-025 em UMA transacao no PostgreSQL 18 descartavel
         env:
           PGHOST: 127.0.0.1
           PGPORT: '5432'
@@ -264,7 +269,7 @@ jobs:
         run: |
           set -euo pipefail
           scripts=()
-          for i in $(seq 1 24); do
+          for i in $(seq 1 25); do
             printf -v n '%03d' "$i"
             files=(backend/migrations/"$n"_*.sql)
             test "${#files[@]}" -eq 1
