@@ -67,7 +67,7 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
             assert db.execute("SELECT count(*) FROM public.memberships WHERE tenant_id=%s",
                               (first["tenant_id"],)).fetchone()[0] == 2
             assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s "
-                              "AND action LIKE 'AI_STUDIO_LOCAL_%'",
+                              "AND action IN ('AI_STUDIO_LOCAL_ROLE_ENROLLED','AI_STUDIO_LOCAL_TENANT_CREATED')",
                               (first["tenant_id"],)).fetchone()[0] == 3
             before=db.execute("SELECT count(*) FROM public.tenants").fetchone()[0]
             with pytest.raises(OnboardingDenied):
