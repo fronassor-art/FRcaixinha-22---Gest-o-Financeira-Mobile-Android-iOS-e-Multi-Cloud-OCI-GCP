@@ -108,7 +108,19 @@ async def login(payload: LoginRequest, response: Response):
                 links = await conn.fetch(
                     'SELECT tenant_id,role FROM public.auth_active_memberships($1::text) '
                     'ORDER BY tenant_id,role', raw_token)
-                if is_master:
+                # Selecao de perfil somente no LOGIN, apos senha comprovada.
+                # A escolha do cliente jamais concede um papel ou vinculo.
+                requested = payload.requested_role
+                if requested == 'MASTER':
+                    if not is_master:
+                        raise HTTPException(status_code=401, detail='Credenciais inválidas ou acesso indisponível.')
+                    role, tenant_id = 'MASTER', None
+                elif requested in ('TENANT_ADMIN', 'TENANT_MEMBER'):
+                    eligible = [link for link in links if link['role'] == requested]
+                    if not eligible:
+                        raise HTTPException(status_code=401, detail='Credenciais inválidas ou acesso indisponível.')
+                    role, tenant_id = requested, eligible[0]['tenant_id']
+                elif is_master:  # Compatibilidade com clientes anteriores de homologacao.
                     role, tenant_id = 'MASTER', None
                 elif links:
                     role, tenant_id = links[0]['role'], links[0]['tenant_id']
@@ -218,6 +230,9 @@ async def get_me(session: AuthenticatedSession = Depends(get_current_session)):
 
 @router.get('/contexts')
 async def list_contexts(request: Request, session: AuthenticatedSession = Depends(get_current_session)):
+    """A sessao revela somente o proprio papel; outros exigem novo login."""
+    if session.role == 'MASTER':
+        return [{'role': 'MASTER', 'tenant_id': None, 'tenant_name': None}]
     try:
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
@@ -228,14 +243,13 @@ async def list_contexts(request: Request, session: AuthenticatedSession = Depend
         finally:
             await conn.close()
     except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
-        raise HTTPException(status_code=503, detail='Vínculos indisponíveis.')
-    contexts = ([{'role': 'MASTER', 'tenant_id': None,
-                  'tenant_name': None}] if session.is_master else [])
-    contexts.extend(
+        raise HTTPException(status_code=503, detail='Vinculo indisponivel.')
+    return [
         {'role': row['role'], 'tenant_id': str(row['tenant_id']),
-         'tenant_name': row['tenant_name']} for row in links
-    )
-    return contexts
+         'tenant_name': row['tenant_name']}
+        for row in links
+        if row['role'] == session.role and str(row['tenant_id']) == session.tenant_id
+    ]
 
 
 @router.get("/sessions")
@@ -311,76 +325,10 @@ def forgot_password(payload: ForgotPasswordRequest):
         detail="Recuperação de senha por e-mail ainda não implementada."
     )
 
-@router.post("/switch-context", response_model=UserResponse)
-async def switch_context(payload: ContextSwitchRequest, request: Request,
-                         session: AuthenticatedSession = Depends(get_current_session)):
-    """Troca o papel do MESMO usuário somente após revalidar a sessão e o vínculo.
-
-    Verificação e UPDATE compartilham a mesma transação/row lock; um logout
-    concorrente, suspensão de usuário ou revogação de vínculo falha fechado.
-    """
-    target_tenant = None
-    if payload.target_role == 'MASTER':
-        if payload.target_tenant_id is not None:
-            raise HTTPException(status_code=403, detail='Contexto não autorizado.')
-    else:
-        try:
-            target_tenant = uuid.UUID(payload.target_tenant_id or '')
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=422, detail='Caixinha inválida.')
-    try:
-        conn = await asyncpg.connect(auth_database_url(), timeout=5)
-        try:
-            async with conn.transaction():
-                actor_id = uuid.UUID(session.user_id)
-                digest = hash_token(bearer_token(request))
-                current = await conn.fetchrow(
-                    "SELECT s.user_id,s.active_role,s.active_tenant_id," 
-                    "s.revoked_at,s.expires_at,u.is_master,u.status "
-                    "FROM public.sessions s JOIN public.users u ON u.id=s.user_id "
-                    "WHERE s.token_hash=$1", digest)
-                now = datetime.datetime.now(datetime.timezone.utc)
-                if (not current or current['user_id'] != actor_id
-                        or current['revoked_at'] is not None
-                        or current['expires_at'] <= now
-                        or current['status'] != 'ACTIVE'):
-                    raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
-                # O contexto ATUAL também precisa permanecer válido. Uma
-                # suspensão entre a dependência HTTP e o row lock da troca
-                # não pode ser usada para migrar um token revogado de papel.
-                links = await conn.fetch(
-                    'SELECT tenant_id,role FROM public.auth_active_memberships($1::text)',
-                    bearer_token(request))
-                if current['active_role'] == 'MASTER':
-                    authorized_current = (
-                        current['is_master'] and current['active_tenant_id'] is None
-                    )
-                else:
-                    authorized_current = any(
-                        row['tenant_id'] == current['active_tenant_id'] and
-                        row['role'] == current['active_role'] for row in links
-                    )
-                if not authorized_current:
-                    raise HTTPException(status_code=401, detail='Vínculo ativo não encontrado.')
-                if payload.target_role == 'MASTER':
-                    if not current['is_master']:
-                        raise HTTPException(status_code=403, detail='Contexto não autorizado.')
-                elif not any(row['tenant_id'] == target_tenant and
-                             row['role'] == payload.target_role for row in links):
-                    raise HTTPException(status_code=403, detail='Vínculo não autorizado.')
-                updated = await conn.fetchval(
-                    "SELECT public.auth_switch_session_context("
-                    "$1::text,$2::varchar,$3::uuid)",
-                    bearer_token(request), payload.target_role, target_tenant)
-                if not updated:
-                    raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
-        finally:
-            await conn.close()
-    except HTTPException:
-        raise
-    except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
-        raise HTTPException(status_code=503, detail='Troca de contexto indisponível.')
-    return UserResponse(id=session.user_id, name=session.name, email=session.email,
-                        cpf='***', role=payload.target_role,
-                        tenant_id=str(target_tenant) if target_tenant else None,
-                        is_master=session.is_master)
+@router.post("/switch-context")
+async def switch_context_disabled(
+    session: AuthenticatedSession = Depends(get_current_session),
+):
+    """Bloqueia troca de papel sem logout, inclusive chamada direta HTTP."""
+    raise HTTPException(status_code=403, detail=
+        'Troca de perfil bloqueada. Saia da conta e entre novamente no perfil desejado.')

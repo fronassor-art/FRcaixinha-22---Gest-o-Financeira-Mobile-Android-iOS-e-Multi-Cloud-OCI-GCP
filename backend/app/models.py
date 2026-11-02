@@ -14,6 +14,12 @@ from pydantic import BaseModel, EmailStr, Field, AliasChoices
 class LoginRequest(BaseModel):
     username_or_email: str = Field(..., validation_alias=AliasChoices('username_or_email', 'usernameOrEmail'), max_length=255, description="E-mail")
     password: str = Field(..., min_length=1, description="Senha de acesso")
+    requested_role: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices('requested_role', 'requestedRole'),
+        pattern="^(MASTER|TENANT_ADMIN|TENANT_MEMBER)$",
+        description="Papel escolhido na tela de login. O servidor valida o vinculo.",
+    )
 
 class UserResponse(BaseModel):
     id: str
