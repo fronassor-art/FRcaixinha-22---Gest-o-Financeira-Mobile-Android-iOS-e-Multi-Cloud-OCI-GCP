@@ -72,3 +72,11 @@ usando a mesma chave local; **nunca** criar uma segunda chave para corrigir
 um erro de rede. Se qualquer secret ja existir antes da geracao, o
 script bloqueia para evitar rotação inadvertida. O proprietario deve
 guardar backup seguro offline da chave e senha e nao enviar ao chat.
+
+### Dependencias e compatibilidade Termux
+
+O script exige `python3`, `keytool` (OpenJDK 21), `gh`, `base64` e `tr`.
+A senha aleatoria e gerada com `python3 -B -c 'import secrets; print(secrets.token_hex(32))'`.
+Nao depende do comando `openssl`: em algumas instalacoes do Termux, o pacote
+`openssl` pode estar instalado sem disponibilizar esse executavel. Nao ha
+necessidade de reinstalar o Java ou alterar o PostgreSQL.

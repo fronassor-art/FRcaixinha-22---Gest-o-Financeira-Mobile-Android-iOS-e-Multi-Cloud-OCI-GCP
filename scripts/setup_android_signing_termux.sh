@@ -11,7 +11,7 @@ KEYSTORE="$DIR/frcaixinha-aistudio-stable.p12"
 PASSWORD_FILE="$DIR/frcaixinha-aistudio-password.txt"
 MARKER="$DIR/secrets-uploaded.txt"
 
-for program in gh keytool openssl base64 tr; do
+for program in gh keytool python3 base64 tr; do
     if ! command -v "$program" >/dev/null 2>&1; then
         echo "BLOQUEADO: falta '$program'. Instale a dependencia antes de continuar."
         exit 2
@@ -52,7 +52,9 @@ if [[ ! -e "$KEYSTORE" ]]; then
             exit 2
         fi
     done
-    FR_KEY_PASS="$(openssl rand -hex 32)"
+    # secrets usa o gerador criptografico do sistema via Python, sem depender
+    # do executavel openssl (o pacote libopenssl pode nao fornecê-lo no Termux).
+    FR_KEY_PASS="$(python3 -B -c 'import secrets; print(secrets.token_hex(32))')"
     export FR_KEY_PASS
     keytool -genkeypair -noprompt \
       -storetype PKCS12 -keystore "$KEYSTORE" \
