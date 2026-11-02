@@ -40,7 +40,7 @@ jobs:
         run: npx tsx src/tests/login_first_access_ui.test.ts
       - name: Build web
         env:
-          VITE_APP_BUILD_REF: ${{ github.sha }}
+          VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run build
 
   android:
@@ -63,13 +63,15 @@ jobs:
         env:
           FRCAIXINHA_ANDROID_LOCAL_TEST: '1'
           VITE_API_URL: http://127.0.0.1:8000
-          VITE_APP_BUILD_REF: ${{ github.sha }}
+          VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run cap:build
       - name: Validar URL e esquema Android debug
+        env:
+          VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           node -e "const c=require('./android/app/src/main/assets/capacitor.config.json'); if(c.server.androidScheme!=='http' || c.server.cleartext!==false) process.exit(1)"
           grep -RlF 'http://127.0.0.1:8000' dist/assets | grep -q .
-          grep -RlF "${GITHUB_SHA:0:7}" dist/assets | grep -q .
+          grep -RlF "${VITE_APP_BUILD_REF:0:7}" dist/assets | grep -q .
       - name: Compilar APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug

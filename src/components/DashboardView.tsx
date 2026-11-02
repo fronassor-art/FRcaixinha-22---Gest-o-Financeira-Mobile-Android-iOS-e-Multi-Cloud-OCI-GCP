@@ -53,7 +53,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
     return () => { alive = false; };
   }, [scope, revision]);
 
-  const current = result.scope === scope ? result : { scope, status: 'loading' };
+  const current: Result = result.scope === scope ? result : { scope, status: 'loading' };
   const heading = role === 'MASTER' ? 'Minha plataforma'
     : role === 'TENANT_ADMIN' ? 'Gestão da caixinha' : 'Minha caixinha';
 
