@@ -12,6 +12,7 @@ type NewAccess = 'member' | 'admin' | null;
 /** Identidade única: somente o servidor concede o papel depois do login. */
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExpiredNotice = false }) => {
   const [mode, setMode] = useState<AccessMode>('login');
+  const [selectedRole, setSelectedRole] = useState<AuthenticatedUser['role'] | null>(null);
   const [newAccess, setNewAccess] = useState<NewAccess>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,13 +25,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    if (!selectedRole) {
+      setError('Escolha seu perfil de acesso.');
+      return;
+    }
     if (!email.trim() || !password) {
       setError('Informe o e-mail e a senha.');
       return;
     }
     setLoading(true);
     try {
-      const user = await authService.login(email.trim(), password);
+      const user = await authService.login(email.trim(), password, selectedRole);
       setPassword('');
       onLoginSuccess(user);
     } catch (cause) {
@@ -62,7 +67,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
               className={'min-h-11 rounded-lg px-3 text-sm font-semibold ' + (mode === 'login' ? 'fr-gold-button' : 'text-[#e9d9a7]')}>
               Entrar
             </button>
-            <button type="button" onClick={() => { setMode('new'); setError(null); setResetHelp(false); }}
+            <button type="button" onClick={() => { setMode('new'); setSelectedRole(null); setError(null); setResetHelp(false); }}
               aria-pressed={mode === 'new'}
               className={'min-h-11 rounded-lg px-3 text-sm font-semibold ' + (mode === 'new' ? 'fr-gold-button' : 'text-[#e9d9a7]')}>
               Primeiro acesso
@@ -70,10 +75,49 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
           </div>
 
           {mode === 'login' ? (
+            selectedRole === null ? (
+              <div className="mt-5">
+                <h2 className="text-xl font-bold text-[#fff5d7]">Entrar na sua conta</h2>
+                <p className="mt-1 text-sm text-emerald-100/80">
+                  Escolha a área para entrar. Cada perfil tem acesso exclusivo.
+                </p>
+                <div className="mt-5 grid gap-3" role="group" aria-label="Selecionar perfil antes do login">
+                  {([
+                    {role:'MASTER' as const, title:'Administrador Master', detail:'Dono da plataforma', icon:ShieldCheck},
+                    {role:'TENANT_ADMIN' as const, title:'Administrador', detail:'Gestão da sua caixinha', icon:BriefcaseBusiness},
+                    {role:'TENANT_MEMBER' as const, title:'Membro', detail:'Minha participação', icon:Users},
+                  ]).map(option => {
+                    const Icon = option.icon;
+                    return (
+                      <button key={option.role} type="button"
+                        onClick={() => { setSelectedRole(option.role); setError(null); }}
+                        className="fr-outline flex min-h-16 items-center gap-3 rounded-xl p-3 text-left">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#d4b56a]">
+                          <Icon className="h-5 w-5 text-[#f1d286]" aria-hidden="true" />
+                        </span>
+                        <span><strong className="block text-sm text-white">{option.title}</strong>
+                          <span className="text-xs text-emerald-100/70">{option.detail}</span></span>
+                        <ArrowRight className="ml-auto h-5 w-5 text-[#e4c576]" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-4 text-center text-xs text-emerald-100/70">
+                  O servidor verifica as permissões após informar sua senha.
+                </p>
+              </div>
+            ) : (
             <div className="mt-5">
-              <h2 className="text-xl font-bold text-[#fff5d7]">Entrar na sua conta</h2>
+              <button type="button" onClick={() => { setSelectedRole(null); setError(null); setPassword(''); }}
+                className="mb-3 flex min-h-9 items-center gap-2 text-xs font-semibold text-[#f3d483]">
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Escolher outro perfil
+              </button>
+              <h2 className="text-xl font-bold text-[#fff5d7]">
+                {selectedRole === 'MASTER' ? 'Administrador Master' :
+                  selectedRole === 'TENANT_ADMIN' ? 'Administrador' : 'Membro'}
+              </h2>
               <p className="mt-1 text-sm text-emerald-100/80">
-                Um login para Master, Administrador ou Membro.
+                Informe suas credenciais para esta área.
               </p>
 
               {sessionExpiredNotice && (
@@ -129,6 +173,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Acesso protegido pelo servidor
               </p>
             </div>
+            )
           ) : (
             <div className="mt-5">
               <h2 className="text-xl font-bold text-[#fff5d7]">Primeiro acesso</h2>
