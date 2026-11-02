@@ -198,6 +198,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_named_sessions_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_login_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
