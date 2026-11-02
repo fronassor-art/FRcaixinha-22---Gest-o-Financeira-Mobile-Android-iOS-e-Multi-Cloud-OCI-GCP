@@ -5,7 +5,8 @@ from urllib.parse import urlsplit
 
 PROJECT_DB = "frcaixinha_aistudio_dev"
 PROJECT_PORT = 5433
-PROJECT_USERS = {"DATABASE_URL": "frc_ai_app", "AUTH_DATABASE_URL": "frc_ai_auth"}
+PROJECT_USERS = {"DATABASE_URL": "frc_ai_app", "AUTH_DATABASE_URL": "frc_ai_auth",
+                 "AUTH_VERIFIER_DATABASE_URL": "frc_ai_verifier"}
 
 
 def check() -> int:
@@ -14,7 +15,7 @@ def check() -> int:
         print("AI_STUDIO_DATABASE=NOT_CONFIGURED (FastAPI health apenas; autenticação bloqueada)")
         return 0
     if not all(urls.values()):
-        print("BLOQUEADO: faltam as duas conexões próprias do AI Studio.", file=sys.stderr)
+        print("BLOQUEADO: faltam as tres conexoes segregadas do AI Studio.", file=sys.stderr)
         return 2
 
     for key, expected_user in PROJECT_USERS.items():

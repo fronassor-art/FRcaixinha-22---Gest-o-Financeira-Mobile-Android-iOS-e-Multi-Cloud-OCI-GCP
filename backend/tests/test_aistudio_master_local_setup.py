@@ -53,3 +53,28 @@ def test_app_roles_are_separate_and_non_superuser():
     assert "GRANT frcaixinha_auth_role TO frc_ai_auth;" in sql
     assert "rolsuper" in sql and "rolbypassrls" in sql
     assert "public.sessions" in sql
+
+
+
+def test_p0_01j_migration_wrapper_only_explicitly_applies_with_backup():
+    script = SCRIPTS / "aistudio_local_migration.sh"
+    result = subprocess.run(["bash","-n",str(script)],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    content=script.read_text(encoding="utf-8")
+    for flag in ("AI_STUDIO_APPROVED_SHA","AI_STUDIO_LOCAL_MIGRATION",
+                 "AUTORIZO_MIGRACAO_AI_STUDIO","--passphrase","--decrypt",
+                 "pg_restore --list","aistudio_db_local.sh"):
+        assert flag in content
+
+
+def test_p0_01j_verifier_setup_requires_explicit_consent_and_no_secrets_in_git():
+    script=SCRIPTS/"aistudio_local_api_setup.py"
+    result=subprocess.run([sys.executable,str(script)],capture_output=True,
+                          text=True,timeout=10)
+    assert result.returncode==2
+    assert "BLOQUEADO" in result.stderr
+    content=script.read_text(encoding="utf-8")
+    for flag in ("AI_STUDIO_LOCAL_API_SETUP","CONFIGURAR_VERIFICADOR_AI_STUDIO",
+                 "frc_ai_verifier","AUTH_VERIFIER_DATABASE_URL","0o600",
+                 "getpass.getpass"):
+        assert flag in content

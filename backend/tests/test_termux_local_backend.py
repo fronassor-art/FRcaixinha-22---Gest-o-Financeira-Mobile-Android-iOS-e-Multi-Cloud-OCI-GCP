@@ -56,11 +56,15 @@ def test_ai_studio_database_guard_requires_dedicated_cluster_and_roles():
     checker = ROOT / 'backend/scripts/validate_aistudio_database.py'
     finance = 'postgresql://frc_ai_app:ci-placeholder@127.0.0.1:5433/frcaixinha_aistudio_dev'
     auth = 'postgresql://frc_ai_auth:ci-placeholder@127.0.0.1:5433/frcaixinha_aistudio_dev'
+    verifier = 'postgresql://frc_ai_verifier:ci-placeholder@127.0.0.1:5433/frcaixinha_aistudio_dev'
 
-    def invoke(main_url, auth_url):
+    def invoke(main_url, auth_url, verifier_url):
         env = os.environ.copy()
         env.pop('DATABASE_URL', None)
         env.pop('AUTH_DATABASE_URL', None)
+        env.pop('AUTH_VERIFIER_DATABASE_URL', None)
+        if verifier_url:
+            env['AUTH_VERIFIER_DATABASE_URL'] = verifier_url
         if main_url:
             env['DATABASE_URL'] = main_url
         if auth_url:
@@ -71,21 +75,24 @@ def test_ai_studio_database_guard_requires_dedicated_cluster_and_roles():
         )
 
     # API ainda sem banco próprio: health permitido; login continua bloqueado.
-    assert invoke(None, None).returncode == 0
+    assert invoke(None, None, None).returncode == 0
     # Configuração isolada futura é aceita sem abrir conexão ao servidor.
-    assert invoke(finance, auth).returncode == 0
+    assert invoke(finance, auth, verifier).returncode == 0
 
     invalid = [
-        (finance, None),
-        (None, auth),
-        (finance.replace(':5433/', ':5432/'), auth),
-        (finance.replace('frcaixinha_aistudio_dev', 'frcaixinha_2_2_dev'), auth),
-        (finance.replace('frc_ai_app', 'frc22_owner'), auth),
-        (finance.replace('127.0.0.1', '192.168.1.25'), auth),
-        (finance, auth.replace('frc_ai_auth', 'frc_ai_app')),
+        (finance, None, verifier),
+        (None, auth, verifier),
+        (finance, auth, None),
+        (finance.replace(':5433/', ':5432/'), auth, verifier),
+        (finance.replace('frcaixinha_aistudio_dev', 'frcaixinha_2_2_dev'), auth, verifier),
+        (finance.replace('frc_ai_app', 'frc22_owner'), auth, verifier),
+        (finance.replace('127.0.0.1', '192.168.1.25'), auth, verifier),
+        (finance, auth.replace('frc_ai_auth', 'frc_ai_app'), verifier),
+        (finance, auth, verifier.replace('frc_ai_verifier', 'frc_ai_owner')),
+        (finance, auth, verifier.replace(':5433/', ':5432/')),
     ]
-    for bad_main, bad_auth in invalid:
-        result = invoke(bad_main, bad_auth)
+    for bad_main, bad_auth, bad_verifier in invalid:
+        result = invoke(bad_main, bad_auth, bad_verifier)
         assert result.returncode == 2, (bad_main, result.stdout)
         assert 'BLOQUEADO' in result.stderr
         assert 'ci-placeholder' not in result.stdout + result.stderr

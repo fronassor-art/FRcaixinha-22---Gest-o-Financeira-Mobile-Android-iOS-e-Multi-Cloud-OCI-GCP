@@ -31,3 +31,22 @@ Este projeto NÃO compartilha dados, bancos ou credenciais com outro aplicativo.
 - A inicialização do primeiro MASTER exige decisão e confirmação separadas.
 - Não colocar senhas no GitHub/AI Studio/ChatGPT nem habilitar Pix, Mercado Pago ou operações financeiras reais.
 - Banco restaurável exige que a senha age seja guardada de forma segura fora do telefone. Backup de database NÃO exporta senhas globais dos roles.
+
+
+## Fase 2 — configurar as três conexões técnicas sem privilégios
+Depois de aplicar 001-027, executar a partir da raiz, em ambiente Python com psycopg:
+AI_STUDIO_LOCAL_API_SETUP=YES python3 backend/scripts/aistudio_local_api_setup.py
+
+Assistente solicita senha do owner e senhas já existentes dos papéis frc_ai_app
+e frc_ai_auth (mínimo 12 caracteres). Não enviar ao chat. Cria role SQL
+frc_ai_verifier exclusiva, gerando nova senha forte, sem papel Master e sem
+permissão de emitir sessões diretamente. Arquivo api.env é criado em
+~/.config/frcaixinha-aistudio-mobile/api.env, modo 0600; script recusa
+sobrescrever arquivo existente. Se qualquer etapa falhar, parar e auditar.
+O operador deve proteger o aparelho com senha/biometria e não copiar api.env
+para repositório, IA Studio, ZIP ou storage público.
+
+Executar depois bash backend/scripts/run_termux_fastapi.sh em uma sessão
+Termux persistente; o backend deverá responder em http://127.0.0.1:8000.
+Confirmar GET /api/health/ready = 200 e READY_FOR_TEST_AUTH antes de
+qualquer provisionamento de conta.
