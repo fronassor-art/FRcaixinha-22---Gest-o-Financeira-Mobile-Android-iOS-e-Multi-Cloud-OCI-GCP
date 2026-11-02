@@ -1,4 +1,5 @@
 """Acesso único nomeado e sessões: apenas PostgreSQL 16 efêmero de CI."""
+import asyncio
 import os
 import uuid
 from urllib.parse import urlparse
@@ -73,6 +74,24 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 "now()+interval '20 minutes')",
                 sid,hash_token(raw),user,role,tenant,
             )
+        # Emissão de sessão ATIVA pelo papel Auth deve ser recusada por RLS.
+        # Não há autenticação nem concessão implícita apenas pela posse do DSN.
+        with pytest.raises(asyncpg.PostgresError) as invalid_active:
+            await auth.execute(
+                "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+                "active_tenant_id,expires_at) VALUES($1,$2,$3,'TENANT_MEMBER',$4,"
+                "now()+interval '20 minutes')",
+                uuid.uuid4(), hash_token("ci-forged-" + uuid.uuid4().hex), actor, a)
+        assert invalid_active.value.sqlstate == "42501"
+
+        with pytest.raises(asyncpg.PostgresError) as invalid_pending:
+            await auth.execute(
+                "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+                "active_tenant_id,expires_at) VALUES($1,$2,$3,'PENDING_CONTEXT',NULL,"
+                "now()+interval '3 minutes')",
+                uuid.uuid4(), hash_token("ci-bad-pending-" + uuid.uuid4().hex), actor)
+        assert invalid_pending.value.sqlstate == "42501"
+
         # Serviço Auth não enumera outros usuários usando UUID arbitrário
         # nem usando hash armazenado como se fosse o token bruto.
         assert await auth.fetch(
@@ -185,6 +204,29 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
             assert current.status_code==200 and current.json()["current_revoked"]
             assert (await client.get("/api/v1/auth/me",headers=headers)).status_code==401
             assert (await client.get("/api/v1/auth/sessions",headers=headers)).status_code==401
+
+            # Concorrência: a validação deve aguardar o row lock do logout
+            # e jamais reativar a sessão revogada após o COMMIT.
+            outsider_headers = {"Authorization": "Bearer " + tokens[2]}
+            async with admin.transaction():
+                assert await admin.fetchval(
+                    "SELECT id FROM public.sessions WHERE id=$1 FOR UPDATE",
+                    ids[2],
+                ) == ids[2]
+                pending_me = asyncio.create_task(
+                    client.get("/api/v1/auth/me", headers=outsider_headers))
+                await asyncio.sleep(0.10)
+                assert not pending_me.done(), "Consulta ignorou o bloqueio da sessao"
+                await admin.execute(
+                    "UPDATE public.sessions SET revoked_at=NOW() WHERE id=$1",
+                    ids[2],
+                )
+            assert (await asyncio.wait_for(pending_me, timeout=5)).status_code == 401
+            assert await auth.fetch(
+                "SELECT * FROM public.auth_active_memberships($1::text)",
+                tokens[2],
+            ) == []
+
     finally:
         await close_db_pool()
         await auth.close()
