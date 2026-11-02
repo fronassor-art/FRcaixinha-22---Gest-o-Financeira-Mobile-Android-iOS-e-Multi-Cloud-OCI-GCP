@@ -87,7 +87,7 @@ async def backend_readiness():
                 "SELECT to_regclass('public.users') IS NOT NULL AS users_ok, "
                 "to_regclass('public.credentials') IS NOT NULL AS credentials_ok, "
                 "to_regclass('public.sessions') IS NOT NULL AS sessions_ok, "
-                "to_regprocedure('public.auth_active_memberships(uuid)') IS NOT NULL AS links_ok"
+                "to_regprocedure('public.auth_active_memberships(text)') IS NOT NULL AS links_ok"
             )
         finally:
             await auth.close()
