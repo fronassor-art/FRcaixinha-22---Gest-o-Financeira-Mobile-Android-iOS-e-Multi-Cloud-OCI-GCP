@@ -155,14 +155,14 @@ async def get_me(session: AuthenticatedSession = Depends(get_current_session)):
 
 
 @router.get('/contexts')
-async def list_contexts(session: AuthenticatedSession = Depends(get_current_session)):
+async def list_contexts(request: Request, session: AuthenticatedSession = Depends(get_current_session)):
     try:
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
             links = await conn.fetch(
                 'SELECT tenant_id,role,tenant_name '
-                'FROM public.auth_active_membership_contexts($1)',
-                uuid.UUID(session.user_id))
+                'FROM public.auth_active_membership_contexts($1::text)',
+                bearer_token(request))
         finally:
             await conn.close()
     except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
