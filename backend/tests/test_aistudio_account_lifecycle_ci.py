@@ -185,6 +185,36 @@ def test_reset_is_hashed_expires_once_and_revokes_every_session(synthetic_accoun
     ).fetchone()[0] == 1
 
 
+def test_preliminary_admin_invitation_schema_allows_no_tenant_but_member_requires_one(synthetic_accounts):
+    """Contrato 3.1: convite MASTER preliminar pode anteceder tenant existente."""
+    db, users, _ = synthetic_accounts
+    preliminary_id = uuid4()
+    db.execute(
+        "INSERT INTO public.invitations(id,tenant_id,inviter_user_id,target_email,"
+        "target_role,token_hash,expires_at) "
+        "VALUES(%s,NULL,%s,'admin.preliminar@example.com','TENANT_ADMIN',%s,"
+        "now()+interval '1 day')",
+        (preliminary_id, users["master"], hash_token("ci-preliminary-admin")),
+    )
+    try:
+        row = db.execute(
+            "SELECT tenant_id,target_role FROM public.invitations WHERE id=%s",
+            (preliminary_id,),
+        ).fetchone()
+        assert row == (None, "TENANT_ADMIN")
+    finally:
+        db.execute("DELETE FROM public.invitations WHERE id=%s", (preliminary_id,))
+    with pytest.raises(psycopg.errors.CheckViolation):
+        with db.transaction():
+            db.execute(
+                "INSERT INTO public.invitations(id,tenant_id,inviter_user_id,"
+                "target_email,target_role,token_hash,expires_at) "
+                "VALUES(%s,NULL,%s,'member.invalid@example.com','TENANT_MEMBER',%s,"
+                "now()+interval '1 day')",
+                (uuid4(), users["admin"], hash_token("ci-invalid-member")),
+            )
+
+
 def test_app_and_auth_have_no_direct_lifecycle_token_access(synthetic_accounts):
     for env_name in ("DATABASE_URL", "CI_AUTH_DATABASE_URL"):
         dsn = os.environ[env_name]

@@ -70,3 +70,13 @@ Um MASTER não herda direitos financeiros de caixinhas sem vínculo.
   rifas ou bolões. Não misturar banco ou fonte de outro projeto.
 - A classificação das 147 cláusulas do checkpoint continua histórica;
   não declarar tudo concluído a partir de testes parciais.
+
+
+### Compatibilidade com tenant preliminar (Contrato 3.1)
+
+O esquema permite convite de `TENANT_ADMIN` com `tenant_id` ainda nulo
+na etapa preliminar de contratação. Para `TENANT_MEMBER`, a caixinha
+é obrigatória. A função de laboratório `prepare_invitation_ci` só prepara
+convites para tenants existentes; a criação/aceite de administrador **antes**
+da criação do tenant continua PENDENTE. Não criar uma caixinha artificial
+só para permitir aceite.

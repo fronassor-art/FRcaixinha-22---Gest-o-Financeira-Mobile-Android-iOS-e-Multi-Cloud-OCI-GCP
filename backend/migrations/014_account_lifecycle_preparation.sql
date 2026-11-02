@@ -18,8 +18,8 @@ ALTER TABLE public.invitations
       OR (accepted_at IS NOT NULL AND accepted_user_id IS NOT NULL
           AND accepted_membership_id IS NOT NULL)
     ),
-  ADD CONSTRAINT invitations_tenant_required
-    CHECK (tenant_id IS NOT NULL),
+  ADD CONSTRAINT invitations_member_requires_tenant
+    CHECK (target_role <> 'TENANT_MEMBER' OR tenant_id IS NOT NULL),
   ADD CONSTRAINT invitations_delivery_before_acceptance
     CHECK (accepted_at IS NULL OR delivery_status='DELIVERED');
 

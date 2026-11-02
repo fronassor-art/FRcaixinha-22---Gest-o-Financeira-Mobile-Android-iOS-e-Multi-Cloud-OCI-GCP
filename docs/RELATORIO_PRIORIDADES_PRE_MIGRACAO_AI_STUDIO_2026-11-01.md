@@ -169,3 +169,11 @@ revogação e expiração. Este pacote não ativa endpoints públicos,
 não executa migração local nem modifica as contagens das 147 cláusulas.
 Relatório detalhado em
 `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
+
+
+### Observação 3.1 — tenant preliminar
+
+A migração 014 não deve exigir `tenant_id` no convite inicial do administrador,
+pois o Caderno Mestre prevê contratação com tenant preliminar. A constraint
+foi limitada aos convites de membros. A ativação de administrador ainda não
+é feita automaticamente no fluxo preliminar; requer implementação e aceite.
