@@ -17,6 +17,11 @@ android {
         }
     }
     buildTypes {
+        // APK de teste exclusivo do AI Studio; nao substitui outro aplicativo.
+        debug {
+            applicationIdSuffix ".aistudio"
+            versionNameSuffix "-AI-STUDIO-TEST"
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

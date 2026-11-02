@@ -61,6 +61,14 @@ jobs:
       - name: Compilar APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
+      - name: Verificar pacote Android independente antes do upload
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | tee /tmp/ai-studio-apk-badging.txt
+          grep -F "package: name='com.frcaixinha.app.aistudio'" /tmp/ai-studio-apk-badging.txt
       - name: Disponibilizar APK debug
         uses: actions/upload-artifact@v4
         with:
@@ -308,3 +316,35 @@ jobs:
         run: |
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
+
+  exportar-fonte-ai-studio:
+    name: Empacotar codigo-fonte para AI Studio
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verificar snapshot e montar ZIP do codigo-fonte
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          # Recusar arquivos tipicamente secretos que nao podem ir ao AI Studio.
+          if git ls-files | grep -E '(^|/)(\.env$|\.env\.(local|production)$|[^/]+\.(pem|p12|pfx|jks|keystore|key|dump|sqlite|db)$)'; then
+            echo "BLOQUEADO: possiveis segredos versionados."
+            exit 1
+          fi
+          mkdir -p export
+          git archive --format=zip --prefix=AI_Studio/ --output=export/AI_Studio_Codigo_Fonte.zip HEAD
+          unzip -t export/AI_Studio_Codigo_Fonte.zip
+          sha256sum export/AI_Studio_Codigo_Fonte.zip > export/SHA256_codigo_fonte.txt
+          git rev-parse HEAD > export/COMMIT_ORIGEM.txt
+      - name: Disponibilizar pacote de codigo-fonte
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI_Studio_Codigo_Fonte_Snapshot
+          path: export/
+          if-no-files-found: error
+          retention-days: 7
