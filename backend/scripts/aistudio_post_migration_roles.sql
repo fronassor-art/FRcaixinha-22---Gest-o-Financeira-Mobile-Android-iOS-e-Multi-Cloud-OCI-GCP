@@ -85,7 +85,12 @@ BEGIN
      OR to_regclass('public.users') IS NULL
      OR to_regclass('public.credentials') IS NULL
      OR to_regclass('public.sessions') IS NULL
-     OR to_regprocedure('public.auth_active_memberships(uuid)') IS NULL THEN
+     OR to_regprocedure('public.auth_active_memberships(text)') IS NULL
+     OR to_regprocedure('public.auth_active_memberships(uuid)') IS NOT NULL
+     OR NOT has_function_privilege('frc_ai_auth',
+          'public.auth_active_memberships(text)','EXECUTE')
+     OR has_function_privilege('frc_ai_app',
+          'public.auth_active_memberships(text)','EXECUTE') THEN
     RAISE EXCEPTION 'Estrutura de identidade MASTER incompleta';
   END IF;
 END
