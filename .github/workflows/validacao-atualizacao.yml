@@ -74,8 +74,36 @@ jobs:
           node -e "const c=require('./android/app/src/main/assets/capacitor.config.json'); if(c.server.androidScheme!=='http' || c.server.cleartext!==false) process.exit(1)"
           grep -RlF 'http://127.0.0.1:8000' dist/assets | grep -q .
           grep -RlF "${VITE_APP_BUILD_REF:0:7}" dist/assets | grep -q .
-      - name: Compilar APK
+      - name: Preparar assinatura persistente para atualizacoes
+        env:
+          ANDROID_SIGNING_JKS_BASE64: ${{ secrets.FRCAIXINHA_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
+          ANDROID_SIGNING_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_SIGNING_JKS_BASE64" || -z "$ANDROID_SIGNING_STORE_PASSWORD" || -z "$ANDROID_SIGNING_ALIAS" || -z "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
+            echo "::error::Assinatura persistente ausente. Configure os quatro Actions secrets FRCAIXINHA_ANDROID_* conforme docs/AI_STUDIO_ASSINATURA_PERSISTENTE.md."
+            exit 1
+          fi
+          umask 077
+          KEYSTORE_FILE="$RUNNER_TEMP/frcaixinha-aistudio-stable-signing.p12"
+          printf '%s' "$ANDROID_SIGNING_JKS_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          test -s "$KEYSTORE_FILE"
+          if ! keytool -list -keystore "$KEYSTORE_FILE" -storetype PKCS12 -alias "$ANDROID_SIGNING_ALIAS" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" >/dev/null 2>&1; then
+            echo "::error::Arquivo de assinatura, alias ou senha invalidos."
+            exit 1
+          fi
+          echo "FRCAIXINHA_ANDROID_KEYSTORE_FILE=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+      - name: Compilar APK assinado para atualizacoes futuras
         working-directory: android
+        env:
+          FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING: '1'
+          FRCAIXINHA_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
+          FRCAIXINHA_ANDROID_KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
+          FRCAIXINHA_ANDROID_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon assembleDebug
       - name: Verificar pacote Android independente antes do upload
         run: |
@@ -84,7 +112,13 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/ai-studio-apk-badging.txt
-          grep -F "package: name='com.frcaixinha.app.aistudio2'" /tmp/ai-studio-apk-badging.txt
+          grep -F "package: name='com.frcaixinha.app.aistudio'" /tmp/ai-studio-apk-badging.txt
+          grep -F "versionCode='${{ github.run_number }}'" /tmp/ai-studio-apk-badging.txt
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/frcaixinha-apk-signing.txt
+          grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/frcaixinha-apk-signing.txt
+          grep -F "Signer #1 certificate SHA-256 digest:" /tmp/frcaixinha-apk-signing.txt
       - name: Disponibilizar APK debug
         uses: actions/upload-artifact@v4
         with:

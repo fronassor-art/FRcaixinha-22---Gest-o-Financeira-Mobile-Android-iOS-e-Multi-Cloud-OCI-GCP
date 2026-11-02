@@ -2,13 +2,25 @@ apply plugin: 'com.android.application'
 
 android {
     namespace = "com.frcaixinha.app"
+    // Assinatura duravel para o pacote de homologacao. A chave jamais fica no Git.
+    def stableSigningRequired = System.getenv("FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING") == "1"
+    def stableKeyFile = System.getenv("FRCAIXINHA_ANDROID_KEYSTORE_FILE")
+    def stableStorePassword = System.getenv("FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD")
+    def stableKeyAlias = System.getenv("FRCAIXINHA_ANDROID_KEY_ALIAS")
+    def stableKeyPassword = System.getenv("FRCAIXINHA_ANDROID_KEY_PASSWORD")
+    def androidCiBuildNumber = System.getenv("FRCAIXINHA_ANDROID_VERSION_CODE")
+    if (stableSigningRequired && (!stableKeyFile || !stableStorePassword ||
+            !stableKeyAlias || !stableKeyPassword || !(new File(stableKeyFile).isFile()))) {
+        throw new GradleException("Assinatura Android permanente nao configurada. Configure os segredos de assinatura no GitHub.")
+    }
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.frcaixinha.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // versionCode monotonicamente crescente no CI, sem downgrade acidental.
+        versionCode androidCiBuildNumber ? Integer.parseInt(androidCiBuildNumber) : 1
+        versionName androidCiBuildNumber ? "1.0.${androidCiBuildNumber}" : "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,11 +28,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Gradle so configura a chave quando o CI exigiu assinatura persistente.
+    if (stableSigningRequired) {
+        signingConfigs {
+            stableDebug {
+                storeFile file(stableKeyFile)
+                storePassword stableStorePassword
+                keyAlias stableKeyAlias
+                keyPassword stableKeyPassword
+                storeType "PKCS12"
+            }
+        }
+    }
     buildTypes {
-        // APK de teste exclusivo do AI Studio; nao substitui outro aplicativo.
+        // MESMO applicationId em todas as atualizacoes Android AI Studio.
         debug {
-            applicationIdSuffix ".aistudio2"
-            versionNameSuffix "-AI-STUDIO-ISOLADOS"
+            applicationIdSuffix ".aistudio"
+            versionNameSuffix "-AI-STUDIO-TEST"
+            if (stableSigningRequired) {
+                signingConfig signingConfigs.stableDebug
+            }
         }
         release {
             minifyEnabled false
