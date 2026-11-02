@@ -159,7 +159,6 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
 
         # A transição só aceita token bruto e verifica vínculo do usuário.
         transition_token = "ci-transition-" + uuid.uuid4().hex
-        transition_id = uuid.uuid4()
         proof = "ci-proof-" + uuid.uuid4().hex
         await verifier.execute(
             "INSERT INTO public.auth_login_proofs(proof_hash,user_id,expires_at)"
@@ -189,8 +188,8 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
             "$1::text,$2::varchar,$3::uuid)",
             transition_token,"TENANT_ADMIN",b) is True
         assert await auth.fetchval(
-            "SELECT active_role FROM public.sessions WHERE id=$1",
-            transition_id) == "TENANT_ADMIN"
+            "SELECT active_role FROM public.sessions WHERE token_hash=$1",
+            hash_token(transition_token)) == "TENANT_ADMIN"
         assert await auth.fetchval(
             "SELECT public.auth_revoke_session($1::text)",
             transition_token,
