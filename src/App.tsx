@@ -46,6 +46,7 @@ import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal'
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
 import { SessionSecurityPanel } from './components/SessionSecurityPanel';
+import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
 import { authService, AuthenticatedUser, AuthContext, contextLabel } from './services/authService';
 
 export default function App() {
@@ -163,15 +164,10 @@ export default function App() {
     }
   };
 
-  // Quando o papel muda, descartar qualquer aba herdada de outro perfil.
+  // Papel ativo validado no servidor; bloqueia renderizacoes de outras funcoes.
   useEffect(() => {
-    const allowed = state.currentRole === 'MASTER'
-      ? ['DASHBOARD', 'LICENCAS', 'SUPORTE', 'NUVEM', 'AUDITORIA']
-      : state.currentRole === 'TENANT_ADMIN'
-        ? ['DASHBOARD', 'MEMBROS', 'CONTRIBUICOES', 'EMPRESTIMOS', 'FECHAMENTO']
-        : ['MEU_PAINEL', 'MINHAS_CONTRIBUICOES', 'MEU_EMPRESTIMO', 'MEU_RESULTADO'];
-    if (!allowed.includes(activeTab)) {
-      setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
+    if (!isRoleTabAllowed(state.currentRole, activeTab)) {
+      setActiveTab(initialRoleTab(state.currentRole));
     }
   }, [state.currentRole, activeTab]);
 
@@ -235,7 +231,8 @@ export default function App() {
   };
 
   const navItems = renderNavTabs();
-  const visibleTab = navItems.some(item => item.id === activeTab) ? activeTab : null;
+  const visibleTab = isRoleTabAllowed(state.currentRole, activeTab) &&
+    navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16 md:pb-0">
