@@ -280,7 +280,7 @@ export default function App() {
         Ambiente de homologação. Nenhuma movimentação financeira real está habilitada.
       </div>
       {/* Secondary Subnav Bar */}
-      <nav className="bg-white border-b border-slate-200 sticky top-16 z-30 shadow-2xs">
+      <nav className="hidden md:block bg-white border-b border-slate-200 sticky top-16 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto py-2">
           {navItems.map(item => {
             const Icon = item.icon;
@@ -427,7 +427,7 @@ export default function App() {
 
       {/* Menu inferior compacto, derivado das abas autorizadas do perfil. */}
       <nav aria-label="Navegação do aplicativo" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 flex justify-around gap-1 px-2 py-2">
-        {navItems.slice(0,4).map(item => {
+        {navItems.slice(0, state.currentRole === 'TENANT_ADMIN' ? 5 : 4).map(item => {
           const Icon = item.icon;
           const shortLabel = item.id === 'MEU_RESULTADO' ? 'Resultado'
             : item.id === 'MINHAS_CONTRIBUICOES' ? 'Contrib.'
