@@ -22,7 +22,7 @@ import {
   Cloud,
   Smartphone,
   Apple,
-  Menu
+  Menu, MoreHorizontal, ChevronDown, Crown, BriefcaseBusiness, UserRound, X, LogOut
 } from 'lucide-react';
 import { appStore, AppState } from './services/store';
 import { Navbar } from './components/Navbar';
@@ -58,6 +58,8 @@ export default function App() {
   const [changingContext, setChangingContext] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [profilePickerOpen, setProfilePickerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Modais globais
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -130,7 +132,10 @@ export default function App() {
     setAuthenticatedUser(user);
     setSessionExpiredNotice(false);
     appStore.setAuthenticatedContext(user);
-    authService.listContexts().then(setContexts).catch(() => setContexts([]));
+    authService.listContexts().then(list => {
+      setContexts(list);
+      if (list.length > 1) setProfilePickerOpen(true);
+    }).catch(() => setContexts([]));
     if (user.role === 'MASTER') {
       setActiveTab('DASHBOARD');
     } else if (user.role === 'TENANT_ADMIN') {
@@ -147,6 +152,8 @@ export default function App() {
     setContexts([]);
     setActiveTab('DASHBOARD');
     setSecurityOpen(false);
+    setMoreOpen(false);
+    setProfilePickerOpen(false);
   };
 
   const handleContextSwitch = async (context: AuthContext) => {
@@ -157,6 +164,9 @@ export default function App() {
       appStore.clearAuthenticatedContext();
       appStore.setAuthenticatedContext(user);
       setActiveTab(user.role === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
+      setProfilePickerOpen(false);
+      setMoreOpen(false);
+      setSecurityOpen(false);
     } catch (error) {
       setContextError(error instanceof Error ? error.message : 'Falha na troca de vínculo.');
     } finally {
@@ -235,7 +245,7 @@ export default function App() {
     navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
-    <div className="min-h-screen min-w-0 max-w-full overflow-x-hidden bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16 md:pb-0">
+    <div className="min-h-dvh min-w-0 max-w-full overflow-x-hidden bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e] pb-24 md:pb-0">
       {/* Top Navbar */}
       <Navbar
         state={state}
@@ -248,39 +258,78 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {contexts.length > 1 && (
-        <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
-          <label htmlFor="active-context" className="font-semibold">Meu acesso único — vínculo ativo</label>
-          <select id="active-context" aria-label="Selecionar perfil e caixinha autorizados"
-            disabled={changingContext}
-            className="min-h-11 min-w-0 max-w-full rounded-lg border border-slate-300 px-3 disabled:opacity-60"
-            value={authenticatedUser.role + ':' + (authenticatedUser.tenantId || '')}
-            onChange={event => {
-              const context = contexts.find(item => item.role + ':' + (item.tenant_id || '') === event.target.value);
-              if (context) void handleContextSwitch(context);
-            }}>
-            {contexts.map(item => <option key={item.role + ':' + (item.tenant_id || '')} value={item.role + ':' + (item.tenant_id || '')}>
-              {contextLabel(item)}
-            </option>)}
-          </select>
-          {changingContext && <span role="status" className="text-slate-600">Validando novo vínculo no servidor...</span>}
+      {/* Uma identidade, escolhas de perfil conferidas pelo servidor. */}
+      <div className="bg-[#073c2c] border-b border-[#a88a4c]/40 px-4 py-2">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+          <button type="button" onClick={() => setProfilePickerOpen(value => !value)}
+            disabled={contexts.length <= 1 || changingContext}
+            aria-expanded={profilePickerOpen}
+            aria-haspopup="dialog"
+            className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 text-left text-sm text-[#fff2cf] disabled:cursor-default">
+            {state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
+              state.currentRole === 'TENANT_ADMIN' ? <BriefcaseBusiness className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
+                <UserRound className="h-4 w-4 shrink-0 text-[#f0ce78]"/>}
+            <span className="truncate max-w-[230px] sm:max-w-md">
+              {state.currentRole === 'MASTER' ? 'Master — Plataforma' :
+                state.currentRole === 'TENANT_ADMIN' ? 'Administrador — Minha caixinha' :
+                  'Membro — Minha caixinha'}
+            </span>
+            {contexts.length > 1 && <ChevronDown className="h-4 w-4 shrink-0"/>}
+          </button>
+          <span className="hidden sm:block text-xs text-[#d2e2cf]">Acesso único</span>
+          <button type="button" onClick={() => setSecurityOpen(value => !value)}
+            aria-expanded={securityOpen}
+            className="min-h-10 shrink-0 px-2 text-xs text-[#f1d58d] underline underline-offset-4">
+            Sessões
+          </button>
+        </div>
+      </div>
+      {contextError && <div role="alert" className="border-b border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
+      {profilePickerOpen && contexts.length > 1 && (
+        <div role="dialog" aria-modal="true" aria-label="Escolher perfil de acesso" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
+          <section className="w-full max-w-sm rounded-[24px] border border-[#c6a05c] bg-[#073c2d] p-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[#f5d586]">Acessar como</h2>
+              <button type="button" onClick={() => setProfilePickerOpen(false)} aria-label="Fechar seleção de perfil"
+                className="rounded-lg p-2 text-[#fae9c3]"><X className="h-5 w-5"/></button>
+            </div>
+            <p className="mb-4 mt-1 text-sm text-emerald-100/75">Escolha um perfil autorizado.</p>
+            <div className="grid gap-3">
+              {contexts.map(item => {
+                const selected = authenticatedUser.role === item.role &&
+                  (authenticatedUser.tenantId || '') === (item.tenant_id || '');
+                const Icon = item.role === 'MASTER' ? Crown : item.role === 'TENANT_ADMIN' ? BriefcaseBusiness : UserRound;
+                return (
+                  <button type="button" key={item.role + ':' + (item.tenant_id || '')}
+                    onClick={() => { if (!selected) void handleContextSwitch(item); else setProfilePickerOpen(false); }}
+                    className={'flex min-h-16 w-full items-center gap-3 rounded-xl border p-3 text-left ' +
+                      (selected ? 'border-[#ebc874] bg-[#165b3e]' : 'border-[#4f805e] bg-[#084532]')}>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#cda75c] text-[#f4d689]">
+                      <Icon className="h-5 w-5"/>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <strong className="block truncate text-sm text-white">
+                        {item.role === 'MASTER' ? 'Administrador Master' :
+                          item.role === 'TENANT_ADMIN' ? 'Administrador' : 'Membro'}
+                      </strong>
+                      <span className="block truncate text-xs text-emerald-100/75">
+                        {item.role === 'MASTER' ? 'Plataforma' : item.tenant_name || 'Caixinha'}
+                      </span>
+                    </span>
+                    {selected && <span className="text-xs font-semibold text-[#f4d689]">Ativo</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
-      {contextError && <div role="alert" className="bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
-      <div className="bg-slate-50 px-4 py-1 border-b border-slate-200 text-right">
-        <button type="button" onClick={() => setSecurityOpen(open => !open)}
-          aria-expanded={securityOpen}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">
-          {securityOpen ? 'Fechar sessões' : 'Sessões'}
-        </button>
-      </div>
       {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
-
-      <div role="note" className="bg-amber-50 border-b border-amber-200 px-4 py-1 text-[11px] font-medium text-amber-900">
-        Ambiente de homologação. Nenhuma movimentação financeira real está habilitada.
+      <div role="note" className="bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
+        Ambiente de homologação · operações financeiras reais indisponíveis
       </div>
       {/* Secondary Subnav Bar */}
-      <nav className="hidden md:block bg-white border-b border-slate-200 sticky top-16 z-30 shadow-2xs">
+      <nav className="hidden md:block border-b border-[#b4cfb5] bg-[#e7f1e7] sticky top-16 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto py-2">
           {navItems.map(item => {
             const Icon = item.icon;
@@ -297,11 +346,11 @@ export default function App() {
                 }}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'bg-[#085137] text-[#f7d986] shadow-xs'
+                    : 'text-[#275c40] hover:text-[#073d2b] hover:bg-[#d3e6d4]'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-[#f5cf79]' : 'text-[#35654c]'}`} />
                 <span>{item.label}</span>
               </button>
             );
@@ -310,7 +359,7 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
         {/* Master Views */}
         {visibleTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
           <DashboardView
@@ -391,63 +440,66 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer com Aviso Legal Homologado */}
-      <footer className="hidden md:block bg-white border-t border-slate-200 mt-auto py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="font-bold text-slate-700">FRcaixinha AI Studio</span> • Ambiente de homologação.
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Não atua como instituição bancária nem detém custódia de depósitos de terceiros (Cláusula 1.1 e 1.7).
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsManualOpen(true)}
-              className="text-emerald-700 hover:underline cursor-pointer"
-            >
-              Manual em 16 Passos (Cláusula 11.4)
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsAuditOpen(true)}
-              className="text-indigo-700 hover:underline cursor-pointer"
-            >
-              Matriz AT-01 a AT-50
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setActiveTab('NUVEM')}
-              className="text-cyan-700 hover:underline cursor-pointer font-medium"
-            >
-              OCI + GCP Soberano
-            </button>
-          </div>
-        </div>
-      </footer>
-
-      {/* Menu inferior compacto, derivado das abas autorizadas do perfil. */}
-      <nav aria-label="Navegação do aplicativo" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 flex justify-around gap-1 px-2 py-2">
-        {navItems.slice(0, state.currentRole === 'TENANT_ADMIN' ? 5 : 4).map(item => {
+      {/* Menu com quatro destinos; funcoes menos comuns ficam em Mais. */}
+      <nav aria-label="Navegação principal" className="fr-mobile-nav fixed bottom-0 left-0 right-0 z-40 flex justify-around gap-1 px-2 pt-2 md:hidden">
+        {navItems.slice(0,3).map(item => {
           const Icon = item.icon;
-          const shortLabel = item.id === 'MEMBROS' ? 'Membros'
-            : item.id === 'FECHAMENTO' ? 'Fechar'
+          const shortLabel = item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
+            : item.id === 'MINHAS_CONTRIBUICOES' || item.id === 'CONTRIBUICOES' ? 'Contrib.'
+            : item.id === 'MEU_EMPRESTIMO' || item.id === 'EMPRESTIMOS' ? 'Crédito'
             : item.id === 'LICENCAS' ? 'Licenças'
-            : item.id === 'MEU_RESULTADO' ? 'Resultado'
-            : item.id === 'MINHAS_CONTRIBUICOES' ? 'Contrib.'
-            : item.id === 'MEU_EMPRESTIMO' ? 'Crédito'
-            : item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
-            : item.id === 'CONTRIBUICOES' ? 'Contrib.'
-            : item.id === 'EMPRESTIMOS' ? 'Crédito' : item.label;
+            : item.id === 'SUPORTE' ? 'Suporte' : item.label;
           return (
-            <button key={item.id} type="button" onClick={() => setActiveTab(item.id)}
+            <button key={item.id} type="button" onClick={() => { setActiveTab(item.id); setMoreOpen(false); }}
               aria-current={activeTab === item.id ? 'page' : undefined}
-              className={'min-w-0 flex-1 rounded-lg px-1 py-1 text-[11px] flex flex-col items-center gap-1 ' + (activeTab === item.id ? 'text-emerald-300 font-bold' : 'text-slate-300')}>
-              <Icon className="h-5 w-5" />
-              <span className="truncate max-w-full">{shortLabel}</span>
+              className={'flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] ' +
+                (activeTab === item.id ? 'bg-[#195c3c] font-bold text-[#f6d488]' : 'text-emerald-100/80')}>
+              <Icon className="h-5 w-5"/>
+              <span className="max-w-full truncate">{shortLabel}</span>
             </button>
           );
         })}
+        <button type="button" onClick={() => setMoreOpen(value => !value)}
+          aria-expanded={moreOpen} aria-label="Mais opções"
+          className={'flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] ' +
+            (moreOpen ? 'bg-[#195c3c] font-bold text-[#f6d488]' : 'text-emerald-100/80')}>
+          <MoreHorizontal className="h-5 w-5"/><span>Mais</span>
+        </button>
       </nav>
+
+      {moreOpen && (
+        <div role="dialog" aria-label="Mais opções" className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 pb-20 md:hidden">
+          <section className="w-full max-w-md rounded-2xl border border-[#bfa260] bg-[#073b2b] p-4 text-[#fff1ce] shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Mais</h2>
+              <button type="button" onClick={() => setMoreOpen(false)} aria-label="Fechar menu" className="p-2">
+                <X className="h-5 w-5"/>
+              </button>
+            </div>
+            {navItems.slice(3).map(item => {
+              const Icon = item.icon;
+              return <button key={item.id} type="button"
+                onClick={() => { setMoreOpen(false); if(item.id === 'AUDITORIA') setIsAuditOpen(true); else setActiveTab(item.id); }}
+                className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
+                <Icon className="h-5 w-5 text-[#f0ca72]"/>{item.label}
+              </button>;
+            })}
+            {contexts.length > 1 && <button type="button"
+              onClick={() => { setMoreOpen(false); setProfilePickerOpen(true); }}
+              className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
+              <UserRound className="h-5 w-5 text-[#f0ca72]"/>Trocar perfil
+            </button>}
+            <button type="button" onClick={() => { setMoreOpen(false); setSecurityOpen(true); }}
+              className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
+              <ShieldCheck className="h-5 w-5 text-[#f0ca72]"/>Segurança e sessões
+            </button>
+            <button type="button" onClick={() => { setMoreOpen(false); void handleLogout(); }}
+              className="flex min-h-11 w-full items-center gap-3 py-2 text-left text-sm">
+              <LogOut className="h-5 w-5 text-[#f0ca72]"/>Sair da conta
+            </button>
+          </section>
+        </div>
+      )}
 
       {/* Modais Globais */}
       <PixModal
