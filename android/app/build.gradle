@@ -19,8 +19,8 @@ android {
     buildTypes {
         // APK de teste exclusivo do AI Studio; nao substitui outro aplicativo.
         debug {
-            applicationIdSuffix ".aistudio"
-            versionNameSuffix "-AI-STUDIO-TEST"
+            applicationIdSuffix ".aistudio2"
+            versionNameSuffix "-AI-STUDIO-ISOLADOS"
         }
         release {
             minifyEnabled false
