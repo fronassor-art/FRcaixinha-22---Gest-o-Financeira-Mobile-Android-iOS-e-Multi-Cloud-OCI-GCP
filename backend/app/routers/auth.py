@@ -55,27 +55,44 @@ async def login(payload: LoginRequest, response: Response):
             if not verified or record['status'] != 'ACTIVE':
                 record_failed_attempt(identifier)
                 raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
-            links = await conn.fetch(
-                'SELECT tenant_id,role FROM public.auth_active_memberships($1) ORDER BY tenant_id,role', record['id'])
-            if record['is_master']:
-                role, tenant_id = 'MASTER', None
-            elif links:
-                role, tenant_id = links[0]['role'], links[0]['tenant_id']
-            else:
-                # Não revelar se o endereço pertence a conta cadastrada, mas
-                # ainda sem vínculo. Também aplicar rate limit a esse caso.
-                record_failed_attempt(identifier)
-                raise HTTPException(
-                    status_code=401,
-                    detail='Credenciais inválidas ou conta indisponível.'
-                )
+
+            # A senha é verificada ANTES de criar o token provisório. A consulta
+            # de vínculos só aceita token bruto de sessão, nunca UUID arbitrário.
+            # INSERT, escolha do vínculo e promoção ocorrem na MESMA transação:
+            # sem vínculo válido => rollback, sem sessão provisória persistida.
             raw_token, token_hash = generate_session_token()
-            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-                seconds=settings.SESSION_EXPIRE_SECONDS)
-            await conn.execute(
-                'INSERT INTO public.sessions(id,token_hash,user_id,active_role,active_tenant_id,expires_at) '
-                'VALUES($1,$2,$3,$4,$5,$6)',
-                uuid.uuid4(), token_hash, record['id'], role, tenant_id, expires_at)
+            async with conn.transaction():
+                current_user = await conn.fetchrow(
+                    "SELECT status,is_master FROM public.users WHERE id=$1", record['id'])
+                if not current_user or current_user['status'] != 'ACTIVE':
+                    record_failed_attempt(identifier)
+                    raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
+                is_master = current_user['is_master']
+                await conn.execute(
+                    "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+                    "active_tenant_id,expires_at) VALUES($1,$2,$3,'PENDING_CONTEXT',NULL,"
+                    "NOW()+INTERVAL '90 seconds')",
+                    uuid.uuid4(), token_hash, record['id'])
+                links = await conn.fetch(
+                    'SELECT tenant_id,role FROM public.auth_active_memberships($1::text) '
+                    'ORDER BY tenant_id,role', raw_token)
+                if is_master:
+                    role, tenant_id = 'MASTER', None
+                elif links:
+                    role, tenant_id = links[0]['role'], links[0]['tenant_id']
+                else:
+                    record_failed_attempt(identifier)
+                    raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
+                expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+                    seconds=settings.SESSION_EXPIRE_SECONDS)
+                updated = await conn.execute(
+                    "UPDATE public.sessions SET active_role=$2,active_tenant_id=$3,"
+                    "expires_at=$4 WHERE token_hash=$1 AND user_id=$5 "
+                    "AND active_role='PENDING_CONTEXT' AND revoked_at IS NULL "
+                    "AND expires_at>NOW()",
+                    token_hash, role, tenant_id, expires_at, record['id'])
+                if updated != 'UPDATE 1':
+                    raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
         finally:
             await conn.close()
     except HTTPException:
@@ -85,7 +102,7 @@ async def login(payload: LoginRequest, response: Response):
     clear_rate_limit(identifier)
     user = UserResponse(id=str(record['id']), name=record['full_name'], email=record['email'],
                         cpf='***', role=role, tenant_id=str(tenant_id) if tenant_id else None,
-                        is_master=record['is_master'])
+                        is_master=is_master)
     return SessionResponse(success=True, user=user, expires_at=expires_at,
                            message='Sessão de homologação iniciada.', token=raw_token)
 
@@ -290,8 +307,8 @@ async def switch_context(payload: ContextSwitchRequest, request: Request,
                 # suspensão entre a dependência HTTP e o row lock da troca
                 # não pode ser usada para migrar um token revogado de papel.
                 links = await conn.fetch(
-                    'SELECT tenant_id,role FROM public.auth_active_memberships($1)',
-                    actor_id)
+                    'SELECT tenant_id,role FROM public.auth_active_memberships($1::text)',
+                    bearer_token(request)))
                 if current['active_role'] == 'MASTER':
                     authorized_current = (
                         current['is_master'] and current['active_tenant_id'] is None
