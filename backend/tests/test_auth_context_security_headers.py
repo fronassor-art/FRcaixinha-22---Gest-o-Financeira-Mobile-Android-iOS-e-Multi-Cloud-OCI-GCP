@@ -23,6 +23,7 @@ def test_auth_responses_are_never_cacheable():
 def test_auth_and_invitation_routes_refuse_unauthenticated_requests():
     with TestClient(app) as client:
         for path in ("/api/v1/auth/contexts",
+                     "/api/v1/auth/sessions",
                      "/api/v1/auth/me",
                      "/api/v1/master/integration-readiness",
                      "/api/v1/invitations"):

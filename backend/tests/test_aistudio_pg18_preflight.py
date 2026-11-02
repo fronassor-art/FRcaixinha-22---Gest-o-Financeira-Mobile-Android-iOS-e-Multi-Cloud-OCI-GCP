@@ -40,6 +40,16 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT count(*) FROM public.platform_license_plans"
         ) == 0, "Catalogo Master deve ser invisivel fora de contexto"
         assert await admin.fetchval(
+            "SELECT to_regprocedure('public.auth_active_membership_contexts(uuid)') IS NOT NULL"
+        ), "Acesso único nomeado precisa existir"
+        assert not await application.fetchval(
+            "SELECT has_function_privilege(current_user,"
+            "'public.auth_active_membership_contexts(uuid)','EXECUTE')"
+        ), "App financeiro não pode consultar nomes de vínculos via Auth"
+        assert not await application.fetchval(
+            "SELECT has_table_privilege(current_user,'public.sessions','SELECT')"
+        ), "Sessões continuam isoladas do app"
+        assert await admin.fetchval(
             "SELECT count(*) FROM public.saas_payment_intents"
         ) == 0, "Nenhuma cobrança deve surgir das migrações"
         assert await admin.fetchval(

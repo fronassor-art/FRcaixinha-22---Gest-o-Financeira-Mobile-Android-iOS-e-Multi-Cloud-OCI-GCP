@@ -119,7 +119,7 @@ No mesmo repositorio AI Studio, foram integradas:
 - Livro-razao e emprestimos: telas autenticadas consultam a API; simulacao Price e somente matematica, nunca liberacao ou quitação.
 - Contribuicoes: tela existente consulta API e nao confirma Pix sem reconciliacao.
 
-O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-018 antes de rodar `apply`. Este documento nao constitui comando de execucao.
+O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-019 antes de rodar `apply`. Este documento nao constitui comando de execucao.
 
 ### Pendencias que nao devem ser apresentadas como prontas
 - Contratacao, renovacao, suspensao e cobranca SaaS; historico de preco nao equivale a receita.
@@ -160,7 +160,7 @@ Nao executar `apply`, `verify` nem bootstrap sem nova autorizacao do proprietari
 - Login pelo papel `frcaixinha_auth_role` mantem SELECT das colunas explicitamente autorizadas. O papel financeiro `frcaixinha_app_role` ve somente `id,full_name` dos membros ativos da propria caixinha no contexto TENANT_ADMIN, ou o proprio registro nos papeis validados.
 - Master tem acesso apenas ao proprio registro nessa tabela; seu inventario SaaS continua na tabela tenants, sem saldos financeiros.
 - Teste em PostgreSQL 16 descartavel exige que Admin A nao veja nomes de B, membro veja apenas o proprio nome, MASTER apenas o proprio, sem contexto zero linhas.
-- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-018`.
+- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-019`.
 
 
 ## Preparação 014 (pacote multitarefa) — executar APENAS no CI descartável
@@ -170,7 +170,7 @@ convite (entrega simulada no CI, aceite único, revogação, expiração) e a
 tabela `password_reset_tokens` para recuperação de senha com tokens
 hash SHA-256. Nenhuma função de laboratório CI foi exposta pela API.
 
-O script de migrações locais foi atualizado para exigir `001-018`,
+O script de migrações locais foi atualizado para exigir `001-019`,
 mas **o usuário pediu expressamente não executar migrações**.
 Não usar `apply`; somente `check` para auditoria de leitura.
 Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
@@ -229,3 +229,19 @@ vínculo e bloqueio da sessão. A API define headers no-store/no-referrer.
 
 **Sem novas migrações. Não executar `apply`.** Relatório:
 `docs/PACOTE_ACESSO_UNICO_SESSOES_AI_STUDIO_2026-11-01.md`.
+
+
+## Pacote 019 — nomes de caixinha e segurança de sessões (somente código)
+
+A migration `019_named_contexts_and_session_inventory.sql` adiciona
+consulta de nomes autorizados ao serviço de autenticação e leitura mínima
+de data de sessão. Nenhum acesso amplo à tabela de tenants foi concedido.
+Novos endpoints `GET /auth/sessions` e `POST /auth/sessions/{id}/revoke`
+operam somente sobre a própria pessoa. O frontend oferece inventário de
+sessões e mostra nomes das caixinhas autorizadas. Licenças SaaS exibem
+status efetivo de expiração; suspensão e retomada continuam **CI-only**.
+
+**Atenção: não executar a migração no Termux.**
+Apenas `git fetch`, `git merge --ff-only` e `check` de leitura são
+permitidos até autorização específica. Detalhes:
+`docs/PACOTE_EXPANDIDO_ACESSO_SESSOES_LICENCAS_AI_STUDIO_2026-11-01.md`.

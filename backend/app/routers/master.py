@@ -188,7 +188,9 @@ async def master_saas_payment_status(
         "ORDER BY created_at DESC,id DESC LIMIT 200"
     )
     entitlements=await conn.fetch(
-        "SELECT id,tenant_id,plan_tier,status,valid_from,valid_until "
+        "SELECT id,tenant_id,plan_tier,status,valid_from,valid_until,"
+        "CASE WHEN status='ACTIVE' AND valid_until<=NOW() THEN 'EXPIRED' "
+        "ELSE status END AS effective_status "
         "FROM public.saas_license_entitlements "
         "ORDER BY valid_until DESC,id DESC LIMIT 200"
     )
@@ -203,6 +205,7 @@ async def master_saas_payment_status(
         "licenses":[
             {"id":str(e["id"]),"tenant_id":str(e["tenant_id"]),
              "plan_tier":e["plan_tier"],"status":e["status"],
+             "effective_status":e["effective_status"],
              "valid_from":e["valid_from"].isoformat(),
              "valid_until":e["valid_until"].isoformat()}
             for e in entitlements

@@ -20,7 +20,8 @@ from app.invite_registration_ci import (
 from app.saas_billing_ci import (
     stage_saas_payment_ci,attach_mp_payment_identifier_ci,
     reconcile_approved_saas_payment_ci,expire_saas_entitlement_ci,
-    revoke_after_verified_refund_ci,record_verified_saas_webhook_ci
+    revoke_after_verified_refund_ci,record_verified_saas_webhook_ci,
+    suspend_saas_entitlement_ci,resume_saas_entitlement_ci
 )
 
 
@@ -306,3 +307,87 @@ def test_verified_webhook_deduplicates_without_activating_a_license(base_ci):
     assert db.execute(
         "SELECT status FROM public.saas_payment_intents WHERE id=%s",(intent,),
     ).fetchone()[0]=="PENDING"
+
+
+
+def test_saas_master_suspension_resume_and_refund_are_audited(base_ci):
+    db,u=base_ci
+    prep=_billing_fixture(db,u)
+    intent=stage_saas_payment_ci(db,preparation_id=prep,
+        platform_collector_id="12345",live_mode=False)
+    assert attach_mp_payment_identifier_ci(db,intent_id=intent,
+        provider_payment_id="654321")
+    start=datetime(2026,11,1,20,tzinfo=timezone.utc)
+    license_id=reconcile_approved_saas_payment_ci(
+        db,intent_id=intent,authoritative_payment=_payment(intent),now=start)
+    assert license_id
+    with pytest.raises(LifecycleDenied):
+        suspend_saas_entitlement_ci(db,entitlement_id=license_id,
+            master_user_id=u['admin'],reason="Teste de seguranca sintetico",
+            now=start+timedelta(days=1))
+    with pytest.raises(LifecycleDenied):
+        suspend_saas_entitlement_ci(db,entitlement_id=license_id,
+            master_user_id=u['master'],reason="curto",
+            now=start+timedelta(days=1))
+    assert suspend_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],reason="Suspensao de auditoria do SaaS",
+        now=start+timedelta(days=1))
+    assert not suspend_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],reason="Repeticao nao permitida em CI",
+        now=start+timedelta(days=1))
+    assert db.execute(
+        "SELECT status FROM public.saas_license_entitlements WHERE id=%s",
+        (license_id,)).fetchone()[0]=="SUSPENDED"
+    assert not resume_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],
+        authoritative_payment=_payment(intent,status="pending"),
+        now=start+timedelta(days=2))
+    assert resume_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],authoritative_payment=_payment(intent),
+        now=start+timedelta(days=2))
+    assert not resume_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],authoritative_payment=_payment(intent),
+        now=start+timedelta(days=2))
+    saved=db.execute(
+        "SELECT status,valid_from,valid_until,suspended_at "
+        "FROM public.saas_license_entitlements WHERE id=%s",(license_id,)
+    ).fetchone()
+    assert saved==("ACTIVE",start,
+        datetime(2026,12,1,20,tzinfo=timezone.utc),None)
+    assert suspend_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],reason="Suspensao antes do estorno total",
+        now=start+timedelta(days=3))
+    assert revoke_after_verified_refund_ci(
+        db,intent_id=intent,authoritative_payment=_payment(
+            intent,status="refunded",refunded="89.90"))
+    assert db.execute(
+        "SELECT status FROM public.saas_license_entitlements WHERE id=%s",
+        (license_id,)).fetchone()[0]=="REVOKED"
+    assert not resume_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],authoritative_payment=_payment(intent),
+        now=start+timedelta(days=4))
+    assert db.execute(
+        "SELECT count(*) FROM public.audit_events WHERE object_id=%s "
+        "AND action IN ('CI_SAAS_SUSPENDED','CI_SAAS_RESUMED','CI_SAAS_REFUND_REVOKED')",
+        (str(license_id),)).fetchone()[0]>=3
+
+
+def test_suspended_entitlement_expires_without_grace_period(base_ci):
+    db,u=base_ci
+    prep=_billing_fixture(db,u)
+    intent=stage_saas_payment_ci(db,preparation_id=prep,
+        platform_collector_id="12345",live_mode=False)
+    attach_mp_payment_identifier_ci(db,intent_id=intent,provider_payment_id="654321")
+    start=datetime(2026,11,1,20,tzinfo=timezone.utc)
+    license_id=reconcile_approved_saas_payment_ci(
+        db,intent_id=intent,authoritative_payment=_payment(intent),now=start)
+    assert suspend_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],reason="Suspensao por teste de vencimento",
+        now=start+timedelta(days=2))
+    expires=datetime(2026,12,1,20,tzinfo=timezone.utc)
+    assert not resume_saas_entitlement_ci(db,entitlement_id=license_id,
+        master_user_id=u['master'],authoritative_payment=_payment(intent),now=expires)
+    assert expire_saas_entitlement_ci(db,entitlement_id=license_id,now=expires)
+    assert db.execute(
+        "SELECT status FROM public.saas_license_entitlements WHERE id=%s",
+        (license_id,)).fetchone()[0]=="EXPIRED"

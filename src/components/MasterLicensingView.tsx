@@ -89,7 +89,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
   type SaasStatus = { key: string; status: 'loading' | 'ready' | 'error';
     payments: Array<{id:string;status:string;expected_amount_cents:number}>;
-    licenses: Array<{id:string;plan_tier:string;status:string;valid_until:string}> };
+    licenses: Array<{id:string;plan_tier:string;status:string;effective_status:string;valid_until:string}> };
   const saasScope = [state.currentUserId,currentRole,state.currentTenantId].join(':');
   const [billing, setBilling] = useState<SaasStatus>({
     key:'',status:'loading',payments:[],licenses:[],
@@ -186,10 +186,10 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
         {currentBilling.status==='ready' ? (
           <p className="mt-1">
             {currentBilling.payments.length} cobrança(s) registrada(s),
-            {' '}{currentBilling.licenses.filter(l => l.status==='ACTIVE').length} licença(s) ativa(s).
+            {' '}{currentBilling.licenses.filter(l => l.effective_status==='ACTIVE').length} licença(s) ativa(s).
             {currentBilling.licenses.map(l => (
               <span key={l.id} className="block">
-                {l.plan_tier} • {l.status} • validade {l.valid_until}
+                {l.plan_tier} • {l.effective_status} • validade {l.valid_until}
               </span>
             ))}
           </p>
@@ -269,7 +269,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
         {currentBilling.status==='ready' ? (
           <p className="mt-1 text-slate-700">
             {currentBilling.payments.length} cobrança(s) persistida(s) e
-            {' '}{currentBilling.licenses.filter(l => l.status==='ACTIVE').length} licença(s) ativa(s).
+            {' '}{currentBilling.licenses.filter(l => l.effective_status==='ACTIVE').length} licença(s) ativa(s).
             Nenhum registro financeiro é inferido a partir de dados locais de demonstração.
           </p>
         ) : <p className="mt-1 text-amber-950">

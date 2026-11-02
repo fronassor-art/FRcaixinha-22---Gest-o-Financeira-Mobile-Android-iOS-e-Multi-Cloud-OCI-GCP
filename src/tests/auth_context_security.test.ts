@@ -4,11 +4,13 @@ import { authService, parseServerContexts, contextLabel } from '../services/auth
 const A='123e4567-e89b-42d3-a456-426614174000';
 const B='423e4567-e89b-42d3-a456-426614174001';
 const USER='723e4567-e89b-42d3-a456-426614174002';
+const SID1='823e4567-e89b-42d3-a456-426614174003';
+const SID2='923e4567-e89b-42d3-a456-426614174004';
 const rawContexts=[
-  {role:'MASTER',tenant_id:null},
-  {role:'TENANT_ADMIN',tenant_id:A},
-  {role:'TENANT_MEMBER',tenant_id:A},
-  {role:'TENANT_MEMBER',tenant_id:B},
+  {role:'MASTER',tenant_id:null,tenant_name:null},
+  {role:'TENANT_ADMIN',tenant_id:A,tenant_name:'Caixinha Pará'},
+  {role:'TENANT_MEMBER',tenant_id:A,tenant_name:'Caixinha Pará'},
+  {role:'TENANT_MEMBER',tenant_id:B,tenant_name:'Caixinha Maranhão'},
 ];
 
 const fakeWindow={
@@ -32,10 +34,12 @@ const initialUser={id:USER,name:'Pessoa CI',email:'ci@example.com',
 
 async function main(){
   assert.equal(parseServerContexts(rawContexts).length,4);
-  assert.match(contextLabel(rawContexts[3] as any),/Membro.*423E4567/);
+  assert.match(contextLabel(rawContexts[3] as any),/Membro.*Caixinha Maranhão/);
   assert.equal(contextLabel(rawContexts[0] as any),'Administrador Master — Plataforma');
   for (const invalid of [
     [{role:'MASTER',tenant_id:A}],
+    [{role:'MASTER',tenant_id:null,tenant_name:'Caixinha proibida'}],
+    [{role:'TENANT_MEMBER',tenant_id:A,tenant_name:''}],
     [{role:'TENANT_MEMBER',tenant_id:null}],
     [{role:'TENANT_MEMBER',tenant_id:'nao-uuid'}],
     [{role:'OUTRO',tenant_id:A}],
@@ -49,6 +53,7 @@ async function main(){
   let routeCalls:string[]=[];
   let pendingMe:((v:Response)=>void)|null=null;
   let pendingContext:((v:Response)=>void)|null=null;
+  let revokedIds=new Set<string>();
   globalThis.fetch=(async (path:any, opts?:RequestInit) => {
     const route=String(path);
     routeCalls.push(route);
@@ -57,6 +62,22 @@ async function main(){
       expires_at:new Date(Date.now()+900_000).toISOString(),
     });
     if (route.endsWith('/contexts')) return response(rawContexts);
+    if (route.endsWith('/sessions'))return response({
+      source:'POSTGRESQL_AUTH',
+      sessions:[SID1,SID2].filter(id=>!revokedIds.has(id)).map(id=>({
+        id,role:id===SID1?'TENANT_MEMBER':'TENANT_ADMIN',
+        tenant_id:id===SID1?A:B,
+        created_at:new Date(Date.now()-30_000).toISOString(),
+        expires_at:new Date(Date.now()+900_000).toISOString(),
+        current:id===SID1,
+      })),
+    });
+    if (route.endsWith('/revoke')) {
+      const sid=route.split('/').at(-2);
+      if(!sid || (sid!==SID1 && sid!==SID2))return response({detail:'Not found'},404);
+      revokedIds.add(sid);
+      return response({success:true,session_id:sid,current_revoked:sid===SID1});
+    }
     if (route.endsWith('/switch-context')){
       const payload=JSON.parse(String(opts?.body));
       responseContext=payload.target_role;
@@ -80,6 +101,10 @@ async function main(){
     assert(authService.isAuthenticated());
     const expiry=authService.getExpiresAt()!;
     assert.equal((await authService.listContexts()).length,4);
+    assert.equal((await authService.listSessions()).length,2);
+    await assert.rejects(authService.revokeSession('not-an-id'),/inválido/);
+    assert.equal(await authService.revokeSession(SID2),false);
+    assert.equal((await authService.listSessions()).length,1);
     assert.equal((await authService.switchContext({
       role:'TENANT_MEMBER',tenant_id:B,
     })).tenantId,B);
@@ -149,6 +174,9 @@ async function main(){
     await slowLogout;
     assert.equal(authService.getUser()?.id,USER,
       'Resposta do logout anterior não pode apagar uma sessão nova');
+    assert.equal(await authService.revokeSession(SID1),true,
+      'Revogação da sessão atual precisa encerrar o login local');
+    assert.equal(authService.getUser(),null);
     globalThis.fetch=regularMockFetch;
     console.log('PASS: identidade única, troca de perfil, recuperação, sessão e concorrência');
   } finally {

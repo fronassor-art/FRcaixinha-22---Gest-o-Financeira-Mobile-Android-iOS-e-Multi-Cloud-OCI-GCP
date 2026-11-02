@@ -1,0 +1,127 @@
+"""Acesso único nomeado e sessões: apenas PostgreSQL 16 efêmero de CI."""
+import os
+import uuid
+from urllib.parse import urlparse
+
+import asyncpg
+import pytest
+
+
+def _ci_url(name: str) -> str:
+    if os.getenv("FRCAIXINHA_CI_ISOLATED") != "1":
+        pytest.skip("Somente banco descartável de GitHub Actions")
+    url = os.environ[name]
+    parsed = urlparse(url)
+    if (parsed.hostname not in ("localhost","127.0.0.1") or parsed.port != 5432
+            or parsed.path != "/frcaixinha_ci"):
+        raise RuntimeError("Conexão fora do banco isolado")
+    return url
+
+
+@pytest.mark.asyncio
+async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.config import settings
+    from app.database import close_db_pool
+    from app.security import hash_token
+
+    admin = await asyncpg.connect(_ci_url("CI_ADMIN_DATABASE_URL"))
+    auth = await asyncpg.connect(_ci_url("CI_AUTH_DATABASE_URL"))
+    app_db = await asyncpg.connect(_ci_url("DATABASE_URL"))
+    actor, outsider = uuid.uuid4(), uuid.uuid4()
+    a,b,c = uuid.uuid4(),uuid.uuid4(),uuid.uuid4()
+    tokens = ["ci-session-"+uuid.uuid4().hex for _ in range(3)]
+    ids = [uuid.uuid4() for _ in range(3)]
+    monkeypatch.setattr(settings, "DATABASE_URL", _ci_url("DATABASE_URL"))
+    monkeypatch.setenv("AUTH_DATABASE_URL", _ci_url("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
+    monkeypatch.setenv("ENVIRONMENT", "homologation")
+    try:
+        assert not await auth.fetchval(
+            "SELECT has_table_privilege(current_user,'public.tenants','SELECT')")
+        assert not await app_db.fetchval(
+            "SELECT has_function_privilege(current_user,"
+            "'public.auth_active_membership_contexts(uuid)','EXECUTE')")
+        for user,name in ((actor,"Pessoa única"),(outsider,"Pessoa distinta")):
+            await admin.execute(
+                "INSERT INTO public.users(id,email,full_name,cpf,phone)"
+                "VALUES($1,$2,$3,$4,'00000000000')",
+                user,f"{user}@example.com",name,user.hex[:14],
+            )
+        for tenant,name in ((a,"Caixinha Pará"),(b,"Caixinha Maranhão"),(c,"Caixinha Privada")):
+            await admin.execute(
+                "INSERT INTO public.tenants(id,display_name,contracting_party_id,admin_user_id)"
+                "VALUES($1,$2,$3,$4)",tenant,name,str(uuid.uuid4()),outsider,
+            )
+        for tenant,user,role in (
+            (a,actor,"TENANT_MEMBER"),(b,actor,"TENANT_ADMIN"),
+            (b,outsider,"TENANT_MEMBER"),(c,outsider,"TENANT_ADMIN"),
+        ):
+            await admin.execute(
+                "INSERT INTO public.memberships(tenant_id,user_id,role)"
+                "VALUES($1,$2,$3)",tenant,user,role,
+            )
+        for sid,raw,user,role,tenant in (
+            (ids[0],tokens[0],actor,"TENANT_MEMBER",a),
+            (ids[1],tokens[1],actor,"TENANT_ADMIN",b),
+            (ids[2],tokens[2],outsider,"TENANT_ADMIN",c),
+        ):
+            await admin.execute(
+                "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+                "active_tenant_id,expires_at) VALUES($1,$2,$3,$4,$5,"
+                "now()+interval '20 minutes')",
+                sid,hash_token(raw),user,role,tenant,
+            )
+        headers = {"Authorization":"Bearer "+tokens[0]}
+        async with AsyncClient(transport=ASGITransport(app=app),
+                               base_url="http://ci") as client:
+            contexts = await client.get("/api/v1/auth/contexts",headers=headers)
+            assert contexts.status_code == 200,contexts.text
+            assert {
+                (row["role"],row["tenant_id"],row["tenant_name"])
+                for row in contexts.json()
+            } == {
+                ("TENANT_MEMBER",str(a),"Caixinha Pará"),
+                ("TENANT_ADMIN",str(b),"Caixinha Maranhão"),
+            }
+            assert "Caixinha Privada" not in contexts.text
+            assert not await auth.fetchval(
+                "SELECT has_table_privilege(current_user,'public.tenants','SELECT')")
+
+            all_sessions = await client.get("/api/v1/auth/sessions",headers=headers)
+            assert all_sessions.status_code == 200,all_sessions.text
+            body=all_sessions.json()
+            assert body["source"] == "POSTGRESQL_AUTH"
+            assert {s["id"] for s in body["sessions"]} == {str(ids[0]),str(ids[1])}
+            assert sum(s["current"] for s in body["sessions"]) == 1
+            assert "token_hash" not in all_sessions.text
+            assert "ip_address" not in all_sessions.text
+
+            foreign = await client.post(
+                f"/api/v1/auth/sessions/{ids[2]}/revoke",headers=headers)
+            assert foreign.status_code == 404
+            assert await auth.fetchval(
+                "SELECT revoked_at IS NULL FROM public.sessions WHERE id=$1",ids[2])
+
+            other = await client.post(
+                f"/api/v1/auth/sessions/{ids[1]}/revoke",headers=headers)
+            assert other.status_code == 200 and not other.json()["current_revoked"]
+            assert (await client.get("/api/v1/auth/me",
+                headers={"Authorization":"Bearer "+tokens[1]})).status_code==401
+            assert (await client.get("/api/v1/auth/me",headers=headers)).status_code==200
+
+            current=await client.post(
+                f"/api/v1/auth/sessions/{ids[0]}/revoke",headers=headers)
+            assert current.status_code==200 and current.json()["current_revoked"]
+            assert (await client.get("/api/v1/auth/me",headers=headers)).status_code==401
+            assert (await client.get("/api/v1/auth/sessions",headers=headers)).status_code==401
+    finally:
+        await close_db_pool()
+        await auth.close()
+        await app_db.close()
+        await admin.execute(
+            "DELETE FROM public.tenants WHERE id=ANY($1::uuid[])",[a,b,c])
+        await admin.execute(
+            "DELETE FROM public.users WHERE id=ANY($1::uuid[])",[actor,outsider])
+        await admin.close()

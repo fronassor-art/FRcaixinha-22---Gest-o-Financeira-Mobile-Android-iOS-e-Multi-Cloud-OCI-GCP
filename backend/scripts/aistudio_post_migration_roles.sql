@@ -24,6 +24,18 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
   END IF;
+  IF to_regprocedure('public.auth_active_membership_contexts(uuid)') IS NULL
+    OR NOT has_function_privilege('frc_ai_auth',
+       'public.auth_active_membership_contexts(uuid)','EXECUTE')
+    OR has_function_privilege('frcaixinha_app_role',
+       'public.auth_active_membership_contexts(uuid)','EXECUTE')
+    OR has_table_privilege('frc_ai_auth','public.tenants','SELECT')
+    OR has_table_privilege('frc_ai_auth','public.memberships','SELECT')
+    OR has_table_privilege('frc_ai_app','public.sessions','SELECT')
+    OR NOT has_column_privilege('frc_ai_auth','public.sessions','created_at','SELECT')
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: acesso unico ou sessoes com privilegios indevidos';
+  END IF;
   IF to_regclass('public.saas_payment_intents') IS NULL
     OR to_regclass('public.saas_license_entitlements') IS NULL
     OR to_regclass('public.saas_provider_webhook_receipts') IS NULL

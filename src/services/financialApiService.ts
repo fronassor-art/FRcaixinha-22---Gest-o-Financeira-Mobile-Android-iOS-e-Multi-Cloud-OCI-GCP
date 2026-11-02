@@ -178,7 +178,7 @@ class FinancialApiService {
     payments: Array<{id:string;tenant_id:string;status:string;
       expected_amount_cents:number;currency:string;created_at:string}>;
     licenses: Array<{id:string;tenant_id:string;plan_tier:string;
-      status:string;valid_from:string;valid_until:string}>;
+      status:string;effective_status:string;valid_from:string;valid_until:string}>;
   }> {
     return this.request('/api/v1/master/saas-payment-status');
   }

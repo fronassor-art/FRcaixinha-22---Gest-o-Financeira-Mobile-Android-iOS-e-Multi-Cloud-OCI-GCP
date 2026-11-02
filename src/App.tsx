@@ -46,6 +46,7 @@ import { MobileInstallModal } from './components/MobileInstallModal';
 import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
+import { SessionSecurityPanel } from './components/SessionSecurityPanel';
 import { authService, AuthenticatedUser, AuthContext, contextLabel } from './services/authService';
 
 export default function App() {
@@ -56,6 +57,7 @@ export default function App() {
   const [contexts, setContexts] = useState<AuthContext[]>([]);
   const [changingContext, setChangingContext] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   // Modais globais
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -108,6 +110,7 @@ export default function App() {
       setAuthenticatedUser(user);
       if (!user) {
         setContexts([]);
+        setSecurityOpen(false);
         appStore.clearAuthenticatedContext();
       }
     });
@@ -143,6 +146,7 @@ export default function App() {
     appStore.clearAuthenticatedContext();
     setContexts([]);
     setActiveTab('DASHBOARD');
+    setSecurityOpen(false);
   };
 
   const handleContextSwitch = async (context: AuthContext) => {
@@ -281,6 +285,15 @@ export default function App() {
         </div>
       )}
       {contextError && <div role="alert" className="bg-rose-50 p-3 text-sm text-rose-900">{contextError}</div>}
+      <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+        <button type="button" onClick={() => setSecurityOpen(open => !open)}
+          aria-expanded={securityOpen}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">
+          {securityOpen ? 'Ocultar segurança da conta' : 'Segurança da conta e sessões'}
+        </button>
+      </div>
+      {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
+
       <div role="note" className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-xs font-semibold text-amber-950">
         HOMOLOGAÇÃO — painéis, rifas, bolões, nuvem e valores seed são demonstrativos. Contribuições consultam a API; nenhum Pix ou sorteio real está habilitado.
       </div>

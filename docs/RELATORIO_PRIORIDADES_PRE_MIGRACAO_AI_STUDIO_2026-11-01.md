@@ -220,3 +220,16 @@ respostas de API incluem no-store/no-referrer. Testes no CI e
 documentação em `docs/PACOTE_ACESSO_UNICO_SESSOES_AI_STUDIO_2026-11-01.md`.
 Ainda não foi aplicada migração local e os serviços reais de convites,
 e-mails e cobranças permanecem desabilitados.
+
+
+## 15. Pacote integrado de acesso único, inventário de sessões e SaaS
+
+A migração 019 prepara a função de nomes das caixinhas por vínculo ativo
+do usuário, sem conceder leitura ampla de tenants ao papel AUTH.
+API lista e revoga apenas sessões próprias. Interface permite consultar
+acessos, encerrar a sessão e selecionar a caixinha por nome real;
+mantém uma única identidade com papéis distintos. O SaaS retorna
+status efetivo com expiração imediata e testes CI de suspensão, retomada,
+estorno e auditoria. Não habilita pagamento, convite nem recuperação
+reais. Consultar
+`docs/PACOTE_EXPANDIDO_ACESSO_SESSOES_LICENCAS_AI_STUDIO_2026-11-01.md`.

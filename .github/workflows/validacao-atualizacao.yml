@@ -151,6 +151,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/016_saas_preparations_no_billing.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/017_saas_payment_activation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/018_invite_email_verification.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/019_named_contexts_and_session_inventory.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -182,6 +183,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_account_lifecycle_ci.py
           python -m pytest -q backend/tests/test_aistudio_governance_ci.py
           python -m pytest -q backend/tests/test_aistudio_live_engines_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_named_sessions_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -247,7 +249,7 @@ jobs:
           python-version: '3.11'
       - name: Dependencias Python
         run: python -m pip install -r backend/requirements.txt
-      - name: Migrar 001-018 em UMA transacao no PostgreSQL 18 descartavel
+      - name: Migrar 001-019 em UMA transacao no PostgreSQL 18 descartavel
         env:
           PGHOST: 127.0.0.1
           PGPORT: '5432'
@@ -257,7 +259,7 @@ jobs:
         run: |
           set -euo pipefail
           scripts=()
-          for i in $(seq 1 18); do
+          for i in $(seq 1 19); do
             printf -v n '%03d' "$i"
             files=(backend/migrations/"$n"_*.sql)
             test "${#files[@]}" -eq 1

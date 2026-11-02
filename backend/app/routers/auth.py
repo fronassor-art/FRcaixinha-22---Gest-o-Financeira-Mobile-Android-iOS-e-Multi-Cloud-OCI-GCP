@@ -160,15 +160,84 @@ async def list_contexts(session: AuthenticatedSession = Depends(get_current_sess
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
             links = await conn.fetch(
-                'SELECT tenant_id,role FROM public.auth_active_memberships($1) ORDER BY tenant_id,role',
+                'SELECT tenant_id,role,tenant_name '
+                'FROM public.auth_active_membership_contexts($1)',
                 uuid.UUID(session.user_id))
         finally:
             await conn.close()
     except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
         raise HTTPException(status_code=503, detail='Vínculos indisponíveis.')
-    contexts = ([{'role': 'MASTER', 'tenant_id': None}] if session.is_master else [])
-    contexts.extend({'role': row['role'], 'tenant_id': str(row['tenant_id'])} for row in links)
+    contexts = ([{'role': 'MASTER', 'tenant_id': None,
+                  'tenant_name': None}] if session.is_master else [])
+    contexts.extend(
+        {'role': row['role'], 'tenant_id': str(row['tenant_id']),
+         'tenant_name': row['tenant_name']} for row in links
+    )
     return contexts
+
+
+@router.get("/sessions")
+async def list_my_sessions(
+    request: Request,
+    session: AuthenticatedSession = Depends(get_current_session),
+):
+    """Lista sessões da identidade autenticada sem expor hash/token/IP/UA."""
+    try:
+        conn = await asyncpg.connect(auth_database_url(), timeout=5)
+        try:
+            rows = await conn.fetch(
+                "SELECT id,active_role,active_tenant_id,created_at,expires_at,"
+                "(token_hash=$2) AS is_current "
+                "FROM public.sessions WHERE user_id=$1 "
+                "AND revoked_at IS NULL AND expires_at>NOW() "
+                "ORDER BY created_at DESC,id DESC LIMIT 100",
+                uuid.UUID(session.user_id),hash_token(bearer_token(request)),
+            )
+        finally:
+            await conn.close()
+    except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
+        raise HTTPException(status_code=503, detail='Sessões indisponíveis.')
+    return {
+        'source': 'POSTGRESQL_AUTH',
+        'sessions': [
+            {'id': str(r['id']), 'role': r['active_role'],
+             'tenant_id': str(r['active_tenant_id']) if r['active_tenant_id'] else None,
+             'created_at': r['created_at'].isoformat(),
+             'expires_at': r['expires_at'].isoformat(),
+             'current': r['is_current']}
+            for r in rows
+        ]
+    }
+
+
+@router.post("/sessions/{session_id}/revoke")
+async def revoke_my_session(
+    session_id: uuid.UUID,
+    request: Request,
+    session: AuthenticatedSession = Depends(get_current_session),
+):
+    """Revoga somente sessão própria; não aceita user_id fornecido pelo cliente."""
+    try:
+        conn = await asyncpg.connect(auth_database_url(), timeout=5)
+        try:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "UPDATE public.sessions SET revoked_at=NOW() "
+                    "WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL "
+                    "AND expires_at>NOW() RETURNING id,token_hash",
+                    session_id, uuid.UUID(session.user_id),
+                )
+        finally:
+            await conn.close()
+    except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
+        raise HTTPException(status_code=503, detail='Revogação indisponível.')
+    if not row:
+        raise HTTPException(status_code=404, detail='Sessão não encontrada.')
+    return {
+        'success': True,
+        'session_id': str(row['id']),
+        'current_revoked': row['token_hash'] == hash_token(bearer_token(request)),
+    }
 
 
 @router.post("/forgot-password")

@@ -15,6 +15,16 @@ export interface AuthenticatedUser {
 export interface AuthContext {
   role: AuthenticatedUser['role'];
   tenant_id: string | null;
+  tenant_name?: string | null;
+}
+
+export interface UserSessionInfo {
+  id: string;
+  role: AuthenticatedUser['role'];
+  tenant_id: string | null;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
 }
 
 /** O servidor decide qual vínculo existe; nunca confiar no texto de um <select>. */
@@ -26,19 +36,30 @@ export function parseServerContexts(value: unknown): AuthContext[] {
     if (!item || typeof item !== 'object') throw new Error('Vínculo inválido.');
     const role = (item as Record<string, unknown>).role;
     const tenantId = (item as Record<string, unknown>).tenant_id;
+    const tenantName = (item as Record<string, unknown>).tenant_name;
     if (!['MASTER', 'TENANT_ADMIN', 'TENANT_MEMBER'].includes(String(role))) {
       throw new Error('Papel inválido recebido do servidor.');
     }
     if (role === 'MASTER') {
-      if (tenantId !== null) throw new Error('O Master não pertence a uma caixinha por este perfil.');
+      if (tenantId !== null || (tenantName !== undefined && tenantName !== null))
+        throw new Error('O Master não pertence a uma caixinha por este perfil.');
     } else if (typeof tenantId !== 'string' ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) {
       throw new Error('Identificador da caixinha inválido.');
     }
+    if (role !== 'MASTER' && tenantName !== undefined && tenantName !== null &&
+        (typeof tenantName !== 'string' || tenantName.trim().length < 1 ||
+         tenantName.length > 255 || /[\u0000-\u001f\u007f]/.test(tenantName))) {
+      throw new Error('Nome da caixinha inválido.');
+    }
     const key = String(role) + ':' + String(tenantId ?? '');
     if (seen.has(key)) throw new Error('Vínculo duplicado na resposta.');
     seen.add(key);
-    result.push({ role: role as AuthenticatedUser['role'], tenant_id: tenantId as string | null });
+    result.push({
+      role: role as AuthenticatedUser['role'],
+      tenant_id: tenantId as string | null,
+      tenant_name: typeof tenantName === 'string' ? tenantName.trim() : null,
+    });
   }
   return result;
 }
@@ -46,7 +67,9 @@ export function parseServerContexts(value: unknown): AuthContext[] {
 export function contextLabel(context: AuthContext): string {
   if (context.role === 'MASTER') return 'Administrador Master — Plataforma';
   const label = context.role === 'TENANT_ADMIN' ? 'Administrador' : 'Membro';
-  return label + ' — Caixinha ' + (context.tenant_id || '').slice(0, 8).toUpperCase();
+  const tenant = context.tenant_name?.trim() ||
+    ('Caixinha ' + (context.tenant_id || '').slice(0, 8).toUpperCase());
+  return label + ' — ' + tenant;
 }
 
 export interface AuthStatusResponse {
@@ -287,6 +310,52 @@ class AuthService {
     const raw = await res.json();
     if (generation !== this.sessionGeneration || token !== this.token) return [];
     return parseServerContexts(raw);
+  }
+
+  public async listSessions(): Promise<UserSessionInfo[]> {
+    if (!this.isAuthenticated()) throw new Error('Sessão expirada.');
+    const token=this.token, generation=this.sessionGeneration;
+    const result=await fetch(getApiBaseUrl()+'/api/v1/auth/sessions',{
+      headers:{'Authorization':'Bearer '+token,'Cache-Control':'no-store'},
+    });
+    if (generation!==this.sessionGeneration || token!==this.token) return [];
+    if(result.status===401){this.invalidateSession();throw new Error('Sessão expirada.');}
+    if(!result.ok)throw new Error('Sessões indisponíveis.');
+    const data=await result.json();
+    if (generation!==this.sessionGeneration || token!==this.token) return [];
+    if(data?.source!=='POSTGRESQL_AUTH'||!Array.isArray(data.sessions)||
+       data.sessions.length>100)throw new Error('Lista de sessões inválida.');
+    return data.sessions.map((item:any)=>{
+      if(typeof item?.id!=='string'||!(/^[0-9a-f-]{36}$/i.test(item.id))||
+         !['MASTER','TENANT_ADMIN','TENANT_MEMBER'].includes(item.role)||
+         !Number.isFinite(Date.parse(item.created_at))||
+         !Number.isFinite(Date.parse(item.expires_at))||
+         typeof item.current!=='boolean')throw new Error('Sessão inválida.');
+      return {
+        id:item.id,role:item.role,tenant_id:item.tenant_id??null,
+        created_at:item.created_at,expires_at:item.expires_at,current:item.current,
+      } as UserSessionInfo;
+    });
+  }
+
+  public async revokeSession(sessionId: string): Promise<boolean> {
+    if (!this.isAuthenticated())throw new Error('Sessão expirada.');
+    if(!/^[0-9a-f-]{36}$/i.test(sessionId))throw new Error('ID de sessão inválido.');
+    const token=this.token,generation=this.sessionGeneration;
+    const result=await fetch(
+      getApiBaseUrl()+'/api/v1/auth/sessions/'+encodeURIComponent(sessionId)+'/revoke',{
+        method:'POST',headers:{'Authorization':'Bearer '+token,
+          'X-Requested-With':'XMLHttpRequest','Cache-Control':'no-store'},
+      });
+    if(generation!==this.sessionGeneration || token!==this.token)
+      throw new Error('Sessão alterada durante revogação.');
+    if(result.status===401){this.invalidateSession();throw new Error('Sessão expirada.');}
+    if(!result.ok)throw new Error('Não foi possível revogar a sessão.');
+    const data=await result.json();
+    if(data?.success!==true || data?.session_id!==sessionId ||
+       typeof data?.current_revoked!=='boolean')throw new Error('Resposta inválida.');
+    if(data.current_revoked)this.invalidateSession();
+    return data.current_revoked;
   }
 
   public async switchContext(context: AuthContext): Promise<AuthenticatedUser> {

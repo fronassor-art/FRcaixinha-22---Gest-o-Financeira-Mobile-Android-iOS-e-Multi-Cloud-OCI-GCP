@@ -24,7 +24,7 @@ class FakeSaasConnection:
                          expected_amount_cents=8990,currency="BRL",created_at=NOW)]
         if "saas_license_entitlements" in sql:
             return [dict(id=uuid4(),tenant_id=UUID(A),plan_tier="ESSENCIAL",
-                         status="ACTIVE",valid_from=NOW,valid_until=NOW)]
+                         status="ACTIVE",effective_status="EXPIRED",valid_from=NOW,valid_until=NOW)]
         raise AssertionError("Unexpected query")
 
 
@@ -48,6 +48,9 @@ def test_master_reads_only_license_status_not_tenant_ledger(db):
     assert r.status_code==200,r.text
     assert r.json()["payments"][0]["expected_amount_cents"]==8990
     assert r.json()["licenses"][0]["status"]=="ACTIVE"
+    assert r.json()["licenses"][0]["effective_status"]=="EXPIRED"
+    assert any("valid_until<=NOW()" in sql and "effective_status" in sql
+               for sql,_ in db.queries if "saas_license_entitlements" in sql)
     assert ready.status_code==200
     assert ready.json()["saas_platform_payment"]=="BLOCKED_BY_GOVERNANCE"
     assert "access_token" not in ready.text
@@ -73,6 +76,7 @@ def test_admin_status_scoped_to_tenant_and_member_denied(db):
     assert allowed.status_code==200,allowed.text
     assert cross.status_code==403
     assert allowed.json()["tenant_id"]==A
+    assert allowed.json()["licenses"][0]["effective_status"]=="EXPIRED"
     assert len(db.queries)==2
     assert all(q[1]==(UUID(A),) for q in db.queries)
     app.dependency_overrides[get_current_session]=lambda:actor(MEM,"TENANT_MEMBER",A)
