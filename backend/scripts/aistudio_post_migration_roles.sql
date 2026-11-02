@@ -22,7 +22,7 @@ BEGIN
   END IF;
   IF has_column_privilege('frcaixinha_app_role','public.users','cpf','SELECT')
     OR has_column_privilege('frcaixinha_app_role','public.users','email','SELECT')
-    OR has_column_privilege('frc_ai_app','public.credentials','SELECT')
+    OR has_table_privilege('frc_ai_app','public.credentials','SELECT')
   THEN
     RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
   END IF;
