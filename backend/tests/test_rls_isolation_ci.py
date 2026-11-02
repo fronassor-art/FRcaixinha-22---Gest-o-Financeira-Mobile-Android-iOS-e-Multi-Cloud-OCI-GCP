@@ -152,6 +152,7 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
     conn, ids = isolated_rows
     monkeypatch.setattr(settings, "DATABASE_URL", _ci_dsn("DATABASE_URL"))
     monkeypatch.setenv("AUTH_DATABASE_URL", _ci_dsn("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv("AUTH_VERIFIER_DATABASE_URL", _ci_dsn("CI_VERIFIER_DATABASE_URL"))
     monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
     monkeypatch.setenv("ENVIRONMENT", "development")
     admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
@@ -204,6 +205,7 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
     app_role, ids = isolated_rows
     monkeypatch.setattr(settings, 'DATABASE_URL', _ci_dsn('DATABASE_URL'))
     monkeypatch.setenv('AUTH_DATABASE_URL', _ci_dsn('CI_AUTH_DATABASE_URL'))
+    monkeypatch.setenv('AUTH_VERIFIER_DATABASE_URL', _ci_dsn('CI_VERIFIER_DATABASE_URL'))
     monkeypatch.setenv('FRCAIXINHA_TEST_AUTH', '1')
     monkeypatch.setenv('ENVIRONMENT', 'development')
     admin = await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
@@ -593,6 +595,7 @@ async def test_unlinked_existing_account_does_not_reveal_identity_or_create_sess
 
     monkeypatch.setattr(settings, "DATABASE_URL", _ci_dsn("DATABASE_URL"))
     monkeypatch.setenv("AUTH_DATABASE_URL", _ci_dsn("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv("AUTH_VERIFIER_DATABASE_URL", _ci_dsn("CI_VERIFIER_DATABASE_URL"))
     monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
     monkeypatch.setenv("ENVIRONMENT", "development")
 
@@ -639,6 +642,7 @@ async def test_logout_all_revokes_every_role_session_of_identity_only(monkeypatc
     admin=await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
     monkeypatch.setattr(settings,'DATABASE_URL',_ci_dsn('DATABASE_URL'))
     monkeypatch.setenv('AUTH_DATABASE_URL',_ci_dsn('CI_AUTH_DATABASE_URL'))
+    monkeypatch.setenv('AUTH_VERIFIER_DATABASE_URL',_ci_dsn('CI_VERIFIER_DATABASE_URL'))
     monkeypatch.setenv('FRCAIXINHA_TEST_AUTH','1')
     monkeypatch.setenv('ENVIRONMENT','homologation')
     token='ci-logout-all-synthetic-'+str(uuid.uuid4())
