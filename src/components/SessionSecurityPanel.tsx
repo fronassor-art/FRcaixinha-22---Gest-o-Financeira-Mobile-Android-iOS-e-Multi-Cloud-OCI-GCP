@@ -49,9 +49,8 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
         <button type="button" onClick={onClose}
           className="rounded-lg border border-slate-300 px-3 py-2">Fechar</button>
       </div>
-      <p className="my-2 text-slate-700">
-        Consulte e encerre sessões de outros acessos. A operação requer confirmação do servidor.
-        Nenhuma senha, token ou endereço IP é exibido aqui.
+      <p className="my-2 text-xs text-slate-600">
+        Consulte ou encerre acessos à sua conta. O servidor confirma cada alteração.
       </p>
       {loading && <p role="status">Consultando sessões no PostgreSQL...</p>}
       {error && <p role="alert" className="text-rose-800">{error}</p>}

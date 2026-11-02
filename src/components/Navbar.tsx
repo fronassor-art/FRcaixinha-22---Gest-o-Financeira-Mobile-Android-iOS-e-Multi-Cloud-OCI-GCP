@@ -40,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const currentUser = state.users.find(u => u.id === state.currentUserId);
   const currentTenant = state.tenants.find(t => t.id === state.currentTenantId);
   const currentSub = state.subscriptions.find(s => s.tenant_id === state.currentTenantId);
+  const build = String(import.meta.env?.VITE_APP_BUILD_REF || 'local').slice(0, 7);
 
   const handleReset = () => {
     if (window.confirm('Deseja redefinir todos os dados para o estado inicial homologado do contrato?')) {
@@ -79,7 +80,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-base tracking-tight text-white">FRcaixinha</span>
-              <span className="text-xs font-bold bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded font-mono">AI</span>
+              <span className="text-xs font-bold bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded">AI</span>
+              <span className="text-[10px] font-mono text-slate-400" title="Versão instalada">{build}</span>
             </div>
             <p className="text-[10px] text-slate-400 -mt-0.5 hidden sm:block">
               Automação e Contabilidade Privada • Sem Custódia Bancária

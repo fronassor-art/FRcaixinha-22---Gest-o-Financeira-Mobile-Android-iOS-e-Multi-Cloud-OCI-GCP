@@ -235,7 +235,7 @@ export default function App() {
     navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16 md:pb-0">
+    <div className="min-h-screen min-w-0 max-w-full overflow-x-hidden bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16 md:pb-0">
       {/* Top Navbar */}
       <Navbar
         state={state}
@@ -271,7 +271,7 @@ export default function App() {
         <button type="button" onClick={() => setSecurityOpen(open => !open)}
           aria-expanded={securityOpen}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">
-          {securityOpen ? 'Ocultar segurança da conta' : 'Segurança e sessões'}
+          {securityOpen ? 'Fechar sessões' : 'Sessões'}
         </button>
       </div>
       {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
@@ -429,7 +429,10 @@ export default function App() {
       <nav aria-label="Navegação do aplicativo" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 flex justify-around gap-1 px-2 py-2">
         {navItems.slice(0, state.currentRole === 'TENANT_ADMIN' ? 5 : 4).map(item => {
           const Icon = item.icon;
-          const shortLabel = item.id === 'MEU_RESULTADO' ? 'Resultado'
+          const shortLabel = item.id === 'MEMBROS' ? 'Membros'
+            : item.id === 'FECHAMENTO' ? 'Fechar'
+            : item.id === 'LICENCAS' ? 'Licenças'
+            : item.id === 'MEU_RESULTADO' ? 'Resultado'
             : item.id === 'MINHAS_CONTRIBUICOES' ? 'Contrib.'
             : item.id === 'MEU_EMPRESTIMO' ? 'Crédito'
             : item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
