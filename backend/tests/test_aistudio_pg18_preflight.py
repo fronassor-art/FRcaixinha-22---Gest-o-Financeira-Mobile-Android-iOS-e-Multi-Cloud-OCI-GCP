@@ -49,6 +49,21 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT has_function_privilege('frcaixinha_auth_role',"
             "'public.auth_active_membership_contexts(text)','EXECUTE')"
         ), "O papel de autenticação deve possuir o acesso mínimo necessário"
+        assert await admin.fetchval(
+            "SELECT to_regprocedure('public.auth_active_memberships(text)') IS NOT NULL"
+        ), "Consulta de vinculos deve exigir token"
+        assert await admin.fetchval(
+            "SELECT to_regprocedure('public.auth_active_memberships(uuid)') IS NULL"
+        ), "Consulta por UUID deve estar removida"
+        assert not await application.fetchval(
+            "SELECT has_function_privilege(current_user,"
+            "'public.auth_active_memberships(text)','EXECUTE')"
+        ), "Papel financeiro não consulta vinculos de autenticação"
+        assert await admin.fetchval(
+            "SELECT pg_get_constraintdef(oid) LIKE '%PENDING_CONTEXT%' "
+            "FROM pg_constraint WHERE conrelid='public.sessions'::regclass "
+            "AND conname='sessions_active_role_check'"
+        ), "O token provisório deve ser validado no esquema"
         assert not await application.fetchval(
             "SELECT has_function_privilege(current_user,"
             "'public.auth_active_membership_contexts(text)','EXECUTE')"
