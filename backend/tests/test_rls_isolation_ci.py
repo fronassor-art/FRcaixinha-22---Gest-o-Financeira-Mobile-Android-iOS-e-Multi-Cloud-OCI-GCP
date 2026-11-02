@@ -224,10 +224,15 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')")
         async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
             member = await client.post('/api/v1/auth/login', json={
-                'usernameOrEmail': f"{ids['member_a']}@example.com", 'password': password})
+                'usernameOrEmail': f"{ids['member_a']}@example.com",
+                'password': password,
+                'requestedRole': 'TENANT_MEMBER'})
             assert member.status_code == 200, member.text
             token = member.json()['token']
             headers = {'Authorization': f'Bearer {token}'}
+            selected = member.json()['user']['tenant_id']
+            assert selected in (str(ids['tenant_a']),str(ids['tenant_b']))
+            other = str(ids['tenant_b']) if selected==str(ids['tenant_a']) else str(ids['tenant_a'])
             stored = await auth.fetchrow(
                 'SELECT user_id,revoked_at,expires_at FROM public.sessions WHERE token_hash=$1',
                 hash_token(token))
@@ -236,57 +241,71 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
             assert contexts.status_code == 200
             assert contexts.headers['cache-control'] == 'no-store'
             assert contexts.headers['referrer-policy'] == 'no-referrer'
-            assert {item['tenant_id'] for item in contexts.json()} == {
-                str(ids['tenant_a']), str(ids['tenant_b'])}
-            denied = await client.post('/api/v1/auth/switch-context', headers=headers,
-                json={'target_role':'TENANT_ADMIN','target_tenant_id':str(ids['tenant_b'])})
-            assert denied.status_code == 403
-            switched = await client.post('/api/v1/auth/switch-context', headers=headers,
-                json={'target_role':'TENANT_MEMBER','target_tenant_id':str(ids['tenant_b'])})
-            assert switched.status_code == 200, switched.text
-            assert switched.json()['tenant_id'] == str(ids['tenant_b'])
+            assert [(x['role'], x['tenant_id']) for x in contexts.json()] == [
+                ('TENANT_MEMBER', selected)]
+            # Nenhum papel nem tenant troca durante a sessao.
+            for role,target in (('TENANT_ADMIN',selected),('TENANT_MEMBER',other)):
+                denied = await client.post('/api/v1/auth/switch-context', headers=headers,
+                    json={'target_role':role,'target_tenant_id':target})
+                assert denied.status_code == 403
+                unchanged=await client.get('/api/v1/auth/me',headers=headers)
+                assert unchanged.status_code==200
+                assert unchanged.json()['role']=='TENANT_MEMBER'
+                assert unchanged.json()['tenant_id']==selected
             assert (await client.get(
-                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=headers)).status_code == 403
-            assert (await client.get('/api/v1/auth/me', headers=headers)).json()['tenant_id'] == str(ids['tenant_b'])
+                f"/api/v1/tenants/{other}/contributions", headers=headers)).status_code == 403
+            # Revogar o vinculo ATIVO derruba a sessao mesmo que exista
+            # vinculo em outro tenant; nada de migração implicitamente.
             await admin.execute(
-                "UPDATE memberships SET status='DESLIGADA' WHERE id=$1", extra)
+                "UPDATE memberships SET status='DESLIGADA' "
+                "WHERE tenant_id=$1 AND user_id=$2 AND role='TENANT_MEMBER'",
+                uuid.UUID(selected),ids['member_a'])
             assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
             assert (await client.post('/api/v1/auth/switch-context', headers=headers,
-                json={'target_role':'TENANT_MEMBER',
-                      'target_tenant_id':str(ids['tenant_a'])})).status_code == 401
+                json={'target_role':'TENANT_MEMBER','target_tenant_id':other})).status_code == 401
             stored_after = await auth.fetchrow(
                 'SELECT active_tenant_id,active_role FROM public.sessions WHERE token_hash=$1',
                 hash_token(token))
-            assert stored_after['active_tenant_id'] == ids['tenant_b']
+            assert str(stored_after['active_tenant_id']) == selected
             assert stored_after['active_role'] == 'TENANT_MEMBER'
             await admin.execute(
-                "UPDATE memberships SET status='ATIVA' WHERE id=$1", extra)
+                "UPDATE memberships SET status='ATIVA' "
+                "WHERE tenant_id=$1 AND user_id=$2 AND role='TENANT_MEMBER'",
+                uuid.UUID(selected),ids['member_a'])
             await admin.execute(
                 'UPDATE sessions SET expires_at=$2 WHERE token_hash=$1',
                 hash_token(token), datetime.now(timezone.utc)-timedelta(seconds=1))
             assert (await client.get('/api/v1/auth/me', headers=headers)).status_code == 401
 
             master = await client.post('/api/v1/auth/login', json={
-                'usernameOrEmail': f"{ids['master']}@example.com", 'password': password})
+                'usernameOrEmail': f"{ids['master']}@example.com",
+                'password': password, 'requestedRole':'MASTER'})
             assert master.status_code == 200, master.text
             master_headers = {'Authorization': f"Bearer {master.json()['token']}"}
             assert (await client.get(
-                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 403
-            own_member = await client.post('/api/v1/auth/switch-context', headers=master_headers,
-                json={'target_role':'TENANT_MEMBER','target_tenant_id':str(ids['tenant_a'])})
-            assert own_member.status_code == 200, own_member.text
+                f"/api/v1/tenants/{ids['tenant_a']}/contributions",
+                headers=master_headers)).status_code == 403
+            assert (await client.post(
+                '/api/v1/auth/switch-context',headers=master_headers,
+                json={'target_role':'TENANT_MEMBER','target_tenant_id':str(ids['tenant_a'])}
+            )).status_code == 403
+            assert (await client.post('/api/v1/auth/logout',headers=master_headers)).status_code==200
+            assert (await client.get('/api/v1/auth/me',headers=master_headers)).status_code==401
+
+            # MESMA identidade agora escolhe Membro na tela de login:
+            # token novo, senha novamente verificada.
+            member_master = await client.post('/api/v1/auth/login',json={
+                'usernameOrEmail':f"{ids['master']}@example.com",
+                'password':password,'requestedRole':'TENANT_MEMBER'})
+            assert member_master.status_code==200,member_master.text
+            member_headers={'Authorization':'Bearer '+member_master.json()['token']}
+            assert member_master.json()['user']['role']=='TENANT_MEMBER'
+            assert member_master.json()['user']['tenant_id']==str(ids['tenant_a'])
             assert (await client.get(
-                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 200
-            restored = await client.post('/api/v1/auth/switch-context',
-                headers=master_headers,
-                json={'target_role':'MASTER','target_tenant_id':None})
-            assert restored.status_code == 200, restored.text
-            assert restored.json()['role'] == 'MASTER'
-            assert restored.json()['tenant_id'] is None
-            assert (await client.get(
-                f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=master_headers)).status_code == 403
-            assert (await client.post('/api/v1/auth/logout', headers=master_headers)).status_code == 200
-            assert (await client.get('/api/v1/auth/me', headers=master_headers)).status_code == 401
+                f"/api/v1/tenants/{ids['tenant_a']}/contributions",
+                headers=member_headers)).status_code==200
+            assert (await client.post('/api/v1/auth/logout',headers=member_headers)).status_code==200
+            assert (await client.get('/api/v1/auth/me',headers=member_headers)).status_code==401
     finally:
         await close_db_pool()
         await auth.close()
