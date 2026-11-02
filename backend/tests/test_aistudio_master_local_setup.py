@@ -63,8 +63,11 @@ def test_p0_01j_migration_wrapper_only_explicitly_applies_with_backup():
     content=script.read_text(encoding="utf-8")
     for flag in ("AI_STUDIO_APPROVED_SHA","AI_STUDIO_LOCAL_MIGRATION",
                  "AUTORIZO_MIGRACAO_AI_STUDIO","--passphrase","--decrypt",
-                 "pg_restore --list","aistudio_db_local.sh"):
+                 "pg_restore --list","aistudio_db_local.sh",
+                 'read -r -s -p', 'db_password </dev/tty',
+                 'export PGPASSWORD="$db_password"', 'frc_ai_owner -w'):
         assert flag in content
+    assert "frc_ai_owner -W" not in content, "Nao permitir dois prompts de senha simultaneos"
 
 
 def test_p0_01j_verifier_setup_requires_explicit_consent_and_no_secrets_in_git():
