@@ -81,3 +81,37 @@ def test_p0_01j_verifier_setup_requires_explicit_consent_and_no_secrets_in_git()
                  "frc_ai_verifier","AUTH_VERIFIER_DATABASE_URL","0o600",
                  "getpass.getpass"):
         assert flag in content
+
+
+def test_termux_config_uses_android_safe_exclusive_create():
+    script = (SCRIPTS / "aistudio_local_api_setup.py").read_text(encoding="utf-8")
+    assert "os.link(" not in script
+    assert "os.O_EXCL" in script
+    assert "os.O_CREAT" in script
+    assert "RECUPERAR_VERIFICADOR_AI_STUDIO" in script
+    assert 'ALTER ROLE {} PASSWORD {}' in script
+    assert "verificador existente; nao repetir setup" in script
+    assert "VERIFIER_RECOVERY=PASS" in script
+
+
+def test_termux_env_file_creation_is_private_and_never_overwrites(tmp_path, monkeypatch):
+    import importlib.util
+    import stat
+    import pytest
+
+    spec=importlib.util.spec_from_file_location(
+        "aistudio_local_api_setup_for_test", SCRIPTS / "aistudio_local_api_setup.py")
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    output=tmp_path / "secret-parent" / "api.env"
+    monkeypatch.setattr(module, "CONFIG", output)
+
+    module.write_env_exclusively({"ENVIRONMENT":"homologation", "AUTH_SECRET":"dummy test only"})
+    first=output.read_bytes()
+    assert b"AUTH_SECRET=" in first
+    assert stat.S_IMODE(output.stat().st_mode)==0o600
+    assert stat.S_IMODE(output.parent.stat().st_mode)==0o700
+
+    with pytest.raises(FileExistsError):
+        module.write_env_exclusively({"AUTH_SECRET":"must not replace"})
+    assert output.read_bytes()==first
