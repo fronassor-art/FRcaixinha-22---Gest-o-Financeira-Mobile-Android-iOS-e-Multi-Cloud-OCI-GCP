@@ -166,7 +166,7 @@ export default function App() {
   // Quando o papel muda, descartar qualquer aba herdada de outro perfil.
   useEffect(() => {
     const allowed = state.currentRole === 'MASTER'
-      ? ['DASHBOARD', 'LICENCAS', 'SUPORTE', 'AUDITORIA']
+      ? ['DASHBOARD', 'LICENCAS', 'SUPORTE', 'NUVEM', 'AUDITORIA']
       : state.currentRole === 'TENANT_ADMIN'
         ? ['DASHBOARD', 'MEMBROS', 'CONTRIBUICOES', 'EMPRESTIMOS', 'FECHAMENTO']
         : ['MEU_PAINEL', 'MINHAS_CONTRIBUICOES', 'MEU_EMPRESTIMO', 'MEU_RESULTADO'];
@@ -209,7 +209,8 @@ export default function App() {
       return [
         { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
-        { id: 'SUPORTE', label: 'Suporte e Break-Glass', icon: LifeBuoy },
+        { id: 'SUPORTE', label: 'Suporte', icon: LifeBuoy },
+        { id: 'NUVEM', label: 'Infraestrutura', icon: Cloud },
         { id: 'AUDITORIA', label: 'Suíte AT-01 a AT-50', icon: ShieldCheck },
       ];
     }
@@ -245,7 +246,7 @@ export default function App() {
         onOpenAudit={() => setIsAuditOpen(true)}
         onOpenMobileInstall={() => setIsMobileInstallOpen(true)}
         onOpenMobilePreview={() => setIsMobilePreviewOpen(true)}
-        onNavigateCloud={() => setActiveTab('NUVEM')}
+        onNavigateCloud={() => { if (state.currentRole === 'MASTER') setActiveTab('NUVEM'); }}
         onOpenGitHub={() => setIsGitHubSyncOpen(true)}
         onLogout={handleLogout}
       />
