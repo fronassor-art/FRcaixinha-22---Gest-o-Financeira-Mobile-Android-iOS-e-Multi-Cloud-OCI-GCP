@@ -92,6 +92,53 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 uuid.uuid4(), hash_token("ci-bad-pending-" + uuid.uuid4().hex), actor)
         assert invalid_pending.value.sqlstate == "42501"
 
+        # A conta Auth não pode editar diretamente papel ou tenant.
+        with pytest.raises(asyncpg.PostgresError) as direct_role:
+            await auth.execute(
+                "UPDATE public.sessions SET active_role='MASTER' WHERE id=$1",
+                ids[0])
+        assert direct_role.value.sqlstate == '42501'
+        with pytest.raises(asyncpg.PostgresError) as direct_tenant:
+            await auth.execute(
+                "UPDATE public.sessions SET active_tenant_id=$1 WHERE id=$2",
+                c,ids[0])
+        assert direct_tenant.value.sqlstate == '42501'
+
+        # A transição só aceita token bruto e verifica vínculo do usuário.
+        transition_token = "ci-transition-" + uuid.uuid4().hex
+        transition_id = uuid.uuid4()
+        await auth.execute(
+            "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+            "active_tenant_id,expires_at) VALUES($1,$2,$3,"
+            "'PENDING_CONTEXT',NULL,NOW()+INTERVAL '90 seconds')",
+            transition_id,hash_token(transition_token),actor)
+        assert await auth.fetchval(
+            "SELECT public.auth_promote_pending_session("
+            "$1::text,$2::varchar,$3::uuid)",
+            transition_token,"TENANT_ADMIN",a) is None
+        assert await auth.fetchval(
+            "SELECT public.auth_promote_pending_session("
+            "$1::text,$2::varchar,$3::uuid)",
+            transition_token,"TENANT_MEMBER",a) is not None
+        assert await auth.fetchval(
+            "SELECT public.auth_switch_session_context("
+            "$1::text,$2::varchar,$3::uuid)",
+            transition_token,"TENANT_ADMIN",c) is False
+        assert await auth.fetchval(
+            "SELECT public.auth_switch_session_context("
+            "$1::text,$2::varchar,$3::uuid)",
+            transition_token,"TENANT_ADMIN",b) is True
+        assert await auth.fetchval(
+            "SELECT active_role FROM public.sessions WHERE id=$1",
+            transition_id) == "TENANT_ADMIN"
+        await auth.execute(
+            "UPDATE public.sessions SET revoked_at=NOW() WHERE id=$1",
+            transition_id)
+        assert await auth.fetchval(
+            "SELECT public.auth_switch_session_context("
+            "$1::text,$2::varchar,$3::uuid)",
+            transition_token,"TENANT_MEMBER",a) is False
+
         # Serviço Auth não enumera outros usuários usando UUID arbitrário
         # nem usando hash armazenado como se fosse o token bruto.
         assert await auth.fetch(
