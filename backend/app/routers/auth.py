@@ -9,6 +9,7 @@ import os
 import asyncio
 import asyncpg
 import uuid
+import hashlib
 from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPasswordRequest, ContextSwitchRequest, UserResponse
 from ..config import settings
 from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure
@@ -59,9 +60,11 @@ async def login(payload: LoginRequest, response: Response):
             # So uma conta que comprovou a senha gera o atestado efemero.
             proof_raw, proof_hash = generate_session_token()
             await verifier.execute(
-                "INSERT INTO public.auth_login_proofs(proof_hash,user_id,expires_at) "
-                "VALUES($1,$2,NOW()+INTERVAL '60 seconds')",
-                proof_hash, record['id'])
+                "INSERT INTO public.auth_login_proofs("
+                "proof_hash,user_id,credential_fingerprint,expires_at) "
+                "VALUES($1,$2,$3,NOW()+INTERVAL '60 seconds')",
+                proof_hash, record['id'],
+                hashlib.sha256(record['password_hash'].encode('utf-8')).hexdigest())
         finally:
             await verifier.close()
 

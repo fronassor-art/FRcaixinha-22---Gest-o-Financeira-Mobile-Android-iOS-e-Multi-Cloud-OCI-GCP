@@ -43,3 +43,40 @@ def test_readiness_does_not_invent_activated_invitation_or_payment():
         # Health confirma apenas que o processo FastAPI responde; NÃO
         # afirma haver auth ou pagamentos reais ativos.
         assert "database_configured" in r.json()
+
+
+
+def test_privileged_auth_dsn_is_refused_before_any_connection(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+    from app.dependencies import auth_database_url, auth_verifier_database_url
+
+    monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
+    monkeypatch.setenv("ENVIRONMENT", "homologation")
+    monkeypatch.setenv(
+        "AUTH_DATABASE_URL",
+        "postgresql://frc_ai_owner:ci@127.0.0.1:5432/frcaixinha_ci",
+    )
+    with pytest.raises(HTTPException) as denied_owner:
+        auth_database_url()
+    assert denied_owner.value.status_code == 503
+
+    monkeypatch.setenv(
+        "AUTH_DATABASE_URL",
+        "postgresql://frcaixinha_auth_ci:ci@127.0.0.1:5432/frcaixinha_ci",
+    )
+    monkeypatch.setenv(
+        "AUTH_VERIFIER_DATABASE_URL",
+        "postgresql://postgres:ci@127.0.0.1:5432/frcaixinha_ci",
+    )
+    with pytest.raises(HTTPException) as denied_verifier:
+        auth_verifier_database_url()
+    assert denied_verifier.value.status_code == 503
+
+    monkeypatch.setenv(
+        "AUTH_VERIFIER_DATABASE_URL",
+        "postgresql://frcaixinha_auth_ci:ci@127.0.0.1:5432/frcaixinha_ci",
+    )
+    with pytest.raises(HTTPException) as same_user:
+        auth_verifier_database_url()
+    assert same_user.value.status_code == 503

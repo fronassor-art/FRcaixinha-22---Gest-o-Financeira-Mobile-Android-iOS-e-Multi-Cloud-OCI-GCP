@@ -28,6 +28,9 @@ def auth_database_url() -> str:
             or os.getenv('ENVIRONMENT', 'development') == 'production'
             or not url.startswith('postgres')):
         raise HTTPException(status_code=503, detail='Autenticação disponível apenas em homologação configurada.')
+    principal = urlparse(url).username
+    if not principal or principal.lower() in {'postgres', 'frc_ai_owner', 'root'}:
+        raise HTTPException(status_code=503, detail='Conta privilegiada proibida para Auth.')
     return url
 
 
@@ -39,6 +42,7 @@ def auth_verifier_database_url() -> str:
         raise HTTPException(status_code=503, detail='Verificador separado nao configurado.')
     a, b = urlparse(session_url), urlparse(url)
     if (not a.username or not b.username or a.username == b.username
+            or b.username.lower() in {'postgres', 'frc_ai_owner', 'root'}
             or (a.hostname, a.port, a.path) != (b.hostname, b.port, b.path)):
         raise HTTPException(status_code=503, detail='Credenciais tecnicas nao segregadas.')
     return url

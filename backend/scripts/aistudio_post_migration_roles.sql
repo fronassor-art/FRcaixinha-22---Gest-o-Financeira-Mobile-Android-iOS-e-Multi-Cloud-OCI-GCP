@@ -1,4 +1,4 @@
--- Execucao na mesma transacao das migracoes versionadas 001-025.
+-- Execucao na mesma transacao das migracoes versionadas 001-026.
 -- MASTER e um papel de aplicativo, jamais um SUPERUSER PostgreSQL.
 GRANT frcaixinha_app_role TO frc_ai_app;
 GRANT frcaixinha_auth_role TO frc_ai_auth;
@@ -82,7 +82,13 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: motor de convites/recuperacao nao protegido';
   END IF;
-  IF has_column_privilege('frc_ai_auth','public.credentials','password_hash','SELECT')
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger
+    WHERE tgrelid='public.credentials'::regclass
+    AND tgname='auth_password_changed_revoke' AND NOT tgisinternal)
+    OR NOT EXISTS (SELECT 1 FROM pg_trigger
+    WHERE tgrelid='public.credentials'::regclass
+    AND tgname='auth_password_deleted_revoke' AND NOT tgisinternal)
+    OR has_column_privilege('frc_ai_auth','public.credentials','password_hash','SELECT')
      OR has_table_privilege('frc_ai_auth','public.sessions','INSERT')
      OR has_table_privilege('frc_ai_auth','public.auth_login_proofs','INSERT')
      OR NOT has_function_privilege('frc_ai_auth',

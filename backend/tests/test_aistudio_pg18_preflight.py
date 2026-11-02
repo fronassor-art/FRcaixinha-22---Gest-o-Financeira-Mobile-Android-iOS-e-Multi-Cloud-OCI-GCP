@@ -91,6 +91,17 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
         assert await admin.fetchval(
             "SELECT to_regclass('public.auth_login_proofs') IS NOT NULL"
         ), "Provas efemeras de login devem existir"
+        assert await admin.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='auth_login_proofs' "
+            "AND column_name='credential_fingerprint')"
+        ), "Provas devem ser vinculadas a credencial verificada"
+        for trigger in ('auth_password_changed_revoke', 'auth_password_deleted_revoke'):
+            assert await admin.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM pg_trigger "
+                "WHERE tgrelid='public.credentials'::regclass "
+                "AND tgname=$1 AND NOT tgisinternal)", trigger,
+            ), "Rotacao/exclusao devem invalidar sessoes"
         assert not await admin.fetchval(
             "SELECT has_column_privilege('frcaixinha_auth_role',"
             "'public.credentials','password_hash','SELECT')"

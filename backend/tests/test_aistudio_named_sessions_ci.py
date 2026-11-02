@@ -25,7 +25,7 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
     from app.main import app
     from app.config import settings
     from app.database import close_db_pool
-    from app.security import hash_token
+    from app.security import hash_token, hash_password_secure
 
     admin = await asyncpg.connect(_ci_url("CI_ADMIN_DATABASE_URL"))
     auth = await asyncpg.connect(_ci_url("CI_AUTH_DATABASE_URL"))
@@ -160,10 +160,16 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
         # A transição só aceita token bruto e verifica vínculo do usuário.
         transition_token = "ci-transition-" + uuid.uuid4().hex
         proof = "ci-proof-" + uuid.uuid4().hex
+        synthetic_hash = hash_password_secure("ci-senha-exclusiva-do-teste")
+        await admin.execute(
+            "INSERT INTO public.credentials(user_id,password_hash) VALUES($1,$2)",
+            actor,synthetic_hash)
+        credential_fingerprint = hash_token(synthetic_hash)
         await verifier.execute(
-            "INSERT INTO public.auth_login_proofs(proof_hash,user_id,expires_at)"
-            " VALUES($1,$2,NOW()+INTERVAL '60 seconds')",
-            hash_token(proof),actor)
+            "INSERT INTO public.auth_login_proofs("
+            "proof_hash,user_id,expires_at,credential_fingerprint)"
+            " VALUES($1,$2,NOW()+INTERVAL '60 seconds',$3)",
+            hash_token(proof),actor,credential_fingerprint)
         assert await auth.fetchval(
             "SELECT public.auth_issue_pending_session($1::uuid,$2::text,$3::text)",
             actor,transition_token,proof) is True

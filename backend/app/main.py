@@ -79,17 +79,30 @@ async def backend_readiness():
     try:
         finance = await asyncpg.connect(settings.DATABASE_URL, timeout=3, command_timeout=3)
         try:
-            await finance.fetchval("SELECT 1")
+            finance_role_ok = await finance.fetchval(
+                "SELECT NOT (rolsuper OR rolbypassrls) FROM pg_roles "
+                "WHERE rolname=current_user")
         finally:
             await finance.close()
         auth = await asyncpg.connect(auth_url, timeout=3, command_timeout=3)
         try:
+            auth_role_ok = await auth.fetchrow(
+                "SELECT NOT (r.rolsuper OR r.rolbypassrls) AS safe, "
+                "NOT has_column_privilege(current_user,'public.credentials',"
+                "'password_hash','SELECT') AS no_hash, "
+                "NOT has_table_privilege(current_user,'public.sessions','INSERT') "
+                "AS no_direct_issue, "
+                "has_function_privilege(current_user,"
+                "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE') "
+                "AS allowed_issuer "
+                "FROM pg_roles r WHERE r.rolname=current_user")
             structure_ok = await auth.fetchrow(
                 "SELECT to_regclass('public.users') IS NOT NULL AS users_ok, "
                 "to_regclass('public.credentials') IS NOT NULL AS credentials_ok, "
                 "to_regclass('public.sessions') IS NOT NULL AS sessions_ok, "
                 "to_regprocedure('public.auth_active_memberships(text)') IS NOT NULL AS links_ok, "
-                "to_regprocedure('public.auth_issue_pending_session(uuid,text,text)') IS NOT NULL AS issuer_ok"
+                "to_regprocedure('public.auth_issue_pending_session(uuid,text,text)') IS NOT NULL AS issuer_ok, "
+                "to_regclass('public.auth_login_proofs') IS NOT NULL AS proofs_ok"
             )
         finally:
             await auth.close()
@@ -98,11 +111,21 @@ async def backend_readiness():
             verifier_ok = await verifier.fetchrow(
                 "SELECT has_column_privilege(current_user,'public.credentials',"
                 "'password_hash','SELECT') AS can_verify, "
-                "has_table_privilege(current_user,'public.sessions','INSERT') AS can_issue"
+                "has_table_privilege(current_user,'public.sessions','INSERT') AS can_issue, "
+                "has_function_privilege(current_user,"
+                "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE') AS can_call_issue, "
+                "has_table_privilege(current_user,'public.auth_login_proofs','SELECT') AS can_read_proofs, "
+                "(SELECT NOT (rolsuper OR rolbypassrls) FROM pg_roles "
+                "WHERE rolname=current_user) AS safe"
             )
         finally:
             await verifier.close()
-        if not verifier_ok or not verifier_ok['can_verify'] or verifier_ok['can_issue']:
+        if (not finance_role_ok or not auth_role_ok
+                or not all(auth_role_ok.values())):
+            raise HTTPException(status_code=503, detail='Conta SQL de API privilegiada ou sem segregacao.')
+        if (not verifier_ok or not verifier_ok['safe']
+                or not verifier_ok['can_verify'] or verifier_ok['can_issue']
+                or verifier_ok['can_call_issue'] or verifier_ok['can_read_proofs']):
             raise HTTPException(status_code=503, detail='Verificador de senha nao segregado.')
         if not structure_ok or not all(structure_ok.values()):
             raise HTTPException(status_code=503, detail="Estrutura de autenticação ainda não validada.")
