@@ -22,7 +22,7 @@ O checkpoint de 01/11/2026, publicado antes desta correção do README, registra
 | Matriz contratual | 147 cláusulas inventariadas |
 | Classificação histórica | 58 parciais; 50 bloqueadas; 34 não verificadas; 5 divergentes |
 | Backlog identificado | 37 tarefas: 8 P0, 14 P1, 6 P2, 5 P3, 4 P4 |
-| Migrações versionadas | 001–019, ensaiadas em bancos descartáveis no CI |
+| Migrações versionadas | 001–020; a 020 restringe nomes dos contextos à posse de sessão válida, para ensaio em CI |
 | Banco exclusivo AI Studio no Termux | PostgreSQL 18.6, `127.0.0.1:5433/frcaixinha_aistudio_dev`, **0 tabelas**, segundo o último relatório do operador |
 | CI no checkpoint | 5 verificações aprovadas; isso não constitui aprovação para produção |
 
