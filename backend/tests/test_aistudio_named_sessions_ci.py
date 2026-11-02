@@ -92,6 +92,35 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 uuid.uuid4(), hash_token("ci-bad-pending-" + uuid.uuid4().hex), actor)
         assert invalid_pending.value.sqlstate == "42501"
 
+        # Auth não possui UPDATE direto de expiração/revogação de sessão.
+        with pytest.raises(asyncpg.PostgresError) as direct_expiry:
+            await auth.execute(
+                "UPDATE public.sessions SET expires_at=NOW()+INTERVAL '1 minute' WHERE id=$1",
+                ids[2],
+            )
+        assert direct_expiry.value.sqlstate == '42501'
+        with pytest.raises(asyncpg.PostgresError) as direct_revocation:
+            await auth.execute(
+                "UPDATE public.sessions SET revoked_at=NOW() WHERE id=$1",
+                ids[2],
+            )
+        assert direct_revocation.value.sqlstate == '42501'
+        assert await auth.fetchval(
+            "SELECT public.auth_refresh_session($1::text)", tokens[0],
+        ) is not None
+        assert await auth.fetchval(
+            "SELECT public.auth_refresh_session($1::text)",
+            "not-a-valid-session-" + uuid.uuid4().hex,
+        ) is None
+        assert await auth.fetchval(
+            "SELECT public.auth_revoke_owned_session($1::text,$2::uuid)",
+            tokens[0], ids[2],
+        ) == 0
+        assert await auth.fetchval(
+            "SELECT revoked_at IS NULL FROM public.sessions WHERE id=$1",
+            ids[2],
+        ) is True
+
         # A conta Auth não pode editar diretamente papel ou tenant.
         with pytest.raises(asyncpg.PostgresError) as direct_role:
             await auth.execute(
