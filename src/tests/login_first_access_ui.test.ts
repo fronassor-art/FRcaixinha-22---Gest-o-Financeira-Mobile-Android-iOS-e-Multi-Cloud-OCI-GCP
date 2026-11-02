@@ -10,7 +10,9 @@ const html = renderToStaticMarkup(
 );
 assert.match(html, /Entrar na sua conta/);
 assert.match(html, /Primeiro acesso/);
-assert.match(html, /Um login para Master, Administrador ou Membro/);
+assert.match(html, /Escolha a área para entrar/);
+assert.match(html, /Administrador Master/);
+assert.match(html, /Minha participação/);
 assert.doesNotMatch(html, /Contrato Técnico Mestre/);
 assert.doesNotMatch(html, /Governança Técnica &amp; Conformidade/);
 const source = readFileSync('src/components/LoginView.tsx','utf8');
@@ -21,5 +23,6 @@ assert.match(source, /a ativação por e-mail/);
 assert.match(source, /Não é possível criar a conta diretamente/);
 assert.ok(!source.includes('authService.register('));
 assert.ok(!source.includes('authService.createInvitation('));
-assert.match(source, /authService.login\(email.trim\(\), password\)/);
+assert.match(source, /authService.login\(email.trim\(\), password, selectedRole\)/);
+assert.match(source, /setSelectedRole\(option.role\)/);
 console.log('PASS: login unico compacto e rotas informativas sem cadastro publico');

@@ -61,7 +61,7 @@ async function main(){
       token:'ci-token-not-real', user:initialUser,
       expires_at:new Date(Date.now()+900_000).toISOString(),
     });
-    if (route.endsWith('/contexts')) return response(rawContexts);
+    if (route.endsWith('/contexts')) return response([rawContexts[2]]);
     if (route.endsWith('/sessions'))return response({
       source:'POSTGRESQL_AUTH',
       sessions:[SID1,SID2].filter(id=>!revokedIds.has(id)).map(id=>({
@@ -100,18 +100,20 @@ async function main(){
     await authService.login('ci@example.com','senha-de-testes-ci');
     assert(authService.isAuthenticated());
     const expiry=authService.getExpiresAt()!;
-    assert.equal((await authService.listContexts()).length,4);
+    assert.equal((await authService.listContexts()).length,1);
     assert.equal((await authService.listSessions()).length,2);
     await assert.rejects(authService.revokeSession('not-an-id'),/inválido/);
     assert.equal(await authService.revokeSession(SID2),false);
     assert.equal((await authService.listSessions()).length,1);
-    assert.equal((await authService.switchContext({
+    await assert.rejects(authService.switchContext({
       role:'TENANT_MEMBER',tenant_id:B,
-    })).tenantId,B);
-    assert.equal(authService.getUser()?.id,USER);
-    assert.equal((await authService.switchContext({
+    }),/Saia da conta/);
+    await assert.rejects(authService.switchContext({
       role:'TENANT_ADMIN',tenant_id:A,
-    })).role,'TENANT_ADMIN');
+    }),/Saia da conta/);
+    assert.equal(authService.getUser()?.role,'TENANT_MEMBER');
+    assert.equal(routeCalls.filter(route=>route.endsWith('/switch-context')).length,0,
+      'Cliente nao deve fazer requisicao de troca de perfil');
     await authService.checkCurrentUser();
     assert.equal(authService.getExpiresAt(),expiry,
       'Consultar /me não pode ampliar validade da sessão no cliente');
@@ -123,14 +125,9 @@ async function main(){
     assert(routeCalls.includes('/api/v1/auth/forgot-password'),
       'Rota de recuperação precisa coincidir com FastAPI');
 
-    activeUserId='another-person';
-    await assert.rejects(authService.switchContext({
-      role:'TENANT_MEMBER',tenant_id:A,
-    }),/incompatível/);
-    assert.equal(authService.getUser(),null,
-      'Resposta incompatível deve encerrar sessão local');
+    await authService.logout();
+    assert.equal(authService.getUser(),null);
 
-    activeUserId=USER;
     await authService.login('ci@example.com','senha-de-testes-ci');
     pendingMe=(_v:Response)=>{}; // ativa espera artificial
     const oldRequest=authService.checkCurrentUser();
@@ -178,7 +175,7 @@ async function main(){
       'Revogação da sessão atual precisa encerrar o login local');
     assert.equal(authService.getUser(),null);
     globalThis.fetch=regularMockFetch;
-    console.log('PASS: identidade única, troca de perfil, recuperação, sessão e concorrência');
+    console.log('PASS: perfis bloqueados ate logout, recuperacao, sessao e concorrencia');
   } finally {
     await authService.logout();
     globalThis.fetch=oldFetch;

@@ -280,8 +280,8 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
                 for row in contexts.json()
             } == {
                 ("TENANT_MEMBER",str(a),"Caixinha Pará"),
-                ("TENANT_ADMIN",str(b),"Caixinha Maranhão"),
             }
+            assert "Caixinha Maranhão" not in contexts.text
             assert "Caixinha Privada" not in contexts.text
             # O timeout de inatividade desliza, mas nunca passa do teto
             # absoluto de 8 horas desde a criação da sessão.

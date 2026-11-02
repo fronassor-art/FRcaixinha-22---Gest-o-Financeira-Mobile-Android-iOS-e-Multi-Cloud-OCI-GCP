@@ -22,7 +22,7 @@ assert.match(login,/build/);
 const loginSource=file('src/components/LoginView.tsx');
 assert.match(loginSource,/Sou novo membro/);
 assert.match(loginSource,/Quero administrar uma caixinha/);
-assert.match(loginSource,/authService.login\(email.trim\(\), password\)/);
+assert.match(loginSource,/authService.login\(email.trim\(\), password, selectedRole\)/);
 assert.doesNotMatch(loginSource,/authService\.register\(/);
 
 const dashboard=file('src/components/DashboardView.tsx');
@@ -38,7 +38,8 @@ assert.deepEqual(tabsAllowedToRole('TENANT_MEMBER'),
   ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO']);
 
 const app=file('src/App.tsx');
-assert.match(app,/handleContextSwitch\(item\)/);
+assert.doesNotMatch(app,/handleContextSwitch|profilePickerOpen|Trocar perfil/);
+assert.match(app,/Administrador Master — Plataforma/);
 assert.match(app,/isRoleTabAllowed\(state.currentRole, activeTab\)/);
 assert.match(app,/navItems.slice\(0,3\)/);
 assert.match(app,/Mais opções/);

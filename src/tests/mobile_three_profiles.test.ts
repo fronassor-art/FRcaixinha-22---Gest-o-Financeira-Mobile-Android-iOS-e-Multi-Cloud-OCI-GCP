@@ -18,7 +18,7 @@ globalThis.fetch=(async(path:RequestInfo|URL,options?:RequestInit)=>{
   if(route.endsWith('/login')){
     const payload=JSON.parse(String(options?.body));
     const found=profiles.find(p=>p.email===payload.usernameOrEmail);
-    if(!found||payload.password!=='synthetic-CI-pass-123')
+    if(!found||payload.password!=='synthetic-CI-pass-123'||payload.requestedRole!==found.role)
       return response({detail:'Credenciais inválidas'},401);
     current=found;signed=true;
     return response({user:found,token:'CI-ONLY-RAM-TOKEN',
@@ -38,7 +38,7 @@ try{
     assert.equal(authService.getUser(),null);
     await assert.rejects(authService.login(person.email,'invalida'),/Credenciais inválidas/);
     assert.equal(authService.isAuthenticated(),false);
-    const user=await authService.login(person.email,'synthetic-CI-pass-123');
+    const user=await authService.login(person.email,'synthetic-CI-pass-123',person.role);
     assert.equal(user.role,person.role);
     assert.equal(user.id,person.id);
     assert.equal((await authService.checkCurrentUser())?.role,person.role);
