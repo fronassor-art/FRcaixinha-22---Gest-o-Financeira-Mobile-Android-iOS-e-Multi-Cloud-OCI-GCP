@@ -1,4 +1,4 @@
--- Execucao na mesma transacao das migracoes versionadas 001-026.
+-- Execucao na mesma transacao das migracoes versionadas 001-027.
 -- MASTER e um papel de aplicativo, jamais um SUPERUSER PostgreSQL.
 GRANT frcaixinha_app_role TO frc_ai_app;
 GRANT frcaixinha_auth_role TO frc_ai_auth;
@@ -98,6 +98,12 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: papel Auth pode forjar prova sem verificador';
   END IF;
+  IF to_regclass('public.auth_login_rate_limits') IS NULL
+    OR has_table_privilege('frc_ai_auth','public.auth_login_rate_limits','SELECT')
+    OR has_table_privilege('frc_ai_app','public.auth_login_rate_limits','SELECT')
+    OR NOT has_function_privilege('frc_ai_auth','public.auth_login_rate_check(text)','EXECUTE')
+    OR NOT has_function_privilege('frc_ai_auth','public.auth_login_rate_failure(text)','EXECUTE')
+  THEN RAISE EXCEPTION 'BLOQUEADO: limitador compartilhado nao isolado'; END IF;
   IF has_column_privilege('frc_ai_auth','public.sessions','expires_at','UPDATE')
     OR has_column_privilege('frc_ai_auth','public.sessions','revoked_at','UPDATE')
     OR NOT has_function_privilege('frc_ai_auth',

@@ -80,3 +80,16 @@ def test_privileged_auth_dsn_is_refused_before_any_connection(monkeypatch):
     with pytest.raises(HTTPException) as same_user:
         auth_verifier_database_url()
     assert same_user.value.status_code == 503
+
+
+
+def test_rate_hmac_key_is_required_and_normalized(monkeypatch):
+    from app.security import auth_rate_limit_key
+    import pytest
+    monkeypatch.delenv('AUTH_RATE_LIMIT_HMAC_KEY', raising=False)
+    with pytest.raises(ValueError):
+        auth_rate_limit_key('ci@example.invalid')
+    monkeypatch.setenv('AUTH_RATE_LIMIT_HMAC_KEY','ci-only-synthetic-secret-not-for-use-in-production')
+    a = auth_rate_limit_key(' CI@example.invalid ')
+    assert a == auth_rate_limit_key('ci@example.invalid')
+    assert len(a)==64 and '@' not in a

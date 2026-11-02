@@ -92,6 +92,11 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT to_regclass('public.auth_login_proofs') IS NOT NULL"
         ), "Provas efemeras de login devem existir"
         assert await admin.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_class WHERE "
+            "oid='public.auth_login_rate_limits'::regclass "
+            "AND relrowsecurity AND relforcerowsecurity)"
+        ), "Limites compartilhados exigem FORCE RLS"
+        assert await admin.fetchval(
             "SELECT EXISTS(SELECT 1 FROM information_schema.columns "
             "WHERE table_schema='public' AND table_name='auth_login_proofs' "
             "AND column_name='credential_fingerprint')"

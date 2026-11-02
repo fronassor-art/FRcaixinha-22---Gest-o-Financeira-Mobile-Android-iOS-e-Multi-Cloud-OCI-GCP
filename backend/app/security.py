@@ -5,6 +5,8 @@ Em conformidade estrita com o Contrato Técnico Mestre (Cláusulas 2.3, 11.2 e 1
 """
 
 import hashlib
+import hmac
+import os
 import secrets
 import time
 from typing import Optional, Tuple
@@ -103,6 +105,17 @@ def generate_session_token() -> Tuple[str, str]:
 
 def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+
+
+def auth_rate_limit_key(identifier: str) -> str:
+    """HMAC do identificador de login usando segredo de ambiente, nunca email bruto no SQL."""
+    secret = os.getenv('AUTH_RATE_LIMIT_HMAC_KEY', '')
+    if len(secret.encode('utf-8')) < 32:
+        raise ValueError('AUTH_RATE_LIMIT_HMAC_KEY ausente ou curta')
+    normalized = identifier.strip().lower()
+    if not normalized or len(normalized)>255:
+        raise ValueError('identificador de login invalido')
+    return hmac.new(secret.encode('utf-8'),normalized.encode('utf-8'),hashlib.sha256).hexdigest()
 
 
 # ------------------------------------------------------------------------------
