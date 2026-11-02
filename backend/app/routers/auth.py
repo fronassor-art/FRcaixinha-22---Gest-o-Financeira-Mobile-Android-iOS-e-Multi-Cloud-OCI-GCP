@@ -12,7 +12,7 @@ import uuid
 import hashlib
 from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPasswordRequest, ContextSwitchRequest, UserResponse
 from ..config import settings
-from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure
+from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure, auth_rate_limit_key
 from ..dependencies import get_current_session, AuthenticatedSession, auth_database_url, auth_verifier_database_url, bearer_token
 
 router = APIRouter(prefix="/auth", tags=["Autenticação e Sessões"])
@@ -24,7 +24,11 @@ def get_auth_status():
     Declara explicitamente a necessidade do backend contratual FastAPI + PostgreSQL.
     """
     database_url_configured = settings.is_database_configured
-    test_enabled = os.getenv('FRCAIXINHA_TEST_AUTH') == '1' and os.getenv('ENVIRONMENT', 'development') != 'production' and bool(os.getenv('AUTH_DATABASE_URL', '').startswith('postgres')) and bool(os.getenv('AUTH_VERIFIER_DATABASE_URL', '').startswith('postgres'))
+    test_enabled = (os.getenv('FRCAIXINHA_TEST_AUTH') == '1'
+                    and os.getenv('ENVIRONMENT', 'development') != 'production'
+                    and bool(os.getenv('AUTH_DATABASE_URL', '').startswith('postgres'))
+                    and bool(os.getenv('AUTH_VERIFIER_DATABASE_URL', '').startswith('postgres'))
+                    and len(os.getenv('AUTH_RATE_LIMIT_HMAC_KEY','').encode('utf-8')) >= 32)
     return AuthStatusResponse(
         status="TEST_MODE" if test_enabled else ("BLOCKED_PENDING_IMPLEMENTATION" if database_url_configured else "BLOCKED_PENDING_CONFIG"),
         configured=test_enabled,
@@ -45,6 +49,20 @@ async def login(payload: LoginRequest, response: Response):
     if not settings.is_database_configured:
         raise HTTPException(status_code=503, detail='Banco de dados não configurado.')
     try:
+        rate_key = auth_rate_limit_key(identifier)
+    except ValueError:
+        raise HTTPException(status_code=503, detail='Protecao de autenticacao indisponivel.')
+    try:
+        # Rate limit compartilhado entre processos, antes da verificacao de senha.
+        rc = await asyncpg.connect(auth_database_url(), timeout=5)
+        try:
+            remaining = await rc.fetchval('SELECT public.auth_login_rate_check($1::text)',rate_key)
+        finally:
+            await rc.close()
+        if remaining is None or remaining < 0:
+            raise HTTPException(status_code=503, detail='Protecao de autenticacao indisponivel.')
+        if remaining > 0:
+            raise HTTPException(status_code=429, detail='Muitas tentativas inválidas. Tente mais tarde.')
         # Credencial verificadora distinta: apenas ela enxerga hashes.
         verifier = await asyncpg.connect(auth_verifier_database_url(), timeout=5)
         try:
@@ -55,7 +73,6 @@ async def login(payload: LoginRequest, response: Response):
             verified = bool(record and await asyncio.to_thread(
                 verify_password_secure, payload.password, record['password_hash']))
             if not verified or record['status'] != 'ACTIVE':
-                record_failed_attempt(identifier)
                 raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
             # So uma conta que comprovou a senha gera o atestado efemero.
             proof_raw, proof_hash = generate_session_token()
@@ -80,7 +97,6 @@ async def login(payload: LoginRequest, response: Response):
                 current_user = await conn.fetchrow(
                     "SELECT status,is_master FROM public.users WHERE id=$1", record['id'])
                 if not current_user or current_user['status'] != 'ACTIVE':
-                    record_failed_attempt(identifier)
                     raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
                 is_master = current_user['is_master']
                 issued = await conn.fetchval(
@@ -97,7 +113,6 @@ async def login(payload: LoginRequest, response: Response):
                 elif links:
                     role, tenant_id = links[0]['role'], links[0]['tenant_id']
                 else:
-                    record_failed_attempt(identifier)
                     raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
                 # Role Auth não pode UPDATE direto em perfil/tenant.
                 # A função PostgreSQL valida token, identidade e vínculo
@@ -108,9 +123,24 @@ async def login(payload: LoginRequest, response: Response):
                     raw_token, role, tenant_id)
                 if expires_at is None:
                     raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
+                # Apagar falhas apenas no COMMIT da sessao validada.
+                cleared = await conn.fetchval(
+                    'SELECT public.auth_login_rate_success($1::text)',rate_key)
+                if not cleared:
+                    raise HTTPException(status_code=503, detail='Protecao de autenticacao indisponivel.')
         finally:
             await conn.close()
-    except HTTPException:
+    except HTTPException as error:
+        if error.status_code == 401:
+            record_failed_attempt(identifier)
+            try:
+                fc = await asyncpg.connect(auth_database_url(), timeout=5)
+                try:
+                    await fc.fetchval('SELECT public.auth_login_rate_failure($1::text)',rate_key)
+                finally:
+                    await fc.close()
+            except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
+                raise HTTPException(status_code=503, detail='Protecao de autenticacao indisponivel.')
         raise
     except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
         raise HTTPException(status_code=503, detail='Serviço de autenticação indisponível.')

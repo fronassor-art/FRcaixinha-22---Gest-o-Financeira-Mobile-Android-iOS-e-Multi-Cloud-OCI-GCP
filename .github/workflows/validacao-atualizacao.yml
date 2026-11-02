@@ -187,6 +187,7 @@ jobs:
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_RATE_LIMIT_HMAC_KEY: ci-only-test-hmac-secret-of-40-bytes-placeholder
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: |
           python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
@@ -206,6 +207,7 @@ jobs:
           ENVIRONMENT: homologation
           AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           AUTH_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_RATE_LIMIT_HMAC_KEY: ci-only-test-hmac-secret-of-40-bytes-placeholder
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: python -m pytest -q backend/tests/test_termux_readiness_ci.py
 

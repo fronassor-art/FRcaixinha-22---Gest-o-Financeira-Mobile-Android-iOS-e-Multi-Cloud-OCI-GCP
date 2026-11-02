@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .dependencies import auth_database_url, auth_verifier_database_url
+from .security import auth_rate_limit_key
 import asyncio
 import asyncpg
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit
@@ -77,6 +78,10 @@ async def backend_readiness():
     auth_url = auth_database_url()
     verifier_url = auth_verifier_database_url()
     try:
+        auth_rate_limit_key('readiness')
+    except ValueError:
+        raise HTTPException(status_code=503, detail='Limitador de login nao configurado.')
+    try:
         finance = await asyncpg.connect(settings.DATABASE_URL, timeout=3, command_timeout=3)
         try:
             finance_role_ok = await finance.fetchval(
@@ -94,7 +99,11 @@ async def backend_readiness():
                 "AS no_direct_issue, "
                 "has_function_privilege(current_user,"
                 "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE') "
-                "AS allowed_issuer "
+                "AS allowed_issuer, "
+                "NOT has_table_privilege(current_user,'public.auth_login_rate_limits','SELECT') AS no_direct_rate, "
+                "has_function_privilege(current_user,'public.auth_login_rate_check(text)','EXECUTE') AS can_rate_check, "
+                "has_function_privilege(current_user,'public.auth_login_rate_failure(text)','EXECUTE') AS can_rate_failure, "
+                "has_function_privilege(current_user,'public.auth_login_rate_success(text)','EXECUTE') AS can_rate_success "
                 "FROM pg_roles r WHERE r.rolname=current_user")
             structure_ok = await auth.fetchrow(
                 "SELECT to_regclass('public.users') IS NOT NULL AS users_ok, "
@@ -102,7 +111,8 @@ async def backend_readiness():
                 "to_regclass('public.sessions') IS NOT NULL AS sessions_ok, "
                 "to_regprocedure('public.auth_active_memberships(text)') IS NOT NULL AS links_ok, "
                 "to_regprocedure('public.auth_issue_pending_session(uuid,text,text)') IS NOT NULL AS issuer_ok, "
-                "to_regclass('public.auth_login_proofs') IS NOT NULL AS proofs_ok"
+                "to_regclass('public.auth_login_proofs') IS NOT NULL AS proofs_ok, "
+                "to_regclass('public.auth_login_rate_limits') IS NOT NULL AS rate_ok"
             )
         finally:
             await auth.close()
@@ -114,7 +124,10 @@ async def backend_readiness():
                 "has_table_privilege(current_user,'public.sessions','INSERT') AS can_issue, "
                 "has_function_privilege(current_user,"
                 "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE') AS can_call_issue, "
+                "has_function_privilege(current_user,'public.auth_login_rate_check(text)',"
+                "'EXECUTE') AS can_rate_check, "
                 "has_table_privilege(current_user,'public.auth_login_proofs','SELECT') AS can_read_proofs, "
+                "has_table_privilege(current_user,'public.auth_login_rate_limits','SELECT') AS can_read_rate, "
                 "(SELECT NOT (rolsuper OR rolbypassrls) FROM pg_roles "
                 "WHERE rolname=current_user) AS safe"
             )
@@ -125,7 +138,8 @@ async def backend_readiness():
             raise HTTPException(status_code=503, detail='Conta SQL de API privilegiada ou sem segregacao.')
         if (not verifier_ok or not verifier_ok['safe']
                 or not verifier_ok['can_verify'] or verifier_ok['can_issue']
-                or verifier_ok['can_call_issue'] or verifier_ok['can_read_proofs']):
+                or verifier_ok['can_call_issue'] or verifier_ok['can_read_proofs']
+                or verifier_ok['can_rate_check'] or verifier_ok['can_read_rate']):
             raise HTTPException(status_code=503, detail='Verificador de senha nao segregado.')
         if not structure_ok or not all(structure_ok.values()):
             raise HTTPException(status_code=503, detail="Estrutura de autenticação ainda não validada.")
