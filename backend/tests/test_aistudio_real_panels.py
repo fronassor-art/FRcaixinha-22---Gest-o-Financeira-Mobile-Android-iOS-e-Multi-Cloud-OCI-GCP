@@ -19,6 +19,10 @@ class FakeConnection:
         self.queries.append((sql, params))
         if "public.tenants" in sql:
             return 1
+        if "public.memberships" in sql and "m.role='TENANT_MEMBER'" in sql:
+            # Na consulta individual do membro, o join com memberships
+            # nao significa contagem de membros de toda a caixinha.
+            return 0
         if "public.memberships" in sql:
             return 2
         return 0
@@ -81,6 +85,10 @@ def test_tenant_dashboard_is_scoped_by_role_and_members_are_admin_only(fake_db):
     assert response.status_code == 200, response.text
     assert response.json()["source"] == "POSTGRESQL_RLS"
     assert response.json()["quota_count_visible"] == 0
+    # As tres contagens devem obrigatoriamente filtrar o membership MEMBER
+    # ate quando a identidade tenha tambem vinculo ADMIN.
+    assert len(fake_db.queries) == 3
+    assert all("m.role='TENANT_MEMBER'" in sql for sql, _ in fake_db.queries)
     assert "member_count_visible" not in response.json()
     assert denied.status_code == 403
 
