@@ -119,7 +119,7 @@ No mesmo repositorio AI Studio, foram integradas:
 - Livro-razao e emprestimos: telas autenticadas consultam a API; simulacao Price e somente matematica, nunca liberacao ou quitação.
 - Contribuicoes: tela existente consulta API e nao confirma Pix sem reconciliacao.
 
-O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-016 antes de rodar `apply`. Este documento nao constitui comando de execucao.
+O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-018 antes de rodar `apply`. Este documento nao constitui comando de execucao.
 
 ### Pendencias que nao devem ser apresentadas como prontas
 - Contratacao, renovacao, suspensao e cobranca SaaS; historico de preco nao equivale a receita.
@@ -160,7 +160,7 @@ Nao executar `apply`, `verify` nem bootstrap sem nova autorizacao do proprietari
 - Login pelo papel `frcaixinha_auth_role` mantem SELECT das colunas explicitamente autorizadas. O papel financeiro `frcaixinha_app_role` ve somente `id,full_name` dos membros ativos da propria caixinha no contexto TENANT_ADMIN, ou o proprio registro nos papeis validados.
 - Master tem acesso apenas ao proprio registro nessa tabela; seu inventario SaaS continua na tabela tenants, sem saldos financeiros.
 - Teste em PostgreSQL 16 descartavel exige que Admin A nao veja nomes de B, membro veja apenas o proprio nome, MASTER apenas o proprio, sem contexto zero linhas.
-- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-016`.
+- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-018`.
 
 
 ## Preparação 014 (pacote multitarefa) — executar APENAS no CI descartável
@@ -170,7 +170,7 @@ convite (entrega simulada no CI, aceite único, revogação, expiração) e a
 tabela `password_reset_tokens` para recuperação de senha com tokens
 hash SHA-256. Nenhuma função de laboratório CI foi exposta pela API.
 
-O script de migrações locais foi atualizado para exigir `001-016`,
+O script de migrações locais foi atualizado para exigir `001-018`,
 mas **o usuário pediu expressamente não executar migrações**.
 Não usar `apply`; somente `check` para auditoria de leitura.
 Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
@@ -189,3 +189,16 @@ Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
 - O script local contém arquivos 001–016 mas **NÃO executar `apply`**.
   Apenas `check` ou git status/fetch/merge para sincronizar código.
 - Relatório: `docs/PACOTE_AMPLIADO_GOVERNANCA_AI_STUDIO_2026-11-01.md`.
+
+
+## Pacote 017–018 — gateways reais preparados, banco local NÃO autorizado
+
+- `017_saas_payment_activation.sql`: intenções Pix SaaS da plataforma,
+  licenças vinculadas a pagamento aprovado, webhooks e revisão de status.
+- `018_invite_email_verification.sql`: identidade única e verificação de
+  titularidade do e-mail com token de uso único; nenhum email é enviado pelo CI.
+- Adaptadores reais SMTP e Mercado Pago são **desligados por padrão** e
+  não estão conectados a endpoints públicos de cobrança/aceite.
+- CI PostgreSQL 16/18 aplica 001–018 em bancos descartáveis; Termux somente
+  sincroniza os arquivos e executa `check`, nunca `apply`.
+- Ver `docs/PACOTE_CONVITES_E_SAAS_REAL_PREPARADO_2026-11-01.md`.

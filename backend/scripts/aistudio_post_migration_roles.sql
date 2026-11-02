@@ -24,6 +24,26 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
   END IF;
+  IF to_regclass('public.saas_payment_intents') IS NULL
+    OR to_regclass('public.saas_license_entitlements') IS NULL
+    OR to_regclass('public.saas_provider_webhook_receipts') IS NULL
+    OR to_regclass('public.invite_email_verification') IS NULL
+    OR has_table_privilege('frc_ai_app','public.saas_payment_intents','INSERT')
+    OR has_table_privilege('frc_ai_auth','public.saas_license_entitlements','SELECT')
+    OR has_table_privilege('frc_ai_app','public.saas_provider_webhook_receipts','SELECT')
+    OR has_table_privilege('frc_ai_auth','public.invite_email_verification','SELECT')
+    OR has_column_privilege('frcaixinha_app_role','public.users','email_verified_at','UPDATE')
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_class WHERE oid='public.saas_payment_intents'::regclass
+        AND relrowsecurity AND relforcerowsecurity
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_class WHERE oid='public.invite_email_verification'::regclass
+        AND relrowsecurity AND relforcerowsecurity
+    )
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: cobranças/ingressos expostos a papeis comuns';
+  END IF;
   IF to_regclass('public.contract_documents') IS NULL
     OR to_regclass('public.contract_acceptances') IS NULL
     OR to_regclass('public.saas_subscription_preparations') IS NULL

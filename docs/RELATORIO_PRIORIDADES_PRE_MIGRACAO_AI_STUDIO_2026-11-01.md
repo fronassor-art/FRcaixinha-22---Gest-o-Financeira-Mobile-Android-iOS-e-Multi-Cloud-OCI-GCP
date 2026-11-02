@@ -182,3 +182,15 @@ foi limitada aos convites de membros. A ativação de administrador ainda não
 ## 11. Pacote de governança adicional
 
 Migracoes 015/016 preparam contrato versionado e aceite pessoal auditavel, e SaaS documental sem cobranca. Nova API de encerramento global de sessoes, leitura propria de aceites e leitura isolada de preparacoes de licenca. Todas as escritas de contrato e licenca ficam apenas no CI descartavel. Nada foi aplicado no PostgreSQL do celular. Para criterios e pendencias, consultar docs/PACOTE_AMPLIADO_GOVERNANCA_AI_STUDIO_2026-11-01.md.
+
+
+## 12. Pacote simultâneo: convites verificáveis e pagamentos SaaS
+
+Migrações 017/018 e motores CI permitem cadastro de novo usuário com
+CPF, convite/email, aceite versionado, emissão de intenção SaaS com
+preço congelado, consulta ao Mercado Pago e ativação apenas após verificação
+de valor/conta/referência/status. SMTP e API Mercado Pago possuem adaptadores
+capazes de comunicação real, mas permanentemente bloqueados até credenciais
+e autorização; endpoints públicos não cobram nem convidam.
+Detalhes, riscos e testes: `docs/PACOTE_CONVITES_E_SAAS_REAL_PREPARADO_2026-11-01.md`.
+O banco `frcaixinha_aistudio_dev` permanece sem migrações.

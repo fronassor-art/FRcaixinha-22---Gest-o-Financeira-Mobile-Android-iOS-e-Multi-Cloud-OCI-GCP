@@ -40,6 +40,21 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT count(*) FROM public.platform_license_plans"
         ) == 0, "Catalogo Master deve ser invisivel fora de contexto"
         assert await admin.fetchval(
+            "SELECT count(*) FROM public.saas_payment_intents"
+        ) == 0, "Nenhuma cobrança deve surgir das migrações"
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.saas_license_entitlements"
+        ) == 0, "Nenhuma licença deve ser ativada pela migração"
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.invite_email_verification"
+        ) == 0, "Nenhum destinatário validado automaticamente"
+        assert not await application.fetchval(
+            "SELECT has_table_privilege(current_user,'public.saas_payment_intents','INSERT')"
+        ), "Papel app não pode criar cobranças"
+        assert not await application.fetchval(
+            "SELECT has_table_privilege(current_user,'public.invite_email_verification','SELECT')"
+        ), "Papel app não pode ler tokens de convite"
+        assert await admin.fetchval(
             "SELECT count(*) FROM public.contract_documents"
         ) == 0, "Sem aceitar termos por inferência"
         assert await admin.fetchval(

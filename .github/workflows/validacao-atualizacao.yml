@@ -95,6 +95,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k 'not disposable_postgres'
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py
+          python -m pytest -q backend/tests/test_platform_provider_adapters.py backend/tests/test_aistudio_live_status_api.py
 
   postgres-isolado:
     name: Migrações e testes de RLS em PostgreSQL descartável
@@ -145,6 +146,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/014_account_lifecycle_preparation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/015_contract_versions_and_acceptance.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/016_saas_preparations_no_billing.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/017_saas_payment_activation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/018_invite_email_verification.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -175,6 +178,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k disposable_postgres
           python -m pytest -q backend/tests/test_aistudio_account_lifecycle_ci.py
           python -m pytest -q backend/tests/test_aistudio_governance_ci.py
+          python -m pytest -q backend/tests/test_aistudio_live_engines_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -240,7 +244,7 @@ jobs:
           python-version: '3.11'
       - name: Dependencias Python
         run: python -m pip install -r backend/requirements.txt
-      - name: Migrar 001-016 em UMA transacao no PostgreSQL 18 descartavel
+      - name: Migrar 001-018 em UMA transacao no PostgreSQL 18 descartavel
         env:
           PGHOST: 127.0.0.1
           PGPORT: '5432'
@@ -250,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           scripts=()
-          for i in $(seq 1 16); do
+          for i in $(seq 1 18); do
             printf -v n '%03d' "$i"
             files=(backend/migrations/"$n"_*.sql)
             test "${#files[@]}" -eq 1

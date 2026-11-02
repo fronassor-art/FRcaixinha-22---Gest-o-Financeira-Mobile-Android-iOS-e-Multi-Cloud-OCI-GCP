@@ -173,3 +173,47 @@ async def list_saas_subscription_preparations(
             for r in rows
         ],
     }
+
+
+
+@router.get("/saas-payment-status")
+async def master_saas_payment_status(
+    session: AuthenticatedSession = Depends(require_master),
+    conn=Depends(get_rls_db_connection),
+):
+    """Visibilidade SaaS da plataforma: sem saldo das caixinhas, sem ativar."""
+    payments=await conn.fetch(
+        "SELECT id,tenant_id,status,expected_amount_cents,currency,created_at "
+        "FROM public.saas_payment_intents "
+        "ORDER BY created_at DESC,id DESC LIMIT 200"
+    )
+    entitlements=await conn.fetch(
+        "SELECT id,tenant_id,plan_tier,status,valid_from,valid_until "
+        "FROM public.saas_license_entitlements "
+        "ORDER BY valid_until DESC,id DESC LIMIT 200"
+    )
+    return {
+        "source":"POSTGRESQL_RLS","provider":"MERCADO_PAGO",
+        "payments":[
+            {"id":str(p["id"]),"tenant_id":str(p["tenant_id"]),"status":p["status"],
+             "expected_amount_cents":p["expected_amount_cents"],
+             "currency":p["currency"],"created_at":p["created_at"].isoformat()}
+            for p in payments
+        ],
+        "licenses":[
+            {"id":str(e["id"]),"tenant_id":str(e["tenant_id"]),
+             "plan_tier":e["plan_tier"],"status":e["status"],
+             "valid_from":e["valid_from"].isoformat(),
+             "valid_until":e["valid_until"].isoformat()}
+            for e in entitlements
+        ],
+    }
+
+
+@router.get("/integration-readiness")
+async def master_integration_readiness(
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Não consulta credenciais e não permite habilitar provedor pela interface."""
+    from ..platform_provider_adapters import read_configuration_status
+    return read_configuration_status()

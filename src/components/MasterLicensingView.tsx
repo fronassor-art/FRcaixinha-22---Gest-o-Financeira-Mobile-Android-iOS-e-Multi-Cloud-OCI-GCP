@@ -87,6 +87,40 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
     ? subscriptionPreps
     : { key: prepScope, status: 'loading', preparations: [] };
 
+  type SaasStatus = { key: string; status: 'loading' | 'ready' | 'error';
+    payments: Array<{id:string;status:string;expected_amount_cents:number}>;
+    licenses: Array<{id:string;plan_tier:string;status:string;valid_until:string}> };
+  const saasScope = [state.currentUserId,currentRole,state.currentTenantId].join(':');
+  const [billing, setBilling] = useState<SaasStatus>({
+    key:'',status:'loading',payments:[],licenses:[],
+  });
+  useEffect(() => {
+    let active = true;
+    setBilling({key:saasScope,status:'loading',payments:[],licenses:[]});
+    const request = currentRole==='MASTER'
+      ? financialApi.fetchMasterSaasPaymentStatus()
+      : currentRole==='TENANT_ADMIN' && state.currentTenantId
+        ? financialApi.fetchTenantSaasPaymentStatus(state.currentTenantId)
+        : null;
+    if (!request) {
+      setBilling({key:saasScope,status:'ready',payments:[],licenses:[]});
+      return () => {active=false;};
+    }
+    request.then(result => {
+      if (result.source !== 'POSTGRESQL_RLS' ||
+          ('tenant_id' in result && result.tenant_id !== state.currentTenantId)) {
+        throw new Error('Contexto SaaS inválido');
+      }
+      if (active) setBilling({key:saasScope,status:'ready',
+        payments:result.payments,licenses:result.licenses});
+    }).catch(() => {
+      if (active) setBilling({key:saasScope,status:'error',payments:[],licenses:[]});
+    });
+    return () => {active=false;};
+  }, [saasScope,revision]);
+  const currentBilling: SaasStatus = billing.key===saasScope ? billing :
+    {key:saasScope,status:'loading',payments:[],licenses:[]};
+
   // Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25)
   const [editingTier, setEditingTier] = useState<LicensePlanTier | null>(null);
   const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(89.90);
@@ -147,8 +181,26 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
           ))}
         </>
       )}
+      <div className="mt-4 rounded-xl border border-slate-200 p-3 text-sm text-slate-800">
+        <strong>Status SaaS validado pelo servidor</strong>
+        {currentBilling.status==='ready' ? (
+          <p className="mt-1">
+            {currentBilling.payments.length} cobrança(s) registrada(s),
+            {' '}{currentBilling.licenses.filter(l => l.status==='ACTIVE').length} licença(s) ativa(s).
+            {currentBilling.licenses.map(l => (
+              <span key={l.id} className="block">
+                {l.plan_tier} • {l.status} • validade {l.valid_until}
+              </span>
+            ))}
+          </p>
+        ) : <p className="mt-1 text-amber-950">
+          {currentBilling.status==='loading' ? 'Consultando registros...' :
+          'Consulta indisponível. Nenhuma licença será presumida ativa.'}
+        </p>}
+      </div>
       <p className="mt-3 text-xs text-amber-950">
-        Contratação, cobrança Pix e ativação continuam bloqueadas.
+        Novas contratações, pagamentos e ativações continuam desabilitados
+        até autorização e integração real dos provedores.
       </p>
     </section>;
   }
@@ -210,6 +262,20 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
               'Consulta SaaS indisponível; não mostrar assinaturas demonstrativas.'}
           </p>
         )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+        <h3 className="font-bold text-slate-900">Cobranças e licenças — PostgreSQL</h3>
+        {currentBilling.status==='ready' ? (
+          <p className="mt-1 text-slate-700">
+            {currentBilling.payments.length} cobrança(s) persistida(s) e
+            {' '}{currentBilling.licenses.filter(l => l.status==='ACTIVE').length} licença(s) ativa(s).
+            Nenhum registro financeiro é inferido a partir de dados locais de demonstração.
+          </p>
+        ) : <p className="mt-1 text-amber-950">
+          {currentBilling.status==='loading' ? 'Consultando o servidor...' :
+            'Status não confirmado pelo servidor.'}
+        </p>}
       </section>
 
       {/* Grid dos 3 Planos Oficiais */}

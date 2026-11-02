@@ -172,6 +172,35 @@ class FinancialApiService {
     return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/my-contracts`);
   }
 
+  // Status documental/financeiro SaaS (nunca exibe ledger de tenants)
+  public async fetchMasterSaasPaymentStatus(): Promise<{
+    source: 'POSTGRESQL_RLS';
+    payments: Array<{id:string;tenant_id:string;status:string;
+      expected_amount_cents:number;currency:string;created_at:string}>;
+    licenses: Array<{id:string;tenant_id:string;plan_tier:string;
+      status:string;valid_from:string;valid_until:string}>;
+  }> {
+    return this.request('/api/v1/master/saas-payment-status');
+  }
+
+  public async fetchTenantSaasPaymentStatus(tenantId: string): Promise<{
+    source: 'POSTGRESQL_RLS'; tenant_id:string;
+    payments: Array<{id:string;status:string;expected_amount_cents:number;
+      currency:string;created_at:string}>;
+    licenses: Array<{id:string;plan_tier:string;status:string;
+      valid_from:string;valid_until:string}>;
+  }> {
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/saas-payment-status`);
+  }
+
+  public async fetchMasterIntegrationReadiness(): Promise<{
+    invitation_delivery: string;
+    saas_platform_payment: string;
+    environment: string;
+  }> {
+    return this.request('/api/v1/master/integration-readiness');
+  }
+
   public async updateMasterLicensePrice(
     tier: 'ESSENCIAL' | 'INTERMEDIARIO',
     monthly_price: number,

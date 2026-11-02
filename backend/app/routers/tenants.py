@@ -156,3 +156,42 @@ async def own_contracts_in_tenant(
             for r in rows
         ],
     }
+
+
+
+@router.get("/{tenant_id}/saas-payment-status")
+async def tenant_saas_payment_status(
+    tenant_id: str,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Somente o administrador da caixinha consulta sua cobrança de licença."""
+    require_tenant_access(tenant_id,session)
+    if session.role!="TENANT_ADMIN":
+        raise HTTPException(status_code=403,detail="Cobrança SaaS exclusiva do administrador.")
+    tenant=_tenant_uuid(tenant_id)
+    payments=await conn.fetch(
+        "SELECT id,status,expected_amount_cents,currency,created_at "
+        "FROM public.saas_payment_intents WHERE tenant_id=$1 "
+        "ORDER BY created_at DESC,id DESC LIMIT 50",tenant,
+    )
+    entitlements=await conn.fetch(
+        "SELECT id,plan_tier,status,valid_from,valid_until "
+        "FROM public.saas_license_entitlements WHERE tenant_id=$1 "
+        "ORDER BY valid_until DESC,id DESC LIMIT 50",tenant,
+    )
+    return {
+        "source":"POSTGRESQL_RLS","tenant_id":str(tenant),
+        "payments":[
+            {"id":str(p["id"]),"status":p["status"],
+             "expected_amount_cents":p["expected_amount_cents"],"currency":p["currency"],
+             "created_at":p["created_at"].isoformat()}
+            for p in payments
+        ],
+        "licenses":[
+            {"id":str(e["id"]),"plan_tier":e["plan_tier"],"status":e["status"],
+             "valid_from":e["valid_from"].isoformat(),
+             "valid_until":e["valid_until"].isoformat()}
+            for e in entitlements
+        ],
+    }
