@@ -72,6 +72,17 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')"
         ), "Sessões continuam isoladas do app"
         assert await admin.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_constraint "
+            "WHERE conrelid='public.sessions'::regclass "
+            "AND conname='sessions_absolute_8h_guard')"
+        ), "Sessões precisam de teto absoluto de 8h"
+        assert await admin.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_policies "
+            "WHERE schemaname='public' AND tablename='sessions' "
+            "AND policyname='sessions_auth_insert' AND cmd='INSERT' "
+            "AND with_check LIKE '%PENDING_CONTEXT%')"
+        ), "O papel Auth só pode inserir sessões provisórias"
+        assert await admin.fetchval(
             "SELECT count(*) FROM public.saas_payment_intents"
         ) == 0, "Nenhuma cobrança deve surgir das migrações"
         assert await admin.fetchval(
