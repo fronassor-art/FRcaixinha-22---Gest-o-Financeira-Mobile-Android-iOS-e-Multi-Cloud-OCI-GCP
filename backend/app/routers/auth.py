@@ -308,7 +308,7 @@ async def switch_context(payload: ContextSwitchRequest, request: Request,
                 # não pode ser usada para migrar um token revogado de papel.
                 links = await conn.fetch(
                     'SELECT tenant_id,role FROM public.auth_active_memberships($1::text)',
-                    bearer_token(request)))
+                    bearer_token(request))
                 if current['active_role'] == 'MASTER':
                     authorized_current = (
                         current['is_master'] and current['active_tenant_id'] is None
