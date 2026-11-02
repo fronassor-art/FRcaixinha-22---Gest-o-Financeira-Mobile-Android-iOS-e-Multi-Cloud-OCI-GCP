@@ -56,3 +56,19 @@ de produção.
 
 Não altera PostgreSQL, tabela de usuários, credenciais existentes, API
 financeira ou main. PR #2 continua Draft.
+
+## Script de configuracao disponivel no repositorio
+
+No Termux, apos sincronizar o projeto, rode apenas uma vez:
+
+```bash
+cd "$HOME/frcaixinha-aistudio-mobile"
+bash scripts/setup_android_signing_termux.sh
+```
+
+O script cria PKCS12 protegido em `~/.config/frcaixinha-aistudio-mobile/android-signing`
+e envia os quatro secrets sem exibir suas senhas. Se falhar, reenviar
+usando a mesma chave local; **nunca** criar uma segunda chave para corrigir
+um erro de rede. Se qualquer secret ja existir antes da geracao, o
+script bloqueia para evitar rotação inadvertida. O proprietario deve
+guardar backup seguro offline da chave e senha e nao enviar ao chat.
