@@ -39,6 +39,18 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
         assert await application.fetchval(
             "SELECT count(*) FROM public.platform_license_plans"
         ) == 0, "Catalogo Master deve ser invisivel fora de contexto"
+        assert await application.fetchval(
+            "SELECT has_column_privilege(current_user,'public.users','cpf','SELECT')"
+        ) is False, "CPF nao pode ser legivel pela aplicacao"
+        assert await application.fetchval(
+            "SELECT has_column_privilege(current_user,'public.users','email','SELECT')"
+        ) is False, "E-mail de autenticacao nao pode ser legivel pela aplicacao"
+        assert await application.fetchval(
+            "SELECT has_column_privilege(current_user,'public.users','full_name','SELECT')"
+        ) is True, "Consultas de nome devem continuar operacionais"
+        assert await application.fetchval(
+            "SELECT has_table_privilege(current_user,'public.credentials','SELECT')"
+        ) is False, "Hash de senhas nao pode ser legivel pela aplicacao"
 
         await admin.execute(
             "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "

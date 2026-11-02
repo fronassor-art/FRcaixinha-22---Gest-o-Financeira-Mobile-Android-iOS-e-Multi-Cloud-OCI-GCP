@@ -51,7 +51,19 @@ async function main() {
     'Logout deve descartar mutações locais anteriores');
   assert.equal(new AppStore().getState().raffleCampaigns[0].title, originalTitle,
     'Seed global não deve ser alterado por uma sessão');
-  console.log('PASS: intenção pendente não altera saldos; conectividade não valida dados locais.');
+  const master = new AppStore();
+  master.setAuthenticatedContext({ id: 'master-sintetico', role: 'MASTER' });
+  const pricesBefore = structuredClone(master.getState().priceVersions);
+  const supportBefore = structuredClone(master.getState().supportGrants);
+  assert.throws(() => master.updateLicenseMonthlyPrice('ESSENCIAL', 99.90, 'Teste'),
+    /FastAPI\/PostgreSQL/, 'Master autenticado não pode confirmar preço apenas em memória');
+  assert.deepEqual(master.getState().priceVersions, pricesBefore);
+  assert.throws(() => master.grantSupportAccess('tenant-inaugural', 'CONSENTED_NORMAL', 'Teste'),
+    /servidor/, 'Master autenticado não pode criar sessão de suporte fictícia');
+  assert.throws(() => master.revokeSupportAccess('grant-ficticio'),
+    /FastAPI/, 'Master autenticado não pode declarar revogação sem backend');
+  assert.deepEqual(master.getState().supportGrants, supportBefore);
+  console.log('PASS: intenção pendente não altera saldos; preço e suporte não são confirmados localmente.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

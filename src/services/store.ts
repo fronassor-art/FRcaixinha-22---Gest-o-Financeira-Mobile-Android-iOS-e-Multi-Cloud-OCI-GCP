@@ -1264,6 +1264,9 @@ export class AppStore {
 
   // --- Master: Edição Dinâmica de Preço ---
   public updateLicenseMonthlyPrice(planTier: LicensePlan['tier'], newMonthlyPrice: number, reason: string) {
+    if (this.state.currentUserId) {
+      throw new Error('Preço real exige registro de nova versão no FastAPI/PostgreSQL; atualização local bloqueada.');
+    }
     if (this.state.currentRole !== 'MASTER') {
       throw new Error('Apenas o Master pode alterar preços de licença');
     }
@@ -1287,6 +1290,9 @@ export class AppStore {
 
   // --- Suporte Excepcional & Break-Glass ---
   public grantSupportAccess(tenantId: string, type: 'CONSENTED_NORMAL' | 'BREAK_GLASS_EMERGENCY', reason: string) {
+    if (this.state.currentUserId) {
+      throw new Error('Suporte real indisponível sem autorização transacional e consentimento no servidor.');
+    }
     const maxMinutes = type === 'CONSENTED_NORMAL' ? 60 : 30;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + maxMinutes * 60 * 1000);
@@ -1312,6 +1318,9 @@ export class AppStore {
   }
 
   public revokeSupportAccess(grantId: string) {
+    if (this.state.currentUserId) {
+      throw new Error('Revogação de suporte real exige confirmação do FastAPI; alteração local bloqueada.');
+    }
     const grant = this.state.supportGrants.find(g => g.id === grantId);
     if (!grant) return;
     grant.status = 'REVOKED';

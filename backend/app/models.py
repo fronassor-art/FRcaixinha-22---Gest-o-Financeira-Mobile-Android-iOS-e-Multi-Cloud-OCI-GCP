@@ -95,7 +95,10 @@ class ContributionPayResponse(BaseModel):
 class LoanSimulateRequest(BaseModel):
     principal: Decimal = Field(..., gt=0, le=50000.00, description="Valor principal do empréstimo")
     term_months: int = Field(..., ge=1, le=6, description="Prazo em meses (máx 6 meses)")
-    monthly_rate: Decimal = Field(default=Decimal("0.20"), description="Taxa mensal contratual (20% a.m.)")
+    monthly_rate: Optional[Decimal] = Field(
+        default=None,
+        description="Legado: se informado, será recusado; taxa vem exclusivamente da política ACTIVE do tenant.",
+    )
     disbursement_date: Optional[date] = Field(default=None, description="Data de desembolso para apuração de período irregular")
     first_due_date: Optional[date] = Field(default=None, description="Data do 1º vencimento")
 

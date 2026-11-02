@@ -167,7 +167,7 @@ class FinancialApiService {
 
   // --- Empréstimos e Tabela Price ---
 
-  public async simulateLoan(tenantId: string, payload: { principal: number; term_months: number; monthly_rate?: number }) {
+  public async simulateLoan(tenantId: string, payload: { principal: number; term_months: number }) {
     return this.request<any>(`/api/v1/tenants/${tenantId}/loans/simulate`, {
       method: 'POST',
       body: JSON.stringify(payload),

@@ -62,7 +62,7 @@ cd ~/frcaixinha-aistudio-mobile || exit 1
 AI_STUDIO_APPLY_MIGRATIONS=YES bash backend/scripts/aistudio_db_local.sh apply
 ```
 
-Exige confirmacao digitada `MIGRAR_SOMENTE_AI_STUDIO`; confirma repo/branch/PGDATA/porta/owner/versao/banco vazio/papeis; usa `psql --single-transaction` e migra SQL `001` ate `011` sem alterar os arquivos legados.
+Exige confirmacao digitada `MIGRAR_SOMENTE_AI_STUDIO`; confirma repo/branch/PGDATA/porta/owner/versao/banco vazio/papeis; usa `psql --single-transaction` e migra SQL `001` ate `012` sem alterar os arquivos legados.
 Na MESMA transacao vincula `frc_ai_app` ao papel `frcaixinha_app_role` e `frc_ai_auth` ao papel `frcaixinha_auth_role`; falhas causam rollback.
 Nao cria usuarios humanos nem disponibiliza transacoes bancarias reais.
 
@@ -119,7 +119,7 @@ No mesmo repositorio AI Studio, foram integradas:
 - Livro-razao e emprestimos: telas autenticadas consultam a API; simulacao Price e somente matematica, nunca liberacao ou quitação.
 - Contribuicoes: tela existente consulta API e nao confirma Pix sem reconciliacao.
 
-O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-011 antes de rodar `apply`. Este documento nao constitui comando de execucao.
+O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-012 antes de rodar `apply`. Este documento nao constitui comando de execucao.
 
 ### Pendencias que nao devem ser apresentadas como prontas
 - Contratacao, renovacao, suspensao e cobranca SaaS; historico de preco nao equivale a receita.
@@ -130,3 +130,25 @@ O guard local agora exige que `011` seja incluida **na mesma transacao** de `001
 - Teste real no Android: o GitHub Actions compila o APK, mas nao testa a integracao no aparelho.
 
 O operador deve sincronizar os arquivos pelo git antes de prosseguir, sem restaurar seed como dados financeiros reais. O PostgreSQL local permanece sem migracoes ate nova autorizacao.
+
+
+## Ajustes P0 subsequentes: politica Price e privacidade no papel de aplicacao
+
+- `/api/v1/tenants/{tenant_id}/loans/simulate` agora e **somente leitura** e exige
+  ciclo `ABERTO` + politica `ACTIVE` acessivel por RLS e pertencente ao mesmo tenant.
+  A taxa e o prazo maximo sao exclusivamente os da politica, nunca do cliente.
+  Se o cliente enviar `monthly_rate`, retorna HTTP 422. Sem ciclo/politica: 409.
+  O calculo usa o calendario do ciclo em vez de presumir 2027.
+- O calculo Price puro continua disponivel em testes, nao libera nenhum valor.
+- A migracao adicional `012_minimize_application_identity_access.sql` retira do
+  papel app leitura geral de `public.users` e concede somente `(id,full_name)`.
+  A conta de autenticacao conserva papeis separados; hashes e CPF ficam fora
+  do papel de aplicacao. Isto NAO cria RLS em users e nao substitui
+  protecao contra consultas cross-tenant nos endpoints.
+- `store.ts`: login autenticado nao pode registrar localmente alteracao de
+  preco ou inicio/revogacao de suporte ficticios.
+- Testes FastAPI e GitHub Actions executam os novos cenarios em banco descartavel,
+  incluindo matriz de permissao por usuario e tenant.
+
+**O banco `frcaixinha_aistudio_dev` do Termux permanece com zero tabelas.
+Nao executar `apply`, `verify` nem bootstrap sem nova autorizacao do proprietario.**

@@ -443,3 +443,74 @@ async def test_admin_member_loan_is_marked_and_blocked_in_real_postgres(isolated
         # deste tenant descartável antes do teardown do fixture.
         await admin.execute("DELETE FROM audit_events WHERE tenant_id=$1", ids['tenant_a'])
         await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_policy_price_simulation_uses_live_tenant_cycle_and_rejects_cross_tenant(isolated_rows):
+    """CI descartavel: taxa/vencimentos reais do tenant, sem parametro arbitrario do cliente."""
+    from datetime import date
+    from decimal import Decimal
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.models import LoanSimulateRequest
+    from app.routers.loans import simulate_loan_price
+
+    app_conn, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    try:
+        cycles = {}
+        for tenant, rate, months in (("tenant_a", "0.1500", 3),
+                                     ("tenant_b", "0.2000", 6)):
+            cycle_id = uuid.uuid4()
+            cycles[tenant] = cycle_id
+            await admin.execute(
+                "INSERT INTO public.cycles "
+                "(id,tenant_id,year,start_date,end_date,settlement_date) "
+                "VALUES($1,$2,2027,$3,$4,$5)",
+                cycle_id, ids[tenant], date(2027, 1, 1), date(2027, 12, 31),
+                date(2028, 1, 10),
+            )
+            await admin.execute(
+                "INSERT INTO public.policies "
+                "(tenant_id,cycle_id,monthly_interest_rate,max_installments) "
+                "VALUES($1,$2,$3,$4)",
+                ids[tenant], cycle_id, Decimal(rate), months,
+            )
+        session = AuthenticatedSession(
+            str(ids["member_a"]), "TENANT_MEMBER", str(ids["tenant_a"]),
+            "member@example.invalid", "Membro sintético", False,
+        )
+        async with app_conn.transaction():
+            await app_conn.execute(
+                "SELECT set_config('app.current_user_id',$1,true)", str(ids["member_a"])
+            )
+            await app_conn.execute(
+                "SELECT set_config('app.current_tenant_id',$1,true)", str(ids["tenant_a"])
+            )
+            await app_conn.execute("SELECT set_config('app.current_role','TENANT_MEMBER',true)")
+            result = await simulate_loan_price(
+                str(ids["tenant_a"]),
+                LoanSimulateRequest(principal=Decimal("500.00"),term_months=3),
+                session, app_conn,
+            )
+            assert result.monthly_rate == Decimal("0.1500")
+            assert result.schedule[0].due_date == "2027-01-10"
+
+            with pytest.raises(HTTPException) as denied:
+                await simulate_loan_price(
+                    str(ids["tenant_b"]),
+                    LoanSimulateRequest(principal=Decimal("500.00"), term_months=3),
+                    session, app_conn,
+                )
+            assert denied.value.status_code == 403
+
+            with pytest.raises(HTTPException) as invalid:
+                await simulate_loan_price(
+                    str(ids["tenant_a"]),
+                    LoanSimulateRequest(principal=Decimal("500.00"), term_months=3,
+                                        monthly_rate=Decimal("0.01")),
+                    session, app_conn,
+                )
+            assert invalid.value.status_code == 422
+    finally:
+        await admin.close()

@@ -104,3 +104,22 @@ Somente depois de eliminar os itens P0 comprovados e reavaliar o checkpoint
 contratual, apresentar um plano de migracao restrito ao banco AI Studio com
 preflight, rollback e autorizacao explicita do proprietario.
 O PG local deve permanecer com **zero tabelas** ate essa decisao.
+
+
+## 7. Rodada P0 posterior — alteracoes propostas para CI (NAO migradas)
+
+Este anexo complementa o checkpoint de 147 clausulas; nao altera automaticamente
+a contagem original. A migracao 012 altera apenas privilegios do papel de
+aplicacao e **ainda nao foi aplicada** no PostgreSQL local.
+
+| Frente | Correcao preparada | Prova pendente ou limite |
+|---|---|---|
+| P0-D 4.1/8.2 | simulador Price le `policies` ACTIVE do `cycles` ABERTO no mesmo tenant via sessao RLS; recusa taxa fornecida pelo cliente, usa inicio/fim reais do ciclo e valida prazo | Testes isolados e integracao sintética em CI; aprovação de credito, reserva e liberação seguem bloqueadas |
+| P0-B Privacidade | `012_minimize_application_identity_access.sql`: papel app acessa de `users` apenas `id` e `full_name`; nao CPF/email/telefone/credenciais; usuario de autenticacao separado | Testar em PG16/PG18 CI; isolamento de nomes por tenant continua dependente de consultas/RLS |
+| P0-E Demonstração | métodos locais de mudança de preço e suporte nao podem confirmar registros quando há conta autenticada | Testes frontend; demonstradores de rifa e bolao preservados sem dinheiro real |
+| P0-A PostgreSQL 18.6 | Ensaio inicial das migrações 001–011 passou no CI; incluir 012 na transacao e repetir ensaio | Compatibilidade de CI não equivale a permissão para modificar Termux |
+| P0-C Identidade/convite | Não habilitado: autenticação continua em homologação, convite e recuperação de senha ainda retornam bloqueio | Exige implementação, testes e revisão de segurança antes do uso real |
+
+**Regras invariáveis:** não merge na main, não usar credenciais reais no CI,
+não ativar cobrança/Pix/transferência, não criar novo painel Master,
+não tocar em nenhum outro projeto e **não migrar o banco do Termux**.

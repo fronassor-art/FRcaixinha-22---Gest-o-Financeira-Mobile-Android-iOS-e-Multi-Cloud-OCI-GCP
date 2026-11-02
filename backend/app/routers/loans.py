@@ -40,7 +40,9 @@ def compute_price_schedule(
     term_months: int,
     monthly_rate: Decimal = Decimal("0.20"),
     disbursement_date: Optional[date] = None,
-    first_due_date: Optional[date] = None
+    first_due_date: Optional[date] = None,
+    cycle_start_date: Optional[date] = None,
+    cycle_end_date: Optional[date] = None,
 ) -> LoanSimulateResponse:
     """Price com taxas por período e desconto composto, sem desembolso real."""
     P = to_cents(principal)
@@ -59,12 +61,22 @@ def compute_price_schedule(
         if days <= 0:
             raise ValueError('Primeiro período inválido.')
         first_rate = i * Decimal(days) / Decimal(30)
-        cycle_end = date(disbursement_date.year, 12, 31)
+        cycle_end = cycle_end_date or date(disbursement_date.year, 12, 31)
+        if cycle_start_date is not None and disbursement_date < cycle_start_date:
+            raise ValueError('Liberação anterior ao início do ciclo da caixinha.')
+        if disbursement_date > cycle_end:
+            raise ValueError('Liberação posterior ao encerramento do ciclo.')
     else:
-        due = date(2027, 1, 10)  # Exemplo indicativo do ciclo informado pelo proprietário.
+        # A simulação sem data de liberação é um exemplo de parcelas regulares.
+        # O endpoint autoritativo informa o ciclo vigente; o cálculo isolado
+        # conserva o ciclo de referência 2027 para retrocompatibilidade de testes.
+        start = cycle_start_date or date(2027, 1, 1)
+        due = date(start.year, start.month, 10)
+        if due <= start:
+            due = _next_tenth(start)
         days = None
         first_rate = i
-        cycle_end = date(2027, 12, 31)
+        cycle_end = cycle_end_date or date(start.year, 12, 31)
 
     rates = [first_rate] + [i] * (n - 1)
     discount = Decimal(1)
@@ -111,33 +123,64 @@ def compute_price_schedule(
 
 
 @router.post("/simulate", response_model=LoanSimulateResponse)
-def simulate_loan_price(
+async def simulate_loan_price(
     tenant_id: str,
     payload: LoanSimulateRequest,
-    session: AuthenticatedSession = Depends(get_current_session)
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
 ):
-    """
-    Simulação determinística oficial da Tabela Price (Cláusula 4.2 e 8.2):
-    - Executa cálculo puramente matemático sem necessidade de escrita em banco.
-    - Aberto a Membros e Administradores autenticados.
+    """Simulação Price só pela política ACTIVE do ciclo ABERTO do tenant.
+
+    Não aceita taxa arbitrária do cliente, não cria reserva, desembolso ou
+    parcela, não altera saldo e não expõe políticas de outras caixinhas.
     """
     require_tenant_access(tenant_id, session)
+    try:
+        tenant = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Identificador da caixinha inválido.")
 
-    if session.role == "MASTER":
+    if payload.monthly_rate is not None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso Proibido: Master não simula nem gerencia empréstimos de caixinhas."
+            status_code=422,
+            detail="A taxa não pode ser informada pelo cliente; prevalece a política vigente da caixinha.",
         )
 
+    cycle = await conn.fetchrow(
+        "SELECT id,start_date,end_date FROM public.cycles "
+        "WHERE tenant_id=$1 AND status='ABERTO' "
+        "ORDER BY start_date DESC,id DESC LIMIT 1",
+        tenant,
+    )
+    if not cycle:
+        raise HTTPException(
+            status_code=409, detail="Não há ciclo aberto autorizado para simulação."
+        )
+    policy = await conn.fetchrow(
+        "SELECT id,monthly_interest_rate,max_installments FROM public.policies "
+        "WHERE tenant_id=$1 AND cycle_id=$2 AND status='ACTIVE' "
+        "ORDER BY version DESC,id DESC LIMIT 1",
+        tenant, cycle["id"],
+    )
+    if not policy:
+        raise HTTPException(
+            status_code=409, detail="A política financeira vigente não está configurada."
+        )
+    if payload.term_months > policy["max_installments"]:
+        raise HTTPException(
+            status_code=422, detail="Prazo excede o limite da política vigente da caixinha."
+        )
     try:
         return compute_price_schedule(
             principal=payload.principal,
             term_months=payload.term_months,
-            monthly_rate=payload.monthly_rate,
+            monthly_rate=Decimal(str(policy["monthly_interest_rate"])),
             disbursement_date=payload.disbursement_date,
-            first_due_date=payload.first_due_date
+            first_due_date=payload.first_due_date,
+            cycle_start_date=cycle["start_date"],
+            cycle_end_date=cycle["end_date"],
         )
-    except ValueError as exc:
+    except (ValueError, ArithmeticError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

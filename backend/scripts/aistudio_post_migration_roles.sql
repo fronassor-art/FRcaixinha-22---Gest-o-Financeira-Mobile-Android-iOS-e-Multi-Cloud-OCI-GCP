@@ -12,6 +12,12 @@ BEGIN
      OR (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='frc_ai_auth') THEN
     RAISE EXCEPTION 'Usuários técnicos privilegiados indevidamente';
   END IF;
+  IF has_column_privilege('frcaixinha_app_role','public.users','cpf','SELECT')
+    OR has_column_privilege('frcaixinha_app_role','public.users','email','SELECT')
+    OR has_column_privilege('frc_ai_app','public.credentials','SELECT')
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
+  END IF;
   IF to_regclass('public.platform_license_plans') IS NULL
      OR to_regclass('public.platform_license_price_versions') IS NULL
      OR to_regclass('public.users') IS NULL

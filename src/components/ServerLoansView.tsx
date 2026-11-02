@@ -151,6 +151,7 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
         </div>
         {simulationStatus && <p role="status" className="mt-3 text-sm">{simulationStatus}</p>}
         {simulation && <div className="mt-3 space-y-1 text-sm">
+          <p>Taxa da política vigente da caixinha: {(Number(simulation.monthly_rate) * 100).toFixed(2)}% a.m.</p>
           <p>Prestação uniforme: {format(simulation.uniform_payment)}</p>
           <p>Última prestação: {format(simulation.last_payment)}</p>
           <p>Juros: {format(simulation.total_interest)} • Total: {format(simulation.total_payable)}</p>
