@@ -87,6 +87,31 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
             "SELECT * FROM public.auth_active_membership_contexts($1::text)",
             "ci-invalid-" + uuid.uuid4().hex,
         ) == []
+        # Também protege o lookup utilizado pelo login e switch-context.
+        assert not await auth.fetch(
+            "SELECT * FROM public.auth_active_memberships($1::text)",
+            str(outsider),
+        )
+        assert not await auth.fetch(
+            "SELECT * FROM public.auth_active_memberships($1::text)",
+            hash_token(tokens[2]),
+        )
+        assert {(x["tenant_id"], x["role"]) for x in await auth.fetch(
+            "SELECT * FROM public.auth_active_memberships($1::text)",
+            tokens[0],
+        )} == {(a, "TENANT_MEMBER"), (b, "TENANT_ADMIN")}
+        pending_token = "ci-pending-" + uuid.uuid4().hex
+        pending_id = uuid.uuid4()
+        await admin.execute(
+            "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+            "active_tenant_id,expires_at) VALUES($1,$2,$3,'PENDING_CONTEXT',NULL,"
+            "now()+interval '90 seconds')",
+            pending_id,hash_token(pending_token),actor,
+        )
+        assert {(x["tenant_id"], x["role"]) for x in await auth.fetch(
+            "SELECT * FROM public.auth_active_memberships($1::text)",
+            pending_token,
+        )} == {(a, "TENANT_MEMBER"), (b, "TENANT_ADMIN")}
         actor_rows = await auth.fetch(
             "SELECT * FROM public.auth_active_membership_contexts($1::text)",
             tokens[0],
@@ -105,6 +130,17 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
         headers = {"Authorization":"Bearer "+tokens[0]}
         async with AsyncClient(transport=ASGITransport(app=app),
                                base_url="http://ci") as client:
+            assert (await client.get(
+                "/api/v1/auth/me",
+                headers={"Authorization":"Bearer "+pending_token},
+            )).status_code == 401, "Token provisório nunca autoriza endpoints"
+            await admin.execute(
+                "UPDATE public.sessions SET expires_at=now()-interval '1 second' "
+                "WHERE id=$1", pending_id)
+            assert not await auth.fetch(
+                "SELECT * FROM public.auth_active_memberships($1::text)",
+                pending_token,
+            )
             contexts = await client.get("/api/v1/auth/contexts",headers=headers)
             assert contexts.status_code == 200,contexts.text
             assert {
