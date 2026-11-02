@@ -61,7 +61,7 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
           {sessions.map(item => (
             <li key={item.id} className="rounded-xl border border-slate-200 bg-white p-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="font-semibold">{item.current ? 'Esta sessão' : 'Outro acesso'} · {item.role}</p>
+                <p className="font-semibold">{item.current ? 'Esta sessão' : 'Outro acesso'}</p>
                 <p className="text-slate-600">
                   Válida até {new Date(item.expires_at).toLocaleString('pt-BR')}
                 </p>

@@ -242,7 +242,14 @@ class AuthService {
           this.invalidateSession();
           return null;
         }
-        this.user = serverUser(data.user || data);
+        const refreshed = serverUser(data.user || data);
+        if (refreshed.id !== this.user?.id ||
+            refreshed.role !== this.user?.role ||
+            (refreshed.tenantId ?? null) !== (this.user?.tenantId ?? null)) {
+          this.invalidateSession();
+          return null;
+        }
+        this.user = refreshed;
         this.expiresAt = expiration;
         this.armExpirationTimer(expiration);
         this.notify();
@@ -259,6 +266,9 @@ class AuthService {
   }
 
   public async login(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role']): Promise<AuthenticatedUser> {
+    if (this.isAuthenticated()) {
+      throw new Error('Saia da conta antes de entrar em outro perfil.');
+    }
     if (isNativeMobilePlatform() && !getApiBaseUrl()) {
       throw new Error('Servidor backend móvel não configurado. Defina VITE_API_URL apontando para a API FastAPI antes de gerar o APK.');
     }
