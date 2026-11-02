@@ -71,6 +71,29 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
         assert not await application.fetchval(
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')"
         ), "Sessões continuam isoladas do app"
+        assert not await admin.fetchval(
+            "SELECT has_column_privilege('frcaixinha_auth_role',"
+            "'public.sessions','active_role','UPDATE')"
+        ), "Auth não pode alterar o papel diretamente"
+        assert not await admin.fetchval(
+            "SELECT has_column_privilege('frcaixinha_auth_role',"
+            "'public.sessions','active_tenant_id','UPDATE')"
+        ), "Auth não pode alterar o tenant diretamente"
+        assert await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_auth_role',"
+            "'public.auth_promote_pending_session(text,varchar,uuid)',"
+            "'EXECUTE')"
+        ), "Auth deve promover sessão apenas por função controlada"
+        assert await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_auth_role',"
+            "'public.auth_switch_session_context(text,varchar,uuid)',"
+            "'EXECUTE')"
+        ), "Auth deve trocar contexto apenas por função controlada"
+        assert not await application.fetchval(
+            "SELECT has_function_privilege(current_user,"
+            "'public.auth_switch_session_context(text,varchar,uuid)',"
+            "'EXECUTE')"
+        ), "O papel financeiro nunca pode trocar perfil Auth"
         assert await admin.fetchval(
             "SELECT EXISTS(SELECT 1 FROM pg_constraint "
             "WHERE conrelid='public.sessions'::regclass "
