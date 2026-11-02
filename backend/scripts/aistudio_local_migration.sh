@@ -41,10 +41,20 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup="$dir/pre_migracao_$stamp.$$.dump.age"
 [[ ! -e "$backup" && ! -e "$backup.partial" ]] || fail "backup ja existe"
 trap 'rm -f "$backup.partial"' EXIT
-echo "BACKUP=START: senha age exclusiva, nao compartilhar no chat"
-pg_dump -h 127.0.0.1 -p 5433 -U frc_ai_owner -W \
-  -d frcaixinha_aistudio_dev --format=custom --no-owner --no-acl |
-  age --passphrase --output "$backup.partial"
+echo "BACKUP=START: solicitar senha PostgreSQL antes de iniciar o age."
+[[ -r /dev/tty ]] || fail "terminal interativo indisponivel"
+db_password=""
+IFS= read -r -s -p "Senha do PostgreSQL (entrada oculta): " db_password </dev/tty ||
+  fail "nao foi possivel ler senha de modo oculto"
+printf '\n' >/dev/tty
+[[ -n "$db_password" ]] || fail "senha PostgreSQL vazia"
+# pg_dump -w NAO faz nova pergunta: age fica sozinho com o terminal.
+(
+  export PGPASSWORD="$db_password"
+  pg_dump -h 127.0.0.1 -p 5433 -U frc_ai_owner -w \
+    -d frcaixinha_aistudio_dev --format=custom --no-owner --no-acl
+) | age --passphrase --output "$backup.partial"
+unset db_password
 [[ -s "$backup.partial" ]] || fail "backup vazio"
 mv -n "$backup.partial" "$backup"
 trap - EXIT
