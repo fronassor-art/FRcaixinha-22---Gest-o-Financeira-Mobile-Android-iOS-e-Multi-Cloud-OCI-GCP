@@ -170,7 +170,7 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
             actor,transition_token,proof) is True
         assert await auth.fetchval(
             "SELECT public.auth_issue_pending_session($1::uuid,$2::text,$3::text)",
-            actor,"ci-new-token-"+uuid.uuid4().hex,proof) is False,
+            actor,"ci-new-token-"+uuid.uuid4().hex,proof) is False, \
             "A mesma prova nao pode ser reutilizada"
         assert await auth.fetchval(
             "SELECT public.auth_promote_pending_session("
