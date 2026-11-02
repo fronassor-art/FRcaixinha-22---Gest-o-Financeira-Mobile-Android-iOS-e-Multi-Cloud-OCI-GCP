@@ -24,11 +24,12 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
   END IF;
-  IF to_regprocedure('public.auth_active_membership_contexts(uuid)') IS NULL
+  IF to_regprocedure('public.auth_active_membership_contexts(text)') IS NULL
+    OR to_regprocedure('public.auth_active_membership_contexts(uuid)') IS NOT NULL
     OR NOT has_function_privilege('frc_ai_auth',
-       'public.auth_active_membership_contexts(uuid)','EXECUTE')
+       'public.auth_active_membership_contexts(text)','EXECUTE')
     OR has_function_privilege('frcaixinha_app_role',
-       'public.auth_active_membership_contexts(uuid)','EXECUTE')
+       'public.auth_active_membership_contexts(text)','EXECUTE')
     OR has_table_privilege('frc_ai_auth','public.tenants','SELECT')
     OR has_table_privilege('frc_ai_auth','public.memberships','SELECT')
     OR has_table_privilege('frc_ai_app','public.sessions','SELECT')
