@@ -79,10 +79,13 @@ def _billing_fixture(db,u,period="MONTHLY"):
 
 
 def _payment(id,amount="89.90",status="approved",collector="12345",
-             ref=None,live=False):
-    return dict(id="654321",transaction_amount=amount,status=status,
+             ref=None,live=False,refunded=None):
+    payment=dict(id="654321",transaction_amount=amount,status=status,
                 currency_id="BRL",collector_id=collector,
                 external_reference=ref or f"saas:{id}",live_mode=live)
+    if refunded is not None:
+        payment["transaction_amount_refunded"]=refunded
+    return payment
 
 
 def test_registration_validates_cpf_and_requires_delivery(base_ci):
@@ -201,6 +204,10 @@ def test_only_reconciled_approved_exact_platform_payment_activates(base_ci):
         db,intent_id=intent,authoritative_payment=_payment(intent),
         now=start+timedelta(days=4)
     )==entitlement
+    # Nem uma cobrança já aprovada pode retornar autorização após GET divergente.
+    assert reconcile_approved_saas_payment_ci(
+        db,intent_id=intent,authoritative_payment=_payment(intent,amount="89.91"),
+    ) is None
     assert db.execute(
         "SELECT count(*) FROM public.saas_license_entitlements "
         "WHERE payment_intent_id=%s",(intent,),
@@ -234,11 +241,19 @@ def test_annual_price_locked_and_verified_refund_revokes(base_ci):
     ).fetchone()[0]==datetime(2027,11,1,20,tzinfo=timezone.utc)
     assert not revoke_after_verified_refund_ci(
         db,intent_id=intent,
-        authoritative_payment=_payment(intent,amount="899.01",status="refunded"),
+        authoritative_payment=_payment(intent,amount="899.01",status="refunded",refunded="899.01"),
     )
-    assert revoke_after_verified_refund_ci(
+    assert not revoke_after_verified_refund_ci(
         db,intent_id=intent,
         authoritative_payment=_payment(intent,amount="899.00",status="refunded"),
+    ), "Reembolso sem montante confirmado não revoga licença"
+    assert not revoke_after_verified_refund_ci(
+        db,intent_id=intent,
+        authoritative_payment=_payment(intent,amount="899.00",status="refunded",refunded="10.00"),
+    ), "Estorno parcial não equivale a reembolso integral"
+    assert revoke_after_verified_refund_ci(
+        db,intent_id=intent,
+        authoritative_payment=_payment(intent,amount="899.00",status="refunded",refunded="899.00"),
     )
     assert db.execute(
         "SELECT status FROM public.saas_license_entitlements WHERE id=%s",
@@ -274,6 +289,12 @@ def test_verified_webhook_deduplicates_without_activating_a_license(base_ci):
         timestamp=1793570400,payload=b'{"data":{"id":"654321"}}',
         valid_signature=True,
     )
+    with pytest.raises(LifecycleDenied):
+        record_verified_saas_webhook_ci(
+            db,provider_payment_id="654321",request_id="req-ci-1",
+            timestamp=1793570400,payload=b'{"data":{"id":"654322"}}',
+            valid_signature=True,
+        )
     with pytest.raises(LifecycleDenied):
         record_verified_saas_webhook_ci(
             db,provider_payment_id="654321",request_id="req-ci-2",

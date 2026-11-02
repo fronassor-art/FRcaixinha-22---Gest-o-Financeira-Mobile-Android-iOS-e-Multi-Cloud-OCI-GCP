@@ -69,3 +69,31 @@ def matches_approved_payment(expected: ExpectedPayment, payment: Mapping[str, An
         return value.is_finite() and value > 0 and value * 100 == Decimal(expected.amount_cents)
     except (InvalidOperation, ValueError):
         return False
+
+
+
+def matches_full_refund(expected: ExpectedPayment, payment: Mapping[str, Any]) -> bool:
+    """Aceita só reembolso TOTAL confirmado pela Payments API autenticada.
+
+    A resposta deve manter identificadores, conta recebedora, referência,
+    moeda, ambiente e valor originais. Um status 'refunded' sem o montante
+    reembolsado NÃO autoriza retirar acesso SaaS. Reembolsos parciais exigem
+    política explícita e seguem bloqueados.
+    """
+    if not isinstance(payment, Mapping) or payment.get('status') != 'refunded':
+        return False
+    refunded = payment.get('transaction_amount_refunded')
+    if isinstance(refunded, bool) or not isinstance(refunded, (str, int, Decimal)):
+        return False
+    try:
+        amount = Decimal(refunded)
+        if (not amount.is_finite() or amount <= 0
+                or amount * 100 != Decimal(expected.amount_cents)):
+            return False
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+    # Somente reutiliza o verificador dos campos imutáveis da operação.
+    # O campo status é verificado acima como refunded, não aprovado.
+    original = dict(payment)
+    original['status'] = 'approved'
+    return matches_approved_payment(expected, original)

@@ -194,3 +194,16 @@ capazes de comunicação real, mas permanentemente bloqueados até credenciais
 e autorização; endpoints públicos não cobram nem convidam.
 Detalhes, riscos e testes: `docs/PACOTE_CONVITES_E_SAAS_REAL_PREPARADO_2026-11-01.md`.
 O banco `frcaixinha_aistudio_dev` permanece sem migrações.
+
+
+## 13. Auditoria complementar de webhooks, convites e estornos
+
+O ciclo 017–018 recebeu correções de timestamp HMAC de Mercado Pago
+(ms e segundos), link de convite sem token na query HTTPS, STARTTLS,
+consentimento e versão obrigatórios no aceite de identidade existente,
+revalidação de pagamento nas tentativas idempotentes, estorno integral
+comprovado e conflito em request-id duplicado. Todos continuam sob
+bloqueio de produção; documentação em
+`docs/PACOTE_ROBUSTEZ_CONVITES_SAAS_2026-11-01.md`.
+Não reclassificar as 147 cláusulas sem auditoria individual e não
+executar migrações no Termux.

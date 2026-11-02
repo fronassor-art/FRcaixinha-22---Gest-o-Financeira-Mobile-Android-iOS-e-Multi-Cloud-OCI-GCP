@@ -1,5 +1,6 @@
 """Regressão CI do ciclo de vida de convite e recuperação, SEM e-mail ou usuário real."""
 import os
+from hashlib import sha256
 from uuid import uuid4
 from urllib.parse import urlparse
 
@@ -12,6 +13,7 @@ from app.account_lifecycle import (
     prepare_password_reset_ci, simulate_reset_delivery_ci, reset_password_ci,
 )
 from app.security import hash_password_secure, hash_token, verify_password_secure
+from app.account_governance_ci import publish_document_ci
 
 
 @pytest.fixture
@@ -24,7 +26,7 @@ def synthetic_accounts():
     assert parsed.port == 5432 and parsed.path == "/frcaixinha_ci"
     users = {name: uuid4() for name in ("master", "admin", "member", "outsider")}
     tenant = uuid4()
-    with psycopg.connect(dsn, autocommit=True) as db:
+    with psycopg.connect(dsn) as db:
         for name, uid in users.items():
             db.execute(
                 "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "
@@ -48,55 +50,81 @@ def synthetic_accounts():
         try:
             yield db, users, tenant
         finally:
-            db.execute(
-                "DELETE FROM public.audit_events WHERE tenant_id=%s OR actor_id=ANY(%s::uuid[])",
-                (tenant, list(users.values())),
-            )
-            db.execute(
-                "DELETE FROM public.invitations WHERE tenant_id=%s", (tenant,),
-            )
-            db.execute(
-                "DELETE FROM public.password_reset_tokens WHERE user_id=ANY(%s::uuid[])",
-                (list(users.values()),),
-            )
-            db.execute(
-                "DELETE FROM public.sessions WHERE user_id=ANY(%s::uuid[])",
-                (list(users.values()),),
-            )
-            db.execute(
-                "DELETE FROM public.memberships WHERE tenant_id=%s", (tenant,),
-            )
-            db.execute("DELETE FROM public.tenants WHERE id=%s", (tenant,))
-            db.execute(
-                "DELETE FROM public.users WHERE id=ANY(%s::uuid[])", (list(users.values()),),
-            )
+            db.rollback()
+
+
+def create_contract_ci(db):
+    label="ci-invitation-"+str(uuid4())
+    return publish_document_ci(
+        db,kind="TENANT_MEMBERSHIP",version=label,
+        sha256_hex=sha256(label.encode()).hexdigest(),
+        reference="Termos sintéticos de convite para CI descartável"
+    )
 
 
 def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_accounts):
     db, users, tenant = synthetic_accounts
+    doc=create_contract_ci(db)
     invitation_id, token = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
         recipient_email=f"{users['member']}@example.com", target_role="TENANT_MEMBER",
     )
+    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
+               (doc,invitation_id))
     stored = db.execute(
         "SELECT token_hash,delivery_status FROM public.invitations WHERE id=%s",
         (invitation_id,),
     ).fetchone()
     assert stored == (hash_token(token), "PENDING_DELIVERY")
     assert token not in str(stored)
-    assert accept_existing_identity_ci(db, token=token, user_id=users["member"]) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True) is None
     assert simulate_invitation_delivery_ci(db, invitation_id)
     assert not simulate_invitation_delivery_ci(db, invitation_id)
-    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"]) is None
-    membership_id = accept_existing_identity_ci(db, token=token, user_id=users["member"])
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,
+        consent=False
+    ) is None
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=uuid4(),
+        consent=True
+    ) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True) is None
+    membership_id = accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True)
     assert membership_id is not None
-    assert accept_existing_identity_ci(db, token=token, user_id=users["member"]) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True) is None
     assert not revoke_invitation_ci(db, invitation_id)
     membership = db.execute(
         "SELECT user_id,tenant_id,role,status FROM public.memberships WHERE id=%s",
         (membership_id,),
     ).fetchone()
     assert membership == (users["member"], tenant, "TENANT_MEMBER", "ATIVA")
+    assert db.execute(
+        "SELECT count(*) FROM public.contract_acceptances "
+        "WHERE user_id=%s AND document_id=%s AND tenant_id=%s",
+        (users["member"],doc,tenant),
+    ).fetchone()[0]==1
+    # Mesmo destinatário, segundo convite e mesmo papel: não duplica vínculo
+    # nem cria um aceite órfão para o segundo convite.
+    second_id, second_token = prepare_invitation_ci(
+        db,tenant_id=tenant,inviter_id=users["admin"],
+        recipient_email=f"{users['member']}@example.com",
+        target_role="TENANT_MEMBER",
+    )
+    db.execute(
+        "UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
+        (doc,second_id),
+    )
+    assert simulate_invitation_delivery_ci(db,second_id)
+    assert accept_existing_identity_ci(
+        db,token=second_token,user_id=users["member"],
+        document_id=doc,consent=True,
+    ) is None
+    assert db.execute(
+        "SELECT count(*) FROM public.contract_acceptances "
+        "WHERE user_id=%s AND document_id=%s AND tenant_id=%s",
+        (users["member"],doc,tenant),
+    ).fetchone()[0]==1
+
     assert db.execute(
         "SELECT count(*) FROM public.audit_events WHERE action='CI_INVITATION_ACCEPTED' "
         "AND object_id=%s", (str(membership_id),),
@@ -105,6 +133,7 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
 
 def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
     db, users, tenant = synthetic_accounts
+    doc=create_contract_ci(db)
     with pytest.raises(LifecycleDenied):
         prepare_invitation_ci(
             db, tenant_id=tenant, inviter_id=users["member"],
@@ -123,21 +152,25 @@ def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
         recipient_email=f"{users['outsider']}@example.com",
         target_role="TENANT_ADMIN",
     )
+    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
+               (doc,invite))
     assert simulate_invitation_delivery_ci(db, invite)
     assert revoke_invitation_ci(db, invite)
-    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"]) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True) is None
 
     pending, expiring = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
         recipient_email=f"{users['outsider']}@example.com",
         target_role="TENANT_MEMBER",
     )
+    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
+               (doc,pending))
     assert simulate_invitation_delivery_ci(db, pending)
     db.execute(
         "UPDATE public.invitations SET expires_at=now()-interval '1 minute' WHERE id=%s",
         (pending,),
     )
-    assert accept_existing_identity_ci(db, token=expiring, user_id=users["outsider"]) is None
+    assert accept_existing_identity_ci(db, token=expiring, user_id=users["outsider"], document_id=doc, consent=True) is None
     assert db.execute(
         "SELECT count(*) FROM public.memberships WHERE user_id=%s",
         (users["outsider"],),

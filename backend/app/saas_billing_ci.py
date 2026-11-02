@@ -14,7 +14,7 @@ import secrets
 import hashlib
 
 from .account_lifecycle import _ci_only, LifecycleDenied
-from .mercado_pago_safety import ExpectedPayment, matches_approved_payment
+from .mercado_pago_safety import ExpectedPayment, matches_approved_payment, matches_full_refund
 
 
 def _cents(amount: Decimal) -> int:
@@ -107,20 +107,23 @@ def reconcile_approved_saas_payment_ci(conn, *, intent_id: UUID,
         ).fetchone()
         if not row or not row[3]:
             return None
-        if row[8]=='APPROVED':
-            saved=conn.execute(
-                "SELECT id FROM public.saas_license_entitlements WHERE payment_intent_id=%s",
-                (intent_id,),
-            ).fetchone()
-            return saved[0] if saved else None
-        if row[8]!='PENDING':
+        if row[8] not in ('PENDING','APPROVED'):
             return None
+        # Mesmo chamadas repetidas devem trazer resposta autoritativa válida.
+        # Um status já aprovado no banco não autoriza retornar entitlement
+        # baseado em pagamento diferente ou resposta falsificada.
         if not matches_approved_payment(
             ExpectedPayment(provider_payment_id=row[3],collector_id=row[4],
                             external_reference=row[5],amount_cents=row[6],
                             live_mode=row[7]),authoritative_payment,
         ):
             return None
+        if row[8]=='APPROVED':
+            saved=conn.execute(
+                "SELECT id FROM public.saas_license_entitlements WHERE payment_intent_id=%s",
+                (intent_id,),
+            ).fetchone()
+            return saved[0] if saved else None
         preparation=conn.execute(
             "SELECT s.tenant_id,s.plan_tier,s.billing_period,s.status,"
             "s.admin_user_id FROM public.saas_subscription_preparations s "
@@ -183,14 +186,12 @@ def revoke_after_verified_refund_ci(conn, *, intent_id: UUID,
             "FROM public.saas_payment_intents WHERE id=%s FOR UPDATE",
             (intent_id,),
         ).fetchone()
-        if not row or row[5]!='APPROVED' or authoritative_payment.get('status')!='refunded':
+        if not row or row[5]!='APPROVED':
             return False
-        payment=dict(authoritative_payment)
-        payment['status']='approved'
-        if not matches_approved_payment(
+        if not matches_full_refund(
             ExpectedPayment(provider_payment_id=row[0],collector_id=row[1],
                             external_reference=row[2],amount_cents=row[3],
-                            live_mode=row[4]),payment):
+                            live_mode=row[4]),authoritative_payment):
             return False
         conn.execute(
             "UPDATE public.saas_payment_intents SET status='REFUNDED' WHERE id=%s",(intent_id,),
@@ -232,4 +233,16 @@ def record_verified_saas_webhook_ci(conn, *, provider_payment_id: str,
         "ON CONFLICT (provider,provider_request_id) DO NOTHING RETURNING id",
         (provider_payment_id,request_id,timestamp,digest),
     ).fetchone()
-    return bool(stored)
+    if stored:
+        return True
+    # Replay idêntico é inofensivo. Mesmo request-id com payload diferente
+    # caracteriza colisão suspeita: falhar fechado, não sobrescrever auditoria.
+    previous=conn.execute(
+        "SELECT provider_payment_id,signature_timestamp,payload_digest,verified "
+        "FROM public.saas_provider_webhook_receipts "
+        "WHERE provider='MERCADO_PAGO' AND provider_request_id=%s",
+        (request_id,),
+    ).fetchone()
+    if previous != (provider_payment_id,timestamp,digest,True):
+        raise LifecycleDenied("Webhook com request-id repetido e conteúdo divergente.")
+    return False

@@ -43,6 +43,7 @@ class InviteMailConfig:
         url=urlsplit(self.public_app_url)
         if (url.scheme != "https" or not url.hostname or url.username or url.password
                 or url.fragment or url.query or self.smtp_port not in range(1,65536)
+                or self.use_starttls is not True
                 or not all((self.smtp_host,self.smtp_user,self.smtp_password,self.sender))
                 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",self.sender)):
             raise ProviderUnavailable("Provedor SMTP ou URL HTTPS não está configurado com segurança.")
@@ -103,7 +104,10 @@ def send_invitation_email(*, config: InviteMailConfig, recipient: str,
         raise ProviderUnavailable("Destinatário ou token de convite inválido.")
     if not re.fullmatch(r"[0-9a-fA-F-]{36}",invitation_id):
         raise ProviderUnavailable("Identificador do convite inválido.")
-    url=config.public_app_url.rstrip("/")+"/accept-invitation?"+urlencode(
+    # O fragmento nunca é enviado ao servidor HTTPS na requisição inicial.
+    # A página de aceite (ainda desativada) deverá remover o token do histórico
+    # antes de submetê-lo via POST, com CSP e Referrer-Policy restritas.
+    url=config.public_app_url.rstrip("/")+"/accept-invitation#"+urlencode(
         {"token":token,"invitation":invitation_id}
     )
     msg=EmailMessage()
@@ -171,12 +175,19 @@ def verify_saas_webhook(*, config: PlatformMpConfig, signature: str,
     try:
         _required_real_gate(kind="SAAS")
         config.verify()
-        ts=next((part.strip().split("=",1)[1] for part in signature.split(",")
-                 if part.strip().startswith("ts=")),None)
-        if ts is None or not ts.isascii() or not ts.isdecimal() or not re.fullmatch(r"[0-9]{1,40}",payment_id):
+        parts = [part.strip() for part in signature.split(",")]
+        timestamps = [part.split("=",1)[1] for part in parts if part.startswith("ts=")]
+        # Mercado Pago publica ts em MILISSEGUNDOS; versões legadas podem usar
+        # SEGUNDOS. O mesmo valor bruto integra o HMAC e não deve ser alterado.
+        if (len(timestamps) != 1 or not timestamps[0].isascii()
+                or not timestamps[0].isdecimal()
+                or len(timestamps[0]) not in (10,13)
+                or not re.fullmatch(r"[0-9]{1,40}",payment_id)):
             return False
+        ts=timestamps[0]
+        issued_at=int(ts)/(1000 if len(ts)==13 else 1)
         clock=now or datetime.now(timezone.utc)
-        if abs(clock.timestamp()-int(ts))>300:
+        if abs(clock.timestamp()-issued_at)>300:
             return False
         return verify_webhook_signature(secret=config.webhook_secret,signature=signature,
                                         request_id=request_id,resource_id=payment_id)

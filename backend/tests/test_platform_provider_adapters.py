@@ -65,9 +65,24 @@ def test_invite_delivery_uses_smtp_auth_and_https_link_without_fake_success(gate
     message=FakeSmtp.last.messages[0]
     body=message.get_content()
     assert "https://app.example.org/accept-invitation" in body
+    assert "https://app.example.org/accept-invitation#token=" in body
+    assert "/accept-invitation?token=" not in body
+    assert "#token=" in body
+
     assert "token="+"A"*43 in body
     assert "secret" not in body
     assert message["To"]=="member@example.org"
+    # Nunca permitir autenticar SMTP sem STARTTLS: senha em texto claro.
+    with pytest.raises(ProviderUnavailable):
+        send_invitation_email(
+            config=InviteMailConfig(
+                "smtp.example.org",587,"ci","secret",
+                "invites@example.org","https://app.example.org",False
+            ),
+            recipient="member@example.org",token="A"*43,
+            invitation_id="123e4567-e89b-12d3-a456-426614174000",
+            smtp_factory=FakeSmtp,
+        )
     with pytest.raises(ProviderUnavailable):
         send_invitation_email(config=InviteMailConfig("smtp.example.org",587,"ci","secret",
                      "invites@example.org","http://app.example.org"),
@@ -136,3 +151,23 @@ def test_verified_webhook_needs_fresh_ts_and_correct_hmac(gates):
     assert not verify_saas_webhook(config=config,signature=signature,
                                    request_id="req-ci-01",payment_id="456789",
                                    now=datetime(2026,11,2,22,0,tzinfo=timezone.utc))
+
+
+def test_mp_webhook_accepts_millisecond_timestamp_and_rejects_stale_or_duplicate_ts(gates):
+    config=PlatformMpConfig("TEST-CI-PLATFORM","12345","top-secret-key-long-enough",False)
+    now=datetime(2026,11,1,22,0,tzinfo=timezone.utc)
+    milliseconds=str(int(now.timestamp()*1000))
+    manifest=f"id:456789;request-id:req-ms-01;ts:{milliseconds};"
+    signed=hmac.new(config.webhook_secret.encode(),manifest.encode(),hashlib.sha256).hexdigest()
+    signature=f"ts={milliseconds},v1={signed}"
+    assert verify_saas_webhook(config=config,signature=signature,
+        request_id="req-ms-01",payment_id="456789",now=now)
+    assert not verify_saas_webhook(config=config,signature=signature,
+        request_id="req-ms-01",payment_id="456789",
+        now=now.replace(hour=23))
+    assert not verify_saas_webhook(config=config,
+        signature=f"ts={milliseconds},ts={milliseconds},v1={signed}",
+        request_id="req-ms-01",payment_id="456789",now=now)
+    assert not verify_saas_webhook(config=config,signature=signature,
+        request_id="req-ms-01",payment_id="456780",now=now)
+

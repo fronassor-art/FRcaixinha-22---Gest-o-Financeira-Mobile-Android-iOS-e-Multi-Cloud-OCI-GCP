@@ -202,3 +202,16 @@ Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
 - CI PostgreSQL 16/18 aplica 001–018 em bancos descartáveis; Termux somente
   sincroniza os arquivos e executa `check`, nunca `apply`.
 - Ver `docs/PACOTE_CONVITES_E_SAAS_REAL_PREPARADO_2026-11-01.md`.
+
+
+## Revisão de robustez 017/018 — nenhuma migração nova
+
+- Correções nos webhooks Mercado Pago com timestamp em milissegundos,
+  idempotência e verificação de estorno integral.
+- Convite de usuário existente precisa de consentimento e versão
+  documental correspondente, registro auditável e identidade própria.
+- Link SMTP com token no fragmento para reduzir exposição em logs HTTP;
+  STARTTLS obrigatório no adaptador preparado.
+- **Somente código e testes no GitHub**. Continua proibido executar
+  `apply`, criar contas reais, enviar e-mails ou ativar pagamentos.
+- Detalhes: `docs/PACOTE_ROBUSTEZ_CONVITES_SAAS_2026-11-01.md`.

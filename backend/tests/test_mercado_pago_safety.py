@@ -2,7 +2,7 @@ import hashlib
 import hmac
 from decimal import Decimal
 
-from app.mercado_pago_safety import ExpectedPayment, matches_approved_payment, verify_webhook_signature
+from app.mercado_pago_safety import ExpectedPayment, matches_approved_payment, matches_full_refund, verify_webhook_signature
 
 
 def test_webhook_signature_rejects_tampering_and_duplicates():
@@ -24,3 +24,26 @@ def test_reconciliation_requires_matching_approved_provider_record():
                    {'external_reference': 'tenant-b:contrib-1'}, {'live_mode': True},
                    {'currency_id': 'USD'}, {'transaction_amount': 100.50}):
         assert not matches_approved_payment(expected, {**valid, **change})
+
+
+
+def test_refund_requires_full_amount_and_same_platform_collector():
+    expected = ExpectedPayment('123', '456', 'saas:license-1', 8990, False)
+    refund = dict(
+        id=123, collector_id=456, external_reference='saas:license-1',
+        transaction_amount=Decimal('89.90'), transaction_amount_refunded=Decimal('89.90'),
+        currency_id='BRL', status='refunded', live_mode=False
+    )
+    assert matches_full_refund(expected, refund)
+    assert not matches_approved_payment(expected, refund)
+    for invalid in (
+        {'transaction_amount_refunded':'10.00'},
+        {'transaction_amount_refunded':None},
+        {'transaction_amount_refunded':89.90},
+        {'transaction_amount_refunded':True},
+        {'status':'approved'},
+        {'collector_id':789},
+        {'external_reference':'saas:other'},
+        {'live_mode':True},
+    ):
+        assert not matches_full_refund(expected, {**refund, **invalid})

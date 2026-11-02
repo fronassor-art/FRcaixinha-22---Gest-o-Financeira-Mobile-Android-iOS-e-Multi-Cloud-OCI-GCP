@@ -107,22 +107,40 @@ def revoke_invitation_ci(conn, invitation_id: UUID) -> bool:
     return result.rowcount == 1
 
 
-def accept_existing_identity_ci(conn, *, token: str, user_id: UUID) -> UUID | None:
-    """Aceita para conta EXISTENTE e verificada; sem autocadastro ou e-mail.
+def accept_existing_identity_ci(
+    conn, *, token: str, user_id: UUID, document_id: UUID,
+    consent: bool = False,
+) -> UUID | None:
+    """Aceite de CONTA EXISTENTE só com documento publicado e consentimento.
 
-    Atualização, membership e auditoria em uma transação.
+    O link sozinho não autoriza vínculo. Contrato versionado, membership,
+    token e auditoria são confirmados na MESMA transação descartável.
+    Nenhuma rota pública usa este executor de laboratório.
     """
     _ci_only(conn)
+    if consent is not True:
+        return None
     with conn.transaction():
         invitation = conn.execute(
             "SELECT id,tenant_id,target_email,target_role,expires_at,"
-            "accepted_at,revoked_at,delivery_status,inviter_user_id "
+            "accepted_at,revoked_at,delivery_status,inviter_user_id,required_document_id "
             "FROM public.invitations WHERE token_hash=%s FOR UPDATE",
             (hash_token(token),),
         ).fetchone()
         if (not invitation or invitation[5] or invitation[6]
                 or invitation[4] <= datetime.now(timezone.utc)
-                or invitation[7] != "DELIVERED"):
+                or invitation[7] != "DELIVERED"
+                or invitation[1] is None
+                or invitation[9] is None
+                or invitation[9] != document_id):
+            return None
+        document = conn.execute(
+            "SELECT 1 FROM public.contract_documents "
+            "WHERE id=%s AND document_kind='TENANT_MEMBERSHIP' "
+            "AND published_at IS NOT NULL",
+            (document_id,),
+        ).fetchone()
+        if not document:
             return None
         user = conn.execute(
             "SELECT email,status FROM public.users WHERE id=%s FOR UPDATE",
@@ -143,11 +161,19 @@ def accept_existing_identity_ci(conn, *, token: str, user_id: UUID) -> UUID | No
             ).fetchone()
             if not inviter:
                 return None
-        elif not conn.execute(
-            "SELECT is_master FROM public.users WHERE id=%s AND status='ACTIVE'",
-            (invitation[8],),
-        ).fetchone()[0]:
+        elif invitation[3] == "TENANT_ADMIN":
+            inviter = conn.execute(
+                "SELECT 1 FROM public.users WHERE id=%s AND is_master "
+                "AND status='ACTIVE'", (invitation[8],)
+            ).fetchone()
+            if not inviter:
+                return None
+        else:
             return None
+
+        # Criar primeiro o vínculo impede aceite órfão se um membro já
+        # estiver cadastrado nesse papel. Falhas posteriores revertem tudo
+        # pela transação (inclusive o vínculo criado).
         membership_id = uuid4()
         created = conn.execute(
             "INSERT INTO public.memberships(id,tenant_id,user_id,role) "
@@ -157,6 +183,30 @@ def accept_existing_identity_ci(conn, *, token: str, user_id: UUID) -> UUID | No
         ).fetchone()
         if not created:
             return None
+        # Não emitir um novo aceite para a MESMA versão, pessoa e caixinha.
+        # O consentimento da tentativa corrente continua obrigatório.
+        accepted = conn.execute(
+            "SELECT id FROM public.contract_acceptances "
+            "WHERE document_id=%s AND user_id=%s AND tenant_id=%s",
+            (document_id, user_id, invitation[1]),
+        ).fetchone()
+        if accepted:
+            acceptance_id = accepted[0]
+        else:
+            from hashlib import sha256
+            acceptance_id = uuid4()
+            proof = sha256(
+                (str(user_id)+str(invitation[0])+str(document_id)
+                 +secrets.token_hex(32)).encode()
+            ).hexdigest()
+            conn.execute(
+                "INSERT INTO public.contract_acceptances "
+                "(id,document_id,document_kind,user_id,tenant_id,"
+                "evidence_hash,evidence_method) "
+                "VALUES(%s,%s,'TENANT_MEMBERSHIP',%s,%s,%s,'CI_VERIFIED_IDENTITY')",
+                (acceptance_id,document_id,user_id,invitation[1],proof),
+            )
+
         conn.execute(
             "UPDATE public.invitations SET accepted_at=now(),accepted_user_id=%s,"
             "accepted_membership_id=%s WHERE id=%s",
@@ -167,7 +217,8 @@ def accept_existing_identity_ci(conn, *, token: str, user_id: UUID) -> UUID | No
             "action,object_type,object_id,reason,evidence_ref)"
             "VALUES(%s,%s,%s,'CI_INVITATION_ACCEPTED','MEMBERSHIP',%s,%s,%s)",
             (user_id, invitation[3], invitation[1], str(membership_id),
-             "Aceite sintético de convite de uso único no CI", str(invitation[0])),
+             "Aceite sintético com documento validado, sem prova externa",
+             str(acceptance_id)),
         )
         return membership_id
 
