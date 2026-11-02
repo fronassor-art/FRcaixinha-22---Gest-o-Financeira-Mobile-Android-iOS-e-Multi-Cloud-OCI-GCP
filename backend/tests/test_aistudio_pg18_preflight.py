@@ -68,6 +68,26 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT has_function_privilege(current_user,"
             "'public.auth_active_membership_contexts(text)','EXECUTE')"
         ), "App financeiro não pode consultar nomes de vínculos via Auth"
+        assert not await admin.fetchval(
+            "SELECT has_column_privilege('frcaixinha_auth_role',"
+            "'public.sessions','expires_at','UPDATE')"
+        ), "Auth não pode renovar sessão diretamente"
+        assert not await admin.fetchval(
+            "SELECT has_column_privilege('frcaixinha_auth_role',"
+            "'public.sessions','revoked_at','UPDATE')"
+        ), "Auth não pode revogar sessão diretamente"
+        assert await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_auth_role',"
+            "'public.auth_refresh_session(text)','EXECUTE')"
+        ), "Auth deve renovar apenas pela função de sessão"
+        assert await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_auth_role',"
+            "'public.auth_revoke_owned_session(text,uuid)','EXECUTE')"
+        ), "Auth deve revogar sessão própria pela função vinculada a token"
+        assert not await application.fetchval(
+            "SELECT has_function_privilege(current_user,"
+            "'public.auth_revoke_all_sessions(text)','EXECUTE')"
+        ), "O papel financeiro não pode revogar sessões"
         assert not await application.fetchval(
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')"
         ), "Sessões continuam isoladas do app"
