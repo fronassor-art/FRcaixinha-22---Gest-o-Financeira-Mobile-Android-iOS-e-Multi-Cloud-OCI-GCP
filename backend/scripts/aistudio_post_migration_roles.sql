@@ -1,4 +1,4 @@
--- Execucao na mesma transacao das migracoes versionadas 001-022.
+-- Execucao na mesma transacao das migracoes versionadas 001-023.
 -- MASTER e um papel de aplicativo, jamais um SUPERUSER PostgreSQL.
 GRANT frcaixinha_app_role TO frc_ai_app;
 GRANT frcaixinha_auth_role TO frc_ai_auth;
@@ -79,6 +79,17 @@ BEGIN
     OR has_table_privilege('frc_ai_auth','public.password_reset_tokens','SELECT')
   THEN
     RAISE EXCEPTION 'BLOQUEADO: motor de convites/recuperacao nao protegido';
+  END IF;
+  IF has_column_privilege('frc_ai_auth','public.sessions','active_role','UPDATE')
+    OR has_column_privilege('frc_ai_auth','public.sessions','active_tenant_id','UPDATE')
+    OR NOT has_function_privilege('frc_ai_auth',
+      'public.auth_promote_pending_session(text,varchar,uuid)','EXECUTE')
+    OR NOT has_function_privilege('frc_ai_auth',
+      'public.auth_switch_session_context(text,varchar,uuid)','EXECUTE')
+    OR has_function_privilege('frc_ai_app',
+      'public.auth_switch_session_context(text,varchar,uuid)','EXECUTE')
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: role Auth pode forjar alteracao direta de contexto';
   END IF;
   IF NOT EXISTS (
        SELECT 1 FROM pg_constraint
