@@ -283,6 +283,9 @@ jobs:
           PGDATABASE: frcaixinha_ci
         run: |
           set -euo pipefail
+          # Reproduzir os papeis tecnicos locais SEM tocar o banco Termux.
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_auth LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           scripts=()
           for i in $(seq 1 27); do
             printf -v n '%03d' "$i"
@@ -291,6 +294,7 @@ jobs:
             test -f "${files[0]}"
             scripts+=(-f "${files[0]}")
           done
+          scripts+=(-f backend/scripts/aistudio_post_migration_roles.sql)
           psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_pg18_app"
