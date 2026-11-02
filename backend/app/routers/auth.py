@@ -12,7 +12,7 @@ import uuid
 from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPasswordRequest, ContextSwitchRequest, UserResponse
 from ..config import settings
 from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure
-from ..dependencies import get_current_session, AuthenticatedSession, auth_database_url, bearer_token
+from ..dependencies import get_current_session, AuthenticatedSession, auth_database_url, auth_verifier_database_url, bearer_token
 
 router = APIRouter(prefix="/auth", tags=["Autenticação e Sessões"])
 
@@ -23,7 +23,7 @@ def get_auth_status():
     Declara explicitamente a necessidade do backend contratual FastAPI + PostgreSQL.
     """
     database_url_configured = settings.is_database_configured
-    test_enabled = os.getenv('FRCAIXINHA_TEST_AUTH') == '1' and os.getenv('ENVIRONMENT', 'development') != 'production' and bool(os.getenv('AUTH_DATABASE_URL', '').startswith('postgres'))
+    test_enabled = os.getenv('FRCAIXINHA_TEST_AUTH') == '1' and os.getenv('ENVIRONMENT', 'development') != 'production' and bool(os.getenv('AUTH_DATABASE_URL', '').startswith('postgres')) and bool(os.getenv('AUTH_VERIFIER_DATABASE_URL', '').startswith('postgres'))
     return AuthStatusResponse(
         status="TEST_MODE" if test_enabled else ("BLOCKED_PENDING_IMPLEMENTATION" if database_url_configured else "BLOCKED_PENDING_CONFIG"),
         configured=test_enabled,
@@ -44,9 +44,10 @@ async def login(payload: LoginRequest, response: Response):
     if not settings.is_database_configured:
         raise HTTPException(status_code=503, detail='Banco de dados não configurado.')
     try:
-        conn = await asyncpg.connect(auth_database_url(), timeout=5)
+        # Credencial verificadora distinta: apenas ela enxerga hashes.
+        verifier = await asyncpg.connect(auth_verifier_database_url(), timeout=5)
         try:
-            record = await conn.fetchrow(
+            record = await verifier.fetchrow(
                 'SELECT u.id,u.email,u.full_name,u.status,u.is_master,c.password_hash '
                 'FROM public.users u JOIN public.credentials c ON c.user_id=u.id WHERE lower(u.email)=$1',
                 identifier)
@@ -55,12 +56,23 @@ async def login(payload: LoginRequest, response: Response):
             if not verified or record['status'] != 'ACTIVE':
                 record_failed_attempt(identifier)
                 raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
+            # So uma conta que comprovou a senha gera o atestado efemero.
+            proof_raw, proof_hash = generate_session_token()
+            await verifier.execute(
+                "INSERT INTO public.auth_login_proofs(proof_hash,user_id,expires_at) "
+                "VALUES($1,$2,NOW()+INTERVAL '60 seconds')",
+                proof_hash, record['id'])
+        finally:
+            await verifier.close()
 
+        conn = await asyncpg.connect(auth_database_url(), timeout=5)
+        try:
             # A senha é verificada ANTES de criar o token provisório. A consulta
             # de vínculos só aceita token bruto de sessão, nunca UUID arbitrário.
-            # INSERT, escolha do vínculo e promoção ocorrem na MESMA transação:
-            # sem vínculo válido => rollback, sem sessão provisória persistida.
-            raw_token, token_hash = generate_session_token()
+            # A prova efemera e de uso unico foi emitida por OUTRA role.
+            # Emissao PENDING, escolha de vinculo e promocao na MESMA transacao:
+            # sem vinculo valido => rollback da sessao; prova ja foi consumida.
+            raw_token, _ = generate_session_token()
             async with conn.transaction():
                 current_user = await conn.fetchrow(
                     "SELECT status,is_master FROM public.users WHERE id=$1", record['id'])
@@ -68,11 +80,12 @@ async def login(payload: LoginRequest, response: Response):
                     record_failed_attempt(identifier)
                     raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
                 is_master = current_user['is_master']
-                await conn.execute(
-                    "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
-                    "active_tenant_id,expires_at) VALUES($1,$2,$3,'PENDING_CONTEXT',NULL,"
-                    "NOW()+INTERVAL '90 seconds')",
-                    uuid.uuid4(), token_hash, record['id'])
+                issued = await conn.fetchval(
+                    "SELECT public.auth_issue_pending_session("
+                    "$1::uuid,$2::text,$3::text)",
+                    record['id'], raw_token, proof_raw)
+                if not issued:
+                    raise HTTPException(status_code=401, detail='Prova de login invalida ou expirada.')
                 links = await conn.fetch(
                     'SELECT tenant_id,role FROM public.auth_active_memberships($1::text) '
                     'ORDER BY tenant_id,role', raw_token)
