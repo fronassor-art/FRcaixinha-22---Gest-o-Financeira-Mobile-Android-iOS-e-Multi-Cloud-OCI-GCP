@@ -186,6 +186,13 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
                     contexts=await client.get("/api/v1/auth/contexts",headers=headers)
                     assert contexts.status_code == 200,contexts.text
                     assert len(contexts.json()) == (3 if role=="MASTER" else 2)
+                    if role == "TENANT_MEMBER":
+                        closing = await client.get(
+                            f"/api/v1/tenants/{first['tenant_id']}/closings/"
+                            f"{uuid4()}", headers=headers,
+                        )
+                        assert closing.status_code == 403, closing.text
+                        assert "member_count_visible" not in dashboard.json()
                     if role == "MASTER":
                         # Testar tres contextos simultaneos sob o MESMO token
                         # e MESMO UUID de identidade, sem login repetido.

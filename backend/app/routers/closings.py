@@ -241,6 +241,14 @@ async def get_cycle_closing(
     Usa u.full_name em conformidade com o schema 001.
     """
     require_tenant_access(tenant_id, session)
+    # A API antiga retornava o rateio global sem uma verificação explícita
+    # de papel. O membro recebe somente seu demonstrativo INDIVIDUAL
+    # (endpoint separado, ainda não implementado).
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Fechamento consolidado exclusivo do administrador.",
+        )
 
     closing = await conn.fetchrow("""
         SELECT * FROM cycle_closings WHERE tenant_id = $1 AND cycle_id = $2;

@@ -52,7 +52,7 @@ async def list_tenant_quotas(
     params = [uuid.UUID(tenant_id)]
 
     if session.role == "TENANT_MEMBER":
-        query += " AND m.user_id = $2"
+        query += " AND m.user_id = $2 AND m.role = 'TENANT_MEMBER' AND m.status = 'ATIVA'"
         params.append(uuid.UUID(session.user_id))
 
     query += " ORDER BY q.quota_number ASC;"
@@ -102,7 +102,7 @@ async def list_tenant_contributions(
     params = [uuid.UUID(tenant_id)]
 
     if session.role == "TENANT_MEMBER":
-        query += " AND m.user_id = $2"
+        query += " AND m.user_id = $2 AND m.role = 'TENANT_MEMBER' AND m.status = 'ATIVA'"
         params.append(uuid.UUID(session.user_id))
 
     query += " ORDER BY c.competence DESC, c.due_date ASC;"

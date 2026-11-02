@@ -218,7 +218,7 @@ async def list_tenant_loans(
     params = [uuid.UUID(tenant_id)]
 
     if session.role == "TENANT_MEMBER":
-        query += " AND m.user_id = $2"
+        query += " AND m.user_id = $2 AND m.role = 'TENANT_MEMBER' AND m.status = 'ATIVA'"
         params.append(uuid.UUID(session.user_id))
 
     query += " ORDER BY l.created_at DESC;"
@@ -320,7 +320,8 @@ async def request_loan(
 
     mem_row = await conn.fetchrow("""
         SELECT id, role, status FROM memberships
-        WHERE tenant_id = $1 AND user_id = $2 AND status = 'ATIVA';
+        WHERE tenant_id = $1 AND user_id = $2
+          AND role = 'TENANT_MEMBER' AND status = 'ATIVA';
     """, uuid.UUID(tenant_id), uuid.UUID(session.user_id))
 
     if not mem_row:

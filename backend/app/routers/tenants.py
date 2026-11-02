@@ -34,15 +34,41 @@ async def get_tenant_dashboard(
     require_tenant_access(tenant_id, session)
     tenant = _tenant_uuid(tenant_id)
     # SELECT por RLS: para o membro, somente suas próprias linhas.
-    quotas = await conn.fetchval(
-        "SELECT count(*) FROM public.quotas WHERE tenant_id=$1", tenant
-    )
-    contributions = await conn.fetchval(
-        "SELECT count(*) FROM public.contributions WHERE tenant_id=$1", tenant
-    )
-    loans = await conn.fetchval(
-        "SELECT count(*) FROM public.loans WHERE tenant_id=$1", tenant
-    )
+    if session.role == "TENANT_MEMBER":
+        # Uma identidade pode ser tambem TENANT_ADMIN. No contexto Membro,
+        # nunca contar linhas vinculadas ao membership administrativo.
+        person = uuid.UUID(session.user_id)
+        quotas = await conn.fetchval(
+            "SELECT count(*) FROM public.quotas q "
+            "JOIN public.memberships m ON m.id=q.membership_id "
+            "WHERE q.tenant_id=$1 AND m.tenant_id=$1 AND m.user_id=$2 "
+            "AND m.role='TENANT_MEMBER' AND m.status='ATIVA'",
+            tenant, person,
+        )
+        contributions = await conn.fetchval(
+            "SELECT count(*) FROM public.contributions c "
+            "JOIN public.memberships m ON m.id=c.membership_id "
+            "WHERE c.tenant_id=$1 AND m.tenant_id=$1 AND m.user_id=$2 "
+            "AND m.role='TENANT_MEMBER' AND m.status='ATIVA'",
+            tenant, person,
+        )
+        loans = await conn.fetchval(
+            "SELECT count(*) FROM public.loans l "
+            "JOIN public.memberships m ON m.id=l.borrower_membership_id "
+            "WHERE l.tenant_id=$1 AND m.tenant_id=$1 AND m.user_id=$2 "
+            "AND m.role='TENANT_MEMBER' AND m.status='ATIVA'",
+            tenant, person,
+        )
+    else:
+        quotas = await conn.fetchval(
+            "SELECT count(*) FROM public.quotas WHERE tenant_id=$1", tenant
+        )
+        contributions = await conn.fetchval(
+            "SELECT count(*) FROM public.contributions WHERE tenant_id=$1", tenant
+        )
+        loans = await conn.fetchval(
+            "SELECT count(*) FROM public.loans WHERE tenant_id=$1", tenant
+        )
     response = {
         "source": "POSTGRESQL_RLS",
         "tenant_id": str(tenant),
