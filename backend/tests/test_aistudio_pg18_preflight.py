@@ -39,6 +39,20 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
         assert await application.fetchval(
             "SELECT count(*) FROM public.platform_license_plans"
         ) == 0, "Catalogo Master deve ser invisivel fora de contexto"
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.contract_documents"
+        ) == 0, "Sem aceitar termos por inferência"
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.saas_subscription_preparations"
+        ) == 0, "Nenhuma licença é preparada sem aceite explícito"
+        assert not await application.fetchval(
+            "SELECT has_table_privilege(current_user,"
+            "'public.contract_acceptances','INSERT')"
+        ), "API app nunca pode forjar aceite"
+        assert not await application.fetchval(
+            "SELECT has_table_privilege(current_user,"
+            "'public.saas_subscription_preparations','INSERT')"
+        ), "API app nunca deve ativar licenciamento"
         assert await application.fetchval(
             "SELECT has_column_privilege(current_user,'public.users','cpf','SELECT')"
         ) is False, "CPF nao pode ser legivel pela aplicacao"

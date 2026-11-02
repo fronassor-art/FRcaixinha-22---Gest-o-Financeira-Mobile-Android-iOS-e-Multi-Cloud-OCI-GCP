@@ -95,3 +95,64 @@ async def get_tenant_members(
             for r in rows
         ],
     }
+
+
+
+@router.get("/{tenant_id}/license-preparation")
+async def tenant_license_preparation(
+    tenant_id: str,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Admin vê somente preparações da própria licença, nunca receita ou Pix."""
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403,detail="Licenciamento exclusivo do administrador da caixinha.")
+    tenant = _tenant_uuid(tenant_id)
+    rows = await conn.fetch(
+        "SELECT id,plan_tier,price_version_id,billing_period,status,created_at "
+        "FROM public.saas_subscription_preparations "
+        "WHERE tenant_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50",tenant
+    )
+    return {
+        "source":"POSTGRESQL_RLS","tenant_id":str(tenant),
+        "billing_status":"NO_PROVIDER_NO_FINANCIAL_ACTIVATION",
+        "preparations":[
+            {"id":str(r["id"]),"plan_tier":r["plan_tier"],
+             "price_version_id":str(r["price_version_id"]),
+             "billing_period":r["billing_period"],"status":r["status"],
+             "created_at":r["created_at"].isoformat()}
+            for r in rows
+        ],
+    }
+
+
+@router.get("/{tenant_id}/my-contracts")
+async def own_contracts_in_tenant(
+    tenant_id: str,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Aceites documentais próprios no tenant ativo; não revela outros membros."""
+    require_tenant_access(tenant_id,session)
+    tenant=_tenant_uuid(tenant_id)
+    rows=await conn.fetch(
+        "SELECT a.id,a.document_id,a.document_kind,a.accepted_at,"
+        "d.version_label,d.sha256,d.source_reference "
+        "FROM public.contract_acceptances a "
+        "JOIN public.contract_documents d ON d.id=a.document_id "
+        "WHERE a.user_id=$1 AND (a.tenant_id=$2 OR "
+        "(a.tenant_id IS NULL AND a.document_kind='PLATFORM_LICENSE')) "
+        "ORDER BY a.accepted_at DESC,a.id DESC LIMIT 100",
+        uuid.UUID(session.user_id),tenant,
+    )
+    return {
+        "source":"POSTGRESQL_RLS","tenant_id":str(tenant),
+        "contracts":[
+            {"id":str(r["id"]),"document_id":str(r["document_id"]),
+             "kind":r["document_kind"],"version":r["version_label"],
+             "sha256":r["sha256"],"source_reference":r["source_reference"],
+             "accepted_at":r["accepted_at"].isoformat()}
+            for r in rows
+        ],
+    }

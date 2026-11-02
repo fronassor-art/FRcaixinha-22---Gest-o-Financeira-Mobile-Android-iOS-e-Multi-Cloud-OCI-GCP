@@ -119,7 +119,7 @@ No mesmo repositorio AI Studio, foram integradas:
 - Livro-razao e emprestimos: telas autenticadas consultam a API; simulacao Price e somente matematica, nunca liberacao ou quitação.
 - Contribuicoes: tela existente consulta API e nao confirma Pix sem reconciliacao.
 
-O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-014 antes de rodar `apply`. Este documento nao constitui comando de execucao.
+O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-016 antes de rodar `apply`. Este documento nao constitui comando de execucao.
 
 ### Pendencias que nao devem ser apresentadas como prontas
 - Contratacao, renovacao, suspensao e cobranca SaaS; historico de preco nao equivale a receita.
@@ -160,7 +160,7 @@ Nao executar `apply`, `verify` nem bootstrap sem nova autorizacao do proprietari
 - Login pelo papel `frcaixinha_auth_role` mantem SELECT das colunas explicitamente autorizadas. O papel financeiro `frcaixinha_app_role` ve somente `id,full_name` dos membros ativos da propria caixinha no contexto TENANT_ADMIN, ou o proprio registro nos papeis validados.
 - Master tem acesso apenas ao proprio registro nessa tabela; seu inventario SaaS continua na tabela tenants, sem saldos financeiros.
 - Teste em PostgreSQL 16 descartavel exige que Admin A nao veja nomes de B, membro veja apenas o proprio nome, MASTER apenas o proprio, sem contexto zero linhas.
-- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-014`.
+- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-016`.
 
 
 ## Preparação 014 (pacote multitarefa) — executar APENAS no CI descartável
@@ -170,7 +170,22 @@ convite (entrega simulada no CI, aceite único, revogação, expiração) e a
 tabela `password_reset_tokens` para recuperação de senha com tokens
 hash SHA-256. Nenhuma função de laboratório CI foi exposta pela API.
 
-O script de migrações locais foi atualizado para exigir `001-014`,
+O script de migrações locais foi atualizado para exigir `001-016`,
 mas **o usuário pediu expressamente não executar migrações**.
 Não usar `apply`; somente `check` para auditoria de leitura.
 Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.
+
+
+## Novas migrações 015/016 (SOMENTE ARQUIVOS, SEM AUTORIZAÇÃO PARA APLICAR)
+
+- 015: `contract_documents` e `contract_acceptances`, versões SHA-256,
+  aceite pessoal auditável, sem mutações de documento/aceite, RLS por perfil.
+- 016: `saas_subscription_preparations`, preparação de assinatura com
+  versão de preço e aceite, sem status ACTIVE ou cobrança real.
+- Nova API `POST /auth/logout-all`: usuário autenticado revoga todas as
+  próprias sessões em contextos distintos, sem afetar outros usuários.
+- Consultas documentais e SaaS específicas para Master, admin e membro.
+- Testes em PostgreSQL 16/18 descartáveis, sem dados reais.
+- O script local contém arquivos 001–016 mas **NÃO executar `apply`**.
+  Apenas `check` ou git status/fetch/merge para sincronizar código.
+- Relatório: `docs/PACOTE_AMPLIADO_GOVERNANCA_AI_STUDIO_2026-11-01.md`.

@@ -50,6 +50,43 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
   }, [isMaster, state.currentUserId, revision]);
 
 
+  type PrepItem = { id: string; plan_tier: string; billing_period: string;
+    status: string; created_at: string; tenant_id?: string };
+  type PrepStatus = { key: string; status: 'loading' | 'ready' | 'error';
+    preparations: PrepItem[] };
+  const prepScope = [state.currentUserId, currentRole, state.currentTenantId].join(':');
+  const [subscriptionPreps, setSubscriptionPreps] = useState<PrepStatus>({
+    key: '', status: 'loading', preparations: [],
+  });
+  useEffect(() => {
+    let active = true;
+    setSubscriptionPreps({ key: prepScope, status: 'loading', preparations: [] });
+    const call = currentRole === 'MASTER'
+      ? financialApi.fetchMasterSubscriptionPreparations()
+      : currentRole === 'TENANT_ADMIN' && state.currentTenantId
+        ? financialApi.fetchTenantLicensePreparation(state.currentTenantId)
+        : null;
+    if (!call) {
+      setSubscriptionPreps({ key: prepScope, status: 'ready', preparations: [] });
+      return () => { active = false; };
+    }
+    call.then(response => {
+      if (response.source !== 'POSTGRESQL_RLS' ||
+          response.billing_status !== 'NO_PROVIDER_NO_FINANCIAL_ACTIVATION' ||
+          ('tenant_id' in response && response.tenant_id !== state.currentTenantId)) {
+        throw new Error('Fonte ou contexto SaaS inválido');
+      }
+      if (active) setSubscriptionPreps({ key: prepScope, status: 'ready',
+        preparations: response.preparations });
+    }).catch(() => {
+      if (active) setSubscriptionPreps({ key: prepScope, status: 'error', preparations: [] });
+    });
+    return () => { active = false; };
+  }, [prepScope, revision]);
+  const prepCurrent: PrepStatus = subscriptionPreps.key === prepScope
+    ? subscriptionPreps
+    : { key: prepScope, status: 'loading', preparations: [] };
+
   // Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25)
   const [editingTier, setEditingTier] = useState<LicensePlanTier | null>(null);
   const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(89.90);
@@ -87,10 +124,31 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
   if (!isMaster) {
     return <section role="status" className="rounded-xl border border-amber-300 bg-white p-5">
-      <h2 className="text-lg font-bold">Minha licença SaaS</h2>
-      <p className="mt-2 text-sm text-slate-700">
-        Assinaturas e pagamentos do administrador ainda não estão integrados ao banco.
-        Nenhuma contratação ou cobrança fictícia será exibida como real.
+      <h2 className="text-lg font-bold">Licença SaaS da caixinha</h2>
+      {currentRole !== 'TENANT_ADMIN' ? (
+        <p className="mt-2 text-sm text-slate-700">
+          Informações comerciais são restritas ao administrador contratante.
+        </p>
+      ) : prepCurrent.status !== 'ready' ? (
+        <p className="mt-2 text-sm text-slate-700">
+          {prepCurrent.status === 'loading' ? 'Consultando o PostgreSQL...' :
+            'Não foi possível consultar a licença. Nenhum status fictício será exibido.'}
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-slate-700">
+            {prepCurrent.preparations.length} preparação(ões) documentais visíveis.
+            Nenhuma representa licença ativa ou pagamento conciliado.
+          </p>
+          {prepCurrent.preparations.map(p => (
+            <p key={p.id} className="mt-2 text-sm text-slate-700">
+              {p.plan_tier} • {p.billing_period} • {p.status}
+            </p>
+          ))}
+        </>
+      )}
+      <p className="mt-3 text-xs text-amber-950">
+        Contratação, cobrança Pix e ativação continuam bloqueadas.
       </p>
     </section>;
   }
@@ -138,6 +196,21 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
           <span>Fuso Oficial: <strong>America/Belem</strong> (Dia Âncora Preservado)</span>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+        <h3 className="font-bold text-slate-900">Preparações de licenças — dados PostgreSQL</h3>
+        {prepCurrent.status === 'ready' ? (
+          <p className="mt-1 text-slate-700">
+            {prepCurrent.preparations.length} preparação(ões) no inventário consultado.
+            Nenhuma é pagamento, renovação conciliada ou licença ativada.
+          </p>
+        ) : (
+          <p className="mt-1 text-amber-950">
+            {prepCurrent.status === 'loading' ? 'Consultando o servidor...' :
+              'Consulta SaaS indisponível; não mostrar assinaturas demonstrativas.'}
+          </p>
+        )}
+      </section>
 
       {/* Grid dos 3 Planos Oficiais */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -607,3 +607,50 @@ async def test_unlinked_existing_account_does_not_reveal_identity_or_create_sess
         clear_rate_limit(email)
         await admin.execute("DELETE FROM public.users WHERE id=$1", user_id)
         await admin.close()
+
+
+
+async def test_logout_all_revokes_every_role_session_of_identity_only(monkeypatch,isolated_rows):
+    """Logout global transacional: duas sessões do ator; outra identidade preservada."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.config import settings
+    from app.security import hash_token
+
+    _,ids=isolated_rows
+    admin=await asyncpg.connect(_ci_dsn('CI_ADMIN_DATABASE_URL'))
+    monkeypatch.setattr(settings,'DATABASE_URL',_ci_dsn('DATABASE_URL'))
+    monkeypatch.setenv('AUTH_DATABASE_URL',_ci_dsn('CI_AUTH_DATABASE_URL'))
+    monkeypatch.setenv('FRCAIXINHA_TEST_AUTH','1')
+    monkeypatch.setenv('ENVIRONMENT','homologation')
+    token='ci-logout-all-synthetic-'+str(uuid.uuid4())
+    tokens=[token,'ci-session-extra-'+str(uuid.uuid4()),
+            'ci-other-person-'+str(uuid.uuid4())]
+    try:
+        for i,raw in enumerate(tokens):
+            actor=ids['member_a'] if i<2 else ids['member_b']
+            tenant=ids['tenant_a'] if i<2 else ids['tenant_b']
+            await admin.execute(
+                "INSERT INTO public.sessions(id,token_hash,user_id,active_role,"
+                "active_tenant_id,expires_at) "
+                "VALUES($1,$2,$3,'TENANT_MEMBER',$4,now()+interval '30 minutes')",
+                uuid.uuid4(),hash_token(raw),actor,tenant,
+            )
+        async with AsyncClient(transport=ASGITransport(app=app),
+                               base_url='http://test') as client:
+            response=await client.post('/api/v1/auth/logout-all',
+                headers={'Authorization':'Bearer '+token})
+        assert response.status_code==200,response.text
+        assert response.json()['revoked_sessions']==2
+        assert await admin.fetchval(
+            'SELECT count(*) FROM public.sessions WHERE user_id=$1 AND revoked_at IS NULL',
+            ids['member_a'])==0
+        assert await admin.fetchval(
+            'SELECT count(*) FROM public.sessions WHERE user_id=$1 AND revoked_at IS NULL',
+            ids['member_b'])==1
+    finally:
+        await admin.execute(
+            "DELETE FROM public.sessions WHERE token_hash=ANY($1::varchar[])",
+            [hash_token(x) for x in tokens],
+        )
+        await admin.close()

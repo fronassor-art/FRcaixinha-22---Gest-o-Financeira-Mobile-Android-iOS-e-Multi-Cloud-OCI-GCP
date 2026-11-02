@@ -177,3 +177,8 @@ A migração 014 não deve exigir `tenant_id` no convite inicial do administrado
 pois o Caderno Mestre prevê contratação com tenant preliminar. A constraint
 foi limitada aos convites de membros. A ativação de administrador ainda não
 é feita automaticamente no fluxo preliminar; requer implementação e aceite.
+
+
+## 11. Pacote de governança adicional
+
+Migracoes 015/016 preparam contrato versionado e aceite pessoal auditavel, e SaaS documental sem cobranca. Nova API de encerramento global de sessoes, leitura propria de aceites e leitura isolada de preparacoes de licenca. Todas as escritas de contrato e licenca ficam apenas no CI descartavel. Nada foi aplicado no PostgreSQL do celular. Para criterios e pendencias, consultar docs/PACOTE_AMPLIADO_GOVERNANCA_AI_STUDIO_2026-11-01.md.

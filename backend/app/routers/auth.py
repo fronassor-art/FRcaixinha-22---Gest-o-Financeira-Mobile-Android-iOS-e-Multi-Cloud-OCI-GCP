@@ -111,6 +111,42 @@ async def logout(request: Request, response: Response):
     return {'success': True, 'message': 'Sessão revogada.'}
 
 
+@router.post("/logout-all")
+async def logout_all_sessions(
+    request: Request,
+    response: Response,
+    session: AuthenticatedSession = Depends(get_current_session),
+):
+    """Revoga todas as sessões (todos os papéis/tenants) do usuário autenticado.
+
+    A confirmação só é emitida após COMMIT no PostgreSQL da autenticação.
+    Não usa a conta financeira e não altera outros usuários.
+    """
+    try:
+        conn = await asyncpg.connect(auth_database_url(), timeout=5)
+        try:
+            async with conn.transaction():
+                rows = await conn.fetch(
+                    "UPDATE public.sessions SET revoked_at=NOW() "
+                    "WHERE user_id=$1 AND revoked_at IS NULL RETURNING id",
+                    uuid.UUID(session.user_id),
+                )
+        finally:
+            await conn.close()
+    except HTTPException:
+        raise
+    except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
+        raise HTTPException(
+            status_code=503, detail="Não foi possível confirmar a revogação de todas as sessões."
+        )
+    response.delete_cookie(
+        key=settings.SESSION_COOKIE_NAME, httponly=True,
+        secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE
+    )
+    return {"success":True,"revoked_sessions":len(rows),
+            "message":"Sessões de todos os perfis revogadas no PostgreSQL."}
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(session: AuthenticatedSession = Depends(get_current_session)):
     return UserResponse(id=session.user_id, name=session.name, email=session.email,

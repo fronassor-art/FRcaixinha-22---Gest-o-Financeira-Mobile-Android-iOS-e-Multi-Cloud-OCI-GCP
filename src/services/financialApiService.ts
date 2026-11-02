@@ -137,6 +137,41 @@ class FinancialApiService {
     return this.request('/api/v1/master/licenses');
   }
 
+  public async fetchMasterSubscriptionPreparations(): Promise<{
+    source: 'POSTGRESQL_RLS';
+    billing_status: string;
+    total_returned: number;
+    preparations: Array<{
+      id: string; tenant_id: string; plan_tier: string; price_version_id: string;
+      billing_period: string; status: string; created_at: string;
+    }>;
+  }> {
+    return this.request('/api/v1/master/subscription-preparations');
+  }
+
+  public async fetchTenantLicensePreparation(tenantId: string): Promise<{
+    source: 'POSTGRESQL_RLS';
+    tenant_id: string;
+    billing_status: string;
+    preparations: Array<{
+      id: string; plan_tier: string; price_version_id: string;
+      billing_period: string; status: string; created_at: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/license-preparation`);
+  }
+
+  public async fetchMyContractAcceptances(tenantId: string): Promise<{
+    source: 'POSTGRESQL_RLS';
+    tenant_id: string;
+    contracts: Array<{
+      id: string; document_id: string; kind: string; version: string;
+      sha256: string; source_reference: string; accepted_at: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/my-contracts`);
+  }
+
   public async updateMasterLicensePrice(
     tier: 'ESSENCIAL' | 'INTERMEDIARIO',
     monthly_price: number,

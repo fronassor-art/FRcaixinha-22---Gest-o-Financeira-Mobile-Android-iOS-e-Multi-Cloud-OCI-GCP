@@ -144,3 +144,32 @@ async def get_master_overview(
         "saas_revenue_status": "NOT_CONNECTED_TO_RECONCILED_BILLING",
         "subscriptions_status": "NOT_IMPLEMENTED_IN_PERSISTENT_SCHEMA",
     }
+
+
+
+@router.get("/subscription-preparations")
+async def list_saas_subscription_preparations(
+    session: AuthenticatedSession = Depends(require_master),
+    conn=Depends(get_rls_db_connection),
+):
+    """Inventário documental SaaS da plataforma, sem dados de saldo dos tenants.
+
+    Nenhuma assinatura nesta tabela representa pagamento confirmado.
+    """
+    rows = await conn.fetch(
+        "SELECT id,tenant_id,plan_tier,price_version_id,billing_period,status,created_at "
+        "FROM public.saas_subscription_preparations "
+        "ORDER BY created_at DESC,id DESC LIMIT 200"
+    )
+    return {
+        "source":"POSTGRESQL_RLS",
+        "billing_status":"NO_PROVIDER_NO_FINANCIAL_ACTIVATION",
+        "total_returned":len(rows),
+        "preparations":[
+            {"id":str(r["id"]),"tenant_id":str(r["tenant_id"]),
+             "plan_tier":r["plan_tier"],"price_version_id":str(r["price_version_id"]),
+             "billing_period":r["billing_period"],"status":r["status"],
+             "created_at":r["created_at"].isoformat()}
+            for r in rows
+        ],
+    }

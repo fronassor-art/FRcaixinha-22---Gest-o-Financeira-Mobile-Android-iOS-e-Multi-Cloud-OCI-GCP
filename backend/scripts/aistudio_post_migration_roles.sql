@@ -24,6 +24,19 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
   END IF;
+  IF to_regclass('public.contract_documents') IS NULL
+    OR to_regclass('public.contract_acceptances') IS NULL
+    OR to_regclass('public.saas_subscription_preparations') IS NULL
+    OR has_table_privilege('frc_ai_app','public.contract_acceptances','INSERT')
+    OR has_table_privilege('frc_ai_auth','public.contract_acceptances','SELECT')
+    OR has_table_privilege('frc_ai_app','public.saas_subscription_preparations','INSERT')
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_class WHERE oid='public.contract_acceptances'::regclass
+        AND relrowsecurity AND relforcerowsecurity
+    )
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: contratos/assinaturas com privilegios indevidos';
+  END IF;
   IF to_regclass('public.password_reset_tokens') IS NULL
     OR NOT EXISTS (SELECT 1 FROM pg_class
        WHERE oid='public.invitations'::regclass AND relrowsecurity AND relforcerowsecurity)
