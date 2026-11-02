@@ -22,7 +22,7 @@ def disposable(name):
 @pytest.mark.asyncio
 async def test_login_five_failed_attempts_block_even_valid_password(monkeypatch):
     uid=uuid.uuid4()
-    email=f"ci-rate-{uid}@example.invalid"
+    email=f"ci-rate-{uid}@example.com"
     password="synthetic-only-CI-password"
     monkeypatch.setattr(settings,"DATABASE_URL",disposable("DATABASE_URL"))
     monkeypatch.setenv("AUTH_DATABASE_URL",disposable("CI_AUTH_DATABASE_URL"))
