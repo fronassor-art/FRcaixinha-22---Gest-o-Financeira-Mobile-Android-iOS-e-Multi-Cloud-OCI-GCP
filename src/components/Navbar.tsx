@@ -50,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
       {/* Top Banner: Central Immutable Calendar Info */}
-      <div className="bg-emerald-950/80 border-b border-emerald-900/60 px-4 py-1.5 text-[11px] text-emerald-200 flex flex-wrap items-center justify-between gap-2">
+      <div className="hidden md:flex bg-emerald-950/80 border-b border-emerald-900/60 px-4 py-1.5 text-[11px] text-emerald-200 flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-medium">
             <Calendar className="w-3.5 h-3.5 text-emerald-400" />
@@ -79,7 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-base tracking-tight text-white">FRcaixinha</span>
-              <span className="text-xs font-bold bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded font-mono">2.2</span>
+              <span className="text-xs font-bold bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded font-mono">AI</span>
             </div>
             <p className="text-[10px] text-slate-400 -mt-0.5 hidden sm:block">
               Automação e Contabilidade Privada • Sem Custódia Bancária
@@ -92,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Multi-Cloud OCI + GCP Status Badge Button */}
           <button
             onClick={onNavigateCloud}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-slate-800 to-slate-850 hover:from-slate-750 hover:to-slate-800 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700/80 transition-all cursor-pointer shadow-xs"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-slate-800 to-slate-850 hover:from-slate-750 hover:to-slate-800 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700/80 transition-all cursor-pointer shadow-xs"
             title="Ver Topologia Multi-Cloud: Google Cloud (SP) + Oracle Cloud (Vinhedo)"
           >
             <div className="flex items-center gap-1">
@@ -109,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile Install App Button */}
           <button
             onClick={onOpenMobileInstall}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 text-xs font-semibold rounded-lg border border-emerald-700/60 transition-colors cursor-pointer"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 text-xs font-semibold rounded-lg border border-emerald-700/60 transition-colors cursor-pointer"
             title="Instalar App no Celular (Android ou iPhone)"
           >
             <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
@@ -132,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* GitHub Sync Button */}
           <button
             onClick={onOpenGitHub}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors cursor-pointer shadow-xs"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors cursor-pointer shadow-xs"
             title="Sincronizar com Repositório GitHub (Git commit eebe257)"
           >
             <Github className="w-3.5 h-3.5 text-indigo-400" />
@@ -142,7 +142,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Quick Manual Button */}
           <button
             onClick={onOpenManual}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition-colors cursor-pointer"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition-colors cursor-pointer"
             title="Abrir Manual Oficial em 16 Passos (Cláusula 11.4)"
           >
             <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
@@ -152,7 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Quick Audit Button */}
           <button
             onClick={onOpenAudit}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-200 text-xs font-semibold rounded-lg border border-indigo-700/60 transition-colors cursor-pointer shadow-xs"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-200 text-xs font-semibold rounded-lg border border-indigo-700/60 transition-colors cursor-pointer shadow-xs"
             title="Verificar Cenários de Prova AT-01 a AT-50"
           >
             <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />
@@ -162,7 +162,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Reset Seed Button */}
           <button
             onClick={handleReset}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            className="hidden md:inline-flex p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             title="Restaurar dados iniciais para homologação"
           >
             <RotateCcw className="w-4 h-4" />
