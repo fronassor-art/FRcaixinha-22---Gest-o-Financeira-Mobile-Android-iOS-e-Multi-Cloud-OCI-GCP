@@ -116,8 +116,8 @@ async def logout(request: Request, response: Response):
         try:
             conn = await asyncpg.connect(auth_database_url(), timeout=5)
             try:
-                await conn.execute('UPDATE public.sessions SET revoked_at=NOW() WHERE token_hash=$1',
-                                   hash_token(token))
+                await conn.fetchval(
+                    'SELECT public.auth_revoke_session($1::text)', token)
             finally:
                 await conn.close()
         except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
@@ -141,12 +141,12 @@ async def logout_all_sessions(
     try:
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
-            async with conn.transaction():
-                rows = await conn.fetch(
-                    "UPDATE public.sessions SET revoked_at=NOW() "
-                    "WHERE user_id=$1 AND revoked_at IS NULL RETURNING id",
-                    uuid.UUID(session.user_id),
-                )
+            revoked_count = await conn.fetchval(
+                "SELECT public.auth_revoke_all_sessions($1::text)",
+                bearer_token(request),
+            )
+            if revoked_count < 0:
+                raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
         finally:
             await conn.close()
     except HTTPException:
@@ -159,7 +159,7 @@ async def logout_all_sessions(
         key=settings.SESSION_COOKIE_NAME, httponly=True,
         secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE
     )
-    return {"success":True,"revoked_sessions":len(rows),
+    return {"success":True,"revoked_sessions":revoked_count,
             "message":"Sessões de todos os perfis revogadas no PostgreSQL."}
 
 
@@ -236,23 +236,20 @@ async def revoke_my_session(
     try:
         conn = await asyncpg.connect(auth_database_url(), timeout=5)
         try:
-            async with conn.transaction():
-                row = await conn.fetchrow(
-                    "UPDATE public.sessions SET revoked_at=NOW() "
-                    "WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL "
-                    "AND expires_at>NOW() RETURNING id,token_hash",
-                    session_id, uuid.UUID(session.user_id),
-                )
+            result = await conn.fetchval(
+                "SELECT public.auth_revoke_owned_session($1::text,$2::uuid)",
+                bearer_token(request), session_id,
+            )
         finally:
             await conn.close()
     except (asyncpg.PostgresError, OSError, asyncio.TimeoutError):
         raise HTTPException(status_code=503, detail='Revogação indisponível.')
-    if not row:
+    if not result:
         raise HTTPException(status_code=404, detail='Sessão não encontrada.')
     return {
         'success': True,
-        'session_id': str(row['id']),
-        'current_revoked': row['token_hash'] == hash_token(bearer_token(request)),
+        'session_id': str(session_id),
+        'current_revoked': result == 2,
     }
 
 
