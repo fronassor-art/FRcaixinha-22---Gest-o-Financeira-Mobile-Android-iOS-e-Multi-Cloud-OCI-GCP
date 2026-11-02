@@ -1,4 +1,4 @@
--- Execucao na mesma transacao das migracoes 001-010.
+-- Execucao na mesma transacao das migracoes versionadas 001-022.
 -- MASTER e um papel de aplicativo, jamais um SUPERUSER PostgreSQL.
 GRANT frcaixinha_app_role TO frc_ai_app;
 GRANT frcaixinha_auth_role TO frc_ai_auth;
@@ -79,6 +79,21 @@ BEGIN
     OR has_table_privilege('frc_ai_auth','public.password_reset_tokens','SELECT')
   THEN
     RAISE EXCEPTION 'BLOQUEADO: motor de convites/recuperacao nao protegido';
+  END IF;
+  IF NOT EXISTS (
+       SELECT 1 FROM pg_constraint
+       WHERE conrelid='public.sessions'::regclass
+         AND conname='sessions_absolute_8h_guard'
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_policies
+       WHERE schemaname='public' AND tablename='sessions'
+         AND policyname='sessions_auth_insert'
+         AND cmd='INSERT'
+         AND with_check LIKE '%PENDING_CONTEXT%'
+     )
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: duracao absoluta ou emissao provisoria invalida';
   END IF;
   IF to_regclass('public.platform_license_plans') IS NULL
      OR to_regclass('public.platform_license_price_versions') IS NULL
