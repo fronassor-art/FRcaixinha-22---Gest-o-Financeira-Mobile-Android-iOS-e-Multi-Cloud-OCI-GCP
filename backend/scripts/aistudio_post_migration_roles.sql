@@ -24,6 +24,16 @@ BEGIN
   THEN
     RAISE EXCEPTION 'BLOQUEADO: identidade/credenciais expostas a aplicacao';
   END IF;
+  IF to_regclass('public.password_reset_tokens') IS NULL
+    OR NOT EXISTS (SELECT 1 FROM pg_class
+       WHERE oid='public.invitations'::regclass AND relrowsecurity AND relforcerowsecurity)
+    OR NOT EXISTS (SELECT 1 FROM pg_class
+       WHERE oid='public.password_reset_tokens'::regclass AND relrowsecurity AND relforcerowsecurity)
+    OR has_table_privilege('frc_ai_app','public.invitations','SELECT')
+    OR has_table_privilege('frc_ai_auth','public.password_reset_tokens','SELECT')
+  THEN
+    RAISE EXCEPTION 'BLOQUEADO: motor de convites/recuperacao nao protegido';
+  END IF;
   IF to_regclass('public.platform_license_plans') IS NULL
      OR to_regclass('public.platform_license_price_versions') IS NULL
      OR to_regclass('public.users') IS NULL

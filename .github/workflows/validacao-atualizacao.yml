@@ -93,6 +93,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_real_panels.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_price_policy_authority.py
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k 'not disposable_postgres'
+          python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
 
   postgres-isolado:
     name: Migrações e testes de RLS em PostgreSQL descartável
@@ -140,6 +141,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/011_platform_license_catalog.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/012_minimize_application_identity_access.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/013_users_identity_rls.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/014_account_lifecycle_preparation.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -168,6 +170,7 @@ jobs:
         run: |
           python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k disposable_postgres
+          python -m pytest -q backend/tests/test_aistudio_account_lifecycle_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -233,7 +236,7 @@ jobs:
           python-version: '3.11'
       - name: Dependencias Python
         run: python -m pip install -r backend/requirements.txt
-      - name: Migrar 001-013 em UMA transacao no PostgreSQL 18 descartavel
+      - name: Migrar 001-014 em UMA transacao no PostgreSQL 18 descartavel
         env:
           PGHOST: 127.0.0.1
           PGPORT: '5432'
@@ -243,7 +246,7 @@ jobs:
         run: |
           set -euo pipefail
           scripts=()
-          for i in $(seq 1 13); do
+          for i in $(seq 1 14); do
             printf -v n '%03d' "$i"
             files=(backend/migrations/"$n"_*.sql)
             test "${#files[@]}" -eq 1

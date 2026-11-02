@@ -151,3 +151,21 @@ O acesso técnico a `public.users` estava limitado a colunas pela migração 012
 - A implementação do Caderno Mestre do Master SaaS não será duplicada.
   A migração 013 permanece apenas versionada; o dono não autorizou
   nenhuma alteração no banco local.
+
+
+## 10. Pacote simultâneo de tarefas pré-migração
+
+Foi preparada a migração `014` para o ciclo seguro de convites e reset
+e o módulo de CI `backend/app/account_lifecycle.py`: tokens de uso único
+armazenados apenas como SHA-256, revogação, expiração, aceite apenas
+para identidade EXISTENTE e verificada, redefinição de senha que revoga
+sessões na mesma transação, hierarquia de convites e auditoria.
+Permissões RLS bloqueiam acesso app/auth a tokens enquanto não houver
+prova de identidade, entrega real e revisão de segurança.
+
+A interface não anunciará envio de link que não foi efetuado. Testes
+abrangem replay, cruzamento de contas, papéis, ausência de entrega,
+revogação e expiração. Este pacote não ativa endpoints públicos,
+não executa migração local nem modifica as contagens das 147 cláusulas.
+Relatório detalhado em
+`docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.

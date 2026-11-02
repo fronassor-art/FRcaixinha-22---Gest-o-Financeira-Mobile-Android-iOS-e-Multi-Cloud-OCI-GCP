@@ -62,7 +62,7 @@ cd ~/frcaixinha-aistudio-mobile || exit 1
 AI_STUDIO_APPLY_MIGRATIONS=YES bash backend/scripts/aistudio_db_local.sh apply
 ```
 
-Exige confirmacao digitada `MIGRAR_SOMENTE_AI_STUDIO`; confirma repo/branch/PGDATA/porta/owner/versao/banco vazio/papeis; usa `psql --single-transaction` e migra SQL `001` ate `013` sem alterar os arquivos legados.
+Exige confirmacao digitada `MIGRAR_SOMENTE_AI_STUDIO`; confirma repo/branch/PGDATA/porta/owner/versao/banco vazio/papeis; usa `psql --single-transaction` e migra SQL `001` ate `014` sem alterar os arquivos legados.
 Na MESMA transacao vincula `frc_ai_app` ao papel `frcaixinha_app_role` e `frc_ai_auth` ao papel `frcaixinha_auth_role`; falhas causam rollback.
 Nao cria usuarios humanos nem disponibiliza transacoes bancarias reais.
 
@@ -119,7 +119,7 @@ No mesmo repositorio AI Studio, foram integradas:
 - Livro-razao e emprestimos: telas autenticadas consultam a API; simulacao Price e somente matematica, nunca liberacao ou quitação.
 - Contribuicoes: tela existente consulta API e nao confirma Pix sem reconciliacao.
 
-O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-013 antes de rodar `apply`. Este documento nao constitui comando de execucao.
+O guard local agora exige que `011` seja incluida **na mesma transacao** de `001-010` para banco ainda vazio. Por isso, uma migracao ja autorizada anteriormente para apenas 001-010 **nao se estende automaticamente** a esta versao. Apos sync, verificar diff e solicitar consentimento especifico para 001-014 antes de rodar `apply`. Este documento nao constitui comando de execucao.
 
 ### Pendencias que nao devem ser apresentadas como prontas
 - Contratacao, renovacao, suspensao e cobranca SaaS; historico de preco nao equivale a receita.
@@ -160,4 +160,17 @@ Nao executar `apply`, `verify` nem bootstrap sem nova autorizacao do proprietari
 - Login pelo papel `frcaixinha_auth_role` mantem SELECT das colunas explicitamente autorizadas. O papel financeiro `frcaixinha_app_role` ve somente `id,full_name` dos membros ativos da propria caixinha no contexto TENANT_ADMIN, ou o proprio registro nos papeis validados.
 - Master tem acesso apenas ao proprio registro nessa tabela; seu inventario SaaS continua na tabela tenants, sem saldos financeiros.
 - Teste em PostgreSQL 16 descartavel exige que Admin A nao veja nomes de B, membro veja apenas o proprio nome, MASTER apenas o proprio, sem contexto zero linhas.
-- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-013`.
+- Nao executar as migracoes locais. O script `apply` segue explicitamente bloqueado ate nova autorizacao e agora compreende `001-014`.
+
+
+## Preparação 014 (pacote multitarefa) — executar APENAS no CI descartável
+
+A migração `014_account_lifecycle_preparation.sql` prepara o estado do
+convite (entrega simulada no CI, aceite único, revogação, expiração) e a
+tabela `password_reset_tokens` para recuperação de senha com tokens
+hash SHA-256. Nenhuma função de laboratório CI foi exposta pela API.
+
+O script de migrações locais foi atualizado para exigir `001-014`,
+mas **o usuário pediu expressamente não executar migrações**.
+Não usar `apply`; somente `check` para auditoria de leitura.
+Consulte `docs/PACOTE_MULTITAREFA_PRE_MIGRACAO_AI_STUDIO_2026-11-01.md`.

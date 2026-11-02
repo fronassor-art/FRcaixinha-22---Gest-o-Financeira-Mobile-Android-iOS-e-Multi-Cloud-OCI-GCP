@@ -273,10 +273,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <div className="p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 space-y-1">
             <div className="flex items-center gap-1.5 font-bold">
               <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Autenticação Bloqueada por Segurança</span>
+              <span>Autenticação sujeita a verificação do servidor</span>
             </div>
             <p className="leading-snug">
-              Sem a conexão ativa com o banco PostgreSQL/FastAPI de produção, <strong>nenhuma sessão é iniciada</strong> e não é permitido login com contas de teste ou papéis selecionados no cliente.
+              O acesso exige FastAPI e PostgreSQL validados. O ambiente atual é de homologação: papéis e vínculos são verificados exclusivamente pelo servidor; nenhuma credencial é validada apenas nesta tela.
             </p>
           </div>
         </div>
@@ -325,7 +325,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Informe seu e-mail cadastrado. Um link de redefinição com chave temporária será processado pelo servidor de autenticação.
+              A recuperação por e-mail ainda depende de integração e verificação de titularidade no servidor. Nenhuma mensagem é enviada enquanto o serviço estiver indisponível.
             </p>
 
             {forgotFeedback ? (
@@ -377,7 +377,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     disabled={forgotLoading}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
                   >
-                    {forgotLoading ? 'Enviando...' : 'Enviar Link de Redefinição'}
+                    {forgotLoading ? 'Verificando serviço...' : 'Verificar disponibilidade'}
                   </button>
                 </div>
               </form>
