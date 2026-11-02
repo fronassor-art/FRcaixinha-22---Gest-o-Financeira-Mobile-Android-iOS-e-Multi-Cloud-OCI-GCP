@@ -65,10 +65,10 @@ async def get_current_session(request: Request) -> AuthenticatedSession:
                                 link['role'] == row['active_role'] for link in links)
                 if not valid:
                     raise HTTPException(status_code=401, detail='Vínculo ativo não encontrado.')
-                await conn.execute(
-                    "UPDATE public.sessions SET expires_at=LEAST("
-                    "created_at + INTERVAL '8 hours',$2) WHERE token_hash=$1",
-                    digest, now + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS))
+                renewed_until = await conn.fetchval(
+                    "SELECT public.auth_refresh_session($1::text)", raw_token)
+                if renewed_until is None:
+                    raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
             return AuthenticatedSession(
                 str(row['user_id']), row['active_role'],
                 str(row['active_tenant_id']) if row['active_tenant_id'] else None,
