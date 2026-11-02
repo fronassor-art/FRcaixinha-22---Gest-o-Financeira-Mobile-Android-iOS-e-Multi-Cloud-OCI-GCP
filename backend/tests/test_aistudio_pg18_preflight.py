@@ -88,6 +88,29 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "SELECT has_function_privilege(current_user,"
             "'public.auth_revoke_all_sessions(text)','EXECUTE')"
         ), "O papel financeiro não pode revogar sessões"
+        assert await admin.fetchval(
+            "SELECT to_regclass('public.auth_login_proofs') IS NOT NULL"
+        ), "Provas efemeras de login devem existir"
+        assert not await admin.fetchval(
+            "SELECT has_column_privilege('frcaixinha_auth_role',"
+            "'public.credentials','password_hash','SELECT')"
+        ), "Conta Auth nao deve consultar hashes de senha"
+        assert not await admin.fetchval(
+            "SELECT has_table_privilege('frcaixinha_auth_role',"
+            "'public.sessions','INSERT')"
+        ), "Conta Auth nao deve emitir sessao por INSERT direto"
+        assert await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_auth_role',"
+            "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE')"
+        ), "Emissao depende de prova separada"
+        assert await admin.fetchval(
+            "SELECT has_column_privilege('frcaixinha_verifier_role',"
+            "'public.credentials','password_hash','SELECT')"
+        ), "Verificador precisa somente ler credenciais"
+        assert not await admin.fetchval(
+            "SELECT has_function_privilege('frcaixinha_verifier_role',"
+            "'public.auth_issue_pending_session(uuid,text,text)','EXECUTE')"
+        ), "Verificador nao deve emitir sessoes"
         assert not await application.fetchval(
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')"
         ), "Sessões continuam isoladas do app"
