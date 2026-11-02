@@ -160,9 +160,10 @@ async def test_named_contexts_session_listing_and_owner_only_revocation(monkeypa
         assert await auth.fetchval(
             "SELECT active_role FROM public.sessions WHERE id=$1",
             transition_id) == "TENANT_ADMIN"
-        await auth.execute(
-            "UPDATE public.sessions SET revoked_at=NOW() WHERE id=$1",
-            transition_id)
+        assert await auth.fetchval(
+            "SELECT public.auth_revoke_session($1::text)",
+            transition_token,
+        ) is True
         assert await auth.fetchval(
             "SELECT public.auth_switch_session_context("
             "$1::text,$2::varchar,$3::uuid)",
