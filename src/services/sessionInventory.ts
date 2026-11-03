@@ -10,8 +10,9 @@ const parseTime=(v:unknown):number=>{
  if(!Number.isFinite(n))throw Error('Data da sessão inválida.');
  return n;
 };
-const privateFields=['token','token_hash','password','password_hash','ip',
- 'ip_address','user_agent','cpf','phone','email','secret','balance'];
+const permittedFields = new Set([
+ 'id','role','tenant_id','created_at','expires_at','current'
+]);
 
 export function parseServerSessionInventory(
  raw:unknown,expected:Pick<AuthenticatedUser,'role'|'tenantId'>
@@ -27,7 +28,7 @@ export function parseServerSessionInventory(
      typeof row.role!=='string'||
      !['MASTER','TENANT_ADMIN','TENANT_MEMBER'].includes(row.role)||
      typeof row.current!=='boolean'||
-     privateFields.some(field=>Object.prototype.hasOwnProperty.call(row,field)))
+     Object.keys(row).some(field=>!permittedFields.has(field)))
      throw Error('Sessão malformada ou com campos privados.');
    const key=row.id.toLowerCase();
    if(seen.has(key))throw Error('Sessão duplicada.');

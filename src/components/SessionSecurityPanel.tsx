@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { authService, UserSessionInfo } from '../services/authService';
+import {sessionRoleLabel,sessionTenantLabel} from '../services/sessionPresentation';
 
 /** Segurança das sessões da própria identidade; não exibe IP, token ou hash. */
 export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
@@ -83,6 +84,7 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
             <li key={item.id} className="rounded-xl border border-slate-200 bg-white p-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="font-semibold">{item.current ? 'Esta sessão' : 'Outro acesso'}</p>
+                <p className="text-slate-700">{sessionRoleLabel(item.role)} · {sessionTenantLabel(item.tenant_id)}</p>
                 <p className="text-slate-600">
                   Válida até {new Date(item.expires_at).toLocaleString('pt-BR')}
                 </p>

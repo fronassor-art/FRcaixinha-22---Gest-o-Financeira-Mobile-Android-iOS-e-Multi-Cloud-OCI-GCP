@@ -41,11 +41,16 @@ export function parseServerContexts(value: unknown): AuthContext[] {
   const result: AuthContext[] = [];
   const seen = new Set<string>();
   for (const item of value) {
-    if (!item || typeof item !== 'object') throw new Error('Vínculo inválido.');
-    const role = (item as Record<string, unknown>).role;
-    const tenantId = (item as Record<string, unknown>).tenant_id;
-    const tenantName = (item as Record<string, unknown>).tenant_name;
-    if (!['MASTER', 'TENANT_ADMIN', 'TENANT_MEMBER'].includes(String(role))) {
+    if (!item || typeof item !== 'object' || Array.isArray(item))
+      throw new Error('Vínculo inválido.');
+    const raw = item as Record<string, unknown>;
+    if (Object.keys(raw).some(key => !['role','tenant_id','tenant_name'].includes(key)))
+      throw new Error('O servidor retornou campos não autorizados no vínculo.');
+    const role = raw.role;
+    const tenantId = raw.tenant_id;
+    const tenantName = raw.tenant_name;
+    if (typeof role !== 'string' ||
+        !['MASTER', 'TENANT_ADMIN', 'TENANT_MEMBER'].includes(role)) {
       throw new Error('Papel inválido recebido do servidor.');
     }
     if (role === 'MASTER') {
@@ -60,7 +65,7 @@ export function parseServerContexts(value: unknown): AuthContext[] {
          tenantName.length > 255 || /[\u0000-\u001f\u007f]/.test(tenantName))) {
       throw new Error('Nome da caixinha inválido.');
     }
-    const key = String(role) + ':' + String(tenantId ?? '');
+    const key = role + ':' + String(tenantId ?? '').toLowerCase();
     if (seen.has(key)) throw new Error('Vínculo duplicado na resposta.');
     seen.add(key);
     result.push({
@@ -423,7 +428,15 @@ class AuthService {
     if (!res.ok) throw new Error('Não foi possível consultar os vínculos.');
     const raw = await res.json();
     if (generation !== this.sessionGeneration || token !== this.token) return [];
-    return parseServerContexts(raw);
+    const contexts = parseServerContexts(raw);
+    // /contexts é apenas da sessão atual. Não revelar outras caixinhas ou
+    // outros papéis a partir de um payload atrasado ou não autorizado.
+    if (!this.user || contexts.length !== 1 ||
+        contexts[0].role !== this.user.role ||
+        (contexts[0].tenant_id ?? null) !== (this.user.tenantId ?? null)) {
+      throw new Error('O servidor não confirmou exclusivamente o vínculo autenticado.');
+    }
+    return contexts;
   }
 
   public async listSessions(): Promise<UserSessionInfo[]> {
