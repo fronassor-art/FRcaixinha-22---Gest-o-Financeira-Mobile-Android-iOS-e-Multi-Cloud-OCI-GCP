@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
-import { DisplayContribution, normalizeContributions, contributionScopeKey } from '../services/contributionsData';
+import { DisplayContribution, contributionScopeKey } from '../services/contributionsData';
 import { formatBRL } from '../services/financialEngine';
 
 interface ContributionsViewProps {
@@ -29,8 +29,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       setResult({ key, status: 'error', items: [], message: 'Não há uma caixinha disponível para esta conta.' });
       return () => { active = false; };
     }
-    financialApi.fetchContributions(tenant).then(data => {
-      const items = normalizeContributions(data, tenant);
+    financialApi.fetchContributions(tenant).then(items => {
       if (active) setResult({ key, status: 'ready', items });
     }).catch(() => {
       if (active) setResult({ key, status: 'error', items: [], message: 'Não foi possível carregar as contribuições. Verifique a conexão e tente novamente.' });

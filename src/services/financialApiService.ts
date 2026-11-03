@@ -25,6 +25,7 @@ import {
   parseTenantDashboard, parseTenantMembers,
 } from './tenantReadBoundary';
 import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
+import {DisplayContribution, normalizeContributions} from './contributionsData';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -335,9 +336,11 @@ class FinancialApiService {
     return this.request<any[]>(`/api/v1/tenants/${tenantId}/quotas`);
   }
 
-  public async fetchContributions(tenantId: string) {
+  public async fetchContributions(tenantId: string): Promise<DisplayContribution[]> {
     assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
-    return this.request<any[]>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/contributions`);
+    const raw: unknown=await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/contributions`);
+    return normalizeContributions(raw,tenantId);
   }
 
   public async payContribution(tenantId: string, contributionId: string, amount: number) {
