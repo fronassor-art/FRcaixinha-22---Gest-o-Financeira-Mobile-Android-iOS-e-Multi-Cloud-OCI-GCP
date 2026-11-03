@@ -216,6 +216,32 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
                 headers = {'Authorization': f'Bearer {token}'}
                 me = await client.get('/api/v1/auth/me', headers=headers)
                 assert me.status_code == 200 and me.json()['role'] == role
+                dashboard = await client.get(
+                    f"/api/v1/tenants/{ids['tenant_a']}/dashboard", headers=headers)
+                member_list = await client.get(
+                    f"/api/v1/tenants/{ids['tenant_a']}/members", headers=headers)
+                other_dashboard = await client.get(
+                    f"/api/v1/tenants/{ids['tenant_b']}/dashboard", headers=headers)
+                assert other_dashboard.status_code == 403
+                if role == 'MASTER':
+                    assert dashboard.status_code == 403
+                    assert member_list.status_code == 403
+                else:
+                    assert dashboard.status_code == 200, dashboard.text
+                    overview = dashboard.json()
+                    assert overview['source'] == 'POSTGRESQL_RLS'
+                    assert overview['tenant_id'] == str(ids['tenant_a'])
+                    assert overview['role'] == role
+                    assert overview['financial_operations'] == 'PENDING_BANK_RECONCILIATION'
+                    if role == 'TENANT_ADMIN':
+                        assert 'member_count_visible' in overview
+                        assert member_list.status_code == 200, member_list.text
+                        assert member_list.json()['tenant_id'] == str(ids['tenant_a'])
+                        assert all('cpf' not in row and 'email' not in row
+                                   for row in member_list.json()['members'])
+                    else:
+                        assert 'member_count_visible' not in overview
+                        assert member_list.status_code == 403
                 contributions = await client.get(f"/api/v1/tenants/{ids['tenant_a']}/contributions", headers=headers)
                 if role == 'MASTER':
                     assert contributions.status_code == 403

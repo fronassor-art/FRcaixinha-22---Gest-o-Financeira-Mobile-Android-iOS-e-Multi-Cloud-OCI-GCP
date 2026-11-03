@@ -20,6 +20,10 @@ import {
   parseWorkflowContract, parseWorkflowPreview, validateWorkflowPreviewRequest,
 } from './masterWorkflow';
 import {MasterPermissionMatrix, parseMasterPermissionMatrix} from './masterPermissionMatrix';
+import {
+  TenantDashboard, TenantMembersPage, assertTenantReadScope,
+  parseTenantDashboard, parseTenantMembers,
+} from './tenantReadBoundary';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -208,25 +212,16 @@ class FinancialApiService {
     return parseWorkflowPreview(raw);
   }
 
-  public async fetchTenantOverview(tenantId: string): Promise<{
-    source: 'POSTGRESQL_RLS';
-    tenant_id: string;
-    role: 'TENANT_ADMIN' | 'TENANT_MEMBER';
-    quota_count_visible: number;
-    contribution_count_visible: number;
-    loan_count_visible: number;
-    member_count_visible?: number;
-    financial_operations: string;
-  }> {
-    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/dashboard`);
+  public async fetchTenantOverview(tenantId: string): Promise<TenantDashboard> {
+    const role = assertTenantReadScope(authService.getUser(), tenantId, 'DASHBOARD');
+    const raw: unknown = await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/dashboard`);
+    return parseTenantDashboard(raw, tenantId, role);
   }
 
-  public async fetchTenantMembers(tenantId: string): Promise<{
-    source: 'POSTGRESQL_RLS';
-    tenant_id: string;
-    members: Array<{ id: string; name: string; role: string; status: string; joined_at: string }>;
-  }> {
-    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/members`);
+  public async fetchTenantMembers(tenantId: string): Promise<TenantMembersPage> {
+    assertTenantReadScope(authService.getUser(), tenantId, 'MEMBERS');
+    const raw: unknown = await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/members`);
+    return parseTenantMembers(raw, tenantId);
   }
 
   // --- Catalogo e precos persistentes do Master (sem cobranca) ---
