@@ -23,7 +23,8 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
         setLoading(false);
       }
     }).catch(() => {
-      if (active) {
+      if (active && authService.isSessionSnapshotCurrent(snapshot) &&
+          userId === authService.getUser()?.id) {
         setError('Não foi possível consultar suas sessões no servidor.');
         setLoading(false);
       }
@@ -32,17 +33,25 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
   }, [userId, revision]);
 
   const revoke = async (id: string) => {
+    const snapshot=authService.captureSession();
+    if(!authService.isSessionSnapshotCurrent(snapshot)){
+      onClose();
+      return;
+    }
     setBusyId(id);
     setError('');
     try {
       const revokedCurrent = await authService.revokeSession(id);
-      if (revokedCurrent) {
+      if(revokedCurrent || !authService.isSessionSnapshotCurrent(snapshot)){
         onClose();
         return;
       }
-      setSessions(previous => previous.filter(item => item.id !== id));
+      // Não confiar na exclusão apenas visual: inventário atualizado da API.
+      setRevision(value => value + 1);
     } catch {
-      setError('A revogação não foi confirmada. Consulte o servidor novamente.');
+      if(authService.isSessionSnapshotCurrent(snapshot))
+        setError('A revogação não foi confirmada. Consulte o servidor novamente.');
+      else onClose();
     } finally {
       setBusyId(null);
     }

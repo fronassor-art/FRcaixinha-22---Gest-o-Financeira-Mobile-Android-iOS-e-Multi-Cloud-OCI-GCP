@@ -18,6 +18,8 @@ export interface AuthSessionSnapshot {
   readonly generation: number;
 }
 
+import {parseServerSessionInventory} from './sessionInventory';
+
 export interface AuthContext {
   role: AuthenticatedUser['role'];
   tenant_id: string | null;
@@ -426,33 +428,27 @@ class AuthService {
 
   public async listSessions(): Promise<UserSessionInfo[]> {
     if (!this.isAuthenticated()) throw new Error('Sessão expirada.');
-    const token=this.token, generation=this.sessionGeneration;
+    const snapshot=this.captureSession();
+    const expected=this.getUser();
+    if(!expected||!snapshot.token)throw new Error('Sessão expirada.');
     const result=await fetch(getApiBaseUrl()+'/api/v1/auth/sessions',{
-      headers:{'Authorization':'Bearer '+token,'Cache-Control':'no-store'},
+      headers:{'Authorization':'Bearer '+snapshot.token,'Cache-Control':'no-store'},
+      cache:'no-store',
     });
-    if (generation!==this.sessionGeneration || token!==this.token) return [];
-    if(result.status===401){this.invalidateSession();throw new Error('Sessão expirada.');}
+    if(!this.isSessionSnapshotCurrent(snapshot))return [];
+    if(result.status===401){this.invalidateSessionIfCurrent(snapshot);throw new Error('Sessão expirada.');}
     if(!result.ok)throw new Error('Sessões indisponíveis.');
-    const data=await result.json();
-    if (generation!==this.sessionGeneration || token!==this.token) return [];
-    if(data?.source!=='POSTGRESQL_AUTH'||!Array.isArray(data.sessions)||
-       data.sessions.length>100)throw new Error('Lista de sessões inválida.');
-    return data.sessions.map((item:any)=>{
-      if(typeof item?.id!=='string'||!(/^[0-9a-f-]{36}$/i.test(item.id))||
-         !['MASTER','TENANT_ADMIN','TENANT_MEMBER'].includes(item.role)||
-         !Number.isFinite(Date.parse(item.created_at))||
-         !Number.isFinite(Date.parse(item.expires_at))||
-         typeof item.current!=='boolean')throw new Error('Sessão inválida.');
-      return {
-        id:item.id,role:item.role,tenant_id:item.tenant_id??null,
-        created_at:item.created_at,expires_at:item.expires_at,current:item.current,
-      } as UserSessionInfo;
-    });
+    const raw:unknown=await result.json();
+    if(!this.isSessionSnapshotCurrent(snapshot))return [];
+    const rows=parseServerSessionInventory(raw,expected);
+    if(!this.isSessionSnapshotCurrent(snapshot))return [];
+    return rows;
   }
 
   public async revokeSession(sessionId: string): Promise<boolean> {
     if (!this.isAuthenticated())throw new Error('Sessão expirada.');
-    if(!/^[0-9a-f-]{36}$/i.test(sessionId))throw new Error('ID de sessão inválido.');
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId))
+      throw new Error('ID de sessão inválido.');
     const token=this.token,generation=this.sessionGeneration;
     const result=await fetch(
       getApiBaseUrl()+'/api/v1/auth/sessions/'+encodeURIComponent(sessionId)+'/revoke',{
