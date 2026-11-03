@@ -21,7 +21,8 @@ def test_loans_get_route_is_unique_and_uses_financial_router():
 
 
 def session(role="TENANT_ADMIN", is_master=False):
-    return AuthenticatedSession("user", role, "tenant", "test@example.invalid", "Teste", is_master)
+    tenant_id = None if role == "MASTER" else "tenant"
+    return AuthenticatedSession("user", role, tenant_id, "test@example.invalid", "Teste", is_master)
 
 
 def test_only_master_context_can_manage_master():
