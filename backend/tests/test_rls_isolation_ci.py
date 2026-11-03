@@ -758,3 +758,60 @@ async def test_logout_all_revokes_every_role_session_of_identity_only(monkeypatc
             [hash_token(x) for x in tokens],
         )
         await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_price_with_real_postgresql_policy_and_rls(isolated_rows):
+    """Consulta real SQL, três perfis e zero efeitos monetários."""
+    from datetime import date
+    from decimal import Decimal
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.models import LoanSimulateRequest
+    from app.routers.loans import simulate_loan_price
+
+    app_conn, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    cycle=uuid.uuid4()
+    try:
+        await admin.execute(
+            "INSERT INTO public.cycles(id,tenant_id,year,start_date,end_date,settlement_date) "
+            "VALUES($1,$2,2027,$3,$4,$5)",
+            cycle,ids["tenant_a"],date(2027,1,1),date(2027,12,31),date(2028,1,10))
+        await admin.execute(
+            "INSERT INTO public.policies(tenant_id,cycle_id,monthly_interest_rate,"
+            "max_installments,contribution_per_quota,admin_pct,member_pct,status) "
+            "VALUES($1,$2,0.2000,6,100.00,15.00,85.00,'ACTIVE')",
+            ids["tenant_a"],cycle)
+        async def simulate(user,tenant,role):
+            session=AuthenticatedSession(str(user),role,str(tenant),
+                "synthetic@example.invalid","Pessoa sintética",role=="MASTER")
+            async with app_conn.transaction():
+                await app_conn.execute("SELECT set_config('app.current_user_id',$1,true)",str(user))
+                await app_conn.execute("SELECT set_config('app.current_tenant_id',$1,true)",str(tenant))
+                await app_conn.execute("SELECT set_config('app.current_role',$1,true)",role)
+                return await simulate_loan_price(str(tenant),
+                    LoanSimulateRequest(principal="500.00",term_months=5),
+                    session,app_conn)
+        member=await simulate(ids["member_a"],ids["tenant_a"],"TENANT_MEMBER")
+        adm=await simulate(ids["admin_a"],ids["tenant_a"],"TENANT_ADMIN")
+        for result in [member,adm]:
+            assert result.monthly_rate==Decimal("0.2000")
+            assert result.total_payable==Decimal("835.96")
+            assert result.total_interest==Decimal("335.96")
+            assert len(result.schedule)==5
+            assert result.schedule[-1].closing_balance==Decimal("0.00")
+        with pytest.raises(HTTPException) as empty:
+            await simulate(ids["member_b"],ids["tenant_b"],"TENANT_MEMBER")
+        assert empty.value.status_code==409
+        with pytest.raises(HTTPException) as master:
+            await simulate(ids["master"],ids["tenant_a"],"MASTER")
+        assert master.value.status_code==403
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.loans WHERE tenant_id=$1",ids["tenant_a"])==0
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=$1",ids["tenant_a"])==0
+        print("PRICE_REAL_POSTGRES_RLS_CI=PASS")
+    finally:
+        await admin.execute("DELETE FROM public.cycles WHERE id=$1",cycle)
+        await admin.close()
