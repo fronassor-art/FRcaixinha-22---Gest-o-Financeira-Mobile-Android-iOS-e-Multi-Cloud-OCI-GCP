@@ -15,12 +15,15 @@ export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
     let active=true;
     const tenant=state.currentTenantId;
     setResult({key,status:'loading'});
-    if(!tenant||!state.currentUserId||state.currentRole!=='TENANT_MEMBER'){
+    if(!tenant||!state.currentUserId||
+      !['TENANT_MEMBER','TENANT_ADMIN'].includes(state.currentRole)){
       setResult({key,status:'error'});
       return ()=>{active=false;};
     }
-    financialApi.fetchMemberAnnualPreview(tenant,2027)
-      .then(data=>{if(active)setResult({key,status:'ready',data});})
+    const request=state.currentRole==='TENANT_ADMIN'
+      ?financialApi.fetchAdminAnnualPreview(tenant,2027)
+      :financialApi.fetchMemberAnnualPreview(tenant,2027);
+    request.then(data=>{if(active)setResult({key,status:'ready',data});})
       .catch(()=>{if(active)setResult({key,status:'error'});});
     return ()=>{active=false;};
   },[key,revision]);
@@ -28,11 +31,13 @@ export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
   return <section aria-labelledby="member-annual-title" className="space-y-4">
     <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
       <h2 id="member-annual-title" className="text-lg font-bold text-slate-900">
-        Meu resultado anual — 2027
+        {state.currentRole==='TENANT_ADMIN'
+          ?'Fechamento — prévia operacional 2027':'Meu resultado anual — 2027'}
       </h2>
       <p className="text-sm text-slate-700">
-        Prévia individual de contribuições registradas no servidor. Não é fechamento anual,
-        lucro distribuído, valor disponível para saque ou confirmação bancária.
+        {state.currentRole==='TENANT_ADMIN'
+          ?'Prévia consolidada das contribuições cadastradas na sua caixinha, sem fechamento, lucro ou conciliação.'
+          :'Prévia individual das suas contribuições registradas no servidor. Não é fechamento, lucro ou confirmação bancária.'}
       </p>
       <button type="button" onClick={()=>setRevision(n=>n+1)}
         className="rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-800">

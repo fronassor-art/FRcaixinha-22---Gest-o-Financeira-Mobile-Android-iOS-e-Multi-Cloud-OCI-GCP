@@ -437,6 +437,17 @@ class FinancialApiService {
     return parseMemberAnnualPreview(raw,tenantId,year);
   }
 
+  /** Prévia administrativa: somente consolidação de obrigações registradas. */
+  public async fetchAdminAnnualPreview(tenantId:string,year=2027):Promise<MemberAnnualPreview>{
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(role!=='TENANT_ADMIN')throw Error('Prévia exclusiva do Administrador');
+    if(!Number.isInteger(year)||year<2020||year>2100)throw Error('Ano inválido');
+    const raw:unknown=await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/contributions/annual-preview/admin?year=${year}`
+    );
+    return parseMemberAnnualPreview(raw,tenantId,year);
+  }
+
   // --- Livro-Razão Contábil ---
 
   public async fetchLedgerAccounts(tenantId: string) {

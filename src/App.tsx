@@ -365,14 +365,7 @@ export default function App() {
         {visibleTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
         {visibleTab === 'LEDGER' && <LedgerView state={state} />}
         {visibleTab === 'FECHAMENTO' && state.currentRole === 'TENANT_ADMIN' && (
-          <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
-            <h2 className="text-lg font-bold">Fechamento</h2>
-            <p className="text-sm text-slate-700">
-              Apuração consolidada ainda não disponível nesta interface.
-              Os dados serão exibidos somente após confirmação pelo servidor.
-              Nenhuma liquidação financeira foi autorizada por esta tela.
-            </p>
-          </section>
+          <MemberAnnualPreviewView state={state}/>
         )}
         {visibleTab === 'LICENCA' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />

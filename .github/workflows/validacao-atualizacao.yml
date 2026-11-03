@@ -58,6 +58,8 @@ jobs:
         run: npx tsx src/tests/api_response_policy_ci.test.ts
       - name: Validar previa anual individual e nao apuracao de lucro
         run: npx tsx src/tests/member_annual_preview_ci.test.ts
+      - name: Validar previa anual operacional do Admin sem liquidação
+        run: npx tsx src/tests/admin_annual_preview_ci.test.ts
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
