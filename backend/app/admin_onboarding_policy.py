@@ -88,7 +88,7 @@ def preview_workflow_transition(
         reasons.append("UNKNOWN_CURRENT_STATE")
     if proposed not in FLOW_STATES + TERMINAL_STATES:
         reasons.append("UNKNOWN_PROPOSED_STATE")
-    if current in allowed_edges and proposed != allowed_edges[current]:
+    if current in FLOW_STATES and proposed != allowed_edges.get(current):
         reasons.append("INVALID_STATE_TRANSITION")
     if actor_role != "MASTER":
         reasons.append("MASTER_REQUIRED")

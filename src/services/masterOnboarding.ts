@@ -61,6 +61,7 @@ export function parseOnboardingCapabilities(raw:unknown):MasterOnboardingCapabil
   return raw as MasterOnboardingCapabilities;
 }
 export function parseOnboardingPreflight(raw:unknown):MasterOnboardingPreflight{
+  const reasons=obj(raw)?raw.blocking_reasons:undefined;
   if(!obj(raw)||raw.source!=='POSTGRESQL_RLS'||
      raw.scope!=='MASTER_ADMIN_ONBOARDING_PREFLIGHT'||
      raw.result!=='BLOCKED_PREPARATION_ONLY'||raw.target_role!=='TENANT_ADMIN'||
@@ -70,9 +71,9 @@ export function parseOnboardingPreflight(raw:unknown):MasterOnboardingPreflight{
      typeof raw.candidate_reference_present!=='boolean'||
      typeof raw.tenant_active!=='boolean'||
      typeof raw.self_approval_blocked!=='boolean'||
-     !Array.isArray(raw.blocking_reasons)||
-     !raw.blocking_reasons.every((reason:unknown)=>typeof reason==='string'&&reason.length<100)||
-     !REQUIRED_GATES.every(k=>raw.blocking_reasons.includes('GATE_'+k+'_BLOCKED'))||
+     !Array.isArray(reasons)||
+     !reasons.every((reason:unknown)=>typeof reason==='string'&&reason.length<100)||
+     !REQUIRED_GATES.every(k=>reasons.includes('GATE_'+k+'_BLOCKED'))||
      !obj(raw.tenant)||typeof raw.tenant.id!=='string'||!uuid.test(raw.tenant.id)||
      typeof raw.tenant.display_name!=='string'||!raw.tenant.display_name.trim()||
      !states.includes(String(raw.tenant.status))||

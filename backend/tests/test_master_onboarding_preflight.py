@@ -162,7 +162,7 @@ def test_pure_transition_simulator_never_grants_privileges():
         candidate_is_actor=True,email_verified=False,tenant_active=False,
         approval_independent=False,token_valid=False,
     )
-    assert "INVALID_STATE_TRANSITION" not in denied["reasons"] or True
+    assert "INVALID_STATE_TRANSITION" in denied["reasons"]
     assert "MASTER_REQUIRED" in denied["reasons"]
     assert "SELF_APPROVAL_PROHIBITED" in denied["reasons"]
     assert "RUNTIME_OPERATIONS_DISABLED" in denied["reasons"]
