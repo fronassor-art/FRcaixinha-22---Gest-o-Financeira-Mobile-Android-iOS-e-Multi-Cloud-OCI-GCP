@@ -26,6 +26,7 @@ import {
 } from './tenantReadBoundary';
 import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
+import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -99,14 +100,8 @@ class FinancialApiService {
     assertSessionNotChanged(snapshot);
 
     if (!response.ok) {
-      let errBody: any = null;
-      try {
-        errBody = await response.json();
-      } catch {
-        // Ignora falha de parse
-      }
-      assertSessionNotChanged(snapshot);
-
+      // HTTP status define a política; texto externo nunca controla autorização.
+      // 401 é tratado ANTES do corpo para evitar depender de JSON malformado.
       if (response.status === 401) {
         authService.invalidateSessionIfCurrent(snapshot);
         throw new SessionBoundaryError(
@@ -114,23 +109,42 @@ class FinancialApiService {
           'SESSION_REQUIRED'
         );
       }
+      let errorBody: unknown = null;
+      try {
+        errorBody = await response.json();
+      } catch {
+        // API/proxy pode responder HTML, texto ou body vazio.
+      }
+      assertSessionNotChanged(snapshot);
+      const error = parseApiErrorEnvelope(errorBody);
 
       if (response.status === 503) {
         throw new FinancialBackendUnavailableError(
-          errBody?.message || 'Backend oficial FastAPI / PostgreSQL não conectado. Operação financeira bloqueada com segurança.',
-          errBody?.code || 'FASTAPI_BACKEND_UNAVAILABLE',
-          errBody?.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais são vedadas.'
+          error.message ||
+            'Backend oficial FastAPI / PostgreSQL indisponível. Operação bloqueada com segurança.',
+          error.code || 'FASTAPI_BACKEND_UNAVAILABLE',
+          error.detail || 'Persistência transacional confirmada pelo PostgreSQL é obrigatória.'
         );
       }
 
       if (response.status === 403) {
-        throw new Error(errBody?.detail?.message || errBody?.detail || errBody?.message || 'Acesso negado pelas regras de governança ou segregação patrimonial.');
+        throw new Error(error.detail || error.message ||
+          'Acesso negado pelas regras de governança ou segregação patrimonial.');
       }
 
-      throw new Error(errBody?.detail || errBody?.message || `Erro na API (${response.status}): ${response.statusText}`);
+      throw new Error(error.detail || error.message ||
+        `Erro na API (${response.status}). Operação não confirmada.`);
     }
 
-    const data: T = await response.json();
+    let data: T;
+    try {
+      data = await response.json();
+    } catch {
+      assertSessionNotChanged(snapshot);
+      throw new ApiResponseIntegrityError(
+        'O servidor retornou uma resposta inválida. Nenhum dado foi confirmado.'
+      );
+    }
     assertSessionNotChanged(snapshot);
     return data;
   }
