@@ -139,8 +139,8 @@ class FinancialApiService {
       }
 
       if (response.status === 403) {
-        throw new Error(error.detail || error.message ||
-          'Acesso negado pelas regras de governança ou segregação patrimonial.');
+        throw new FinancialApiHttpError(error.detail || error.message ||
+          'Acesso negado pelas regras de governança ou segregação patrimonial.', 403);
       }
 
       throw new FinancialApiHttpError(error.detail || error.message ||

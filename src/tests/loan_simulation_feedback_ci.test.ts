@@ -8,7 +8,7 @@ import {ApiResponseIntegrityError} from '../services/apiResponsePolicy';
 import {loanSimulationFailureMessage} from '../services/loanSimulationFeedback';
 const A='00000000-0000-4000-8000-000000000001';
 const U='00000000-0000-4000-8000-000000000002';
-const cases:[
+const cases: Array<[number,string,string]>=[
   [409,'Não há ciclo aberto autorizado para simulação.','ciclo ABERTO'],
   [409,'A política financeira vigente não está configurada.','política financeira ACTIVE'],
   [409,'Detalhe arbitrário','condição contratual'],
