@@ -51,12 +51,14 @@ import { LoginView } from './components/LoginView';
 import { SessionSecurityPanel } from './components/SessionSecurityPanel';
 import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
 import { authService, AuthenticatedUser } from './services/authService';
+import { createForegroundSessionGuard } from './services/sessionResumeGuard';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
   const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(() => authService.getUser());
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
+  const [resumeValidationPending, setResumeValidationPending] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -94,12 +96,16 @@ export default function App() {
 
   // Monitorar ciclo de vida de autenticação e expiração de sessão
   useEffect(() => {
-    // Validação compulsória contra o servidor em /api/auth/me na inicialização
-    authService.checkCurrentUser().then(user => {
-      if (user) {
+    // Resposta da inicialização nunca pode apagar um novo login que chegou
+    // enquanto /me ainda estava pendente.
+    let mounted = true;
+    const bootstrap = authService.captureSession();
+    void authService.checkCurrentUser().then(user => {
+      if (!mounted) return;
+      if (user && authService.isSessionSnapshotCurrent(bootstrap)) {
         setAuthenticatedUser(user);
         appStore.setAuthenticatedContext(user);
-      } else {
+      } else if (!authService.getUser()) {
         setAuthenticatedUser(null);
         appStore.clearAuthenticatedContext();
       }
@@ -119,9 +125,27 @@ export default function App() {
     };
     window.addEventListener('frcaixinha:session-expired', handleExpired);
 
+    // Android e navegador: depois de retornar do segundo plano, nenhuma
+    // tela protegida aparece até que /auth/me confirme a sessão atual.
+    const resumeGuard = createForegroundSessionGuard(authService, setResumeValidationPending);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void resumeGuard.revalidate();
+      }
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) void resumeGuard.revalidate();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
+
     return () => {
+      mounted = false;
+      resumeGuard.dispose();
       unsubscribeAuth();
       window.removeEventListener('frcaixinha:session-expired', handleExpired);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 
@@ -171,6 +195,20 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
         sessionExpiredNotice={sessionExpiredNotice}
       />
+    );
+  }
+
+  // Enquanto volta do segundo plano, nunca expor dados de um perfil cuja
+  // autorização ainda não foi revalidada pelo servidor.
+  if (resumeValidationPending) {
+    return (
+      <main role="status" aria-live="polite"
+        className="min-h-screen flex items-center justify-center bg-[#edf5ed] p-6">
+        <div className="max-w-md rounded-2xl border border-[#b7cbb8] bg-white p-6 text-center text-[#17452f]">
+          <strong className="block text-lg">Verificando sua sessão</strong>
+          <p className="mt-2 text-sm">Confirmando o acesso seguro com o servidor.</p>
+        </div>
+      </main>
     );
   }
 

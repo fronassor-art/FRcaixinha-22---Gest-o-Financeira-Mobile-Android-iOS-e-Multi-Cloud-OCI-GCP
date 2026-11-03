@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Serviço de Autenticação com Fronteira de Servidor Real
+ * FRcaixinha AI Studio Mobile - Serviço de Autenticação com Fronteira de Servidor Real
  * Implementa comunicação com /api/auth, guarda tokens sensíveis exclusivamente em memória
  * e encerra sessões expiradas conforme exigência de segurança e LGPD.
  */
