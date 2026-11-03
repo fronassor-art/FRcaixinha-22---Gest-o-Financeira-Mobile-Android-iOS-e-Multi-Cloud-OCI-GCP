@@ -12,6 +12,8 @@ export interface MemberAnnualPreview {
   profit_amount:null;
 }
 const UUID=/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
+const allowed=new Set(['source','tenant_id','year','contribution_count','pending_count',
+ 'total_due','amount_paid_recorded','remaining_due','result_status','profit_amount']);
 const rec=(x:unknown):x is Record<string,unknown> =>
   typeof x==='object'&&x!==null&&!Array.isArray(x);
 function count(n:unknown):number{
@@ -36,8 +38,7 @@ export function parseMemberAnnualPreview(raw:unknown,tenantId:string,year:number
     raw.source!=='POSTGRESQL_RLS'||raw.year!==year||
     raw.result_status!=='PREVIA_NAO_E_LIQUIDACAO'||
     raw.profit_amount!==null ||
-    ['cpf','email','phone','balance','member_name','other_members','admin_share','member_pool','total_net_profit','distributions','ledger','password_hash','token']
-      .some(k=>Object.prototype.hasOwnProperty.call(raw,k)))
+    Object.keys(raw).some(k=>!allowed.has(k)))
     throw Error('Resumo individual fora do contexto autorizado');
   const total=count(raw.contribution_count),pending=count(raw.pending_count);
   if(pending>total)throw Error('Quantidade inconsistente');

@@ -64,6 +64,8 @@ jobs:
         run: npx tsx src/tests/member_annual_preview_ci.test.ts
       - name: Validar previa anual operacional do Admin sem liquidação
         run: npx tsx src/tests/admin_annual_preview_ci.test.ts
+      - name: Macropacote 160 — 20 validacoes de previa registrada
+        run: npx tsx src/tests/macropacote_160_preview_ci.test.ts
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
@@ -205,6 +207,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
           python -m pytest -q backend/tests/test_auth_context_security_headers.py
           python -m pytest -q backend/tests/test_macropacote_140_access_ci.py
+          python -m pytest -q backend/tests/test_macropacote_160_preview_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_auth_session_fail_closed_ci.py
           python -m pytest -q backend/tests/test_master_explicit_login_policy.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py

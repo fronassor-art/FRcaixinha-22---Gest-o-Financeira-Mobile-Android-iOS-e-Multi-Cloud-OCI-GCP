@@ -7,7 +7,7 @@ Precisão Monetária: Uso de Decimal com ROUND_HALF_UP e prevenção estrita de 
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
 import uuid
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from datetime import datetime, date, timedelta
 from ..models import ContributionResponse, ContributionPayRequest, ContributionPayResponse, QuotaResponse, MemberAnnualPreviewResponse
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
@@ -128,6 +128,25 @@ async def list_tenant_contributions(
 
 
 
+
+def checked_annual_preview(row):
+    """Validate totals before rendering a read-only annual preview."""
+    if row is None:
+        raise HTTPException(status_code=503,detail="Prévia indisponível.")
+    try:
+        count,pending=row["contribution_count"],row["pending_count"]
+        if (type(count) is not int or type(pending) is not int or
+                not 0 <= pending <= count <= 100000):
+            raise ValueError("Invalid counts")
+        due,paid=to_cents(row["total_due"]),to_cents(row["amount_paid_recorded"])
+        if (not due.is_finite() or not paid.is_finite() or
+                not Decimal("0") <= paid <= due <= Decimal("1000000000")):
+            raise ValueError("Invalid registered values")
+    except (KeyError,ValueError,TypeError,InvalidOperation,OverflowError):
+        raise HTTPException(status_code=503,detail="Prévia indisponível: dados inconsistentes.")
+    return count,pending,due,paid
+
+
 @router.get("/contributions/annual-preview/me", response_model=MemberAnnualPreviewResponse)
 async def get_member_annual_preview(
     tenant_id: str,
@@ -161,18 +180,12 @@ async def get_member_annual_preview(
           AND c.competence LIKE $3
     """, uuid.UUID(tenant_id), uuid.UUID(session.user_id), f"{year:04d}-%")
 
-    due = to_cents(row["total_due"])
-    paid = to_cents(row["amount_paid_recorded"])
-    if paid < 0 or due < 0 or paid > due:
-        raise HTTPException(
-            status_code=503,
-            detail="Prévia indisponível: valores registrados inconsistentes."
-        )
+    total_count,pending_count,due,paid=checked_annual_preview(row)
     return MemberAnnualPreviewResponse(
         tenant_id=tenant_id,
         year=year,
-        contribution_count=row["contribution_count"],
-        pending_count=row["pending_count"],
+        contribution_count=total_count,
+        pending_count=pending_count,
         total_due=due,
         amount_paid_recorded=paid,
         remaining_due=due-paid,
@@ -201,12 +214,10 @@ async def get_admin_annual_preview(
         WHERE c.tenant_id=$1 AND m.tenant_id=$1
           AND m.role='TENANT_MEMBER' AND c.competence LIKE $2
     """, uuid.UUID(tenant_id), f"{year:04d}-%")
-    due,paid=to_cents(row["total_due"]),to_cents(row["amount_paid_recorded"])
-    if due<0 or paid<0 or paid>due:
-        raise HTTPException(status_code=503,detail="Prévia indisponível: valores inconsistentes.")
+    total_count,pending_count,due,paid=checked_annual_preview(row)
     return MemberAnnualPreviewResponse(
         tenant_id=tenant_id,year=year,
-        contribution_count=row["contribution_count"],pending_count=row["pending_count"],
+        contribution_count=total_count,pending_count=pending_count,
         total_due=due,amount_paid_recorded=paid,remaining_due=due-paid,profit_amount=None,
     )
 

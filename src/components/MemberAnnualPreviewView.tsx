@@ -3,16 +3,18 @@ import {AppState} from '../services/store';
 import {financialApi} from '../services/financialApiService';
 import {MemberAnnualPreview} from '../services/memberAnnualPreview';
 import {formatBRL} from '../services/financialEngine';
+import {authService} from '../services/authService';
 
 type Result={key:string,status:'loading'|'ready'|'error',data?:MemberAnnualPreview};
 export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
-  const key=JSON.stringify([
-    state.currentUserId,state.currentTenantId,state.currentRole,2027
-  ]);
   const [revision,setRevision]=useState(0);
+  const key=JSON.stringify([
+    state.currentUserId,state.currentTenantId,state.currentRole,2027,revision
+  ]);
   const [result,setResult]=useState<Result>({key:'',status:'loading'});
   useEffect(()=>{
     let active=true;
+    const snapshot=authService.captureSession();
     const tenant=state.currentTenantId;
     setResult({key,status:'loading'});
     if(!tenant||!state.currentUserId||
@@ -23,8 +25,13 @@ export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
     const request=state.currentRole==='TENANT_ADMIN'
       ?financialApi.fetchAdminAnnualPreview(tenant,2027)
       :financialApi.fetchMemberAnnualPreview(tenant,2027);
-    request.then(data=>{if(active)setResult({key,status:'ready',data});})
-      .catch(()=>{if(active)setResult({key,status:'error'});});
+    request.then(data=>{
+      if(active&&authService.isSessionSnapshotCurrent(snapshot))
+        setResult({key,status:'ready',data});
+    }).catch(()=>{
+      if(active&&authService.isSessionSnapshotCurrent(snapshot))
+        setResult({key,status:'error'});
+    });
     return ()=>{active=false;};
   },[key,revision]);
   const current=result.key===key?result:{key,status:'loading' as const};
@@ -67,6 +74,7 @@ export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
         <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           Lucro, rendimentos e rateio anual ainda não apurados nem autorizados.
           Nenhuma transferência foi executada por esta consulta.
+          Valor registrado como pago não representa conciliação bancária.
         </p>
       </div>}
   </section>;

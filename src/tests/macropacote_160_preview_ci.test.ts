@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {parseMemberAnnualPreview} from '../services/memberAnnualPreview';
+const t='00000000-0000-4000-8000-000000000001';
+const data={source:'POSTGRESQL_RLS',tenant_id:t,year:2027,
+ contribution_count:12,pending_count:12,total_due:'1200.00',
+ amount_paid_recorded:'0.00',remaining_due:'1200.00',
+ result_status:'PREVIA_NAO_E_LIQUIDACAO',profit_amount:null};
+let checks=0;
+const check=(fn:()=>void)=>{fn();checks++;};
+const reject=(row:unknown)=>assert.throws(()=>parseMemberAnnualPreview(row,t,2027));
+const p=parseMemberAnnualPreview(data,t,2027);
+check(()=>assert.equal(p.contribution_count,12));
+check(()=>assert.equal(p.pending_count,12));
+check(()=>assert.equal(p.total_due,1200));
+check(()=>assert.equal(p.amount_paid_recorded,0));
+check(()=>assert.equal(p.remaining_due,1200));
+check(()=>reject({...data,tenant_id:'00000000-0000-4000-8000-000000000002'}));
+check(()=>reject({...data,year:2026}));
+check(()=>reject({...data,source:'LOCAL'}));
+check(()=>reject({...data,result_status:'LIQUIDADO'}));
+check(()=>reject({...data,profit_amount:'0.00'}));
+check(()=>reject({...data,total_due:'1200.001'}));
+check(()=>reject({...data,amount_paid_recorded:'1200.01'}));
+check(()=>reject({...data,remaining_due:'1.00'}));
+check(()=>reject({...data,pending_count:13}));
+check(()=>reject({...data,contribution_count:-1}));
+check(()=>reject({...data,member_name:'privado'}));
+check(()=>reject({...data,random_field:'privado'}));
+check(()=>reject({...data,ledger:{}}));
+check(()=>reject({...data,cpf:'00000000000'}));
+check(()=>reject({...data,admin_share:'0.00'}));
+assert.equal(checks,20);
+const view=readFileSync('src/components/MemberAnnualPreviewView.tsx','utf8');
+assert.match(view,/authService\.captureSession\(\)/);
+assert.match(view,/authService\.isSessionSnapshotCurrent\(snapshot\)/);
+assert.match(view,/Valor registrado como pago não representa conciliação bancária/);
+const backend=readFileSync('backend/app/routers/contributions.py','utf8');
+assert.match(backend,/checked_annual_preview\(row\)/);
+console.log('MACROPACOTE_160_PREVIA_FRONTEND=PASS');
