@@ -12,13 +12,18 @@ echo "O psql poderá solicitar a senha do usuário técnico sem exibir caractere
 psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5433 \
  -U frc_ai_owner -d frcaixinha_aistudio_dev -W <<'SQL'
 BEGIN READ ONLY;
-SELECT CASE WHEN current_database()='frcaixinha_aistudio_dev'
+SELECT (current_database()='frcaixinha_aistudio_dev'
  AND inet_server_port()=5433
  AND current_user='frc_ai_owner'
  AND current_setting('data_directory')=
- '/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18'
- THEN 'AI_STUDIO_CLUSTER=PASS'
- ELSE (1/0)::text END AS isolamento;
+ '/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18')
+ AS ai_studio_isolated \gset
+\if :ai_studio_isolated
+  \echo AI_STUDIO_CLUSTER=PASS
+\else
+  \echo BLOQUEADO: PostgreSQL não corresponde ao cluster AI Studio
+  SELECT 1/0;
+\endif
 SELECT 'CICLOS_ABERTOS='||count(*)::text
  FROM public.cycles WHERE status='ABERTO';
 SELECT 'POLITICAS_ACTIVE='||count(*)::text
