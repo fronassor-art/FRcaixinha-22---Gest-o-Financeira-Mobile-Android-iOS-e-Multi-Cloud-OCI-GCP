@@ -199,7 +199,15 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
                 email = f"{ids[name]}@example.com"
                 bad = await client.post('/api/v1/auth/login', json={'usernameOrEmail': email, 'password': 'senha-incorreta'})
                 assert bad.status_code == 401
-                response = await client.post('/api/v1/auth/login', json={'usernameOrEmail': email, 'password': password})
+                if role == 'MASTER':
+                    # Clientes antigos sem requestedRole nao recebem Master.
+                    legacy = await client.post('/api/v1/auth/login', json={
+                        'usernameOrEmail': email, 'password': password})
+                    assert legacy.status_code == 401
+                    assert 'token' not in legacy.json()
+                response = await client.post('/api/v1/auth/login', json={
+                    'usernameOrEmail': email, 'password': password,
+                    'requestedRole': role})
                 assert response.status_code == 200, response.text
                 body = response.json()
                 assert body['user']['role'] == role
@@ -667,7 +675,7 @@ async def test_unlinked_existing_account_does_not_reveal_identity_or_create_sess
                 json={"usernameOrEmail": email, "password": password},
             )
             assert response.status_code == 401
-            assert response.json()["detail"] == "Credenciais inválidas ou conta indisponível."
+            assert response.json()["detail"] == "Credenciais inválidas ou acesso indisponível."
             assert "token" not in response.json()
         assert await admin.fetchval(
             "SELECT count(*) FROM public.sessions WHERE user_id=$1", user_id
