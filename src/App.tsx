@@ -266,13 +266,13 @@ export default function App() {
       />
 
       {/* Sessao de papel imutavel: para outra area, sair e autenticar de novo. */}
-      <div className="shrink-0 border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
+      <div className="fr-app-profile shrink-0 border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div aria-label="Perfil autenticado" className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 text-sm text-[#fff2cf]">
+          <div aria-label="Perfil autenticado" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 py-2 text-xs sm:text-sm text-[#fff2cf]">
             {state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
               state.currentRole === 'TENANT_ADMIN' ? <BriefcaseBusiness className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
                 <UserRound className="h-4 w-4 shrink-0 text-[#f0ce78]"/>}
-            <span className="truncate">
+            <span className="min-w-0 whitespace-normal break-words leading-4">
               {state.currentRole === 'MASTER' ? 'Administrador Master — Plataforma' :
                 state.currentRole === 'TENANT_ADMIN' ? 'Administrador — Minha caixinha' : 'Membro — Minha caixinha'}
             </span>
