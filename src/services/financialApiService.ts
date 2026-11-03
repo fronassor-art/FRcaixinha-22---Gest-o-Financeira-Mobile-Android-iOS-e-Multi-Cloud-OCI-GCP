@@ -212,14 +212,23 @@ class FinancialApiService {
     return parseWorkflowPreview(raw);
   }
 
+  private currentTenantReader() {
+    const user = authService.getUser();
+    if (!user) throw new SessionBoundaryError(
+      'Sessão ausente ou expirada. Faça login novamente.',
+      'SESSION_REQUIRED'
+    );
+    return user;
+  }
+
   public async fetchTenantOverview(tenantId: string): Promise<TenantDashboard> {
-    const role = assertTenantReadScope(authService.getUser(), tenantId, 'DASHBOARD');
+    const role = assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
     const raw: unknown = await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/dashboard`);
     return parseTenantDashboard(raw, tenantId, role);
   }
 
   public async fetchTenantMembers(tenantId: string): Promise<TenantMembersPage> {
-    assertTenantReadScope(authService.getUser(), tenantId, 'MEMBERS');
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'MEMBERS');
     const raw: unknown = await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/members`);
     return parseTenantMembers(raw, tenantId);
   }
