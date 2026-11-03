@@ -43,6 +43,7 @@ check(()=>expectSessionRejected(inv([session,session])));
 check(()=>expectSessionRejected(inv([{...session,role:'MASTER'}])));
 check(()=>assert.equal(sessionRoleLabel('TENANT_ADMIN'),'Administrador da caixinha'));
 check(()=>assert.equal(sessionTenantLabel(T),'Caixinha '+T.slice(0,8).toUpperCase()));
+assert.equal(sessionTenantLabel('not-a-uuid'),'Caixinha não identificada');
 assert.equal(checks,20);
 const ui=renderToStaticMarkup(React.createElement(SessionSecurityPanel,{onClose:()=>undefined}));
 assert.match(ui,/Sessões da minha conta/);
