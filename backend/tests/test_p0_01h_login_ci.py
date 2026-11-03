@@ -48,14 +48,16 @@ async def test_login_five_failed_attempts_block_even_valid_password(monkeypatch)
                     "usernameOrEmail":email,"password":"bad-password"})
                 assert r.status_code==401,(i,r.text)
             locked=await client.post("/api/v1/auth/login",json={
-                "usernameOrEmail":email,"password":password})
+                "usernameOrEmail":email,"password":password,
+                "requestedRole":"MASTER"})
             assert locked.status_code==429,locked.text
             key=auth_rate_limit_key(email)
             assert await auth.fetchval("SELECT public.auth_login_rate_check($1)",key)>0
             assert await auth.fetchval("SELECT public.auth_login_rate_success($1)",key)
             clear_rate_limit(email) # Simula somente o cooldown no CI.
             ok=await client.post("/api/v1/auth/login",json={
-                "usernameOrEmail":email,"password":password})
+                "usernameOrEmail":email,"password":password,
+                "requestedRole":"MASTER"})
             assert ok.status_code==200,ok.text
             token=ok.json()["token"]
             assert len(token)>24
