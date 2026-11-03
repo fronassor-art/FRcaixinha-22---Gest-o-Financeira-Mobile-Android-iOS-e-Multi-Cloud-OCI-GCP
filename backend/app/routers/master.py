@@ -270,6 +270,7 @@ async def get_master_tenant_registry(
 @router.get("/saas-portfolio")
 async def get_master_saas_portfolio(
     search: str = Query(default="", max_length=80),
+    tenant_status: Literal["TODOS","RASCUNHO_INATIVO","ATIVO","SUSPENSO","ENCERRADO"] = "TODOS",
     page: int = Query(default=1, ge=1, le=1000),
     session: AuthenticatedSession = Depends(require_master),
     conn = Depends(get_rls_db_connection),
@@ -281,11 +282,12 @@ async def get_master_saas_portfolio(
     """
     term = search.strip()
     predicate = (
-        " FROM public.tenants t WHERE "
+        " FROM public.tenants t WHERE ("
         "strpos(lower(t.display_name),lower($1::text))>0 OR "
-        "strpos(lower(t.admin_user_id::text),lower($1::text))>0"
+        "strpos(lower(t.admin_user_id::text),lower($1::text))>0) "
+        "AND ($2::text='TODOS' OR t.status=$2::text)"
     )
-    total = await conn.fetchval("SELECT count(*)" + predicate, term)
+    total = await conn.fetchval("SELECT count(*)" + predicate, term, tenant_status)
     rows = await conn.fetch("""
         SELECT t.id,t.display_name,t.status AS tenant_status,t.created_at,
                t.admin_user_id,
@@ -293,6 +295,12 @@ async def get_master_saas_portfolio(
                 WHERE tx.admin_user_id=t.admin_user_id) AS admin_total,
                (SELECT count(*)::int FROM public.tenants tx
                 WHERE tx.admin_user_id=t.admin_user_id AND tx.status='ATIVO') AS admin_active,
+               (SELECT count(*)::int FROM public.tenants tx
+                WHERE tx.admin_user_id=t.admin_user_id AND tx.status='SUSPENSO') AS admin_suspended,
+               (SELECT count(*)::int FROM public.tenants tx
+                WHERE tx.admin_user_id=t.admin_user_id AND tx.status='RASCUNHO_INATIVO') AS admin_draft,
+               (SELECT count(*)::int FROM public.tenants tx
+                WHERE tx.admin_user_id=t.admin_user_id AND tx.status='ENCERRADO') AS admin_closed,
                e.plan_tier AS licensed_plan,e.status AS license_status,
                e.valid_from,e.valid_until,
                CASE WHEN e.status='ACTIVE' AND e.valid_until<=now() THEN 'EXPIRED'
@@ -316,16 +324,18 @@ async def get_master_saas_portfolio(
             ORDER BY created_at DESC,id DESC LIMIT 1
         ) p ON true
         LEFT JOIN public.platform_license_plans lp ON lp.tier=e.plan_tier
-        WHERE strpos(lower(t.display_name),lower($1::text))>0 OR
-              strpos(lower(t.admin_user_id::text),lower($1::text))>0
+        WHERE (strpos(lower(t.display_name),lower($1::text))>0 OR
+               strpos(lower(t.admin_user_id::text),lower($1::text))>0)
+          AND ($2::text='TODOS' OR t.status=$2::text)
         ORDER BY t.created_at DESC,t.id DESC
-        LIMIT $2 OFFSET $3
-    """, term, 20, (page-1)*20)
+        LIMIT $3 OFFSET $4
+    """, term, tenant_status, 20, (page-1)*20)
     return {
         "source": "POSTGRESQL_RLS",
         "scope": "MASTER_SAAS_PORTFOLIO",
         "boxes_limit_policy": "NOT_DEFINED",
         "total": total, "page": page, "page_size": 20,
+        "tenant_status_filter": tenant_status,
         "has_more": page*20 < total,
         "tenants": [
             {
@@ -334,6 +344,9 @@ async def get_master_saas_portfolio(
                 "tenant_status": row["tenant_status"],
                 "registered_at": row["created_at"].isoformat(),
                 "admin_total": row["admin_total"], "admin_active": row["admin_active"],
+                "admin_suspended": row["admin_suspended"],
+                "admin_draft": row["admin_draft"],
+                "admin_closed": row["admin_closed"],
                 "licensed_plan": row["licensed_plan"],
                 "license_status": row["license_status"],
                 "effective_status": row["effective_status"],

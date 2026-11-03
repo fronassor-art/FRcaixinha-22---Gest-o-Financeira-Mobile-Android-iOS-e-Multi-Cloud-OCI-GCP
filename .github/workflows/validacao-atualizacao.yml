@@ -44,6 +44,8 @@ jobs:
         run: npx tsx src/tests/master_tenant_registry_ui.test.ts
       - name: Validar responsaveis cadastrais Master
         run: npx tsx src/tests/master_admin_registry_ui.test.ts
+      - name: Validar Macropacote 120 — inventario SaaS Master
+        run: npx tsx src/tests/master_saas_portfolio_ci.test.ts
       - name: Validar pre-analise Master de convites e estados seguros
         run: npx tsx src/tests/master_onboarding_preflight_ui.test.ts
       - name: Validar simulador de fluxo, idempotencia e auditoria Master

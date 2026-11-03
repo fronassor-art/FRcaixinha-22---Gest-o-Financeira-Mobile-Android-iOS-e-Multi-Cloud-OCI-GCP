@@ -11,6 +11,7 @@
 import { authService, getApiBaseUrl, AuthSessionSnapshot } from './authService';
 import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 import { parseMasterAdminRegistry, adminRegistryQuery, MasterAdminRegistryPage } from './masterAdminRegistry';
+import {parseMasterSaasPortfolio, MasterSaasPortfolio, SaasStatusFilter} from './masterSaasPortfolio';
 import {
   MasterOnboardingCapabilities, MasterOnboardingPreflight,
   parseOnboardingCapabilities, parseOnboardingPreflight,
@@ -262,26 +263,16 @@ class FinancialApiService {
   }
 
 
-  /** Apenas metadados cadastrais e comerciais do Master; nunca saldos de tenants. */
-  public async fetchMasterSaasPortfolio(search: string, page: number): Promise<{
-    source: 'POSTGRESQL_RLS'; scope: 'MASTER_SAAS_PORTFOLIO';
-    boxes_limit_policy: 'NOT_DEFINED';
-    total: number; page: number; page_size: number; has_more: boolean;
-    tenants: Array<{
-      id: string; display_name: string; admin_user_id: string;
-      tenant_status: string; registered_at: string;
-      admin_total: number; admin_active: number;
-      licensed_plan: string | null; license_status: string | null;
-      effective_status: string | null;
-      valid_from: string | null; valid_until: string | null;
-      prepared_plan: string | null; prepared_period: string | null;
-      preparation_status: string | null; prepared_at: string | null;
-      members_limit: number | null; quotas_limit: number | null;
-    }>;
-  }> {
-    if (!Number.isInteger(page) || page < 1 || page > 1000) throw new Error('Página inválida');
-    const params = new URLSearchParams({search: search.trim().slice(0,80), page: String(page)});
-    return this.request('/api/v1/master/saas-portfolio?' + params.toString());
+  /** Consulta read-only Master, valida contexto e esquema recebido. */
+  public async fetchMasterSaasPortfolio(search: string,page: number,filter:SaasStatusFilter='TODOS'):Promise<MasterSaasPortfolio> {
+    if(!Number.isSafeInteger(page)||page<1||page>1000)throw Error('Página inválida');
+    if(!['TODOS','RASCUNHO_INATIVO','ATIVO','SUSPENSO','ENCERRADO'].includes(filter))
+      throw Error('Filtro inválido');
+    const cleaned=search.trim();
+    if(cleaned.length>80)throw Error('Busca muito longa');
+    const params=new URLSearchParams({search:cleaned,page:String(page),tenant_status:filter});
+    const raw:unknown=await this.request('/api/v1/master/saas-portfolio?'+params.toString());
+    return parseMasterSaasPortfolio(raw,filter,page);
   }
 
   // --- Catalogo e precos persistentes do Master (sem cobranca) ---
