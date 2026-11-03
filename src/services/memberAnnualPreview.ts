@@ -36,7 +36,7 @@ export function parseMemberAnnualPreview(raw:unknown,tenantId:string,year:number
     raw.source!=='POSTGRESQL_RLS'||raw.year!==year||
     raw.result_status!=='PREVIA_NAO_E_LIQUIDACAO'||
     raw.profit_amount!==null ||
-    ['cpf','email','phone','balance','member_name','other_members','admin_share','password_hash','token']
+    ['cpf','email','phone','balance','member_name','other_members','admin_share','member_pool','total_net_profit','distributions','ledger','password_hash','token']
       .some(k=>Object.prototype.hasOwnProperty.call(raw,k)))
     throw Error('Resumo individual fora do contexto autorizado');
   const total=count(raw.contribution_count),pending=count(raw.pending_count);
