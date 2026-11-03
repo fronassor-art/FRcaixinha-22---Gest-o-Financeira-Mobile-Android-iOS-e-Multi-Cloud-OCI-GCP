@@ -25,6 +25,7 @@ import {
   parseTenantDashboard, parseTenantMembers,
 } from './tenantReadBoundary';
 import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
+import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
@@ -366,12 +367,14 @@ class FinancialApiService {
 
   // --- Empréstimos e Tabela Price ---
 
-  public async simulateLoan(tenantId: string, payload: { principal: number; term_months: number }) {
+  public async simulateLoan(tenantId: string, payload: { principal: number; term_months: number }): Promise<LoanSimulation> {
     assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
-    return this.request<any>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/loans/simulate`, {
+    const checked=validateSimulationRequest(payload);
+    const raw:unknown=await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/loans/simulate`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(checked),
     });
+    return parseLoanSimulation(raw,checked);
   }
 
   public async fetchLoans(tenantId: string): Promise<DisplayLoan[]> {

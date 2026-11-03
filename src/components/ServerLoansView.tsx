@@ -2,33 +2,26 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
 import type {DisplayLoan} from '../services/loanReadBoundary';
+import type {LoanSimulation} from '../services/loanSimulationBoundary';
 
 interface Props { state: AppState }
-interface Simulation {
-  principal: number;
-  monthly_rate: number;
-  term_months: number;
-  uniform_payment: number;
-  last_payment: number;
-  total_interest: number;
-  total_payable: number;
-  schedule: Array<{ installment_number: number; due_date: string; monthly_payment: number }>;
-}
 type State = { key: string; status: 'loading' | 'ready' | 'error'; loans: DisplayLoan[] };
 
 export const ServerLoansView: React.FC<Props> = ({ state }) => {
   const key = [state.currentUserId, state.currentRole, state.currentTenantId].join(':');
   const latestKey = useRef(key);
   latestKey.current = key;
+  const simulationRequestId = useRef(0);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<State>({ key: '', status: 'loading', loans: [] });
   const [amount, setAmount] = useState('500');
   const [months, setMonths] = useState('5');
-  const [simulation, setSimulation] = useState<Simulation | null>(null);
+  const [simulation, setSimulation] = useState<LoanSimulation | null>(null);
   const [simulationStatus, setSimulationStatus] = useState('');
 
   useEffect(() => {
     let active = true;
+    simulationRequestId.current++;
     setSimulation(null);
     setSimulationStatus('');
     setResult({ key, status: 'loading', loans: [] });
@@ -51,6 +44,7 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
 
   async function runSimulation(event: React.FormEvent) {
     event.preventDefault();
+    const requestId=++simulationRequestId.current;
     setSimulation(null);
     setSimulationStatus('Calculando no FastAPI...');
     const principal = Number(amount);
@@ -63,12 +57,11 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
     const requestedKey = key;
     try {
       const data = await financialApi.simulateLoan(state.currentTenantId, { principal, term_months });
-      if (requestedKey !== latestKey.current) return;
-      if (!Array.isArray(data.schedule)) throw new Error('Resultado inválido');
+      if (requestedKey !== latestKey.current || requestId !== simulationRequestId.current) return;
       setSimulation(data);
       setSimulationStatus('Simulação matemática concluída no servidor. Não equivale a oferta, aprovação ou desembolso.');
     } catch {
-      if (requestedKey === latestKey.current) {
+      if (requestedKey === latestKey.current && requestId === simulationRequestId.current) {
         setSimulationStatus('Simulação indisponível no FastAPI. Nenhuma operação financeira foi realizada.');
       }
     }
@@ -122,12 +115,22 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
           <label className="grid gap-1 text-sm text-slate-800">
             Valor (R$)
             <input type="number" min="0.01" max="50000" step="0.01" value={amount}
-              onChange={event => setAmount(event.target.value)}
+              onChange={event => {
+                simulationRequestId.current++;
+                setSimulation(null);
+                setSimulationStatus('');
+                setAmount(event.target.value);
+              }}
               className="rounded-lg border border-slate-300 p-2"/>
           </label>
           <label className="grid gap-1 text-sm text-slate-800">
             Quantidade de parcelas
-            <select value={months} onChange={event => setMonths(event.target.value)}
+            <select value={months} onChange={event => {
+                simulationRequestId.current++;
+                setSimulation(null);
+                setSimulationStatus('');
+                setMonths(event.target.value);
+              }}
               className="rounded-lg border border-slate-300 p-2">
               {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
             </select>
