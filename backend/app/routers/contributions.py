@@ -180,6 +180,37 @@ async def get_member_annual_preview(
     )
 
 
+@router.get("/contributions/annual-preview/admin", response_model=MemberAnnualPreviewResponse)
+async def get_admin_annual_preview(
+    tenant_id: str,
+    year: int = Query(default=2027, ge=2020, le=2100),
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn = Depends(get_rls_db_connection),
+):
+    """Somente consolidado cadastral, sem fechamento, lucro ou Pix."""
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Prévia exclusiva do Administrador.")
+    row = await conn.fetchrow("""
+        SELECT count(*)::integer AS contribution_count,
+               count(*) FILTER (WHERE c.payment_status != 'QUITADA')::integer AS pending_count,
+               COALESCE(sum(c.amount_due),0) AS total_due,
+               COALESCE(sum(c.amount_paid),0) AS amount_paid_recorded
+        FROM public.contributions c
+        JOIN public.memberships m ON m.id=c.membership_id
+        WHERE c.tenant_id=$1 AND m.tenant_id=$1
+          AND m.role='TENANT_MEMBER' AND c.competence LIKE $2
+    """, uuid.UUID(tenant_id), f"{year:04d}-%")
+    due,paid=to_cents(row["total_due"]),to_cents(row["amount_paid_recorded"])
+    if due<0 or paid<0 or paid>due:
+        raise HTTPException(status_code=503,detail="Prévia indisponível: valores inconsistentes.")
+    return MemberAnnualPreviewResponse(
+        tenant_id=tenant_id,year=year,
+        contribution_count=row["contribution_count"],pending_count=row["pending_count"],
+        total_due=due,amount_paid_recorded=paid,remaining_due=due-paid,profit_amount=None,
+    )
+
+
 @router.post("/contributions/{contribution_id}/pay", response_model=ContributionPayResponse)
 async def pay_contribution(
     tenant_id: str,
