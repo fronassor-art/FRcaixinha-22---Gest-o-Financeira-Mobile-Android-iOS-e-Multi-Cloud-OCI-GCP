@@ -3,7 +3,7 @@ FRcaixinha 2.2 — Rotas Exclusivas do Administrador Master
 Contrato Técnico Mestre (Cláusulas 1.3, 2.8, 3.2, 5.4, 11.2 e 16.4)
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from pydantic import BaseModel, Field
 from decimal import Decimal
 from typing import Literal
@@ -31,6 +31,70 @@ async def confirm_owner_access(session: AuthenticatedSession = Depends(require_m
         "verified": True,
         "role": "MASTER",
         "scope": "PLATFORM_GOVERNANCE_ONLY",
+    }
+
+
+@router.get("/tenant-registry")
+async def get_master_tenant_registry(
+    search: str = Query(default="", max_length=80),
+    tenant_status: Literal[
+        "TODOS", "RASCUNHO_INATIVO", "ATIVO", "SUSPENSO", "ENCERRADO"
+    ] = "TODOS",
+    page: int = Query(default=1, ge=1, le=1000),
+    page_size: int = Query(default=20, ge=5, le=50),
+    session: AuthenticatedSession = Depends(require_master),
+    conn = Depends(get_rls_db_connection),
+):
+    """Governanca cadastral: somente tenants e UUID do responsavel principal.
+
+    Sem join com users/memberships, sem telefone, e-mail, saldos ou ledger.
+    Identidade e status sao verificados por require_master e RLS PostgreSQL.
+    """
+    term = search.strip()
+    state = "" if tenant_status == "TODOS" else tenant_status
+    filter_sql = (
+        " FROM public.tenants "
+        "WHERE strpos(lower(display_name), lower($1::text)) > 0 "
+        "AND ($2::text = '' OR status = $2::text)"
+    )
+    total = await conn.fetchval("SELECT count(*)" + filter_sql, term, state)
+    rows = await conn.fetch(
+        "SELECT id,display_name,status,is_owner_box,admin_user_id,created_at"
+        + filter_sql +
+        " ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4",
+        term, state, page_size, (page - 1) * page_size,
+    )
+    # Estes totais independem dos filtros e nao consultam financas dos tenants.
+    groups = await conn.fetch(
+        "SELECT status,count(*)::int AS count FROM public.tenants "
+        "GROUP BY status ORDER BY status"
+    )
+    counts = {key: 0 for key in
+              ("RASCUNHO_INATIVO", "ATIVO", "SUSPENSO", "ENCERRADO")}
+    for group in groups:
+        if group["status"] in counts:
+            counts[group["status"]] = group["count"]
+    return {
+        "source": "POSTGRESQL_RLS",
+        "scope": "MASTER_TENANT_REGISTRY",
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "has_more": page * page_size < total,
+        "status_counts": counts,
+        "tenants": [
+            {
+                "id": str(row["id"]),
+                "display_name": row["display_name"],
+                "status": row["status"],
+                "is_owner_box": row["is_owner_box"],
+                "admin_user_id": str(row["admin_user_id"]),
+                "created_at": row["created_at"].isoformat(),
+            }
+            for row in rows
+        ],
+        "admin_invitation_status": "NOT_IMPLEMENTED",
+        "admin_access_changes": "BLOCKED_PENDING_APPROVAL",
     }
 
 

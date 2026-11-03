@@ -86,7 +86,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
           </div>
           <p className="mt-5 text-xs font-medium text-emerald-100/85">Caixinhas cadastradas</p>
           <p className="mt-1 text-4xl font-extrabold">{data.total_tenants}</p>
-          <div className="mt-4 flex items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3">
+          <button type="button" onClick={() => onNavigateTab('CAIXINHAS')}
+            className="mt-4 flex min-h-11 w-full items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3 text-left"
+          >
+            <span className="text-sm text-emerald-50">Gestão cadastral de caixinhas</span>
+            <ChevronRight className="h-5 w-5 text-[#f1d485]" aria-hidden="true"/>
+          </button>
+          <div className="mt-3 flex items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3">
             <span className="text-sm text-emerald-50">Licenciamento em homologação</span>
             <button type="button" onClick={() => onNavigateTab('LICENCAS')}
               aria-label="Ver licenças" className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#efd17a] text-[#12452e]">

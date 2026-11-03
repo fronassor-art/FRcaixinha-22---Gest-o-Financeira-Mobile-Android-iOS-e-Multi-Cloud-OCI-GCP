@@ -30,6 +30,7 @@ import { PixModal } from './components/PixModal';
 import { AdminManualModal } from './components/AdminManualModal';
 import { AuditSuiteModal } from './components/AuditSuiteModal';
 import { DashboardView } from './components/DashboardView';
+import { MasterTenantRegistryView } from './components/MasterTenantRegistryView';
 import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
 import { ServerLoansView } from './components/ServerLoansView';
@@ -176,6 +177,7 @@ export default function App() {
     if (state.currentRole === 'MASTER') {
       return [
         { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
+        { id: 'CAIXINHAS', label: 'Caixinhas', icon: BriefcaseBusiness },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
         { id: 'SUPORTE', label: 'Suporte', icon: LifeBuoy },
         { id: 'NUVEM', label: 'Infraestrutura', icon: Cloud },
@@ -283,6 +285,9 @@ export default function App() {
             onOpenPixModal={openPixModal}
           />
         )}
+        {visibleTab === 'CAIXINHAS' && state.currentRole === 'MASTER' && (
+          <MasterTenantRegistryView state={state} />
+        )}
         {visibleTab === 'LICENCAS' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
         )}
@@ -362,6 +367,7 @@ export default function App() {
           const shortLabel = item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
             : item.id === 'MINHAS_CONTRIBUICOES' || item.id === 'CONTRIBUICOES' ? 'Contrib.'
             : item.id === 'MEU_EMPRESTIMO' || item.id === 'EMPRESTIMOS' ? 'Crédito'
+            : item.id === 'CAIXINHAS' ? 'Caixinhas'
             : item.id === 'LICENCAS' ? 'Licenças'
             : item.id === 'SUPORTE' ? 'Suporte' : item.label;
           return (

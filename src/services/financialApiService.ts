@@ -9,6 +9,7 @@
  */
 
 import { authService, getApiBaseUrl } from './authService';
+import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -94,6 +95,13 @@ class FinancialApiService {
     subscriptions_status: string;
   }> {
     return this.request('/api/v1/master/overview');
+  }
+
+  public async fetchMasterTenantRegistry(params: {
+    search: string; status: RegistryStatus; page: number; pageSize?: number;
+  }): Promise<MasterRegistryPage> {
+    const raw: unknown = await this.request('/api/v1/master/tenant-registry?' + registryQuery(params));
+    return parseMasterTenantRegistry(raw);
   }
 
   public async fetchTenantOverview(tenantId: string): Promise<{
