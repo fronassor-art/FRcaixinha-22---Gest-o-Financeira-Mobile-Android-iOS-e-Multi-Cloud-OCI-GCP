@@ -15,9 +15,14 @@ export interface LoanSimulation {
 }
 export type LoanSimulationRequest={principal:number;term_months:number};
 const obj=(v:unknown):v is Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v);
-const sensitive=['cpf','email','password','password_hash','token','token_hash',
-  'access_token','bank_account','pix_key','secret','user_agent'];
-const clean=(v:Record<string,unknown>)=>!sensitive.some(k=>Object.prototype.hasOwnProperty.call(v,k));
+const RESPONSE_FIELDS=new Set(['principal','monthly_rate','term_months',
+  'uniform_payment','last_payment','total_interest','total_payable',
+  'is_irregular_first_period','first_period_days','effective_first_rate','schedule']);
+const INSTALLMENT_FIELDS=new Set(['installment_number','due_date',
+  'opening_balance','monthly_payment','interest_portion','amortization_portion',
+  'closing_balance','is_cents_adjusted']);
+const clean=(v:Record<string,unknown>,allowed:Set<string>)=>
+  Object.keys(v).every(k=>allowed.has(k));
 const cents=(v:unknown):number=>{
   if(typeof v==='string'&&!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(v))
     throw Error('Valor monetário inválido na simulação.');
@@ -55,7 +60,7 @@ export function validateSimulationRequest(req:LoanSimulationRequest):LoanSimulat
 }
 export function parseLoanSimulation(raw:unknown,requested:LoanSimulationRequest):LoanSimulation{
   const req=validateSimulationRequest(requested);
-  if(!obj(raw)||!clean(raw)||raw.term_months!==req.term_months||
+  if(!obj(raw)||!clean(raw,RESPONSE_FIELDS)||raw.term_months!==req.term_months||
      !Array.isArray(raw.schedule)||raw.schedule.length!==req.term_months||
      typeof raw.is_irregular_first_period!=='boolean')
     throw Error('Contrato de simulação incompatível.');
@@ -69,9 +74,17 @@ export function parseLoanSimulation(raw:unknown,requested:LoanSimulationRequest)
   if(days!==null&&days!==undefined&&
      (!Number.isInteger(days)||Number(days)<1||Number(days)>62))
     throw Error('Período inválido na simulação.');
+  if((raw.is_irregular_first_period===true && (days===null||days===undefined||days===30)) ||
+     (raw.is_irregular_first_period===false && days!==null && days!==undefined && days!==30))
+    throw Error('Período e classificação inconsistentes.');
+  if(days!==null&&days!==undefined &&
+     Math.abs(monthlyRate*days/30-effectiveRate)>1e-7)
+    throw Error('Taxa do primeiro período divergente.');
+  if((days===null||days===undefined)&&Math.abs(monthlyRate-effectiveRate)>1e-7)
+    throw Error('Taxa regular divergente.');
   let balance=p,prevMonth=-1,paid=0,amortized=0,interestPaid=0;
   const schedule:LoanSimulationInstallment[]=raw.schedule.map((row:unknown,i:number)=>{
-    if(!obj(row)||!clean(row)||row.installment_number!==i+1||
+    if(!obj(row)||!clean(row,INSTALLMENT_FIELDS)||row.installment_number!==i+1||
        typeof row.is_cents_adjusted!=='boolean')
       throw Error('Parcela fora de sequência.');
     const dueMonth=month(row.due_date);

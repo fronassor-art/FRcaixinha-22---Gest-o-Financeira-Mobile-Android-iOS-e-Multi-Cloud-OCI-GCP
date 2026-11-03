@@ -44,6 +44,9 @@ def assess_annual_consent(*, tenant_id: str, cycle_year: int, admin_user_id: str
     if local_day.year != cycle_year:
         return AnnualConsentAssessment(False, 0, 0, (), 'FORA_DO_CICLO')
     active_members = tuple(members)
+    if (any(not m.membership_id or not m.user_id for m in active_members) or
+            len({m.membership_id for m in active_members}) != len(active_members)):
+        return AnnualConsentAssessment(False, 0, 0, (), 'VINCULOS_INVALIDOS')
     if not any(m.user_id == admin_user_id for m in active_members):
         return AnnualConsentAssessment(False, 0, 0, (), 'ADMIN_NAO_MEMBRO_ATIVO')
     required = {m.membership_id for m in active_members if m.user_id != admin_user_id}
@@ -58,7 +61,11 @@ def assess_annual_consent(*, tenant_id: str, cycle_year: int, admin_user_id: str
                 or event.occurred_at.tzinfo is None or event.occurred_at > at):
             continue
         previous = latest.get(event.voter_membership_id)
-        if previous is None or event.occurred_at >= previous.occurred_at:
+        if (previous is None or event.occurred_at > previous.occurred_at or
+                (event.occurred_at == previous.occurred_at and
+                 previous.kind == 'SIGNED' and event.kind != 'SIGNED')):
+            # Mesmo instante: revogação ou estado desconhecido prevalece,
+            # independentemente da ordem dos eventos.
             latest[event.voter_membership_id] = event
     signed = {member_id for member_id, event in latest.items() if event.kind == 'SIGNED'}
     missing = tuple(sorted(required - signed))

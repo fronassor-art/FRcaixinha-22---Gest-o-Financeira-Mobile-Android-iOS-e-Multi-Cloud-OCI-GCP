@@ -7,7 +7,7 @@ Precisão Monetária: Uso de Decimal com ROUND_HALF_UP (Sem uso de float para c�
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional
 import uuid
-from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR
+from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, InvalidOperation
 from datetime import date, datetime, timedelta
 from ..models import (
     LoanSimulateRequest, LoanSimulateResponse, InstallmentScheduleItem,
@@ -45,10 +45,17 @@ def compute_price_schedule(
     cycle_end_date: Optional[date] = None,
 ) -> LoanSimulateResponse:
     """Price com taxas por período e desconto composto, sem desembolso real."""
-    P = to_cents(principal)
+    try:
+        P = to_cents(principal)
+        i = Decimal(str(monthly_rate))
+    except (InvalidOperation, ValueError, TypeError, OverflowError) as exc:
+        raise ValueError('Principal ou taxa inválidos.') from exc
     n = term_months
-    i = Decimal(str(monthly_rate))
-    if P <= 0 or n < 1 or n > 6 or i < 0 or not i.is_finite():
+    if (not P.is_finite() or not i.is_finite() or
+            P < Decimal('0.01') or P > Decimal('50000.00') or
+            P != Decimal(str(principal)) or
+            type(n) is not int or n < 1 or n > 6 or
+            i < 0 or i > Decimal('1.00')):
         raise ValueError('Principal, taxa ou prazo inválido.')
     if first_due_date and not disbursement_date:
         raise ValueError('Primeiro vencimento exige data de liberação.')
@@ -166,22 +173,28 @@ async def simulate_loan_price(
         raise HTTPException(
             status_code=409, detail="A política financeira vigente não está configurada."
         )
-    if payload.term_months > policy["max_installments"]:
+    policy_limit = policy["max_installments"]
+    if type(policy_limit) is not int or not 1 <= policy_limit <= 6:
+        raise HTTPException(status_code=503, detail="Limite de prazo da política inválido.")
+    if payload.term_months > policy_limit:
         raise HTTPException(
             status_code=422, detail="Prazo excede o limite da política vigente da caixinha."
         )
     try:
+        policy_rate = Decimal(str(policy["monthly_interest_rate"]))
+        if not policy_rate.is_finite() or not Decimal('0') <= policy_rate <= Decimal('1'):
+            raise ValueError('Taxa da política financeira inválida.')
         return compute_price_schedule(
             principal=payload.principal,
             term_months=payload.term_months,
-            monthly_rate=Decimal(str(policy["monthly_interest_rate"])),
+            monthly_rate=policy_rate,
             disbursement_date=payload.disbursement_date,
             first_due_date=payload.first_due_date,
             cycle_start_date=cycle["start_date"],
             cycle_end_date=cycle["end_date"],
         )
-    except (ValueError, ArithmeticError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (InvalidOperation, TypeError, ValueError, ArithmeticError) as exc:
+        raise HTTPException(status_code=422, detail="Dados de simulação ou política inválidos.") from exc
 
 
 @router.get("", response_model=List[LoanResponse])

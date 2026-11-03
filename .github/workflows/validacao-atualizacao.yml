@@ -58,6 +58,8 @@ jobs:
         run: npx tsx src/tests/loan_simulation_feedback_ci.test.ts
       - name: Validar cronograma Price e rejeicao de simulacao tardia
         run: npx tsx src/tests/loan_simulation_integrity_ci.test.ts
+      - name: Macropacote 180 — Price, sessao e consentimento
+        run: npx tsx src/tests/macropacote_180_credit_ci.test.ts
       - name: Validar erros HTTP seguros e integridade do JSON financeiro
         run: npx tsx src/tests/api_response_policy_ci.test.ts
       - name: Validar previa anual individual e nao apuracao de lucro
@@ -192,6 +194,7 @@ jobs:
         run: |
           python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
           python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
           python -m pytest -q backend/tests/test_aistudio_real_panels.py

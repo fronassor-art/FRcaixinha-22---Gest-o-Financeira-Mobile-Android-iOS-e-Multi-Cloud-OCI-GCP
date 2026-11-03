@@ -4,16 +4,17 @@ import { financialApi } from '../services/financialApiService';
 import type {DisplayLoan} from '../services/loanReadBoundary';
 import type {LoanSimulation} from '../services/loanSimulationBoundary';
 import {loanSimulationFailureMessage} from '../services/loanSimulationFeedback';
+import {authService} from '../services/authService';
 
 interface Props { state: AppState }
 type State = { key: string; status: 'loading' | 'ready' | 'error'; loans: DisplayLoan[] };
 
 export const ServerLoansView: React.FC<Props> = ({ state }) => {
-  const key = [state.currentUserId, state.currentRole, state.currentTenantId].join(':');
+  const [revision, setRevision] = useState(0);
+  const key = [state.currentUserId, state.currentRole, state.currentTenantId, revision].join(':');
   const latestKey = useRef(key);
   latestKey.current = key;
   const simulationRequestId = useRef(0);
-  const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<State>({ key: '', status: 'loading', loans: [] });
   const [amount, setAmount] = useState('500');
   const [months, setMonths] = useState('5');
@@ -22,6 +23,7 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
 
   useEffect(() => {
     let active = true;
+    const snapshot = authService.captureSession();
     simulationRequestId.current++;
     setSimulation(null);
     setSimulationStatus('');
@@ -31,9 +33,11 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
       return () => { active = false; };
     }
     financialApi.fetchLoans(state.currentTenantId).then(loans => {
-      if (active) setResult({ key, status: 'ready', loans });
+      if (active && authService.isSessionSnapshotCurrent(snapshot))
+        setResult({ key, status: 'ready', loans });
     }).catch(() => {
-      if (active) setResult({ key, status: 'error', loans: [] });
+      if (active && authService.isSessionSnapshotCurrent(snapshot))
+        setResult({ key, status: 'error', loans: [] });
     });
     return () => { active = false; };
   }, [key, revision]);
