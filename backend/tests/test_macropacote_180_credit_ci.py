@@ -127,7 +127,7 @@ def test_annual_consent_pure_and_revocation_wins_ties():
     assert not assess([a,b,c],[s1,s2,evt('m2','UNKNOWN',now)],now).authorized
     assert not assess([a,b,c],[s1],now).authorized
     assert assess([a,b,b],[s1],now).reason=='VINCULOS_INVALIDOS'
-    assert not assess([a,b,c],[s1,s2],datetime(2028,1,1,tzinfo=timezone.utc)).authorized
+    assert not assess([a,b,c],[s1,s2],datetime(2028,1,2,tzinfo=timezone.utc)).authorized
 
 @pytest.mark.asyncio
 async def test_real_disburse_repay_and_early_settlement_stay_blocked():

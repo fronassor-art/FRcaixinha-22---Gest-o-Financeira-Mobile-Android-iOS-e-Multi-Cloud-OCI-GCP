@@ -78,7 +78,7 @@ export function parseLoanSimulation(raw:unknown,requested:LoanSimulationRequest)
      (raw.is_irregular_first_period===false && days!==null && days!==undefined && days!==30))
     throw Error('Período e classificação inconsistentes.');
   if(days!==null&&days!==undefined &&
-     Math.abs(monthlyRate*days/30-effectiveRate)>1e-7)
+     Math.abs(monthlyRate*Number(days)/30-effectiveRate)>1e-7)
     throw Error('Taxa do primeiro período divergente.');
   if((days===null||days===undefined)&&Math.abs(monthlyRate-effectiveRate)>1e-7)
     throw Error('Taxa regular divergente.');
