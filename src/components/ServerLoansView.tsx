@@ -3,6 +3,7 @@ import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
 import type {DisplayLoan} from '../services/loanReadBoundary';
 import type {LoanSimulation} from '../services/loanSimulationBoundary';
+import {loanSimulationFailureMessage} from '../services/loanSimulationFeedback';
 
 interface Props { state: AppState }
 type State = { key: string; status: 'loading' | 'ready' | 'error'; loans: DisplayLoan[] };
@@ -60,9 +61,9 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
       if (requestedKey !== latestKey.current || requestId !== simulationRequestId.current) return;
       setSimulation(data);
       setSimulationStatus('Simulação matemática concluída no servidor. Não equivale a oferta, aprovação ou desembolso.');
-    } catch {
+    } catch (error: unknown) {
       if (requestedKey === latestKey.current && requestId === simulationRequestId.current) {
-        setSimulationStatus('Simulação indisponível no FastAPI. Nenhuma operação financeira foi realizada.');
+        setSimulationStatus(loanSimulationFailureMessage(error));
       }
     }
   }

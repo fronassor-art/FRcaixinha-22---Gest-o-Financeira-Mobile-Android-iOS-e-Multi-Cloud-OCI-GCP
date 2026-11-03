@@ -41,6 +41,16 @@ export class FinancialBackendUnavailableError extends Error {
   }
 }
 
+/** Status explícito do HTTP, sem transformar erros em permissões.
+ * Mensagens provêm do parser que elimina conteúdo suspeito.
+ */
+export class FinancialApiHttpError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'FinancialApiHttpError';
+  }
+}
+
 export class SessionBoundaryError extends Error {
   constructor(
     message: string,
@@ -133,8 +143,8 @@ class FinancialApiService {
           'Acesso negado pelas regras de governança ou segregação patrimonial.');
       }
 
-      throw new Error(error.detail || error.message ||
-        `Erro na API (${response.status}). Operação não confirmada.`);
+      throw new FinancialApiHttpError(error.detail || error.message ||
+        `Erro na API (${response.status}). Operação não confirmada.`, response.status);
     }
 
     let data: T;
