@@ -92,6 +92,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
             <span className="text-sm text-emerald-50">Gestão cadastral de caixinhas</span>
             <ChevronRight className="h-5 w-5 text-[#f1d485]" aria-hidden="true"/>
           </button>
+          <button type="button" onClick={() => onNavigateTab('ADMINISTRADORES')}
+            className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3 text-left"
+          >
+            <span className="text-sm text-emerald-50">Responsáveis cadastrais</span>
+            <ChevronRight className="h-5 w-5 text-[#f1d485]" aria-hidden="true"/>
+          </button>
           <div className="mt-3 flex items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3">
             <span className="text-sm text-emerald-50">Licenciamento em homologação</span>
             <button type="button" onClick={() => onNavigateTab('LICENCAS')}

@@ -31,6 +31,7 @@ import { AdminManualModal } from './components/AdminManualModal';
 import { AuditSuiteModal } from './components/AuditSuiteModal';
 import { DashboardView } from './components/DashboardView';
 import { MasterTenantRegistryView } from './components/MasterTenantRegistryView';
+import { MasterAdminRegistryView } from './components/MasterAdminRegistryView';
 import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
 import { ServerLoansView } from './components/ServerLoansView';
@@ -179,6 +180,7 @@ export default function App() {
         { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
         { id: 'CAIXINHAS', label: 'Caixinhas', icon: BriefcaseBusiness },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
+        { id: 'ADMINISTRADORES', label: 'Administradores', icon: Users },
         { id: 'SUPORTE', label: 'Suporte', icon: LifeBuoy },
         { id: 'NUVEM', label: 'Infraestrutura', icon: Cloud },
         { id: 'AUDITORIA', label: 'Suíte AT-01 a AT-50', icon: ShieldCheck },
@@ -287,6 +289,9 @@ export default function App() {
         )}
         {visibleTab === 'CAIXINHAS' && state.currentRole === 'MASTER' && (
           <MasterTenantRegistryView state={state} />
+        )}
+        {visibleTab === 'ADMINISTRADORES' && state.currentRole === 'MASTER' && (
+          <MasterAdminRegistryView state={state} />
         )}
         {visibleTab === 'LICENCAS' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />

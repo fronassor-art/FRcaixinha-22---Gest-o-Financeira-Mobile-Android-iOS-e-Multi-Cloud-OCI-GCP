@@ -34,6 +34,63 @@ async def confirm_owner_access(session: AuthenticatedSession = Depends(require_m
     }
 
 
+@router.get("/admin-registry")
+async def get_master_admin_registry(
+    search: str = Query(default="", max_length=36),
+    page: int = Query(default=1, ge=1, le=1000),
+    page_size: int = Query(default=20, ge=5, le=50),
+    session: AuthenticatedSession = Depends(require_master),
+    conn = Depends(get_rls_db_connection),
+):
+    """Responsáveis cadastrais principais de caixinhas, sem dados pessoais.
+
+    O campo admin_user_id nao prova conta ativa nem membership autorizado.
+    Usa exclusivamente public.tenants, sob RLS e papel MASTER validado.
+    """
+    term = search.strip().lower()
+    filter_sql = (
+        " FROM public.tenants "
+        "WHERE strpos(lower(admin_user_id::text), $1::text) > 0"
+    )
+    total = await conn.fetchval(
+        "SELECT count(DISTINCT admin_user_id)" + filter_sql, term
+    )
+    rows = await conn.fetch(
+        "SELECT admin_user_id,count(*)::int AS tenant_count,"
+        "count(*) FILTER (WHERE status='ATIVO')::int AS active_count,"
+        "count(*) FILTER (WHERE status='SUSPENSO')::int AS suspended_count,"
+        "count(*) FILTER (WHERE status='RASCUNHO_INATIVO')::int AS draft_count,"
+        "count(*) FILTER (WHERE status='ENCERRADO')::int AS closed_count"
+        + filter_sql +
+        " GROUP BY admin_user_id"
+        " ORDER BY count(*) DESC, admin_user_id"
+        " LIMIT $2 OFFSET $3",
+        term, page_size, (page - 1) * page_size,
+    )
+    return {
+        "source": "POSTGRESQL_RLS",
+        "scope": "MASTER_PRIMARY_ADMIN_REGISTRY",
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "has_more": page * page_size < total,
+        "identity_status": "UNVERIFIED_REFERENCE_ONLY",
+        "invitation_status": "NOT_IMPLEMENTED",
+        "access_changes": "BLOCKED_PENDING_APPROVAL",
+        "administrators": [
+            {
+                "admin_user_id": str(row["admin_user_id"]),
+                "tenant_count": row["tenant_count"],
+                "active_count": row["active_count"],
+                "suspended_count": row["suspended_count"],
+                "draft_count": row["draft_count"],
+                "closed_count": row["closed_count"],
+            }
+            for row in rows
+        ],
+    }
+
+
 @router.get("/tenant-registry")
 async def get_master_tenant_registry(
     search: str = Query(default="", max_length=80),
