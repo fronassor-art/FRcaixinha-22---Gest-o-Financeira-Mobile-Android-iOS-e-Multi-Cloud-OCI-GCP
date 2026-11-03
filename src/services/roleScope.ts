@@ -2,7 +2,7 @@ import type { UserRole } from '../types';
 
 // Fonte unica de autorizacao para renderizar abas apos troca de contexto.
 const TABS: Record<UserRole, readonly string[]> = {
-  MASTER: ['DASHBOARD','CAIXINHAS','LICENCAS','ADMINISTRADORES','SUPORTE','NUVEM','AUDITORIA'],
+  MASTER: ['DASHBOARD','CAIXINHAS','LICENCAS','ADMINISTRADORES','ONBOARDING','SUPORTE','NUVEM','AUDITORIA'],
   TENANT_ADMIN: ['DASHBOARD','MEMBROS','CONTRIBUICOES','EMPRESTIMOS','FECHAMENTO'],
   TENANT_MEMBER: ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO'],
 };

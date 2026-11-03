@@ -11,6 +11,10 @@
 import { authService, getApiBaseUrl } from './authService';
 import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 import { parseMasterAdminRegistry, adminRegistryQuery, MasterAdminRegistryPage } from './masterAdminRegistry';
+import {
+  MasterOnboardingCapabilities, MasterOnboardingPreflight,
+  parseOnboardingCapabilities, parseOnboardingPreflight,
+} from './masterOnboarding';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -110,6 +114,26 @@ class FinancialApiService {
   }): Promise<MasterAdminRegistryPage> {
     const raw: unknown = await this.request('/api/v1/master/admin-registry?' + adminRegistryQuery(params));
     return parseMasterAdminRegistry(raw);
+  }
+
+  public async fetchMasterOnboardingCapabilities(): Promise<MasterOnboardingCapabilities> {
+    const raw: unknown = await this.request('/api/v1/master/admin-onboarding/capabilities');
+    return parseOnboardingCapabilities(raw);
+  }
+
+  public async simulateMasterOnboarding(params: {
+    tenantId: string; candidateUserId?: string; purpose: string;
+  }): Promise<MasterOnboardingPreflight> {
+    const raw: unknown = await this.request('/api/v1/master/admin-onboarding/preflight', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: params.tenantId,
+        target_role: 'TENANT_ADMIN',
+        ...(params.candidateUserId ? { candidate_user_id: params.candidateUserId } : {}),
+        purpose: params.purpose,
+      }),
+    });
+    return parseOnboardingPreflight(raw);
   }
 
   public async fetchTenantOverview(tenantId: string): Promise<{

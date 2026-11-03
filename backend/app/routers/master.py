@@ -10,6 +10,7 @@ from typing import Literal
 import uuid
 from ..dependencies import require_master, AuthenticatedSession
 from ..database import get_rls_db_connection
+from ..admin_onboarding_policy import readiness_manifest, preflight_assessment
 
 router = APIRouter(prefix="/master", tags=["Governança Master da Plataforma"])
 
@@ -18,10 +19,55 @@ class SupportBreakGlassRequest(BaseModel):
     justification: str = Field(..., min_length=15, description="Justificativa formal auditável para acesso emergencial de suporte")
     duration_minutes: int = Field(default=30, le=60, description="Duração máxima do acesso excepcional (máx 60 min)")
 
+class AdminOnboardingPreflightRequest(BaseModel):
+    tenant_id: uuid.UUID
+    target_role: Literal["TENANT_ADMIN"]
+    candidate_user_id: uuid.UUID | None = None
+    purpose: str = Field(..., min_length=15, max_length=240)
+
+
 class LicensePriceChange(BaseModel):
     tier: Literal['ESSENCIAL', 'INTERMEDIARIO']
     monthly_price: Decimal = Field(..., gt=Decimal('0'), le=Decimal('999999.99'), decimal_places=2)
     reason: str = Field(..., min_length=15, max_length=500)
+
+
+@router.get("/admin-onboarding/capabilities")
+async def admin_onboarding_capabilities(
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Relatorio server-side de bloqueios de criacao de administradores."""
+    return readiness_manifest()
+
+
+@router.post("/admin-onboarding/preflight")
+async def admin_onboarding_preflight(
+    payload: AdminOnboardingPreflightRequest,
+    session: AuthenticatedSession = Depends(require_master),
+    conn = Depends(get_rls_db_connection),
+):
+    """PRE-ANALISE SOMENTE LEITURA. Nunca cria conta, convite ou permissao.
+
+    O UUID do candidato e apenas hipotetico: nao consulta users.
+    A justificativa e validada, mas jamais armazenada, ecoada ou enviada.
+    """
+    if len(payload.purpose.strip()) < 15:
+        raise HTTPException(status_code=422, detail="Justificativa insuficiente.")
+    tenant = await conn.fetchrow(
+        "SELECT id,display_name,status,is_owner_box "
+        "FROM public.tenants WHERE id=$1",
+        payload.tenant_id,
+    )
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Caixinha não encontrada.")
+    return preflight_assessment(
+        tenant_id=str(tenant["id"]),
+        tenant_name=tenant["display_name"],
+        tenant_status=tenant["status"],
+        is_owner_box=tenant["is_owner_box"],
+        candidate_id=str(payload.candidate_user_id) if payload.candidate_user_id else None,
+        actor_id=session.user_id,
+    )
 
 
 @router.get("/owner-access")

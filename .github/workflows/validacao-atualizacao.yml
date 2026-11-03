@@ -44,6 +44,8 @@ jobs:
         run: npx tsx src/tests/master_tenant_registry_ui.test.ts
       - name: Validar responsaveis cadastrais Master
         run: npx tsx src/tests/master_admin_registry_ui.test.ts
+      - name: Validar pre-analise Master de convites e estados seguros
+        run: npx tsx src/tests/master_onboarding_preflight_ui.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web
@@ -162,6 +164,7 @@ jobs:
           python -m pytest -q backend/tests/test_owner_private_access.py
           python -m pytest -q backend/tests/test_master_tenant_registry.py
           python -m pytest -q backend/tests/test_master_admin_registry.py
+          python -m pytest -q backend/tests/test_master_onboarding_preflight.py
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
           python -m pytest -q backend/tests/test_auth_context_security_headers.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py

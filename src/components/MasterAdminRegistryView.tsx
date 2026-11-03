@@ -7,7 +7,9 @@ import {AppState} from '../services/store';
 type Result={key:string;status:'loading'|'ready'|'error';data?:MasterAdminRegistryPage};
 
 /** Governança somente leitura: não altera contas, acesso ou movimentações. */
-export const MasterAdminRegistryView:React.FC<{state:AppState}>=({state})=>{
+export const MasterAdminRegistryView:React.FC<{
+  state:AppState; onOpenOnboarding?:()=>void;
+}>=({state,onOpenOnboarding})=>{
   const [input,setInput]=useState('');
   const [search,setSearch]=useState('');
   const [page,setPage]=useState(1);
@@ -50,6 +52,11 @@ export const MasterAdminRegistryView:React.FC<{state:AppState}>=({state})=>{
         Convites, aprovações e suspensões indisponíveis até validação de segurança.
       </p>
     </header>
+    <button type="button" onClick={onOpenOnboarding}
+      disabled={!onOpenOnboarding}
+      className="fr-gold-button min-h-11 w-full rounded-xl px-4 text-sm font-semibold disabled:opacity-60">
+      Consultar preparação de convites (sem emitir)
+    </button>
 
     <form className="fr-light-card space-y-3 rounded-2xl p-4"
       onSubmit={event=>{event.preventDefault();setSearch(input.trim());setPage(1);}}>
