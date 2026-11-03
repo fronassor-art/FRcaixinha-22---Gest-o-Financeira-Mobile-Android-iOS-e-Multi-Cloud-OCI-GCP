@@ -35,6 +35,7 @@ import { MasterAdminRegistryView } from './components/MasterAdminRegistryView';
 import { MasterOnboardingView } from './components/MasterOnboardingView';
 import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
+import { MemberAnnualPreviewView } from './components/MemberAnnualPreviewView';
 import { ServerLoansView } from './components/ServerLoansView';
 import { ConsentView } from './components/ConsentView';
 import { LedgerView } from './components/LedgerView';
@@ -399,14 +400,7 @@ export default function App() {
         )}
         {visibleTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
         {visibleTab === 'MEU_RESULTADO' && state.currentRole === 'TENANT_MEMBER' && (
-          <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
-            <h2 className="text-lg font-bold">Meu resultado anual</h2>
-            <p className="text-sm text-slate-700">
-              Seu demonstrativo individual ainda não está disponível no servidor.
-              Informações de outros membros e resultados administrativos
-              não são exibidos neste perfil.
-            </p>
-          </section>
+          <MemberAnnualPreviewView state={state}/>
         )}
       </main>
 

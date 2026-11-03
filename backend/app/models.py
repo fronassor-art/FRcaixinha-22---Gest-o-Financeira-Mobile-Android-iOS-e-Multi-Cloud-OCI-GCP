@@ -84,6 +84,20 @@ class ContributionResponse(BaseModel):
     due_status: str
     paid_at: Optional[datetime] = None
 
+class MemberAnnualPreviewResponse(BaseModel):
+    """Prévia somente de registros próprios; não é fechamento ou pagamento."""
+    source: str = 'POSTGRESQL_RLS'
+    tenant_id: str
+    year: int
+    contribution_count: int
+    pending_count: int
+    total_due: Decimal
+    amount_paid_recorded: Decimal
+    remaining_due: Decimal
+    result_status: str = 'PREVIA_NAO_E_LIQUIDACAO'
+    profit_amount: Optional[Decimal] = None
+
+
 class ContributionPayRequest(BaseModel):
     amount: Decimal = Field(..., gt=0, description="Valor para intenção de pagamento em BRL")
 

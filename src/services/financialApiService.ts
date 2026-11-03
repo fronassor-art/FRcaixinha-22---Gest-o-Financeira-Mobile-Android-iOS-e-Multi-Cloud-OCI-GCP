@@ -27,6 +27,7 @@ import {
 import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
+import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
 export class FinancialBackendUnavailableError extends Error {
@@ -423,6 +424,17 @@ class FinancialApiService {
     return this.request<any>(`/api/v1/tenants/${tenantId}/loans/${loanId}/early-settlement`, {
       method: 'POST',
     });
+  }
+
+  /** Prévia registrada no PostgreSQL para o Membro, sem cálculo de lucro. */
+  public async fetchMemberAnnualPreview(tenantId:string,year=2027):Promise<MemberAnnualPreview>{
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(role!=='TENANT_MEMBER')throw new Error('Demonstrativo somente para Membro');
+    if(!Number.isInteger(year)||year<2020||year>2100)throw Error('Ano inválido');
+    const raw:unknown=await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/contributions/annual-preview/me?year=${year}`
+    );
+    return parseMemberAnnualPreview(raw,tenantId,year);
   }
 
   // --- Livro-Razão Contábil ---

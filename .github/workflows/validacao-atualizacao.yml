@@ -56,6 +56,8 @@ jobs:
         run: npx tsx src/tests/loan_simulation_integrity_ci.test.ts
       - name: Validar erros HTTP seguros e integridade do JSON financeiro
         run: npx tsx src/tests/api_response_policy_ci.test.ts
+      - name: Validar previa anual individual e nao apuracao de lucro
+        run: npx tsx src/tests/member_annual_preview_ci.test.ts
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil

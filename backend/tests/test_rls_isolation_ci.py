@@ -918,3 +918,82 @@ async def test_quotas_contributions_real_postgresql_api_roles_without_payment(is
         await admin.execute(
             "DELETE FROM public.cycles WHERE id=ANY($1::uuid[])",cycles)
         await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_member_annual_preview_real_rows_no_profit_or_write(isolated_rows):
+    """Prévia individual: SELECT real protegido por contexto e PostgreSQL RLS."""
+    from datetime import date
+    from decimal import Decimal
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.routers.contributions import get_member_annual_preview
+
+    conn,ids=isolated_rows
+    admin=await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    ca,cb=uuid.uuid4(),uuid.uuid4()
+    try:
+        for tenant,cycle in ((ids["tenant_a"],ca),(ids["tenant_b"],cb)):
+            await admin.execute(
+                "INSERT INTO public.cycles(id,tenant_id,year,start_date,end_date,settlement_date) "
+                "VALUES($1,$2,2027,$3,$4,$5)",
+                cycle,tenant,date(2027,1,1),date(2027,12,31),date(2028,1,10))
+        for tenant,cycle,member,n in (
+            (ids["tenant_a"],ca,ids["membership_a"],12),
+            (ids["tenant_a"],ca,ids["membership_a2"],1),
+            (ids["tenant_b"],cb,ids["membership_b"],1),
+        ):
+            for month in range(1,n+1):
+                await admin.execute(
+                  "INSERT INTO public.contributions(tenant_id,cycle_id,membership_id,"
+                  "competence,due_date,amount_due,amount_paid,payment_status,due_status) "
+                  "VALUES($1,$2,$3,$4,$5,100,0,'PENDENTE','NO_PRAZO')",
+                  tenant,cycle,member,f"2027-{month:02}",date(2027,month,10))
+        async def preview(user,active_tenant,requested_tenant,role):
+            session=AuthenticatedSession(
+                str(user),role,str(active_tenant) if active_tenant else None,
+                "ci@example.invalid","CI",role=="MASTER")
+            async with conn.transaction():
+                for setting,v in (
+                  ("app.current_user_id",str(user)),
+                  ("app.current_tenant_id",str(active_tenant) if active_tenant else ""),
+                  ("app.current_role",role),
+                ):
+                    await conn.execute(
+                      "SELECT set_config($1,$2,true)",setting,v)
+                return await get_member_annual_preview(
+                    str(requested_tenant),2027,session,conn)
+        result=await preview(ids["member_a"],ids["tenant_a"],
+                             ids["tenant_a"],"TENANT_MEMBER")
+        assert result.contribution_count==12
+        assert result.pending_count==12
+        assert result.total_due==Decimal("1200.00")
+        assert result.amount_paid_recorded==Decimal("0.00")
+        assert result.remaining_due==Decimal("1200.00")
+        assert result.profit_amount is None
+        other=await preview(ids["member_a2"],ids["tenant_a"],
+                            ids["tenant_a"],"TENANT_MEMBER")
+        assert other.contribution_count==1
+        assert other.total_due==Decimal("100.00")
+        with pytest.raises(HTTPException) as cross:
+            await preview(ids["member_b"],ids["tenant_b"],
+                          ids["tenant_a"],"TENANT_MEMBER")
+        assert cross.value.status_code==403
+        with pytest.raises(HTTPException) as denied:
+            await preview(ids["admin_a"],ids["tenant_a"],
+                          ids["tenant_a"],"TENANT_ADMIN")
+        assert denied.value.status_code==403
+        with pytest.raises(HTTPException) as master:
+            await preview(ids["master"],None,ids["tenant_a"],"MASTER")
+        assert master.value.status_code==403
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=$1",
+            ids["tenant_a"])==0
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.cycle_closings WHERE tenant_id=$1",
+            ids["tenant_a"])==0
+        print("ANNUAL_PREVIEW_REAL_POSTGRES_RLS_CI=PASS")
+    finally:
+        await admin.execute(
+            "DELETE FROM public.cycles WHERE id=ANY($1::uuid[])",[ca,cb])
+        await admin.close()

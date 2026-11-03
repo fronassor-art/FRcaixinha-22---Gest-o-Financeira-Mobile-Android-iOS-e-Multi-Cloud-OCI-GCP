@@ -4,12 +4,12 @@ Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 4.5, 6.3, 6.4, 7.1, 14.1 e 16.4)
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP e prevenção estrita de saldo fictício.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
-from ..models import ContributionResponse, ContributionPayRequest, ContributionPayResponse, QuotaResponse
+from ..models import ContributionResponse, ContributionPayRequest, ContributionPayResponse, QuotaResponse, MemberAnnualPreviewResponse
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
 from ..config import settings
@@ -125,6 +125,59 @@ async def list_tenant_contributions(
         )
         for r in rows
     ]
+
+
+
+@router.get("/contributions/annual-preview/me", response_model=MemberAnnualPreviewResponse)
+async def get_member_annual_preview(
+    tenant_id: str,
+    year: int = Query(default=2027, ge=2020, le=2100),
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn = Depends(get_rls_db_connection),
+):
+    """Resumo real de registros próprios, jamais apuração de lucro.
+
+    SELECT executado com RLS do usuário e tenant ativos. A soma dos valores
+    pagos é apenas dado cadastral; não presume conciliação bancária.
+    """
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_MEMBER":
+        raise HTTPException(
+            status_code=403,
+            detail="Demonstrativo individual exclusivo do perfil Membro."
+        )
+
+    row = await conn.fetchrow("""
+        SELECT count(*)::integer AS contribution_count,
+               count(*) FILTER (WHERE c.payment_status != 'QUITADA')::integer
+                 AS pending_count,
+               COALESCE(sum(c.amount_due),0) AS total_due,
+               COALESCE(sum(c.amount_paid),0) AS amount_paid_recorded
+        FROM public.contributions c
+        JOIN public.memberships m ON m.id=c.membership_id
+        WHERE c.tenant_id=$1
+          AND m.tenant_id=$1 AND m.user_id=$2
+          AND m.role='TENANT_MEMBER' AND m.status='ATIVA'
+          AND c.competence LIKE $3
+    """, uuid.UUID(tenant_id), uuid.UUID(session.user_id), f"{year:04d}-%")
+
+    due = to_cents(row["total_due"])
+    paid = to_cents(row["amount_paid_recorded"])
+    if paid < 0 or due < 0 or paid > due:
+        raise HTTPException(
+            status_code=503,
+            detail="Prévia indisponível: valores registrados inconsistentes."
+        )
+    return MemberAnnualPreviewResponse(
+        tenant_id=tenant_id,
+        year=year,
+        contribution_count=row["contribution_count"],
+        pending_count=row["pending_count"],
+        total_due=due,
+        amount_paid_recorded=paid,
+        remaining_due=due-paid,
+        profit_amount=None,
+    )
 
 
 @router.post("/contributions/{contribution_id}/pay", response_model=ContributionPayResponse)
