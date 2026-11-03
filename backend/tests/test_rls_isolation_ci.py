@@ -815,3 +815,89 @@ async def test_price_with_real_postgresql_policy_and_rls(isolated_rows):
     finally:
         await admin.execute("DELETE FROM public.cycles WHERE id=$1",cycle)
         await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_quotas_contributions_real_postgresql_api_roles_without_payment(isolated_rows):
+    """Cotação e contribuições pendentes com rota FastAPI e RLS reais.
+
+    No CI descartável: admin vê tenant; membro vê apenas seu membership;
+    Master e outro tenant não conseguem consultar.
+    """
+    from datetime import date
+    from decimal import Decimal
+    from fastapi import HTTPException
+    from app.dependencies import AuthenticatedSession
+    from app.routers.contributions import list_tenant_quotas, list_tenant_contributions
+
+    app_conn, ids=isolated_rows
+    admin=await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    cycles=[uuid.uuid4(),uuid.uuid4()]
+    contribution_ids=[uuid.uuid4(),uuid.uuid4(),uuid.uuid4()]
+    rows=[
+        (ids["tenant_a"], ids["membership_a"],cycles[0],contribution_ids[0]),
+        (ids["tenant_a"], ids["membership_a2"],cycles[0],contribution_ids[1]),
+        (ids["tenant_b"], ids["membership_b"],cycles[1],contribution_ids[2]),
+    ]
+    try:
+        for tenant,cycle in [(ids["tenant_a"],cycles[0]),(ids["tenant_b"],cycles[1])]:
+            await admin.execute(
+                "INSERT INTO public.cycles(id,tenant_id,year,start_date,end_date,settlement_date) "
+                "VALUES($1,$2,2027,$3,$4,$5)",
+                cycle,tenant,date(2027,1,1),date(2027,12,31),date(2028,1,10))
+        for tenant,membership,cycle,record_id in rows:
+            await admin.execute(
+                "INSERT INTO public.contributions(id,tenant_id,cycle_id,membership_id,"
+                "competence,due_date,amount_due,amount_paid,payment_status,due_status) "
+                "VALUES($1,$2,$3,$4,'2027-01',$5,100.00,0.00,'PENDENTE','NO_PRAZO')",
+                record_id,tenant,cycle,membership,date(2027,1,10))
+
+        async def read(user,tenant,role):
+            session=AuthenticatedSession(str(user),role,str(tenant),
+                "synthetic@example.invalid","Pessoa CI",role=="MASTER")
+            async with app_conn.transaction():
+                for key,value in [
+                  ("app.current_user_id",str(user)),
+                  ("app.current_tenant_id",str(tenant)),
+                  ("app.current_role",role)]:
+                    await app_conn.execute(
+                        "SELECT set_config($1,$2,true)",key,value)
+                quotas=await list_tenant_quotas(str(tenant),session,app_conn)
+                contributions=await list_tenant_contributions(str(tenant),session,app_conn)
+                return quotas,contributions
+
+        admin_quotas,admin_rows=await read(
+            ids["admin_a"],ids["tenant_a"],"TENANT_ADMIN")
+        assert {x.id for x in admin_quotas}=={
+            str(ids["quota_a"]),str(ids["quota_a2"])}
+        assert {x.id for x in admin_rows}=={
+            str(contribution_ids[0]),str(contribution_ids[1])}
+        for actor,expected_quota,expected_contribution in [
+            ("member_a","quota_a",contribution_ids[0]),
+            ("member_a2","quota_a2",contribution_ids[1]),
+            ("member_b","quota_b",contribution_ids[2])
+        ]:
+            tenant=ids["tenant_b"] if actor=="member_b" else ids["tenant_a"]
+            quotas,contributions=await read(ids[actor],tenant,"TENANT_MEMBER")
+            assert [x.id for x in quotas]==[str(ids[expected_quota])]
+            assert [x.id for x in contributions]==[str(expected_contribution)]
+            assert contributions[0].amount_due==Decimal("100.00")
+            assert contributions[0].amount_paid==Decimal("0.00")
+            assert contributions[0].payment_status=="PENDENTE"
+        with pytest.raises(HTTPException) as other:
+            await read(ids["member_b"],ids["tenant_a"],"TENANT_MEMBER")
+        assert other.value.status_code==403
+        with pytest.raises(HTTPException) as master:
+            await read(ids["master"],ids["tenant_a"],"MASTER")
+        assert master.value.status_code==403
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.pix_payment_intents "
+            "WHERE tenant_id=$1",ids["tenant_a"])==0
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.ledger_transactions "
+            "WHERE tenant_id=$1",ids["tenant_a"])==0
+        print("QUOTAS_CONTRIBUICOES_REAIS_RLS_CI=PASS; SEM_MOVIMENTACAO=PASS")
+    finally:
+        await admin.execute(
+            "DELETE FROM public.cycles WHERE id=ANY($1::uuid[])",cycles)
+        await admin.close()
