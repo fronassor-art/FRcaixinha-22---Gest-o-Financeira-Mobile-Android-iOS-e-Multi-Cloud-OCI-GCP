@@ -68,6 +68,14 @@ async def create_tenant_audit_event(
     - Impede alteração ou exclusão de eventos existentes.
     """
     require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Evento de auditoria exclusivo do administrador.")
+    # O payload legado era autodeclarado pelo cliente, sem procedência
+    # verificada ou vínculo com ação de domínio confirmada pelo servidor.
+    # Sem esse controle, criar uma trilha oficial seria evidência falsa.
+    raise HTTPException(status_code=503, detail=(
+        "Registro manual de auditoria indisponível até comprovar origem e integridade."
+    ))
 
     event_id = uuid.uuid4()
     await conn.execute("""

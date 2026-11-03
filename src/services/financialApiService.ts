@@ -29,6 +29,7 @@ import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
+import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
 export class FinancialBackendUnavailableError extends Error {
@@ -462,14 +463,29 @@ class FinancialApiService {
     return parseMemberAnnualPreview(raw,tenantId,year);
   }
 
-  // --- Livro-Razão Contábil ---
+  // --- Livro-Razão Contábil — nunca para Master ou Membro ---
+
+  private assertLedgerAdmin(tenantId:string):void {
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(role!=='TENANT_ADMIN')throw Error('Livro-Razão somente para administrador da caixinha.');
+  }
+
+  public async fetchLedgerIntegrityPreview(tenantId:string):Promise<LedgerIntegrityPreview> {
+    this.assertLedgerAdmin(tenantId);
+    const raw:unknown=await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/integrity-preview`
+    );
+    return parseLedgerIntegrityPreview(raw,tenantId);
+  }
 
   public async fetchLedgerAccounts(tenantId: string) {
-    return this.request<any[]>(`/api/v1/tenants/${tenantId}/ledger/accounts`);
+    this.assertLedgerAdmin(tenantId);
+    return this.request<any[]>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/accounts`);
   }
 
   public async fetchLedgerTransactions(tenantId: string) {
-    return this.request<any[]>(`/api/v1/tenants/${tenantId}/ledger/transactions`);
+    this.assertLedgerAdmin(tenantId);
+    return this.request<any[]>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/transactions`);
   }
 
   // --- Consentimento de Autoempréstimo de Admin ---

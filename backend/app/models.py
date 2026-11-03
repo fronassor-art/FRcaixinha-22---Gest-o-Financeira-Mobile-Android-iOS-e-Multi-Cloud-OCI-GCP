@@ -214,6 +214,19 @@ class LoanEarlySettlementResponse(BaseModel):
 
 # --- Schemas do Livro-Razão Contábil (Partidas Dobradas) ---
 
+class LedgerIntegrityPreviewResponse(BaseModel):
+    """Only counts, never banking confirmation or authorization to close cycles."""
+    source: str = "POSTGRESQL_RLS"
+    scope: str = "TENANT_ADMIN_READ_ONLY"
+    tenant_id: str
+    checked_transactions: int
+    balanced_transactions: int
+    review_required_transactions: int
+    status: str
+    bank_reconciled: bool = False
+    financial_closing_authorized: bool = False
+
+
 class LedgerAccountResponse(BaseModel):
     id: str
     tenant_id: str

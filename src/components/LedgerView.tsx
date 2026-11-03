@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
+import { authService } from '../services/authService';
+import type { LedgerIntegrityPreview } from '../services/ledgerIntegrityPreview';
 
 interface Props { state: AppState }
 interface Account {
@@ -24,36 +26,46 @@ interface Result {
   status: 'loading' | 'ready' | 'error';
   accounts: Account[];
   transactions: Transaction[];
+  integrity?: LedgerIntegrityPreview;
 }
 
 export const LedgerView: React.FC<Props> = ({ state }) => {
-  const key = [state.currentUserId, state.currentRole, state.currentTenantId].join(':');
   const [revision, setRevision] = useState(0);
+  const key = [state.currentUserId, state.currentRole, state.currentTenantId, revision].join(':');
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', accounts: [], transactions: [] });
   useEffect(() => {
     let active = true;
+    const snapshot=authService.captureSession();
     setResult({ key, status: 'loading', accounts: [], transactions: [] });
     if (state.currentRole !== 'TENANT_ADMIN' || !state.currentTenantId || !state.currentUserId) {
       setResult({ key, status: 'error', accounts: [], transactions: [] });
       return () => { active = false; };
     }
-    Promise.all([
-      financialApi.fetchLedgerAccounts(state.currentTenantId),
-      financialApi.fetchLedgerTransactions(state.currentTenantId),
-    ]).then(([accounts, transactions]) => {
-      if (!Array.isArray(accounts) || !Array.isArray(transactions) ||
-          accounts.some(a => a.tenant_id !== state.currentTenantId) ||
-          transactions.some(t => t.tenant_id !== state.currentTenantId)) {
-        throw new Error('Isolamento do ledger inválido');
+    financialApi.fetchLedgerIntegrityPreview(state.currentTenantId).then(async integrity=>{
+      if(integrity.status!=='BALANCED')return {integrity,accounts:[] as Account[],transactions:[] as Transaction[]};
+      const [accounts,transactions]:[Account[],Transaction[]]=await Promise.all([
+        financialApi.fetchLedgerAccounts(state.currentTenantId),
+        financialApi.fetchLedgerTransactions(state.currentTenantId),
+      ]);
+      if(!Array.isArray(accounts)||!Array.isArray(transactions)||
+         accounts.some(a=>a.tenant_id!==state.currentTenantId)||
+         transactions.some(t=>t.tenant_id!==state.currentTenantId)||
+         transactions.length!==integrity.checked_transactions){
+        throw Error('Detalhamento contábil incompatível.');
       }
-      if (active) setResult({ key, status: 'ready', accounts, transactions });
-    }).catch(() => {
-      if (active) setResult({ key, status: 'error', accounts: [], transactions: [] });
+      return {integrity,accounts,transactions};
+    }).then(({integrity,accounts,transactions})=>{
+      if(active&&authService.isSessionSnapshotCurrent(snapshot))
+        setResult({key,status:'ready',integrity,accounts,transactions});
+    }).catch(()=>{
+      if(active&&authService.isSessionSnapshotCurrent(snapshot))
+        setResult({key,status:'error',accounts:[],transactions:[]});
     });
     return () => { active = false; };
   }, [key, revision]);
 
-  const current = result.key === key ? result : { key, status: 'loading' as const, accounts: [], transactions: [] };
+  const current: Result = result.key === key ? result :
+    { key, status: 'loading', accounts: [], transactions: [] };
   const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
@@ -69,7 +81,28 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
       {current.status === 'error' && <p role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-900">
         Livro-Razão indisponível ou acesso não autorizado. Nenhum saldo demonstrativo é apresentado.
       </p>}
-      {current.status === 'ready' && <>
+      {current.status === 'ready' && current.integrity && <div
+        className="rounded-xl border border-slate-200 bg-white p-4 space-y-2"
+        aria-label="Prévia de integridade contábil">
+        <h3 className="font-semibold text-slate-900">Prévia de integridade do Livro-Razão</h3>
+        <p className="text-sm text-slate-700">
+          Lançamentos examinados: {current.integrity.checked_transactions} ·
+          Equilibrados: {current.integrity.balanced_transactions} ·
+          Para revisão: {current.integrity.review_required_transactions}.
+        </p>
+        <p className="text-sm font-semibold text-slate-800" role="status">
+          {current.integrity.status==='BALANCED'
+            ?'Partidas dobradas consistentes na prévia.'
+            :current.integrity.status==='REVIEW_REQUIRED'
+              ?'Divergência contábil: detalhamento bloqueado para revisão.'
+              :'Nenhuma transação contábil registrada; detalhamento não exibido.'}
+        </p>
+        <p className="text-xs text-amber-900">
+          Integridade matemática não é conciliação bancária, liberação de
+          pagamentos, distribuição de lucros ou autorização de fechamento.
+        </p>
+      </div>}
+      {current.status === 'ready' && current.integrity?.status==='BALANCED' && <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {current.accounts.map(a => (
             <article key={a.id} className="rounded-xl border border-slate-200 bg-white p-4">

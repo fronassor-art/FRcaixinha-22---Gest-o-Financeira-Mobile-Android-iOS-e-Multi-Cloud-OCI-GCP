@@ -8,13 +8,93 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
-from ..models import LedgerAccountResponse, LedgerTransactionResponse, LedgerEntryResponse
+from ..models import LedgerAccountResponse, LedgerTransactionResponse, LedgerEntryResponse, LedgerIntegrityPreviewResponse
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
 
 router = APIRouter(prefix="/tenants/{tenant_id}/ledger", tags=["Livro-Razão e Contabilidade"])
 
 CENTS = Decimal("0.01")
+
+
+def _summarize_integrity_rows(rows, tenant_id: str):
+    """Pure aggregation: detect imbalanced postings, never assert bank reconciliation."""
+    if len(rows) > 500:
+        raise HTTPException(status_code=503, detail="Prévia contábil indisponível: limite de consulta.")
+    seen = set()
+    invalid = 0
+    for row in rows:
+        try:
+            identifier = str(uuid.UUID(str(row["transaction_id"])))
+            entries = row["entry_count"]
+            dr_count = row["debit_entries"]
+            cr_count = row["credit_entries"]
+            bad_entries = row["invalid_entries"]
+            dr = row["debit_cents"]
+            cr = row["credit_cents"]
+            if (not identifier or identifier in seen or
+                    any(type(x) is not int for x in
+                        (entries, dr_count, cr_count, bad_entries, dr, cr)) or
+                    min(entries, dr_count, cr_count, bad_entries, dr, cr) < 0):
+                raise ValueError("Invalid ledger aggregates")
+        except (KeyError, ValueError, TypeError, OverflowError):
+            raise HTTPException(status_code=503, detail="Prévia contábil indisponível: dados inválidos.")
+        seen.add(identifier)
+        if (entries < 2 or dr_count < 1 or cr_count < 1 or
+                entries != dr_count + cr_count or bad_entries > 0 or
+                dr <= 0 or cr <= 0 or dr != cr):
+            invalid += 1
+    total = len(rows)
+    return LedgerIntegrityPreviewResponse(
+        source="POSTGRESQL_RLS",
+        scope="TENANT_ADMIN_READ_ONLY",
+        tenant_id=tenant_id,
+        checked_transactions=total,
+        balanced_transactions=total-invalid,
+        review_required_transactions=invalid,
+        status="NO_TRANSACTIONS" if total == 0 else
+            ("REVIEW_REQUIRED" if invalid else "BALANCED"),
+        bank_reconciled=False,
+        financial_closing_authorized=False,
+    )
+
+
+@router.get("/integrity-preview", response_model=LedgerIntegrityPreviewResponse)
+async def get_ledger_integrity_preview(
+    tenant_id: str,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Aggregate ledger only for authorized tenant Admin; no journal entries exposed."""
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Prévia contábil exclusiva do administrador.")
+    try:
+        tenant=uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Identificador de caixinha inválido.")
+    rows = await conn.fetch("""
+        SELECT t.id AS transaction_id,
+               count(e.id)::integer AS entry_count,
+               count(e.id) FILTER (WHERE e.entry_type='DR')::integer AS debit_entries,
+               count(e.id) FILTER (WHERE e.entry_type='CR')::integer AS credit_entries,
+               COALESCE(sum(e.amount_cents) FILTER (WHERE e.entry_type='DR'),0)::bigint AS debit_cents,
+               COALESCE(sum(e.amount_cents) FILTER (WHERE e.entry_type='CR'),0)::bigint AS credit_cents,
+               count(e.id) FILTER (WHERE e.amount_cents IS NULL
+                       OR e.amount_cents<=0 OR a.id IS NULL
+                       OR e.entry_type NOT IN ('DR','CR'))::integer AS invalid_entries
+        FROM public.ledger_transactions t
+        LEFT JOIN public.ledger_entries e
+          ON e.transaction_id=t.id AND e.tenant_id=t.tenant_id
+        LEFT JOIN public.ledger_accounts a
+          ON a.id=e.account_id AND a.tenant_id=t.tenant_id
+        WHERE t.tenant_id=$1
+        GROUP BY t.id
+        ORDER BY t.id
+        LIMIT 501
+    """, tenant)
+    return _summarize_integrity_rows(rows, tenant_id)
+
 
 @router.get("/accounts", response_model=List[LedgerAccountResponse])
 async def list_ledger_accounts(
