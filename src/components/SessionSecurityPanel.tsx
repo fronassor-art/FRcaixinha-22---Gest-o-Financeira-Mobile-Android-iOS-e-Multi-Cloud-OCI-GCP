@@ -7,12 +7,18 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
   const userId = authService.getUser()?.id;
 
   useEffect(() => {
     let active = true;
+    const snapshot = authService.captureSession();
+    setLoading(true);
+    setError('');
+    setSessions([]);
     authService.listSessions().then(rows => {
-      if (active && userId === authService.getUser()?.id) {
+      if (active && authService.isSessionSnapshotCurrent(snapshot) &&
+          userId === authService.getUser()?.id) {
         setSessions(rows);
         setLoading(false);
       }
@@ -23,7 +29,7 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
       }
     });
     return () => { active = false; };
-  }, [userId]);
+  }, [userId, revision]);
 
   const revoke = async (id: string) => {
     setBusyId(id);
@@ -51,7 +57,13 @@ export function SessionSecurityPanel({ onClose }: { onClose: () => void }) {
       </div>
       <p className="my-2 text-xs text-slate-600">
         Consulte ou encerre acessos à sua conta. O servidor confirma cada alteração.
+        Se a rede falhar, o bloqueio local não comprova revogação remota.
       </p>
+      <button type="button" disabled={loading || busyId !== null}
+        onClick={() => setRevision(value => value + 1)}
+        className="mb-2 min-h-10 rounded-lg border border-slate-300 px-3 text-slate-800 disabled:opacity-50">
+        Atualizar sessões
+      </button>
       {loading && <p role="status">Consultando sessões no PostgreSQL...</p>}
       {error && <p role="alert" className="text-rose-800">{error}</p>}
       {!loading && sessions.length === 0 && !error &&

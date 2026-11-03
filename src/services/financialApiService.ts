@@ -8,7 +8,7 @@
  * É expressamente PROIBIDO gravar silenciosamente operações financeiras em localStorage!
  */
 
-import { authService, getApiBaseUrl } from './authService';
+import { authService, getApiBaseUrl, AuthSessionSnapshot } from './authService';
 import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 import { parseMasterAdminRegistry, adminRegistryQuery, MasterAdminRegistryPage } from './masterAdminRegistry';
 import {
@@ -33,11 +33,37 @@ export class FinancialBackendUnavailableError extends Error {
   }
 }
 
+export class SessionBoundaryError extends Error {
+  constructor(
+    message: string,
+    public readonly code: 'SESSION_REQUIRED' | 'SESSION_CHANGED_DURING_REQUEST'
+  ) {
+    super(message);
+    this.name = 'SessionBoundaryError';
+  }
+}
+
+function assertSessionNotChanged(snapshot: AuthSessionSnapshot): void {
+  if (!authService.isSessionSnapshotCurrent(snapshot)) {
+    throw new SessionBoundaryError(
+      'O acesso mudou durante a consulta. Descarte o resultado anterior.',
+      'SESSION_CHANGED_DURING_REQUEST'
+    );
+  }
+}
+
 class FinancialApiService {
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}${path}`;
-    const token = authService.getToken();
+    const snapshot = authService.captureSession();
+    if (!snapshot.token) {
+      throw new SessionBoundaryError(
+        'Sessão ausente ou expirada. Entre novamente para consultar dados.',
+        'SESSION_REQUIRED'
+      );
+    }
+    const token = snapshot.token;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -56,12 +82,15 @@ class FinancialApiService {
         headers,
       });
     } catch (netErr: any) {
+      assertSessionNotChanged(snapshot);
       throw new FinancialBackendUnavailableError(
         'Falha de Conexão com o Backend FastAPI. O servidor não pôde ser contatado.',
         'NETWORK_CONNECTION_FAILED',
         netErr?.message
       );
     }
+
+    assertSessionNotChanged(snapshot);
 
     if (!response.ok) {
       let errBody: any = null;
@@ -70,10 +99,14 @@ class FinancialApiService {
       } catch {
         // Ignora falha de parse
       }
+      assertSessionNotChanged(snapshot);
 
       if (response.status === 401) {
-        authService.invalidateSession();
-        throw new Error('Sessão expirada ou revogada. Faça login novamente.');
+        authService.invalidateSessionIfCurrent(snapshot);
+        throw new SessionBoundaryError(
+          'Sessão expirada ou revogada. Faça login novamente.',
+          'SESSION_REQUIRED'
+        );
       }
 
       if (response.status === 503) {
@@ -91,7 +124,9 @@ class FinancialApiService {
       throw new Error(errBody?.detail || errBody?.message || `Erro na API (${response.status}): ${response.statusText}`);
     }
 
-    return response.json();
+    const data: T = await response.json();
+    assertSessionNotChanged(snapshot);
+    return data;
   }
 
   // --- Consultas de painéis (somente dados autoritativos, sem seed) ---

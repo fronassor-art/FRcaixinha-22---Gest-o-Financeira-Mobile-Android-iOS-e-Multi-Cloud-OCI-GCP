@@ -12,6 +12,12 @@ export interface AuthenticatedUser {
   tenantId?: string;
 }
 
+/** Identifica uma sessão específica sem persistir tokens ou fornecer permissão. */
+export interface AuthSessionSnapshot {
+  readonly token: string | null;
+  readonly generation: number;
+}
+
 export interface AuthContext {
   role: AuthenticatedUser['role'];
   tenant_id: string | null;
@@ -152,6 +158,25 @@ class AuthService {
     return this.isAuthenticated() ? this.token : null;
   }
 
+  /** Requisições devem descartar resultados caso o login mude enquanto aguardam rede. */
+  public captureSession(): AuthSessionSnapshot {
+    const token = this.getToken();
+    return { token, generation: this.sessionGeneration };
+  }
+
+  public isSessionSnapshotCurrent(snapshot: AuthSessionSnapshot): boolean {
+    if (!snapshot.token || snapshot.token !== this.token ||
+        snapshot.generation !== this.sessionGeneration) return false;
+    return this.isAuthenticated();
+  }
+
+  /** Um 401 antigo nunca deve encerrar um login novo. */
+  public invalidateSessionIfCurrent(snapshot: AuthSessionSnapshot): boolean {
+    if (!this.isSessionSnapshotCurrent(snapshot)) return false;
+    this.invalidateSession();
+    return true;
+  }
+
   public getUser(): AuthenticatedUser | null {
     if (!this.isAuthenticated()) return null;
     return this.user;
@@ -255,6 +280,7 @@ class AuthService {
         this.notify();
         return this.user;
       }
+      this.invalidateSessionIfCurrent({token: originalToken, generation});
       return null;
     } catch {
       if (generation === this.sessionGeneration && originalToken === this.token) {
@@ -407,6 +433,8 @@ class AuthService {
     if(result.status===401){this.invalidateSession();throw new Error('Sessão expirada.');}
     if(!result.ok)throw new Error('Não foi possível revogar a sessão.');
     const data=await result.json();
+    if(generation!==this.sessionGeneration || token!==this.token)
+      throw new Error('Sessão alterada durante revogação.');
     if(data?.success!==true || data?.session_id!==sessionId ||
        typeof data?.current_revoked!=='boolean')throw new Error('Resposta inválida.');
     if(data.current_revoked)this.invalidateSession();
