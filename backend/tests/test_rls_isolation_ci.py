@@ -852,8 +852,9 @@ async def test_quotas_contributions_real_postgresql_api_roles_without_payment(is
                 "VALUES($1,$2,$3,$4,'2027-01',$5,100.00,0.00,'PENDENTE','NO_PRAZO')",
                 record_id,tenant,cycle,membership,date(2027,1,10))
 
-        async def read(user,tenant,role):
-            session=AuthenticatedSession(str(user),role,str(tenant),
+        async def read(user,tenant,role,active_tenant=None):
+            # A sessão é emitida para o tenant real, não para o alvo fornecido.
+            session=AuthenticatedSession(str(user),role,str(active_tenant or tenant),
                 "synthetic@example.invalid","Pessoa CI",role=="MASTER")
             async with app_conn.transaction():
                 for key,value in [
@@ -885,8 +886,24 @@ async def test_quotas_contributions_real_postgresql_api_roles_without_payment(is
             assert contributions[0].amount_paid==Decimal("0.00")
             assert contributions[0].payment_status=="PENDENTE"
         with pytest.raises(HTTPException) as other:
-            await read(ids["member_b"],ids["tenant_a"],"TENANT_MEMBER")
+            await read(ids["member_b"],ids["tenant_a"],"TENANT_MEMBER",
+                       active_tenant=ids["tenant_b"])
         assert other.value.status_code==403
+        # Defesa adicional: mesmo sem o bloqueio HTTP, o RLS no banco
+        # não entrega cotas nem contribuições da caixinha A ao membro B.
+        async with app_conn.transaction():
+            await app_conn.execute("SELECT set_config('app.current_user_id',$1,true)",
+                                   str(ids["member_b"]))
+            await app_conn.execute("SELECT set_config('app.current_tenant_id',$1,true)",
+                                   str(ids["tenant_a"]))
+            await app_conn.execute("SELECT set_config('app.current_role',$1,true)",
+                                   "TENANT_MEMBER")
+            assert await app_conn.fetchval(
+                "SELECT count(*) FROM public.quotas WHERE tenant_id=$1",
+                ids["tenant_a"])==0
+            assert await app_conn.fetchval(
+                "SELECT count(*) FROM public.contributions WHERE tenant_id=$1",
+                ids["tenant_a"])==0
         with pytest.raises(HTTPException) as master:
             await read(ids["master"],ids["tenant_a"],"MASTER")
         assert master.value.status_code==403
