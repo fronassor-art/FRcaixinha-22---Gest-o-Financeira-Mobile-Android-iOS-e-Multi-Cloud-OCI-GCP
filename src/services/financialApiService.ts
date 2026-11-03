@@ -19,6 +19,7 @@ import {
   WorkflowContract, WorkflowPreview, WorkflowPreviewRequest,
   parseWorkflowContract, parseWorkflowPreview, validateWorkflowPreviewRequest,
 } from './masterWorkflow';
+import {MasterPermissionMatrix, parseMasterPermissionMatrix} from './masterPermissionMatrix';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -138,6 +139,11 @@ class FinancialApiService {
       }),
     });
     return parseOnboardingPreflight(raw);
+  }
+
+  public async fetchMasterPermissionMatrix(): Promise<MasterPermissionMatrix> {
+    const raw: unknown = await this.request('/api/v1/master/admin-onboarding/permission-matrix');
+    return parseMasterPermissionMatrix(raw);
   }
 
   public async fetchMasterWorkflowContract(): Promise<WorkflowContract> {

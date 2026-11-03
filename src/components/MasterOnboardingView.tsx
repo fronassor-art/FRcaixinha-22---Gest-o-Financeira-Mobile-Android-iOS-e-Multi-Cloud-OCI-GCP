@@ -7,6 +7,7 @@ import {
 } from '../services/masterOnboarding';
 import {AppState} from '../services/store';
 import {MasterWorkflowAuditView} from './MasterWorkflowAuditView';
+import {MasterPermissionMatrixView} from './MasterPermissionMatrixView';
 
 const LABELS:Record<string,string>={
   MASTER_MFA:'Segundo fator do proprietário',
@@ -156,6 +157,7 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
       </form>
     </>}
 
+    <MasterPermissionMatrixView state={state}/>
     <MasterWorkflowAuditView state={state}/>
 
     {preflight&&<div role="status" className="fr-light-card rounded-2xl p-4">

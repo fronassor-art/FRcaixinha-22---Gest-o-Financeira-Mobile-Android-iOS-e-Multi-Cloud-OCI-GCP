@@ -48,6 +48,8 @@ jobs:
         run: npx tsx src/tests/master_onboarding_preflight_ui.test.ts
       - name: Validar simulador de fluxo, idempotencia e auditoria Master
         run: npx tsx src/tests/master_workflow_audit_ui.test.ts
+      - name: Validar matriz de permissoes declaradas no cliente Master
+        run: npx tsx src/tests/master_permission_matrix_ui.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web
@@ -168,6 +170,7 @@ jobs:
           python -m pytest -q backend/tests/test_master_admin_registry.py
           python -m pytest -q backend/tests/test_master_onboarding_preflight.py
           python -m pytest -q backend/tests/test_master_workflow_audit.py
+          python -m pytest -q backend/tests/test_master_permission_matrix.py
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
           python -m pytest -q backend/tests/test_auth_context_security_headers.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py
@@ -264,6 +267,7 @@ jobs:
           DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: |
           python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_onboarding_permission_matrix_ci.py
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k disposable_postgres
           python -m pytest -q backend/tests/test_aistudio_account_lifecycle_ci.py
           python -m pytest -q backend/tests/test_aistudio_governance_ci.py

@@ -104,6 +104,35 @@ async def test_member_sees_only_own_quota_in_same_tenant(isolated_rows):
     assert await _visible_quotas(conn, ids["member_a"], ids["tenant_a"], "TENANT_MEMBER") == {ids["quota_a"]}
 
 
+async def test_master_metadata_only_across_two_tenants_under_rls(isolated_rows):
+    """Master sees tenant names for governance, NEVER membership/quotas.
+
+    Uses synthetic rows from fixture in the disposable database only.
+    """
+    conn, ids = isolated_rows
+    targets = [ids["tenant_a"], ids["tenant_b"]]
+    async with conn.transaction():
+        await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(ids["master"]))
+        await conn.execute("SELECT set_config('app.current_role',$1,true)", "MASTER")
+        await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)", "")
+        rows = await conn.fetch(
+            "SELECT id FROM public.tenants WHERE id=ANY($1::uuid[])", targets)
+        assert {row["id"] for row in rows} == set(targets)
+        assert await conn.fetchval(
+            "SELECT count(*) FROM public.memberships WHERE tenant_id=ANY($1::uuid[])", targets
+        ) == 0
+        assert await conn.fetchval(
+            "SELECT count(*) FROM public.quotas WHERE tenant_id=ANY($1::uuid[])", targets
+        ) == 0
+    async with conn.transaction():
+        await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(ids["admin_a"]))
+        await conn.execute("SELECT set_config('app.current_role',$1,true)", "TENANT_ADMIN")
+        await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)", str(ids["tenant_a"]))
+        rows = await conn.fetch(
+            "SELECT id FROM public.tenants WHERE id=ANY($1::uuid[])", targets)
+        assert {row["id"] for row in rows} == {ids["tenant_a"]}
+
+
 async def test_master_context_cannot_read_member_quotas(isolated_rows):
     conn, ids = isolated_rows
     assert await _visible_quotas(conn, ids["master"], ids["tenant_a"], "MASTER") == set()

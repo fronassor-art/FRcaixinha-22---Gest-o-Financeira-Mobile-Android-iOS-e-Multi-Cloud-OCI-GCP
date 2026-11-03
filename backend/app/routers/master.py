@@ -14,6 +14,7 @@ from ..admin_onboarding_policy import readiness_manifest, preflight_assessment
 from ..admin_onboarding_workflow import (
     STATES, workflow_contract, preview_transition,
 )
+from ..onboarding_permission_matrix import permission_matrix_contract
 
 router = APIRouter(prefix="/master", tags=["Governança Master da Plataforma"])
 
@@ -56,6 +57,14 @@ class LicensePriceChange(BaseModel):
     tier: Literal['ESSENCIAL', 'INTERMEDIARIO']
     monthly_price: Decimal = Field(..., gt=Decimal('0'), le=Decimal('999999.99'), decimal_places=2)
     reason: str = Field(..., min_length=15, max_length=500)
+
+
+@router.get("/admin-onboarding/permission-matrix")
+async def admin_onboarding_permission_matrix(
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Matriz descritiva. A autorização verdadeira permanece em RBAC e PostgreSQL."""
+    return permission_matrix_contract()
 
 
 @router.get("/admin-onboarding/workflow-contract")
