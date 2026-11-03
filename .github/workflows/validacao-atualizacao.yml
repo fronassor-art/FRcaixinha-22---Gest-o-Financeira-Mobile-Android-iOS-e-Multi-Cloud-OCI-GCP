@@ -68,6 +68,8 @@ jobs:
         run: npx tsx src/tests/session_resilience_ci.test.ts
       - name: Validar matriz de permissoes declaradas no cliente Master
         run: npx tsx src/tests/master_permission_matrix_ui.test.ts
+      - name: Validar barras de sistema e safe area Android
+        run: npx tsx src/tests/android_safe_area_ci.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web
@@ -101,7 +103,7 @@ jobs:
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          node -e "const c=require('./android/app/src/main/assets/capacitor.config.json'); if(c.server.androidScheme!=='http' || c.server.cleartext!==false) process.exit(1)"
+          node -e "const c=require('./android/app/src/main/assets/capacitor.config.json'); if(c.server.androidScheme!=='http' || c.server.cleartext!==false || c.plugins?.SystemBars?.insetsHandling!=='native' || c.plugins?.SystemBars?.style!=='DARK') process.exit(1)"
           grep -RlF 'http://127.0.0.1:8000' dist/assets | grep -q .
           grep -RlF "${VITE_APP_BUILD_REF:0:7}" dist/assets | grep -q .
       - name: Preparar assinatura persistente para atualizacoes

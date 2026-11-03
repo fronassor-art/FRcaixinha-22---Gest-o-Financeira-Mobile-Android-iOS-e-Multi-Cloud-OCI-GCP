@@ -26,7 +26,13 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
   plugins: {
-    // Configurações de plugins nativos
+    // Edge-to-edge obrigatorio no Android recente; WebViews antigos
+    // recebem padding nativo e WebViews modernos usam env(safe-area-inset-*).
+    SystemBars: {
+      insetsHandling: 'native',
+      initialViewportFitValueHint: 'cover',
+      style: 'DARK',
+    },
   },
 };
 
