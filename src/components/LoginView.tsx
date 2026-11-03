@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users, BriefcaseBusiness, AlertCircle } from 'lucide-react';
 import { authService, AuthenticatedUser } from '../services/authService';
 
@@ -21,6 +21,41 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const build = String(import.meta.env?.VITE_APP_BUILD_REF || 'local').slice(0, 7);
+  // A navegacao reservada nao e uma credencial: o backend e a unica autoridade.
+  const ownerRoute = '#/acesso-proprietario';
+  const logoTaps = useRef({ count: 0, last: 0 });
+  useEffect(() => {
+    const syncReservedRoute = () => {
+      if (window.location.hash !== ownerRoute) return;
+      setMode('login');
+      setSelectedRole('MASTER');
+      setNewAccess(null);
+      setPassword('');
+      setError(null);
+    };
+    syncReservedRoute();
+    window.addEventListener('hashchange', syncReservedRoute);
+    return () => window.removeEventListener('hashchange', syncReservedRoute);
+  }, []);
+  const openReservedAccess = () => {
+    if (mode !== 'login' || selectedRole !== null) return;
+    const now = Date.now();
+    const count = now - logoTaps.current.last <= 4000 ? logoTaps.current.count + 1 : 1;
+    logoTaps.current = { count, last: now };
+    if (count !== 7) return;
+    logoTaps.current = { count: 0, last: 0 };
+    setSelectedRole('MASTER');
+    setPassword('');
+    setError(null);
+  };
+  const returnToPublicAccess = () => {
+    setSelectedRole(null);
+    setError(null);
+    setPassword('');
+    if (typeof window !== 'undefined' && window.location.hash === ownerRoute) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -49,8 +84,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-8 sm:py-10 flex flex-col items-center justify-center">
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center pb-6">
-          <img src="/icon.svg" alt="FRcaixinha — monograma dourado e folhas"
-            width="120" height="120" className="h-24 w-24 rounded-[26px] shadow-2xl shadow-amber-600/20" />
+          <button type="button" onClick={openReservedAccess} aria-label="Logotipo FRcaixinha"
+            className="rounded-[26px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f3d483]">
+            <img src="/icon.svg" alt="FRcaixinha — monograma dourado e folhas"
+              width="120" height="120" className="h-24 w-24 rounded-[26px] shadow-2xl shadow-amber-600/20" />
+          </button>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
             <span className="fr-gold-text">FR</span><span className="text-[#f7ecbf]">caixinha</span>
           </h1>
@@ -67,7 +105,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
               className={'min-h-11 rounded-lg px-3 text-sm font-semibold ' + (mode === 'login' ? 'fr-gold-button' : 'text-[#e9d9a7]')}>
               Entrar
             </button>
-            <button type="button" onClick={() => { setMode('new'); setSelectedRole(null); setError(null); setResetHelp(false); }}
+            <button type="button" onClick={() => { setMode('new'); returnToPublicAccess(); setResetHelp(false); }}
               aria-pressed={mode === 'new'}
               className={'min-h-11 rounded-lg px-3 text-sm font-semibold ' + (mode === 'new' ? 'fr-gold-button' : 'text-[#e9d9a7]')}>
               Primeiro acesso
@@ -83,7 +121,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                 </p>
                 <div className="mt-5 grid gap-3" role="group" aria-label="Selecionar perfil antes do login">
                   {([
-                    {role:'MASTER' as const, title:'Administrador Master', detail:'Dono da plataforma', icon:ShieldCheck},
                     {role:'TENANT_ADMIN' as const, title:'Administrador', detail:'Gestão da sua caixinha', icon:BriefcaseBusiness},
                     {role:'TENANT_MEMBER' as const, title:'Membro', detail:'Minha participação', icon:Users},
                   ]).map(option => {
@@ -108,7 +145,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
               </div>
             ) : (
             <div className="mt-5">
-              <button type="button" onClick={() => { setSelectedRole(null); setError(null); setPassword(''); }}
+              <button type="button" onClick={returnToPublicAccess}
                 className="mb-3 flex min-h-9 items-center gap-2 text-xs font-semibold text-[#f3d483]">
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Escolher outro perfil
               </button>
@@ -204,7 +241,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                   <p className="mt-1 text-sm text-emerald-50">
                     {newAccess === 'member'
                       ? 'Peça um convite ao administrador da caixinha.'
-                      : 'O Administrador Master precisa autorizar seu acesso.'}
+                      : 'A administração da plataforma precisa autorizar seu acesso.'}
                   </p>
                   <p className="mt-2 text-xs text-[#f7dc99]">
                     Os convites eletrônicos e a ativação por e-mail ainda não foram habilitados.

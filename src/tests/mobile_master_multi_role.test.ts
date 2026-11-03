@@ -41,6 +41,9 @@ globalThis.fetch=(async(path:RequestInfo|URL,options?:RequestInit)=>{
   }
   if(url.endsWith('/logout')){tokenActive=false;return result({success:true});}
   if(!tokenActive)return result({detail:'Sem sessao'},401);
+  if(url.endsWith('/owner-access')) return active==='MASTER'
+    ? result({verified:true,role:'MASTER',scope:'PLATFORM_GOVERNANCE_ONLY'})
+    : result({detail:'Negado'},403);
   if(url.endsWith('/me'))return result(user());
   if(url.endsWith('/contexts'))return result([contexts.find(c=>c.role===active)]);
   if(url.endsWith('/switch-context'))return result({detail:'Troca bloqueada'},403);

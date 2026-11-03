@@ -11,7 +11,8 @@ const html = renderToStaticMarkup(
 assert.match(html, /Entrar na sua conta/);
 assert.match(html, /Primeiro acesso/);
 assert.match(html, /Escolha a área para entrar/);
-assert.match(html, /Administrador Master/);
+assert.doesNotMatch(html, /Administrador Master|Dono da plataforma/);
+assert.match(html, /Gestão da sua caixinha/);
 assert.match(html, /Minha participação/);
 assert.doesNotMatch(html, /Contrato Técnico Mestre/);
 assert.doesNotMatch(html, /Governança Técnica &amp; Conformidade/);
@@ -25,4 +26,7 @@ assert.ok(!source.includes('authService.register('));
 assert.ok(!source.includes('authService.createInvitation('));
 assert.match(source, /authService.login\(email.trim\(\), password, selectedRole\)/);
 assert.match(source, /setSelectedRole\(option.role\)/);
+assert.doesNotMatch(source, /role:'MASTER' as const, title:/);
+assert.match(source, /openReservedAccess/);
+assert.match(source, /#\/acesso-proprietario/);
 console.log('PASS: login unico compacto e rotas informativas sem cadastro publico');

@@ -38,6 +38,8 @@ jobs:
         run: npx tsx src/tests/role_scope_ui.test.ts
       - name: Validar caminhos de primeiro acesso sem auto-cadastro
         run: npx tsx src/tests/login_first_access_ui.test.ts
+      - name: Validar entrada reservada e confirmacao Master
+        run: npx tsx src/tests/owner_private_access_ui.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web
@@ -153,6 +155,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_real_panels.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_price_policy_authority.py
           python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k 'not disposable_postgres'
+          python -m pytest -q backend/tests/test_owner_private_access.py
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
           python -m pytest -q backend/tests/test_auth_context_security_headers.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py

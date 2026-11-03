@@ -103,7 +103,7 @@ def require_master(session: AuthenticatedSession = Depends(get_current_session))
     """
     Garante acesso exclusivo ao Administrador Master da plataforma.
     """
-    if session.role != "MASTER" or not session.is_master:
+    if session.role != "MASTER" or not session.is_master or session.tenant_id is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso Proibido: Esta operação exige o papel de Administrador Master da plataforma."

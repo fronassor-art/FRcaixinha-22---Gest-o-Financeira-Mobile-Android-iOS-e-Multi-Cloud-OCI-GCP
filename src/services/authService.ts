@@ -299,6 +299,48 @@ class AuthService {
     if (requestedRole && authenticated.role !== requestedRole) {
       throw new Error('O servidor não confirmou o perfil de acesso solicitado.');
     }
+    // Nao anunciar sessão MASTER antes da verificação server-side.
+    if (authenticated.role === 'MASTER') {
+      let confirmed = false;
+      try {
+        const proof = await fetch(getApiBaseUrl() + '/api/v1/master/owner-access', {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + data.token,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Cache-Control': 'no-store',
+          },
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (proof.ok) {
+          const result = await proof.json();
+          confirmed = result?.verified === true &&
+            result?.role === 'MASTER' &&
+            result?.scope === 'PLATFORM_GOVERNANCE_ONLY' &&
+            (authenticated.tenantId ?? null) === null;
+        }
+      } catch {
+        // Falha fechada: nao promover sessao Master.
+      }
+      if (!confirmed || generation !== this.sessionGeneration) {
+        try {
+          await fetch(getApiBaseUrl() + '/api/v1/auth/logout', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + data.token,
+              'X-Requested-With': 'XMLHttpRequest',
+              'Cache-Control': 'no-store',
+            },
+            credentials: 'include',
+          });
+        } catch { /* Token nao chega ao estado do app. */ }
+        throw new Error('Acesso do proprietário não confirmado pelo servidor.');
+      }
+    }
+    if (generation !== this.sessionGeneration) {
+      throw new Error('Operação de login cancelada: a sessão foi alterada.');
+    }
     this.token = data.token;
     this.user = authenticated;
     this.expiresAt = expiresAt;

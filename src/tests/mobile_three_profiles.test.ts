@@ -24,6 +24,9 @@ globalThis.fetch=(async(path:RequestInfo|URL,options?:RequestInit)=>{
     return response({user:found,token:'CI-ONLY-RAM-TOKEN',
       expires_at:new Date(Date.now()+900000).toISOString()});
   }
+  if(route.endsWith('/owner-access')) return signed&&current?.role==='MASTER'
+    ? response({verified:true,role:'MASTER',scope:'PLATFORM_GOVERNANCE_ONLY'})
+    : response({detail:'Negado'},403);
   if(route.endsWith('/me'))
     return signed&&current?response(current):response({detail:'Sem sessao'},401);
   if(route.endsWith('/contexts'))

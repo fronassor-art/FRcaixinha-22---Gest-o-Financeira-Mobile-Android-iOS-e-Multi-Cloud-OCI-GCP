@@ -24,6 +24,16 @@ class LicensePriceChange(BaseModel):
     reason: str = Field(..., min_length=15, max_length=500)
 
 
+@router.get("/owner-access")
+async def confirm_owner_access(session: AuthenticatedSession = Depends(require_master)):
+    """Confirma papel MASTER no backend sem revelar dados de proprietario ou tenant."""
+    return {
+        "verified": True,
+        "role": "MASTER",
+        "scope": "PLATFORM_GOVERNANCE_ONLY",
+    }
+
+
 @router.get("/licenses")
 async def get_platform_licenses(
     session: AuthenticatedSession = Depends(require_master),

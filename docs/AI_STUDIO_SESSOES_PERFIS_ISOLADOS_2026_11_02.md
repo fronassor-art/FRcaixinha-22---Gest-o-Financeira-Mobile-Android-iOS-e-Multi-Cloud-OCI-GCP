@@ -2,8 +2,12 @@
 
 Decisão operacional em 02/11/2026: **cada sessão terá um único papel**.
 
-- Tela sem login: escolher área MASTER, TENANT_ADMIN ou TENANT_MEMBER;
-  depois informar a senha. A seleção é apenas pedido, não autorização.
+- Tela publica: selecionar apenas TENANT_ADMIN ou TENANT_MEMBER.
+  A entrada MASTER nao aparece na lista, mas mantem permissao server-side.
+- Entrada Master reservada: sete toques no logo em ate quatro segundos
+  ou fragmento local #/acesso-proprietario; nao sao fatores de seguranca.
+- GET /api/v1/master/owner-access e obrigatorio para confirmar a sessao
+  antes de mostrar o painel Master. A API usa require_master.
 - API verifica a credencial e vínculo ativo antes de promover sessão no banco.
 - MASTER: só funções da plataforma, nunca painéis de membros/administradores.
 - TENANT_ADMIN: somente a caixinha e operações permitidas ao administrador.
