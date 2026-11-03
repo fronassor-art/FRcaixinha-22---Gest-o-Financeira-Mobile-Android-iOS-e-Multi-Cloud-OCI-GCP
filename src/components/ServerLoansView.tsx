@@ -1,19 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
+import type {DisplayLoan} from '../services/loanReadBoundary';
 
 interface Props { state: AppState }
-interface Loan {
-  id: string;
-  tenant_id: string;
-  borrower_name?: string;
-  principal: number;
-  term_months: number;
-  monthly_payment: number;
-  total_interest: number;
-  status: string;
-  installments: Array<{ id: string; installment_number: number; due_date: string; status: string }>;
-}
 interface Simulation {
   principal: number;
   monthly_rate: number;
@@ -24,7 +14,7 @@ interface Simulation {
   total_payable: number;
   schedule: Array<{ installment_number: number; due_date: string; monthly_payment: number }>;
 }
-type State = { key: string; status: 'loading' | 'ready' | 'error'; loans: Loan[] };
+type State = { key: string; status: 'loading' | 'ready' | 'error'; loans: DisplayLoan[] };
 
 export const ServerLoansView: React.FC<Props> = ({ state }) => {
   const key = [state.currentUserId, state.currentRole, state.currentTenantId].join(':');
@@ -47,9 +37,6 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
       return () => { active = false; };
     }
     financialApi.fetchLoans(state.currentTenantId).then(loans => {
-      if (!Array.isArray(loans) || loans.some(l => l.tenant_id !== state.currentTenantId)) {
-        throw new Error('Contexto inválido');
-      }
       if (active) setResult({ key, status: 'ready', loans });
     }).catch(() => {
       if (active) setResult({ key, status: 'error', loans: [] });

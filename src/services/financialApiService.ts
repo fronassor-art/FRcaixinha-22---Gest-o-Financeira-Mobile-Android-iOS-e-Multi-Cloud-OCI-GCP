@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 — Serviço Central de API Financeira
+ * FRcaixinha AI Studio Mobile — Serviço Central de API Financeira
  * Integra o frontend diretamente aos endpoints oficiais FastAPI + PostgreSQL.
  *
  * REGRA INVIOLÁVEL:
@@ -24,6 +24,7 @@ import {
   TenantDashboard, TenantMembersPage, assertTenantReadScope,
   parseTenantDashboard, parseTenantMembers,
 } from './tenantReadBoundary';
+import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -335,7 +336,8 @@ class FinancialApiService {
   }
 
   public async fetchContributions(tenantId: string) {
-    return this.request<any[]>(`/api/v1/tenants/${tenantId}/contributions`);
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    return this.request<any[]>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/contributions`);
   }
 
   public async payContribution(tenantId: string, contributionId: string, amount: number) {
@@ -348,14 +350,17 @@ class FinancialApiService {
   // --- Empréstimos e Tabela Price ---
 
   public async simulateLoan(tenantId: string, payload: { principal: number; term_months: number }) {
-    return this.request<any>(`/api/v1/tenants/${tenantId}/loans/simulate`, {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    return this.request<any>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/loans/simulate`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
-  public async fetchLoans(tenantId: string) {
-    return this.request<any[]>(`/api/v1/tenants/${tenantId}/loans`);
+  public async fetchLoans(tenantId: string): Promise<DisplayLoan[]> {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    const raw: unknown = await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/loans`);
+    return parseTenantLoans(raw, tenantId);
   }
 
   public async requestLoan(tenantId: string, payload: { principal: number; term_months: number; is_admin_loan?: boolean; justification?: string }) {

@@ -50,6 +50,8 @@ jobs:
         run: npx tsx src/tests/master_workflow_audit_ui.test.ts
       - name: Validar isolamento de paineis e membros por tenant no cliente
         run: npx tsx src/tests/tenant_read_boundary_ci.test.ts
+      - name: Validar leituras de emprestimos e contribuições por perfil
+        run: npx tsx src/tests/financial_read_boundary_ci.test.ts
       - name: Validar reautenticacao ao retornar do segundo plano
         run: npx tsx src/tests/session_resume_guard_ci.test.ts
       - name: Validar inventario de sessoes e revogacao no cliente
