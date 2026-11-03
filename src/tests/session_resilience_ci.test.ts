@@ -23,7 +23,8 @@ const user={id:USER,name:'CI',email:'ci@example.invalid',
   role:'TENANT_ADMIN',tenant_id:TENANT};
 const dashboard={source:'POSTGRESQL_RLS',tenant_id:TENANT,role:'TENANT_ADMIN',
   quota_count_visible:0,contribution_count_visible:0,
-  loan_count_visible:0,financial_operations:'DISABLED'};
+  loan_count_visible:0,member_count_visible:0,
+  financial_operations:'PENDING_BANK_RECONCILIATION'};
 let logins=0;
 let mode:'pending'|'ok'|'401'|'403'|'503'|'network'='ok';
 let resolvePending:(response:Response)=>void=()=>undefined;
