@@ -261,6 +261,29 @@ class FinancialApiService {
     return parseTenantMembers(raw, tenantId);
   }
 
+
+  /** Apenas metadados cadastrais e comerciais do Master; nunca saldos de tenants. */
+  public async fetchMasterSaasPortfolio(search: string, page: number): Promise<{
+    source: 'POSTGRESQL_RLS'; scope: 'MASTER_SAAS_PORTFOLIO';
+    boxes_limit_policy: 'NOT_DEFINED';
+    total: number; page: number; page_size: number; has_more: boolean;
+    tenants: Array<{
+      id: string; display_name: string; admin_user_id: string;
+      tenant_status: string; registered_at: string;
+      admin_total: number; admin_active: number;
+      licensed_plan: string | null; license_status: string | null;
+      effective_status: string | null;
+      valid_from: string | null; valid_until: string | null;
+      prepared_plan: string | null; prepared_period: string | null;
+      preparation_status: string | null; prepared_at: string | null;
+      members_limit: number | null; quotas_limit: number | null;
+    }>;
+  }> {
+    if (!Number.isInteger(page) || page < 1 || page > 1000) throw new Error('Página inválida');
+    const params = new URLSearchParams({search: search.trim().slice(0,80), page: String(page)});
+    return this.request('/api/v1/master/saas-portfolio?' + params.toString());
+  }
+
   // --- Catalogo e precos persistentes do Master (sem cobranca) ---
 
   public async fetchMasterLicenses(): Promise<{

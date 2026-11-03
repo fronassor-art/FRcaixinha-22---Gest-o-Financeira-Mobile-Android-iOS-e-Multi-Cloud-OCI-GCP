@@ -194,6 +194,7 @@ jobs:
           python -m pytest -q backend/tests/test_owner_private_access.py
           python -m pytest -q backend/tests/test_master_tenant_registry.py
           python -m pytest -q backend/tests/test_master_admin_registry.py
+          python -m pytest -q backend/tests/test_master_saas_portfolio_ci.py
           python -m pytest -q backend/tests/test_master_onboarding_preflight.py
           python -m pytest -q backend/tests/test_master_workflow_audit.py
           python -m pytest -q backend/tests/test_master_permission_matrix.py

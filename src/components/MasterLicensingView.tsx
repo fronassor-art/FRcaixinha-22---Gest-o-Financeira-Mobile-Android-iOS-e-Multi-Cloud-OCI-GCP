@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { MasterSaasPortfolioView } from './MasterSaasPortfolioView';
 import { financialApi } from '../services/financialApiService';
 import {
   ShieldCheck,
@@ -229,6 +230,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
   return (
     <div className="space-y-6">
+      <MasterSaasPortfolioView userId={state.currentUserId ?? null}/>
       {/* Header com Regras Comerciais */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
