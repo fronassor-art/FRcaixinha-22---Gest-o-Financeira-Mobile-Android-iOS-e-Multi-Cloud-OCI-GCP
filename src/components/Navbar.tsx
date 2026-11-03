@@ -32,7 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     {label:'Visualizar celular',icon:Smartphone,action:onOpenMobilePreview},
   ];
   return (
-    <header className="fr-app-header sticky z-40 border-b border-[#9f7a38]/35 bg-[#032d21] text-[#fff2cd] shadow-lg">
+    <header className="fr-app-header relative z-40 shrink-0 border-b border-[#9f7a38]/35 bg-[#032d21] text-[#fff2cd] shadow-lg">
       <div className="mx-auto flex h-[66px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <img src="/icon.svg" alt="FRcaixinha" width="44" height="44"

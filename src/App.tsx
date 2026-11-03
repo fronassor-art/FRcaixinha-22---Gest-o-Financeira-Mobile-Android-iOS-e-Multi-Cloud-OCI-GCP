@@ -252,7 +252,7 @@ export default function App() {
     navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
-    <div className="min-h-dvh min-w-0 max-w-full overflow-x-hidden bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e] pb-24 md:pb-0">
+    <div className="fr-app-shell min-w-0 max-w-full bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e]">
       {/* Top Navbar */}
       <Navbar
         state={state}
@@ -266,7 +266,7 @@ export default function App() {
       />
 
       {/* Sessao de papel imutavel: para outra area, sair e autenticar de novo. */}
-      <div className="border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
+      <div className="shrink-0 border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div aria-label="Perfil autenticado" className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 text-sm text-[#fff2cf]">
             {state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
@@ -285,11 +285,11 @@ export default function App() {
         </div>
       </div>
       {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
-      <div role="note" className="bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
+      <div role="note" className="shrink-0 bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
         Ambiente de homologação · operações financeiras reais indisponíveis
       </div>
       {/* Secondary Subnav Bar */}
-      <nav className="hidden md:block border-b border-[#b4cfb5] bg-[#e7f1e7] sticky top-16 z-30">
+      <nav className="hidden shrink-0 md:block border-b border-[#b4cfb5] bg-[#e7f1e7]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto py-2">
           {navItems.map(item => {
             const Icon = item.icon;
@@ -319,7 +319,7 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+      <main className="fr-app-main flex-1 min-h-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5" tabIndex={0}>
         {/* Master Views */}
         {visibleTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
           <DashboardView
@@ -398,7 +398,7 @@ export default function App() {
       </main>
 
       {/* Menu com quatro destinos; funcoes menos comuns ficam em Mais. */}
-      <nav aria-label="Navegação principal" className="fr-mobile-nav fixed bottom-0 left-0 right-0 z-40 flex justify-around gap-1 px-2 pt-2 md:hidden">
+      <nav aria-label="Navegação principal" className="fr-mobile-nav relative z-40 flex shrink-0 justify-around gap-1 px-2 pt-2 md:hidden">
         {navItems.slice(0,3).map(item => {
           const Icon = item.icon;
           const shortLabel = item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
