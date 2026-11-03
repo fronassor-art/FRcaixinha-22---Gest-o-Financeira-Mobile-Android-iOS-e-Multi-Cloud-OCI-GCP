@@ -18,7 +18,7 @@ const example={
 };
 assert.equal(parseTenantLoans([example],A)[0].principal,500);
 assert.equal(parseTenantLoans([{...example,monthly_rate:'0.20'}],A)[0].installments.length,1);
-const clean=parseTenantLoans([{...example,monthly_rate:'0.20'}],A)[0] as Record<string,unknown>;
+const clean=parseTenantLoans([{...example,monthly_rate:'0.20'}],A)[0];
 assert(!('monthly_rate' in clean),'O cliente exibe somente campos do painel');
 for(const bad of [
  [{...example,tenant_id:B}],
