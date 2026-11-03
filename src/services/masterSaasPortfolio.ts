@@ -79,7 +79,8 @@ export function parseMasterSaasPortfolio(raw:unknown,filter:SaasStatusFilter,pag
     if(tenant.prepared_plan===null &&
        [tenant.prepared_period,tenant.preparation_status,tenant.prepared_at].some(v=>v!==null))
       throw Error('Preparação incompleta');
-    if(tenant.valid_from&&tenant.valid_until&&Date.parse(tenant.valid_until)<=Date.parse(tenant.valid_from))
+    if(typeof tenant.valid_from==='string'&&typeof tenant.valid_until==='string'&&
+       Date.parse(tenant.valid_until)<=Date.parse(tenant.valid_from))
       throw Error('Vigência da licença inválida');
     seen.add(tenant.id);
   }
