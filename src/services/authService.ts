@@ -126,6 +126,7 @@ class AuthService {
   private listeners: (() => void)[] = [];
   private expirationTimer: number | null = null;
   private sessionGeneration = 0;
+  private loginInProgress = false;
 
   constructor() {
     // Inicialização segura: sem sessão ativa por padrão
@@ -292,6 +293,35 @@ class AuthService {
   }
 
   public async login(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role']): Promise<AuthenticatedUser> {
+    if (this.loginInProgress) throw new Error('Outra tentativa de login está em andamento.');
+    this.loginInProgress = true;
+    try {
+      return await this.performLogin(usernameOrEmail, password, requestedRole);
+    } finally {
+      this.loginInProgress = false;
+    }
+  }
+
+  /** Revogação best-effort de token que não chegou a ser aceito no cliente. */
+  private async revokeUnusedLoginToken(token: unknown): Promise<void> {
+    if (typeof token !== 'string' || !token) return;
+    try {
+      await fetch(getApiBaseUrl() + '/api/v1/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Cache-Control': 'no-store',
+        },
+        credentials: 'include',
+        cache: 'no-store',
+      });
+    } catch {
+      // Sem conexão, o token permanece inacessível no cliente; TTL no servidor.
+    }
+  }
+
+  private async performLogin(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role']): Promise<AuthenticatedUser> {
     if (this.isAuthenticated()) {
       throw new Error('Saia da conta antes de entrar em outro perfil.');
     }
@@ -312,6 +342,7 @@ class AuthService {
 
     const data = await res.json();
     if (generation !== this.sessionGeneration) {
+      if (res.ok) await this.revokeUnusedLoginToken(data?.token);
       throw new Error('Operação de login cancelada: a sessão foi alterada.');
     }
     if (!res.ok) {
@@ -321,8 +352,17 @@ class AuthService {
     // Armazenamento EXCLUSIVO em memória (RAM transitória)
     const expiresAt = data.expiresAt ?? Date.parse(data.expires_at);
     if (!data.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error('Sessão inválida recebida do servidor.');
-    const authenticated = serverUser(data.user);
-    if (requestedRole && authenticated.role !== requestedRole) {
+    let authenticated: AuthenticatedUser;
+    try {
+      authenticated = serverUser(data.user);
+    } catch {
+      await this.revokeUnusedLoginToken(data.token);
+      throw new Error('Resposta de identidade inválida.');
+    }
+    if ((requestedRole && authenticated.role !== requestedRole) ||
+        (authenticated.role === 'MASTER' &&
+         (requestedRole !== 'MASTER' || (authenticated.tenantId ?? null) !== null))) {
+      await this.revokeUnusedLoginToken(data.token);
       throw new Error('O servidor não confirmou o perfil de acesso solicitado.');
     }
     // Nao anunciar sessão MASTER antes da verificação server-side.
@@ -350,21 +390,12 @@ class AuthService {
         // Falha fechada: nao promover sessao Master.
       }
       if (!confirmed || generation !== this.sessionGeneration) {
-        try {
-          await fetch(getApiBaseUrl() + '/api/v1/auth/logout', {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Bearer ' + data.token,
-              'X-Requested-With': 'XMLHttpRequest',
-              'Cache-Control': 'no-store',
-            },
-            credentials: 'include',
-          });
-        } catch { /* Token nao chega ao estado do app. */ }
+        await this.revokeUnusedLoginToken(data.token);
         throw new Error('Acesso do proprietário não confirmado pelo servidor.');
       }
     }
     if (generation !== this.sessionGeneration) {
+      await this.revokeUnusedLoginToken(data.token);
       throw new Error('Operação de login cancelada: a sessão foi alterada.');
     }
     this.token = data.token;

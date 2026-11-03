@@ -14,6 +14,7 @@ from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPa
 from ..config import settings
 from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure, auth_rate_limit_key
 from ..dependencies import get_current_session, AuthenticatedSession, auth_database_url, auth_verifier_database_url, bearer_token
+from ..login_role_policy import select_login_role
 
 router = APIRouter(prefix="/auth", tags=["Autenticação e Sessões"])
 
@@ -108,24 +109,12 @@ async def login(payload: LoginRequest, response: Response):
                 links = await conn.fetch(
                     'SELECT tenant_id,role FROM public.auth_active_memberships($1::text) '
                     'ORDER BY tenant_id,role', raw_token)
-                # Selecao de perfil somente no LOGIN, apos senha comprovada.
-                # A escolha do cliente jamais concede um papel ou vinculo.
-                requested = payload.requested_role
-                if requested == 'MASTER':
-                    if not is_master:
-                        raise HTTPException(status_code=401, detail='Credenciais inválidas ou acesso indisponível.')
-                    role, tenant_id = 'MASTER', None
-                elif requested in ('TENANT_ADMIN', 'TENANT_MEMBER'):
-                    eligible = [link for link in links if link['role'] == requested]
-                    if not eligible:
-                        raise HTTPException(status_code=401, detail='Credenciais inválidas ou acesso indisponível.')
-                    role, tenant_id = requested, eligible[0]['tenant_id']
-                elif is_master:  # Compatibilidade com clientes anteriores de homologacao.
-                    role, tenant_id = 'MASTER', None
-                elif links:
-                    role, tenant_id = links[0]['role'], links[0]['tenant_id']
-                else:
-                    raise HTTPException(status_code=401, detail='Credenciais inválidas ou conta indisponível.')
+                # Master nunca surge por fallback de cliente legado.
+                role, tenant_id = select_login_role(
+                    requested_role=payload.requested_role,
+                    is_master=is_master,
+                    links=links,
+                )
                 # Role Auth não pode UPDATE direto em perfil/tenant.
                 # A função PostgreSQL valida token, identidade e vínculo
                 # na mesma transação; retorna a expiração real da sessão.

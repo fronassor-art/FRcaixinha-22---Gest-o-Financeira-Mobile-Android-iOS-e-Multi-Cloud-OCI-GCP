@@ -48,6 +48,8 @@ jobs:
         run: npx tsx src/tests/master_onboarding_preflight_ui.test.ts
       - name: Validar simulador de fluxo, idempotencia e auditoria Master
         run: npx tsx src/tests/master_workflow_audit_ui.test.ts
+      - name: Validar Master explicito e rejeicao de login concorrente
+        run: npx tsx src/tests/owner_login_hardening_ci.test.ts
       - name: Validar concorrencia de sessoes e falhas de rede no frontend
         run: npx tsx src/tests/session_resilience_ci.test.ts
       - name: Validar matriz de permissoes declaradas no cliente Master
@@ -176,6 +178,7 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
           python -m pytest -q backend/tests/test_auth_context_security_headers.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_auth_session_fail_closed_ci.py
+          python -m pytest -q backend/tests/test_master_explicit_login_policy.py
           python -m pytest -q backend/tests/test_aistudio_governance_api.py
           python -m pytest -q backend/tests/test_platform_provider_adapters.py backend/tests/test_aistudio_live_status_api.py
 
