@@ -72,7 +72,7 @@ async def test_imbalanced_or_invalid_postings_are_review_required():
         row(entry_count=1,credit_entries=0),
         row(entry_count=3,debit_entries=1,credit_entries=1),
         row(invalid_entries=1),row(debit_entries=0),
-        row(credit_entries=0),row(debit_cents=-1)
+        row(credit_entries=0)
     ]
     for bad in cases:
         db=DB([row(),bad])
@@ -85,6 +85,7 @@ async def test_imbalanced_or_invalid_postings_are_review_required():
 async def test_malformed_or_excessive_ledger_fails_closed():
     for rows in [
         [row(debit_cents='500')],
+        [row(debit_cents=-1)],
         [row(entry_count=True)],
         [row(invalid_entries=None)],
         [row(transaction_id='')],
