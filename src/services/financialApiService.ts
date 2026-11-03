@@ -15,6 +15,10 @@ import {
   MasterOnboardingCapabilities, MasterOnboardingPreflight,
   parseOnboardingCapabilities, parseOnboardingPreflight,
 } from './masterOnboarding';
+import {
+  WorkflowContract, WorkflowPreview, WorkflowPreviewRequest,
+  parseWorkflowContract, parseWorkflowPreview, validateWorkflowPreviewRequest,
+} from './masterWorkflow';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -134,6 +138,33 @@ class FinancialApiService {
       }),
     });
     return parseOnboardingPreflight(raw);
+  }
+
+  public async fetchMasterWorkflowContract(): Promise<WorkflowContract> {
+    const raw: unknown = await this.request('/api/v1/master/admin-onboarding/workflow-contract');
+    return parseWorkflowContract(raw);
+  }
+
+  public async previewMasterWorkflowTransition(params: WorkflowPreviewRequest): Promise<WorkflowPreview> {
+    validateWorkflowPreviewRequest(params);
+    const raw: unknown = await this.request('/api/v1/master/admin-onboarding/transition-preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_state: params.currentState,
+        proposed_state: params.proposedState,
+        simulated_actor_role: params.actorRole,
+        candidate_is_actor: params.candidateIsActor,
+        email_verified: params.emailVerified,
+        tenant_active: params.tenantActive,
+        independent_approval: params.independentApproval,
+        token_valid: params.tokenValid,
+        expected_revision: params.expectedRevision,
+        observed_revision: params.observedRevision,
+        idempotency_key: params.idempotencyKey,
+        previously_used_keys: params.previouslyUsedKeys,
+      }),
+    });
+    return parseWorkflowPreview(raw);
   }
 
   public async fetchTenantOverview(tenantId: string): Promise<{

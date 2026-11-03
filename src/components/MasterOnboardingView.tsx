@@ -6,6 +6,7 @@ import {
   validatePreflightInput,
 } from '../services/masterOnboarding';
 import {AppState} from '../services/store';
+import {MasterWorkflowAuditView} from './MasterWorkflowAuditView';
 
 const LABELS:Record<string,string>={
   MASTER_MFA:'Segundo fator do proprietário',
@@ -154,6 +155,8 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
         {error&&<p role="alert" className="text-sm text-[#8c3225]">{error}</p>}
       </form>
     </>}
+
+    <MasterWorkflowAuditView state={state}/>
 
     {preflight&&<div role="status" className="fr-light-card rounded-2xl p-4">
       <div className="flex items-start gap-2">

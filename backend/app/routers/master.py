@@ -11,6 +11,9 @@ import uuid
 from ..dependencies import require_master, AuthenticatedSession
 from ..database import get_rls_db_connection
 from ..admin_onboarding_policy import readiness_manifest, preflight_assessment
+from ..admin_onboarding_workflow import (
+    STATES, workflow_contract, preview_transition,
+)
 
 router = APIRouter(prefix="/master", tags=["Governança Master da Plataforma"])
 
@@ -26,10 +29,63 @@ class AdminOnboardingPreflightRequest(BaseModel):
     purpose: str = Field(..., min_length=15, max_length=240)
 
 
+class AdminTransitionPreviewRequest(BaseModel):
+    current_state: Literal[
+        "REQUESTED", "EMAIL_VERIFIED", "MASTER_REVIEW", "APPROVED",
+        "INVITE_PREPARED", "DELIVERED", "ACCEPTED", "ACTIVE",
+        "REJECTED", "REVOKED", "EXPIRED",
+    ]
+    proposed_state: Literal[
+        "REQUESTED", "EMAIL_VERIFIED", "MASTER_REVIEW", "APPROVED",
+        "INVITE_PREPARED", "DELIVERED", "ACCEPTED", "ACTIVE",
+        "REJECTED", "REVOKED", "EXPIRED",
+    ]
+    simulated_actor_role: Literal["MASTER", "TENANT_ADMIN", "TENANT_MEMBER"]
+    candidate_is_actor: bool = False
+    email_verified: bool = False
+    tenant_active: bool = False
+    independent_approval: bool = False
+    token_valid: bool = False
+    expected_revision: int = Field(default=0, ge=0, le=1000000)
+    observed_revision: int = Field(default=0, ge=0, le=1000000)
+    idempotency_key: uuid.UUID
+    previously_used_keys: list[uuid.UUID] = Field(default_factory=list, max_length=32)
+
+
 class LicensePriceChange(BaseModel):
     tier: Literal['ESSENCIAL', 'INTERMEDIARIO']
     monthly_price: Decimal = Field(..., gt=Decimal('0'), le=Decimal('999999.99'), decimal_places=2)
     reason: str = Field(..., min_length=15, max_length=500)
+
+
+@router.get("/admin-onboarding/workflow-contract")
+async def admin_workflow_contract(
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Desenho imutável do ciclo de convites; nenhuma consulta ou escrita SQL."""
+    return workflow_contract()
+
+
+@router.post("/admin-onboarding/transition-preview")
+async def admin_transition_preview(
+    payload: AdminTransitionPreviewRequest,
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Simulador em memória. Nunca cria convite, evento auditável ou conta."""
+    return preview_transition(
+        current=payload.current_state,
+        proposed=payload.proposed_state,
+        actor_role=payload.simulated_actor_role,
+        candidate_is_actor=payload.candidate_is_actor,
+        email_verified=payload.email_verified,
+        tenant_active=payload.tenant_active,
+        independent_approval=payload.independent_approval,
+        token_valid=payload.token_valid,
+        expected_revision=payload.expected_revision,
+        observed_revision=payload.observed_revision,
+        idempotency_key=payload.idempotency_key,
+        previously_used_keys=payload.previously_used_keys,
+    )
 
 
 @router.get("/admin-onboarding/capabilities")
