@@ -300,6 +300,27 @@ def backend_m2400_connect_webhook_preflight_contract():
     }
 
 
+@app.get("/api/health/features/m2500", include_in_schema=False)
+def backend_m2500_ci_only_persistence_contract():
+    """Migração 032 SOMENTE CI descartável, sem acessar PostgreSQL."""
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M2500_CI_OAUTH_INBOX_PERSISTENCE_V1",
+        "ci_only_synthetic_migration_032": True,
+        "database_migration_applied_locally": False,
+        "oauth_exchange_active": False,
+        "oauth_token_stored": False,
+        "webhook_receiver_registered": False,
+        "real_webhooks_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+        "pix_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
