@@ -31,10 +31,15 @@ CONTRACT = "AI_STUDIO_M2900_SIGNED_WEBHOOK_STAGING_INBOX_V1"
 
 @dataclass(frozen=True)
 class SellerContext:
+    """seller_id = technical MP account ID; not a fourth SaaS user role."""
     tenant_id: UUID
     seller_id: str
     webhook_secret_ocid: str
     active: bool = True
+
+    @property
+    def provider_account_id(self) -> str:
+        return self.seller_id
 
 
 @dataclass(frozen=True)
@@ -146,6 +151,7 @@ def create_webhook_staging_router(
     @router.post("/integrations/mercadopago/webhook",include_in_schema=False)
     async def inbound(request: Request):
         if (request.url.scheme != "https"
+                or len(request.headers.getlist("content-type")) != 1
                 or request.headers.get("content-type","").split(";")[0].lower()
                     != "application/json"):
             raise HTTPException(415, "Unsupported channel")
@@ -156,14 +162,24 @@ def create_webhook_staging_router(
                     raise ValueError()
             except ValueError:
                 raise HTTPException(413,"Envelope too large") from None
-        raw=await request.body()
-        if len(raw) > MAX_BODY:
-            raise HTTPException(413,"Envelope too large")
+        # Content-Length is not mandatory (chunked transfer). Never buffer
+        # an unbounded request body before applying the hard size limit.
+        received=bytearray()
+        async for part in request.stream():
+            if len(received)+len(part)>MAX_BODY:
+                raise HTTPException(413,"Envelope too large")
+            received.extend(part)
+        raw=bytes(received)
         query=request.query_params
         if len(query.getlist("data.id")) != 1 or len(query.getlist("type")) != 1:
             raise HTTPException(400,"Query invalid")
         data_id=query["data.id"]
         kind=query["type"]
+        # Reject ambiguous signed header copies before resolving the
+        # beneficiary account or reading secrets from Vault.
+        if (len(request.headers.getlist("x-request-id")) != 1
+                or len(request.headers.getlist("x-signature")) != 1):
+            raise HTTPException(400,"Signed headers ambiguous")
         req_id=request.headers.get("x-request-id","")
         sig=request.headers.get("x-signature","")
         try:

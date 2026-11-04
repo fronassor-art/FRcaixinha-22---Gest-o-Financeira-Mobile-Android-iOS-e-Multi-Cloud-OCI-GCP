@@ -452,6 +452,23 @@ def backend_m3200_oci_recovery_policy():
     }
 
 
+@app.get("/api/health/features/m3300", include_in_schema=False)
+def backend_m3300_webhook_stream_protection():
+    """Proteções do código sem montar webhook no FastAPI local."""
+    return {
+        "workstream":"AI_STUDIO",
+        "contract":"AI_STUDIO_M3300_MP_WEBHOOK_INGRESS_HARDENING_V1",
+        "signed_webhook_stream_limit_bytes":16384,
+        "duplicate_signed_headers_rejected":True,
+        "staging_router_not_mounted_locally":True,
+        "oci_staging_deployed":False,
+        "real_webhooks_active":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "real_payments_enabled":False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
