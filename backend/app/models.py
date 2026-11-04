@@ -298,6 +298,19 @@ class CycleClosingResponse(BaseModel):
 
 # --- Schemas de Auditoria ---
 
+class AuditReadinessResponse(BaseModel):
+    source: str
+    scope: str
+    tenant_id: str
+    checked_events: int
+    fields_present_events: int
+    review_required_events: int
+    status: str
+    provenance_verified: bool = False
+    append_only_verified: bool = False
+    financial_audit_approved: bool = False
+
+
 class AuditEventResponse(BaseModel):
     id: str
     actor_id: Optional[str] = None

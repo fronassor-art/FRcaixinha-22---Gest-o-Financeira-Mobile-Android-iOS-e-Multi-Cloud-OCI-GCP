@@ -70,6 +70,10 @@ jobs:
         run: npx tsx src/tests/macropacote_160_preview_ci.test.ts
       - name: Macropacote 200 — Livro-Razao e integridade do cliente
         run: npx tsx src/tests/macropacote_200_ledger_ci.test.ts
+      - name: Macropacote 220 — detalhes contabeis seguros e isolamento
+        run: npx tsx src/tests/macropacote_220_ledger_boundary_ci.test.ts
+      - name: Macropacote 220 — validar comando somente leitura Termux
+        run: bash -n backend/scripts/aistudio_220_termux_readonly_checkpoint.sh
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
@@ -198,6 +202,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
           python -m pytest -q backend/tests/test_aistudio_real_panels.py

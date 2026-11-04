@@ -1,16 +1,42 @@
 """
-FRcaixinha 2.2 — Rotas de Trilha de Auditoria Imutável (Append-Only)
+FRcaixinha AI Studio — Rotas de auditoria de tenant (consulta administrativa)
 Contrato Técnico Mestre (Cláusulas 2.8, 14.1 e 16.4)
 """
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 import uuid
-from ..models import AuditEventResponse, AuditEventCreatePayload
+from ..models import AuditEventResponse, AuditEventCreatePayload, AuditReadinessResponse
+from ..audit_readiness import summarize_audit_rows
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
 
 router = APIRouter(prefix="/tenants/{tenant_id}/audit-events", tags=["Trilha de Auditoria Imutável"])
+
+@router.get("/readiness-preview", response_model=AuditReadinessResponse)
+async def get_audit_readiness_preview(
+    tenant_id: str,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn = Depends(get_rls_db_connection),
+):
+    """Sintaxe dos eventos, sem afirmar autoria ou origem verificadas."""
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Diagnóstico exclusivo do administrador.")
+    try:
+        tenant = uuid.UUID(tenant_id)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="Caixinha inválida.") from exc
+    rows = await conn.fetch("""
+        SELECT id, actor_id, actor_role, action, object_type, object_id,
+               reason, evidence_ref, created_at
+        FROM public.audit_events
+        WHERE tenant_id=$1
+        ORDER BY created_at DESC, id ASC
+        LIMIT 501
+    """, tenant)
+    return summarize_audit_rows(rows, tenant_id)
+
 
 @router.get("", response_model=List[AuditEventResponse])
 async def list_tenant_audit_events(
@@ -77,23 +103,3 @@ async def create_tenant_audit_event(
         "Registro manual de auditoria indisponível até comprovar origem e integridade."
     ))
 
-    event_id = uuid.uuid4()
-    await conn.execute("""
-        INSERT INTO audit_events (
-            id, actor_id, actor_role, tenant_id, action, object_type, object_id, reason, evidence_ref, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW());
-    """, event_id, uuid.UUID(session.user_id), session.role, uuid.UUID(tenant_id),
-       payload.action, payload.object_type, payload.object_id, payload.reason, payload.evidence_ref)
-
-    return AuditEventResponse(
-        id=str(event_id),
-        actor_id=str(session.user_id),
-        actor_role=session.role,
-        tenant_id=tenant_id,
-        action=payload.action,
-        object_type=payload.object_type,
-        object_id=payload.object_id,
-        reason=payload.reason,
-        evidence_ref=payload.evidence_ref,
-        created_at=datetime.utcnow()
-    )

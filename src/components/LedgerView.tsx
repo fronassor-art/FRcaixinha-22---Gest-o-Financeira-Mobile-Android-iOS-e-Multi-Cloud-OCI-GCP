@@ -3,29 +3,15 @@ import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
 import { authService } from '../services/authService';
 import type { LedgerIntegrityPreview } from '../services/ledgerIntegrityPreview';
+import {validateLedgerAccountLinks} from '../services/ledgerDetailBoundary';
+import type {DisplayLedgerAccount,DisplayLedgerTransaction} from '../services/ledgerDetailBoundary';
 
 interface Props { state: AppState }
-interface Account {
-  id: string;
-  tenant_id: string;
-  account_code: string;
-  account_name: string;
-  account_type: string;
-  balance_cents: number;
-}
-interface Transaction {
-  id: string;
-  tenant_id: string;
-  description: string;
-  transaction_date: string;
-  reference_id: string;
-  entries: Array<{ id: string; account_name: string; entry_type: string; amount_cents: number }>;
-}
 interface Result {
   key: string;
   status: 'loading' | 'ready' | 'error';
-  accounts: Account[];
-  transactions: Transaction[];
+  accounts: DisplayLedgerAccount[];
+  transactions: DisplayLedgerTransaction[];
   integrity?: LedgerIntegrityPreview;
 }
 
@@ -42,8 +28,8 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
       return () => { active = false; };
     }
     financialApi.fetchLedgerIntegrityPreview(state.currentTenantId).then(async integrity=>{
-      if(integrity.status!=='BALANCED')return {integrity,accounts:[] as Account[],transactions:[] as Transaction[]};
-      const [accounts,transactions]:[Account[],Transaction[]]=await Promise.all([
+      if(integrity.status!=='BALANCED')return {integrity,accounts:[] as DisplayLedgerAccount[],transactions:[] as DisplayLedgerTransaction[]};
+      const [accounts,transactions]:[DisplayLedgerAccount[],DisplayLedgerTransaction[]]=await Promise.all([
         financialApi.fetchLedgerAccounts(state.currentTenantId),
         financialApi.fetchLedgerTransactions(state.currentTenantId),
       ]);
@@ -53,6 +39,7 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
          transactions.length!==integrity.checked_transactions){
         throw Error('Detalhamento contábil incompatível.');
       }
+      validateLedgerAccountLinks(accounts,transactions);
       return {integrity,accounts,transactions};
     }).then(({integrity,accounts,transactions})=>{
       if(active&&authService.isSessionSnapshotCurrent(snapshot))

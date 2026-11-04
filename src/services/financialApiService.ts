@@ -30,6 +30,7 @@ import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
+import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
 export class FinancialBackendUnavailableError extends Error {
@@ -478,14 +479,16 @@ class FinancialApiService {
     return parseLedgerIntegrityPreview(raw,tenantId);
   }
 
-  public async fetchLedgerAccounts(tenantId: string) {
+  public async fetchLedgerAccounts(tenantId: string):Promise<DisplayLedgerAccount[]> {
     this.assertLedgerAdmin(tenantId);
-    return this.request<any[]>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/accounts`);
+    const raw:unknown=await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/accounts`);
+    return parseLedgerAccounts(raw,tenantId);
   }
 
-  public async fetchLedgerTransactions(tenantId: string) {
+  public async fetchLedgerTransactions(tenantId: string):Promise<DisplayLedgerTransaction[]> {
     this.assertLedgerAdmin(tenantId);
-    return this.request<any[]>(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/transactions`);
+    const raw:unknown=await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/transactions`);
+    return parseLedgerTransactions(raw,tenantId);
   }
 
   // --- Consentimento de Autoempréstimo de Admin ---
