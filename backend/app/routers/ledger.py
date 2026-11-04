@@ -4,11 +4,15 @@ Projeto isolado. Consultas autorizadas por sessao, tenant e RLS.
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
-from ..models import LedgerAccountResponse, LedgerTransactionResponse, LedgerEntryResponse, LedgerIntegrityPreviewResponse
+from ..models import (
+    LedgerAccountResponse, LedgerTransactionResponse, LedgerEntryResponse,
+    LedgerIntegrityPreviewResponse, LedgerAccountJournalEntryResponse,
+    LedgerAccountJournalPageResponse,
+)
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
 
@@ -18,6 +22,7 @@ CENTS = Decimal("0.01")
 MAX_LEDGER_ACCOUNTS = 500
 MAX_LEDGER_TRANSACTIONS = 500
 MAX_LEDGER_ENTRIES_PER_TRANSACTION = 100
+MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE = 50
 
 
 def _require_ledger_bound(rows, limit: int):
@@ -220,3 +225,99 @@ async def list_ledger_transactions(
         ))
 
     return results
+
+
+# Consulta analitica paginada de UMA conta. Nao altera as rotas antigas,
+# nem pretende validar saldo/conciliacao de todo o livro-razão.
+@router.get(
+    "/accounts/{account_id}/entries",
+    response_model=LedgerAccountJournalPageResponse,
+)
+async def list_ledger_account_entries(
+    tenant_id: str,
+    account_id: str,
+    page: int = Query(1, ge=1, le=1000),
+    page_size: int = Query(25, ge=1, le=MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE),
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn = Depends(get_rls_db_connection),
+):
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Consulta exclusiva do administrador da caixinha.")
+    try:
+        tenant = uuid.UUID(tenant_id)
+        account = uuid.UUID(account_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Identificador contábil inválido.")
+    if type(page) is not int or not (1 <= page <= 1000) or (
+        type(page_size) is not int or not (1 <= page_size <= MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE)
+    ):
+        raise HTTPException(status_code=422, detail="Paginação inválida.")
+
+    # Diferencia conta inexistente de ausência de lançamentos, sempre no mesmo tenant.
+    active = await conn.fetchrow(
+        "SELECT id FROM public.ledger_accounts "
+        "WHERE tenant_id=$1 AND id=$2 LIMIT 1",
+        tenant, account,
+    )
+    if active is None:
+        raise HTTPException(status_code=404, detail="Conta contábil não encontrada.")
+
+    rows = await conn.fetch("""
+        SELECT e.id, e.transaction_id, t.transaction_date, t.description,
+               t.reference_id, e.entry_type, e.amount_cents
+        FROM public.ledger_entries e
+        JOIN public.ledger_transactions t
+          ON t.id=e.transaction_id AND t.tenant_id=e.tenant_id
+        WHERE e.tenant_id=$1 AND e.account_id=$2
+        ORDER BY t.transaction_date DESC, t.id DESC, e.id DESC
+        LIMIT $3 OFFSET $4
+    """, tenant, account, page_size + 1, (page - 1) * page_size)
+
+    has_more = len(rows) > page_size
+    result = []
+    seen = set()
+    for record in rows[:page_size]:
+        try:
+            entry_id = str(uuid.UUID(str(record["id"])))
+            tx_id = str(uuid.UUID(str(record["transaction_id"])))
+            cents = record["amount_cents"]
+            entry_type = record["entry_type"]
+            posted = record["transaction_date"]
+            description = record["description"]
+            reference = record["reference_id"]
+            if (
+                entry_id in seen
+                or type(cents) is not int or cents <= 0 or cents > 100000000000
+                or entry_type not in ("DR", "CR")
+                or not isinstance(description, str) or not description.strip()
+                or len(description) > 500
+                or not isinstance(reference, str) or not reference.strip()
+                or len(reference) > 200
+                or posted is None
+            ):
+                raise ValueError("Invalid journal entry")
+        except (KeyError, TypeError, ValueError, OverflowError):
+            raise HTTPException(status_code=503, detail="Dados contábeis inválidos: consulta não exibida.")
+        seen.add(entry_id)
+        result.append(LedgerAccountJournalEntryResponse(
+            id=entry_id,
+            transaction_id=tx_id,
+            transaction_date=posted,
+            description=description,
+            reference_id=reference,
+            entry_type=entry_type,
+            amount_cents=cents,
+            amount_brl=(Decimal(cents) / Decimal(100)).quantize(CENTS),
+        ))
+    return LedgerAccountJournalPageResponse(
+        tenant_id=str(tenant),
+        account_id=str(account),
+        page=page,
+        page_size=page_size,
+        has_more=has_more,
+        entries=result,
+        complete_ledger_verified=False,
+        bank_reconciled=False,
+        financial_closing_authorized=False,
+    )

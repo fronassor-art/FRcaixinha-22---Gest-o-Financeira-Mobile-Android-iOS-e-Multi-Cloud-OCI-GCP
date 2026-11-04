@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 /**
- * FRcaixinha 2.2 — Configuração do Capacitor para Empacotamento Android
+ * FR Caixinha — configuracao Capacitor da frente AI Studio
  * Contrato Técnico Mestre (Cláusulas 11.1 e 16.2)
  *
  * NOTAS DE SEGURANÇA E AMBIENTE:
@@ -19,7 +19,7 @@ if (localAndroidTest && process.env.VITE_API_URL !== 'http://127.0.0.1:8000') {
 
 const config: CapacitorConfig = {
   appId: 'com.frcaixinha.app',
-  appName: 'FRcaixinha AI Studio',
+  appName: 'FR Caixinha',
   webDir: 'dist',
   server: {
     androidScheme: localAndroidTest ? 'http' : 'https',

@@ -74,6 +74,10 @@ jobs:
         run: npx tsx src/tests/macropacote_200_ledger_ci.test.ts
       - name: Macropacote 220 — detalhes contabeis seguros e isolamento
         run: npx tsx src/tests/macropacote_220_ledger_boundary_ci.test.ts
+      - name: M300 — extrato contábil por conta, paginação e segregação
+        run: npx tsx src/tests/macropacote_300_ledger_account_entries_ci.test.ts
+      - name: M300 — identidade FR Caixinha e contrato comum
+        run: npx tsx src/tests/macropacote_300_product_identity_ci.test.ts
       - name: Macropacote 220 — validar comando somente leitura Termux
         run: bash -n backend/scripts/aistudio_220_termux_readonly_checkpoint.sh
       - name: Macropacote 240 e 280 — scripts somente leitura
@@ -81,6 +85,7 @@ jobs:
           bash -n backend/scripts/aistudio_240_roles_readonly.sh
           bash -n backend/scripts/aistudio_240_backup_integrity_readonly.sh
           bash -n backend/scripts/aistudio_280_runtime_readonly.sh
+          bash -n backend/scripts/aistudio_300_checkpoint_readonly.sh
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
@@ -213,6 +218,8 @@ jobs:
           python -m pytest -q backend/tests/test_aistudio_240_gates.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_260_ledger_read_ci.py
           python -m pytest -q backend/tests/test_macropacote_280_runtime_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_300_ledger_journal_ci.py
+          python -m pytest -q backend/tests/test_macropacote_300_runtime_ci.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
           python -m pytest -q backend/tests/test_aistudio_real_panels.py

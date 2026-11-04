@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_health_identifies_only_aistudio():
     payload = health_check()
-    assert payload["app"] == "FRcaixinha AI Studio Mobile"
+    assert payload["app"] == "FR Caixinha"
     assert "2.2" not in payload["app"]
 
 

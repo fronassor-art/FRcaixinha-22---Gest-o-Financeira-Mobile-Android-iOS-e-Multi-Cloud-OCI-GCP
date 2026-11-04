@@ -30,6 +30,7 @@ import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
+import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
@@ -489,6 +490,22 @@ class FinancialApiService {
     this.assertLedgerAdmin(tenantId);
     const raw:unknown=await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/transactions`);
     return parseLedgerTransactions(raw,tenantId);
+  }
+
+  /** Pagina de uma conta: read-only, nunca significa conciliacao. */
+  public async fetchLedgerAccountJournal(
+    tenantId:string,accountId:string,page:number,pageSize:number=25
+  ):Promise<LedgerAccountJournalPage>{
+    this.assertLedgerAdmin(tenantId);
+    if(!Number.isSafeInteger(page)||page<1||page>1000||
+       !Number.isSafeInteger(pageSize)||pageSize<1||pageSize>50)
+      throw Error('Parâmetros de paginação inválidos.');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/ledger/accounts/'+encodeURIComponent(accountId)+
+      '/entries?page='+page+'&page_size='+pageSize
+    );
+    return parseLedgerAccountJournalPage(raw,tenantId,accountId,page,pageSize);
   }
 
   // --- Consentimento de Autoempréstimo de Admin ---

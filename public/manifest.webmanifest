@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "FRcaixinha — Gestão de Caixinhas",
-  "short_name": "FRcaixinha",
+  "name": "FR Caixinha — Gestão de Caixinhas",
+  "short_name": "FR Caixinha",
   "description": "Gestão de caixinhas com identidade única e permissões por perfil.",
   "start_url": "/",
   "scope": "/",

@@ -236,6 +236,30 @@ class LedgerAccountResponse(BaseModel):
     balance_cents: int
     balance_brl: Decimal
 
+class LedgerAccountJournalEntryResponse(BaseModel):
+    id: str
+    transaction_id: str
+    transaction_date: datetime
+    description: str
+    reference_id: str
+    entry_type: str
+    amount_cents: int
+    amount_brl: Decimal
+
+
+class LedgerAccountJournalPageResponse(BaseModel):
+    source: str = "POSTGRESQL_RLS"
+    tenant_id: str
+    account_id: str
+    page: int
+    page_size: int
+    has_more: bool
+    complete_ledger_verified: bool = False
+    bank_reconciled: bool = False
+    financial_closing_authorized: bool = False
+    entries: List[LedgerAccountJournalEntryResponse]
+
+
 class LedgerEntryResponse(BaseModel):
     id: str
     account_id: str

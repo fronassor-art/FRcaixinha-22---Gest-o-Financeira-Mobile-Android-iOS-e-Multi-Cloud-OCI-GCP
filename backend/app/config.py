@@ -1,6 +1,6 @@
 """
-FRcaixinha 2.2 — Configurações do Backend FastAPI
-Contrato Técnico Mestre (Cláusulas 1.2, 14.1 e 16.2)
+FR Caixinha — configuracoes da frente AI Studio
+Referencias: Documento Mestre e Contrato Tecnico Mestre comuns ao produto.
 """
 
 import os
@@ -8,7 +8,7 @@ from typing import List
 from pydantic import BaseModel
 
 class Settings(BaseModel):
-    PROJECT_NAME: str = "FRcaixinha 2.2 — API Oficial"
+    PROJECT_NAME: str = "FR Caixinha — API de homologação"
     VERSION: str = "2.2.0"
     API_V1_STR: str = "/api/v1"
     

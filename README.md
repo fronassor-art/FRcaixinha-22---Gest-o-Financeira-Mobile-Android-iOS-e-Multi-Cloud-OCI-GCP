@@ -1,6 +1,10 @@
-# Aplicativo do AI Studio — desenvolvimento no GitHub
+# FR Caixinha — frente de desenvolvimento Google AI Studio
 
-> **Identidade do projeto:** este repositório contém a exportação do aplicativo **Google AI Studio** em desenvolvimento nesta branch. O nome histórico do repositório e alguns identificadores herdados no código mencionam "FRcaixinha 2.2", mas **não autorizam compartilhar dados, infraestrutura, decisões ou alterações com o outro projeto independente de mesmo nome**. Tratar este trabalho como **Projeto AI Studio**.
+> **Nome oficial do produto:** **FR Caixinha**, F de Fábio e R de Rossano.
+> **Mesmo produto, duas frentes técnicas.** O **Documento Mestre e o Contrato Técnico Mestre** orientam as regras funcionais comuns do aplicativo. A frente original está pausada; esta implementação foi iniciada do zero no Google AI Studio e possui repositório, branch, código, banco de dados, usuários técnicos, credenciais, backups e infraestrutura isolados.
+> Não importar automaticamente código ou dados da frente anterior. Divergências contratuais e decisões arquiteturais exigem rastreabilidade e aprovação; não mudar estados das 147 cláusulas por inferência.
+>
+> **Nota de implantação:** React + Capacitor é uma escolha aprovada para esta implementação; não muda o nome comercial do produto. OCI/GCP e operações financeiras reais não estão homologados.
 
 ## Repositório e fluxo oficial
 
@@ -9,7 +13,7 @@
 - **PR de integração:** [#2](https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP/pull/2), mantida **em rascunho** até autorização expressa.
 - **Fonte do desenvolvimento:** commits efetuados diretamente no GitHub, acompanhados por GitHub Actions.
 - **Termux (Android):** clone local `~/frcaixinha-aistudio-mobile` apenas para sincronização, conferências e homologação especificamente autorizada, via `git fetch` e `git merge --ff-only`.
-- **Separação obrigatória:** não usar bancos, clusters, credenciais, backups, repositórios ou decisões técnicas do outro aplicativo.
+- **Separação obrigatória:** não misturar bancos, clusters, credenciais, backups, repositórios ou código das duas frentes. Aplicar o mesmo Documento Mestre e Contrato Técnico Mestre ao produto.
 
 **Não executar `git branch -M main`, `git push` do Termux, `git reset --hard`, `git clean` ou migrações para realizar a sincronização ordinária.** A branch de trabalho é a da PR #2 e a `main` permanece preservada.
 
@@ -27,6 +31,8 @@ O checkpoint de 01/11/2026, publicado antes desta correção do README, registra
 | CI no checkpoint | 5 verificações aprovadas; isso não constitui aprovação para produção |
 
 **Importante:** as contagens de requisitos representam uma **fotografia documental histórica**, não um índice de conclusão recalculado após cada pacote. Confira evidências por cláusula antes de mudar os estados.
+
+Referência consolidada atual: [Macropacote M300 — checklist amplo, entregas e pendências](docs/FR_CAIXINHA_MACROPACOTE_300_CHECKLIST_CONSOLIDADO.md). Este documento preserva a matriz histórica sem inflar sua conclusão.
 
 Referências de trabalho:
 - [Checkpoint executivo de pendências](docs/CHECKPOINT_EXECUTIVO_PENDENCIAS_AI_STUDIO_2026-11-01.md)

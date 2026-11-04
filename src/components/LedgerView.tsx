@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import {LedgerAccountEntries} from './LedgerAccountEntries';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
 import { authService } from '../services/authService';
@@ -17,6 +18,7 @@ interface Result {
 
 export const LedgerView: React.FC<Props> = ({ state }) => {
   const [revision, setRevision] = useState(0);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const key = [state.currentUserId, state.currentRole, state.currentTenantId, revision].join(':');
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', accounts: [], transactions: [] });
   useEffect(() => {
@@ -96,12 +98,20 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
               <p className="text-xs text-slate-500">{a.account_code} — {a.account_type}</p>
               <h3 className="font-semibold text-slate-900">{a.account_name}</h3>
               <p className="mt-2 text-lg font-bold">{fmt(a.balance_cents)}</p>
+              <button type="button" onClick={()=>setSelectedAccountId(a.id)}
+                className="mt-3 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                Ver extrato da conta
+              </button>
             </article>
           ))}
         </div>
         {current.accounts.length === 0 && <p className="rounded-lg bg-white p-4">
           Nenhuma conta contábil encontrada no servidor para esta caixinha.
         </p>}
+        {current.accounts.filter(a=>a.id===selectedAccountId).map(a=>
+          <LedgerAccountEntries key={key+':'+a.id}
+            tenantId={state.currentTenantId!} account={a}
+            onClose={()=>setSelectedAccountId(null)}/>)}
         <h3 className="text-base font-semibold text-slate-900">Lançamentos contabilizados</h3>
         {current.transactions.length === 0 && <p className="rounded-lg bg-white p-4">
           Nenhum lançamento confirmado.
