@@ -96,6 +96,8 @@ jobs:
         run: npx tsx src/tests/macropacote_320_visibility_policy_ci.test.ts
       - name: M360 — navegação por cursor, parser e isolamento da sessão
         run: npx tsx src/tests/macropacote_360_keyset_ci.test.ts
+      - name: M2200 — mil navegacoes seguras de extrato sem dados bancarios
+        run: npx tsx src/tests/macropacote_2200_ledger_navigation_ci.test.ts
       - name: M300 — identidade FR Caixinha e contrato comum
         run: npx tsx src/tests/macropacote_300_product_identity_ci.test.ts
       - name: Macropacote 220 — validar comando somente leitura Termux
@@ -246,6 +248,7 @@ jobs:
           python -m pytest -q backend/tests/test_m1720_financial_sandbox_ci.py
           python -m pytest -q backend/tests/test_m1880_financial_evidence_ci.py
           python -m pytest -q backend/tests/test_m2040_sandbox_contract_ci.py
+          python -m pytest -q backend/tests/test_m2200_three_source_preflight_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

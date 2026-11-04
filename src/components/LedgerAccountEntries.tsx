@@ -4,7 +4,7 @@ import {financialApi} from '../services/financialApiService';
 import type {DisplayLedgerAccount} from '../services/ledgerDetailBoundary';
 import type {LedgerAccountDirectoryItem} from '../services/ledgerAccountDirectoryBoundary';
 import type {LedgerKeysetPage} from '../services/ledgerKeysetBoundary';
-import {initialJournalNavigation,nextJournalNavigation,previousJournalNavigation} from '../services/ledgerJournalCursorNavigation';
+import {initialJournalNavigation,nextJournalNavigation,previousJournalNavigation,canAdvanceJournalNavigation} from '../services/ledgerJournalCursorNavigation';
 interface Props {tenantId:string;account:Pick<DisplayLedgerAccount,'id'|'account_code'|'account_name'>|LedgerAccountDirectoryItem;onClose:()=>void}
 interface Result {key:string;status:'loading'|'ready'|'error';data?:LedgerKeysetPage}
 export const LedgerAccountEntries:React.FC<Props>=({tenantId,account,onClose})=>{
@@ -34,8 +34,10 @@ export const LedgerAccountEntries:React.FC<Props>=({tenantId,account,onClose})=>
  const previous=()=>{
   if(current.status==='ready'&&nav.page>1)setNav(previousJournalNavigation);
  };
+ const canMoveNext=current.status==='ready'&&!!current.data&&
+   canAdvanceJournalNavigation(nav,current.data);
  const next=()=>{
-  if(current.status!=='ready'||!current.data?.has_more)return;
+  if(!canMoveNext||!current.data)return;
   setNav(old=>nextJournalNavigation(old,current.data!));
  };
  return <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3"
@@ -65,10 +67,15 @@ export const LedgerAccountEntries:React.FC<Props>=({tenantId,account,onClose})=>
     <button type="button" disabled={nav.page<=1} onClick={previous}
      className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40">Anterior</button>
     <span className="text-xs text-slate-600">Página {nav.page}</span>
-    <button type="button" disabled={!current.data.has_more||nav.page>=1000}
+    <button type="button" disabled={!canMoveNext}
      onClick={next}
      className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40">Próxima</button>
    </div>
+   {current.data.has_more && nav.page<1000 && !canMoveNext&&
+    <p role="alert" className="text-xs text-rose-800">
+     Continuação do extrato bloqueada por cursor repetido ou inválido.
+     Nenhum saldo financeiro foi confirmado.
+    </p>}
    {nav.page>=1000&&current.data.has_more&&<p role="status" className="text-xs text-amber-900">
     Limite de páginas de homologação atingido. A consulta permanece parcial.
    </p>}

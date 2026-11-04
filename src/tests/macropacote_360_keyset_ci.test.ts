@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {parseLedgerKeysetPage as parse} from '../services/ledgerKeysetBoundary';
-import {initialJournalNavigation,nextJournalNavigation,previousJournalNavigation} from '../services/ledgerJournalCursorNavigation';
+import {initialJournalNavigation,nextJournalNavigation,previousJournalNavigation,canAdvanceJournalNavigation} from '../services/ledgerJournalCursorNavigation';
 const T='00000000-0000-4000-8000-000000000001';
 const A='00000000-0000-4000-8000-000000000002';
 const OTHER='00000000-0000-4000-8000-000000000003';
@@ -62,6 +62,12 @@ assert.deepEqual(backAndForward.cursors,[null,'bmV3']);
 assert.deepEqual(n2.cursors,[null,cursor]);
 assert.equal(nextJournalNavigation(n2,{has_more:false,next_cursor:null}).page,2);
 assert.equal(nextJournalNavigation(n1,{has_more:true,next_cursor:null}).page,1);
+assert.equal(canAdvanceJournalNavigation(n1,{has_more:true,next_cursor:cursor}),true);
+assert.equal(canAdvanceJournalNavigation(n2,{has_more:true,next_cursor:cursor}),false);
+assert.equal(nextJournalNavigation(n2,{has_more:true,next_cursor:cursor}).page,2);
+assert.equal(canAdvanceJournalNavigation(n2,{has_more:false,next_cursor:cursor}),false);
+assert.equal(canAdvanceJournalNavigation(n2,{has_more:true,next_cursor:'\n'}),false);
+
 assert.equal(nextJournalNavigation({...n1,page:1000,cursors:Array(1000).fill(cursor)},
  {has_more:true,next_cursor:cursor}).page,1000);
 const api=readFileSync('src/services/financialApiService.ts','utf8');
@@ -73,6 +79,6 @@ assert.match(ui,/result\.key===key/);
 assert.match(ui,/nextJournalNavigation/);
 assert.match(ui,/previousJournalNavigation/);
 assert.match(ui,/disabled=\{nav\.page<=1\}/);
-assert.match(ui,/disabled=\{!current\.data\.has_more\|\|nav\.page>=1000\}/);
+assert.match(ui,/disabled=\{!canMoveNext\}/);
 assert.match(ui,/Não comprova completude do Livro-Razão/);
 console.log('FR_CAIXINHA_M360_KEYSET_FRONTEND=PASS');

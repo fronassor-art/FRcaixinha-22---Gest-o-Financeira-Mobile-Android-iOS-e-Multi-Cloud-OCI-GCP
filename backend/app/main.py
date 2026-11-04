@@ -16,6 +16,7 @@ from . import ledger_keyset as _ledger_keyset
 from . import financial_sandbox_reconciliation as _financial_lab
 from . import synthetic_financial_journal as _synthetic_journal
 from . import annual_evidence_preflight as _annual_evidence
+from . import financial_three_source_preflight as _three_source
 import os
 from .routers import sandbox_evidence_ci as _sandbox_evidence_ci
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations
@@ -234,6 +235,27 @@ def backend_m2040_feature_contract():
         "payout_authorized": False,
         "real_payments_enabled": False,
         "runtime_git_sha_verified": False,
+    }
+
+
+@app.get("/api/health/features/m2200", include_in_schema=False)
+def backend_m2200_three_source_contract():
+    """Diagnóstico do laboratório de reconciliação de registros, SEM I/O."""
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": _three_source.CONTRACT,
+        "three_source_preflight_only": True,
+        "settlement_is_bank_proof": False,
+        "provider_connected": False,
+        "real_webhooks_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "closing_authorized": False,
+        "capital_confirmed": False,
+        "payout_authorized": False,
+        "pix_enabled": False,
+        "real_payments_enabled": False,
     }
 
 
