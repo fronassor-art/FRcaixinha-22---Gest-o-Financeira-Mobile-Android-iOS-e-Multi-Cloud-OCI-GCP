@@ -4,6 +4,7 @@ import {financialApi} from '../services/financialApiService';
 import {MemberAnnualPreview} from '../services/memberAnnualPreview';
 import {formatBRL} from '../services/financialEngine';
 import {authService} from '../services/authService';
+import {MemberCycleRiskPanel} from './MemberCycleRiskPanel';
 
 type Result={key:string,status:'loading'|'ready'|'error',data?:MemberAnnualPreview};
 export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
@@ -77,5 +78,6 @@ export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
           Valor registrado como pago não representa conciliação bancária.
         </p>
       </div>}
+    <MemberCycleRiskPanel state={state}/>
   </section>;
 };

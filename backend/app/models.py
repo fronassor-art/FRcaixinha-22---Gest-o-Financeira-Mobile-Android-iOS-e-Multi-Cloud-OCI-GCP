@@ -61,6 +61,32 @@ class ContextSwitchRequest(BaseModel):
 
 # --- Schemas de Contribuições e Cotas ---
 
+
+class MemberCycleRiskPreviewResponse(BaseModel):
+    """Histórico registrado sem conclusão bancária, punitiva ou distributiva."""
+    tenant_id: str
+    cycle_year: int
+    membership_id: str
+    as_of: date
+    source: str
+    scope: str
+    owner_box: bool
+    registered_contributions_count: int
+    registered_due_cents: int
+    registered_paid_cents: int
+    registered_open_cents: int
+    longest_registered_overdue_days: int
+    currently_unpaid_consecutive_months: int
+    potential_three_unpaid_trigger_date: Optional[date] = None
+    membership_profit_eligible: Optional[bool] = None
+    reconciled_principal_cents: Optional[int] = None
+    capital_days_weight: Optional[Decimal] = None
+    contractual_effect_applied: bool = False
+    real_financial_operations_enabled: bool = False
+    financial_closing_authorized: bool = False
+    bank_reconciled: bool = False
+    result_status: str = "HISTORY_AND_PROOF_NOT_ATTESTED"
+
 class QuotaResponse(BaseModel):
     id: str
     tenant_id: str

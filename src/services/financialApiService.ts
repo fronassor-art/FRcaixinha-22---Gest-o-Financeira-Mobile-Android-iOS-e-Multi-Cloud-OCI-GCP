@@ -29,6 +29,7 @@ import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
+import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
@@ -446,6 +447,27 @@ class FinancialApiService {
   }
 
   /** Prévia registrada no PostgreSQL para o Membro, sem cálculo de lucro. */
+  /** M531: consulta de risco registrada — não confirma Pix, nem bloqueia membro. */
+  public async fetchMemberCycleRiskPreview(
+    tenantId:string,year:number,asOf:string,memberId?:string
+  ):Promise<MemberCycleRiskPreview>{
+    const reader=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||
+      !/^\d{4}-\d{2}-\d{2}$/.test(asOf))
+      throw Error('Ano/data inválidos para a prévia do ciclo');
+    if(reader==='TENANT_MEMBER'&&memberId!==undefined)
+      throw Error('Membro não pode selecionar outro vínculo');
+    if(reader==='TENANT_ADMIN'&&(!memberId||
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(memberId)))
+      throw Error('Administrador precisa selecionar um vínculo válido');
+    const tail=reader==='TENANT_ADMIN'
+      ?'/members/'+encodeURIComponent(memberId as string):'/me';
+    const endpoint='/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-risk'+tail+'?as_of='+encodeURIComponent(asOf);
+    const raw:unknown=await this.request(endpoint);
+    return parseMemberCycleRiskPreview(raw,tenantId,year,reader,memberId);
+  }
+
   public async fetchMemberAnnualPreview(tenantId:string,year=2027):Promise<MemberAnnualPreview>{
     const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
     if(role!=='TENANT_MEMBER')throw new Error('Demonstrativo somente para Membro');

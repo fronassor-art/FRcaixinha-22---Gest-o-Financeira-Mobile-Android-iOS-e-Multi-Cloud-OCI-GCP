@@ -26,6 +26,9 @@ from app.routers.ledger import (
 from app.routers.loans import (
     compute_price_schedule, simulate_loan_price, list_tenant_loans,
 )
+from app.routers.member_cycle_previews import (
+    get_my_cycle_risk_preview, get_admin_member_cycle_risk_preview,
+)
 from app.member_cycle_rules import (
     MonthlyDueProof, CapitalMovement, ExitRequest, review_member_cycle,
 )
@@ -453,6 +456,41 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
               "OWNER_LEGAL_GATE=BLOCKED; OWNER_PRINCIPAL_CENTS=22500; "
               "VOLUNTARY_EXIT=PENDING_REVIEW; "
               "TENANT_CROSS_POLICY=BLOCKED; REAL_PAYOUT=0")
+        # M531: endpoints reais de consulta pela sessão + RLS do PostgreSQL.
+        own_risk=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda s,c: get_my_cycle_risk_preview(
+                a,2027,date(2027,12,31),s,c))
+        assert own_risk.registered_contributions_count==12
+        assert own_risk.registered_due_cents==180000
+        assert own_risk.registered_paid_cents==22500
+        assert own_risk.potential_three_unpaid_trigger_date==date(2027,4,11)
+        assert own_risk.membership_profit_eligible is None
+        assert own_risk.capital_days_weight is None
+        assert not own_risk.contractual_effect_applied
+        admin_risk=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda s,c: get_admin_member_cycle_risk_preview(
+                a,2027,memberships["member_a2"],date(2027,12,31),s,c))
+        assert admin_risk.registered_open_cents==157500
+        assert admin_risk.membership_id==str(memberships["member_a2"])
+        other_risk=await as_actor("member_b","b","TENANT_MEMBER",
+            lambda s,c: get_my_cycle_risk_preview(
+                b,2027,date(2027,12,31),s,c))
+        assert other_risk.registered_paid_cents==0
+        assert other_risk.registered_due_cents==210000
+        assert other_risk.membership_profit_eligible is None
+        for name, side, role, target, target_mid in (
+            ("admin_a","a","TENANT_ADMIN",b,memberships["member_b"]),
+            ("member_a2","a","TENANT_MEMBER",a,memberships["member_a"]),
+            ("master",None,"MASTER",a,memberships["member_a2"]),
+        ):
+            with pytest.raises(HTTPException) as denied:
+                await as_actor(name,side,role,
+                    lambda s,c:get_admin_member_cycle_risk_preview(
+                        target,2027,target_mid,date(2027,12,31),s,c))
+            assert denied.value.status_code==403
+        print("M531_RISK_API_PG_RLS=PASS; ADMIN_AND_MEMBER=PASS; "
+              "MASTER_AND_CROSS_TENANT=DENIED; "
+              "CONTRACTUAL_SANCTION=NOT_APPLIED; BANK_RECONCILED=FALSE")
         print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
               "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
               "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "
