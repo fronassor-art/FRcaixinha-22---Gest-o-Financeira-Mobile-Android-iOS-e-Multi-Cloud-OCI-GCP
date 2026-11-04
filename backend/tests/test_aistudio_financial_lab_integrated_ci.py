@@ -126,7 +126,7 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
                     "INSERT INTO public.policies(id,tenant_id,cycle_id,monthly_interest_rate,"
                     "max_installments,contribution_per_quota,admin_pct,member_pct) "
                     "VALUES($1,$2,$3,$4,6,$5,15,85)",
-                    policy, tenant, interest_rate, quota_value,
+                    policy, tenant, cycle, interest_rate, quota_value,
                 )
                 for number, link in enumerate(groups[side], start=1):
                     await admin.execute(
