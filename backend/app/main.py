@@ -383,6 +383,24 @@ def backend_m2800_oci_mercado_pago_connectors_contract():
     }
 
 
+@app.get("/api/health/features/m2900", include_in_schema=False)
+def backend_m2900_staging_webhook_contract():
+    """Pronto para injeção de dependências em staging, sem registrar receiver."""
+    from .mp_webhook_staging_runtime import CONTRACT
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": CONTRACT,
+        "webhook_staging_router_factory": True,
+        "staging_migration_applied": False,
+        "oci_staging_deployed": False,
+        "real_webhooks_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
