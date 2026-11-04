@@ -32,6 +32,7 @@ import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPrevi
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
+import {LedgerKeysetPage,parseLedgerKeysetPage} from './ledgerKeysetBoundary';
 import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
@@ -500,6 +501,24 @@ class FinancialApiService {
     this.assertLedgerAdmin(tenantId);
     const raw:unknown=await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/transactions`);
     return parseLedgerTransactions(raw,tenantId);
+  }
+
+  /** Página por cursor: leitura parcial, nova autorizacao no backend a cada GET. */
+  public async fetchLedgerAccountKeyset(
+    tenantId:string,accountId:string,cursor:string|null,pageSize=25
+  ):Promise<LedgerKeysetPage> {
+    this.assertLedgerAdmin(tenantId);
+    if(!Number.isSafeInteger(pageSize)||pageSize<1||pageSize>50||
+       (cursor!==null&&!/^[A-Za-z0-9_-]{1,400}$/.test(cursor)))
+      throw Error('Parâmetros do cursor contábil inválidos.');
+    const params=new URLSearchParams({page_size:String(pageSize)});
+    if(cursor!==null)params.set('cursor',cursor);
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/ledger/accounts/'+encodeURIComponent(accountId)+
+      '/entries/keyset?'+params.toString()
+    );
+    return parseLedgerKeysetPage(raw,tenantId,accountId,pageSize);
   }
 
   /** Pagina de uma conta: read-only, nunca significa conciliacao. */

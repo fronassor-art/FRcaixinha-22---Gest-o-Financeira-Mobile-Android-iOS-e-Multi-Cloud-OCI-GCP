@@ -80,6 +80,8 @@ jobs:
         run: npx tsx src/tests/macropacote_320_ledger_empty_ci.test.ts
       - name: M320 — máquina de estados de visibilidade contábil
         run: npx tsx src/tests/macropacote_320_visibility_policy_ci.test.ts
+      - name: M360 — navegação por cursor, parser e isolamento da sessão
+        run: npx tsx src/tests/macropacote_360_keyset_ci.test.ts
       - name: M300 — identidade FR Caixinha e contrato comum
         run: npx tsx src/tests/macropacote_300_product_identity_ci.test.ts
       - name: Macropacote 220 — validar comando somente leitura Termux
