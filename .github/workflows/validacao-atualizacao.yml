@@ -243,6 +243,7 @@ jobs:
           python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
           python -m pytest -q backend/tests/test_member_obligations_oracle_ci.py
+          python -m pytest -q backend/tests/test_m1720_financial_sandbox_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

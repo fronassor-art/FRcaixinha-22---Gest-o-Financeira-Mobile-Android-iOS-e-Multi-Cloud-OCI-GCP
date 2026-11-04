@@ -13,6 +13,7 @@ import asyncpg
 import hashlib
 from pathlib import Path
 from . import ledger_keyset as _ledger_keyset
+from . import financial_sandbox_reconciliation as _financial_lab
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations
 
 app = FastAPI(
@@ -152,6 +153,26 @@ def backend_m360_feature_contract():
         "real_payments_enabled": False,
         "bank_reconciled": False,
         "source_fingerprints_at_import": _M360_SOURCE_AT_IMPORT,
+        "runtime_git_sha_verified": False,
+    }
+
+
+@app.get("/api/health/features/m1720", include_in_schema=False)
+def backend_m1720_feature_contract():
+    """Somente contrato de capacidades locais; nunca indica conciliação bancária."""
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": _financial_lab.LAB_CONTRACT,
+        "sandbox_preview_only": True,
+        "sandbox_merchant_get_connected": False,
+        "loan_allocation_preview": True,
+        "exit_restitution_readiness_only": True,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
         "runtime_git_sha_verified": False,
     }
 
