@@ -80,7 +80,7 @@ async def test_member_gets_only_own_requests():
     assert r.items[0].sandbox_only
     assert not r.items[0].financial_effect_applied
     assert not r.items[0].payment_authorized
-    assert "requested_by_user_id=$3" in db.calls[-1][1]
+    assert "rls_user_membership_ids($3::uuid,$1::uuid)" in db.calls[-1][1]
 
 
 @pytest.mark.asyncio

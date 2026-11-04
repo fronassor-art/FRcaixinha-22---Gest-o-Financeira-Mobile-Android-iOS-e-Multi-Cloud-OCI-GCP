@@ -184,12 +184,22 @@ async def member_lifecycle_closing_gates(
     _auth(tenant_id,session,role="TENANT_ADMIN")
     cycle_id=await _cycle(tenant_id,year,conn)
     try:
+        # M1081: a solicitação permanece imutável em 028; o evento mais
+        # recente de 029 define se a revisão documental ainda está pendente.
         pending=await conn.fetchrow(
-            "SELECT count(*) FILTER (WHERE request_kind='VOLUNTARY_EXIT')::integer "
-            "AS exits, count(*) FILTER "
-            "(WHERE request_kind='DELINQUENCY_REVIEW')::integer AS reviews "
-            "FROM public.member_lifecycle_requests "
-            "WHERE tenant_id=$1 AND cycle_id=$2 AND status='PENDING_REVIEW'",
+            "SELECT count(*) FILTER "
+            "(WHERE r.request_kind='VOLUNTARY_EXIT')::integer AS exits, "
+            "count(*) FILTER "
+            "(WHERE r.request_kind='DELINQUENCY_REVIEW')::integer AS reviews "
+            "FROM public.member_lifecycle_requests r "
+            "LEFT JOIN LATERAL ("
+            "SELECT e.event_kind FROM public.member_lifecycle_review_events e "
+            "WHERE e.tenant_id=r.tenant_id AND e.request_id=r.id "
+            "ORDER BY e.event_seq DESC LIMIT 1"
+            ") last_review ON TRUE "
+            "WHERE r.tenant_id=$1 AND r.cycle_id=$2 AND r.status='PENDING_REVIEW' "
+            "AND (last_review.event_kind IS NULL OR last_review.event_kind NOT IN "
+            "('ADMIN_REVIEW_ACCEPTED_SANDBOX','ADMIN_REVIEW_REJECTED_SANDBOX'))",
             tenant_id,cycle_id,
         )
         unsettled=await conn.fetchval(
@@ -233,7 +243,8 @@ async def my_member_lifecycle_requests(
         "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
         "request_kind,policy_reference,status,requested_at "
         "FROM public.member_lifecycle_requests "
-        "WHERE tenant_id=$1 AND cycle_id=$2 AND requested_by_user_id=$3 "
+        "WHERE tenant_id=$1 AND cycle_id=$2 AND membership_id IN ("
+        "SELECT public.rls_user_membership_ids($3::uuid,$1::uuid)) "
         "ORDER BY requested_at DESC,id DESC LIMIT 101",
         tenant_id,cycle_id,UUID(session.user_id),
     )

@@ -41,6 +41,11 @@ from app.routers.member_lifecycle_sandbox import (
 )
 
 
+from app.routers.member_lifecycle_reviews import (
+    ReviewEventPayload, lifecycle_review_capabilities,
+    list_member_review_events, submit_member_review_event_sandbox,
+)
+
 from app.member_cycle_rules import (
     MonthlyDueProof, CapitalMovement, ExitRequest, review_member_cycle,
 )
@@ -689,6 +694,140 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
         print("M761_LIFECYCLE_SANDBOX_PG=PASS; IDEMPOTENCY=PASS; "
               "ADMIN_REVIEW=PASS; OWN_HISTORY=PASS; TENANTS_ISOLATED=PASS; "
               "PRODUCTION_MONEY=OFF; NO_STATUS_OR_CLOSING_CHANGE=PASS")
+        # M1081: decisões de documentos e contestações em PostgreSQL real
+        # descartável. A base 028 permanece imutável; 029 guarda eventos.
+        await admin.execute(
+            "INSERT INTO public.memberships(id,tenant_id,user_id,role) "
+            "VALUES($1,$2,$3,'TENANT_ADMIN')",
+            uuid.uuid4(),a,ids["shared"],
+        )
+        review_cap=await as_actor("shared","a","TENANT_ADMIN",
+            lambda sess,conn:lifecycle_review_capabilities(a,2027,sess,conn))
+        assert review_cap.schema_ready
+        assert review_cap.can_review_independently
+        member_cap=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:lifecycle_review_capabilities(a,2027,sess,conn))
+        assert member_cap.can_submit_contestation
+        # A própria revisão de inadimplência aberta pelo admin precisa aparecer
+        # para o membro afetado, mesmo sem ter sido aberta por ele.
+        visible=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:my_member_lifecycle_requests(a,2027,sess,conn))
+        assert len(visible.items)==2
+        assert {x.request_kind for x in visible.items}=={
+            "VOLUNTARY_EXIT","DELINQUENCY_REVIEW"}
+        acceptance=ReviewEventPayload(
+            idempotency_key=uuid.uuid4(),
+            event_kind="ADMIN_REVIEW_ACCEPTED_SANDBOX",
+            evidence_reference="CI-TECHNICAL-EXIT-ACCEPTED",
+        )
+        accepted=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(member_exit.id),acceptance,sess,conn))
+        assert accepted.event_kind=="ADMIN_REVIEW_ACCEPTED_SANDBOX"
+        same=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(member_exit.id),acceptance,sess,conn))
+        assert same.event_id==accepted.event_id
+        accepted_history=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:list_member_review_events(
+                a,2027,uuid.UUID(member_exit.id),sess,conn))
+        assert not accepted_history.pending_technical_review
+        assert accepted_history.latest_event_kind=="ADMIN_REVIEW_ACCEPTED_SANDBOX"
+        assert not accepted_history.financial_effect_applied
+        assert not accepted_history.payout_authorized
+        # Administrador que criou a revisão não pode decidir o próprio caso.
+        with pytest.raises(HTTPException) as forbidden:
+            await as_actor("admin_a","a","TENANT_ADMIN",
+                lambda sess,conn:submit_member_review_event_sandbox(
+                    a,2027,uuid.UUID(admin_review.id),
+                    ReviewEventPayload(
+                        idempotency_key=uuid.uuid4(),
+                        event_kind="ADMIN_REVIEW_REJECTED_SANDBOX",
+                        evidence_reference="CI-SELF-APPROVAL-DENIED",
+                    ),sess,conn))
+        assert forbidden.value.status_code==409
+        # Membro tem direito de contestar a revisão iniciada pelo admin.
+        contest=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(admin_review.id),
+                ReviewEventPayload(
+                    idempotency_key=uuid.uuid4(),event_kind="MEMBER_CONTESTED",
+                    evidence_reference="CI-CONTESTATION-2027-FIRST",
+                ),sess,conn))
+        assert contest.event_kind=="MEMBER_CONTESTED"
+        # Revisão por outro administrador do mesmo tenant; o Master nunca
+        # ganha acesso nem pode substituir essa separação de papéis.
+        rejected=await as_actor("shared","a","TENANT_ADMIN",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(admin_review.id),
+                ReviewEventPayload(
+                    idempotency_key=uuid.uuid4(),
+                    event_kind="ADMIN_REVIEW_REJECTED_SANDBOX",
+                    evidence_reference="CI-REVIEW-REJECTED-2027",
+                ),sess,conn))
+        assert rejected.event_kind=="ADMIN_REVIEW_REJECTED_SANDBOX"
+        recontested=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(admin_review.id),
+                ReviewEventPayload(
+                    idempotency_key=uuid.uuid4(),event_kind="MEMBER_CONTESTED",
+                    evidence_reference="CI-CONTESTATION-2027-SECOND",
+                ),sess,conn))
+        assert recontested.event_seq>rejected.event_seq
+        final=await as_actor("shared","a","TENANT_ADMIN",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(admin_review.id),
+                ReviewEventPayload(
+                    idempotency_key=uuid.uuid4(),
+                    event_kind="ADMIN_REVIEW_ACCEPTED_SANDBOX",
+                    evidence_reference="CI-REVIEW-COMPLETED-2027",
+                ),sess,conn))
+        assert final.event_seq>recontested.event_seq
+        case_history=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:list_member_review_events(
+                a,2027,uuid.UUID(admin_review.id),sess,conn))
+        assert len(case_history.items)==4
+        assert not case_history.pending_technical_review
+        assert case_history.latest_event_kind=="ADMIN_REVIEW_ACCEPTED_SANDBOX"
+        assert not case_history.closing_authorized
+        after=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:member_lifecycle_closing_gates(a,2027,sess,conn))
+        assert after.pending_voluntary_exits==0
+        assert after.pending_delinquency_reviews==0
+        assert after.registered_unsettled_contributions==23
+        assert after.unclosed_loans==1
+        assert not after.bank_reconciled
+        assert not after.can_close_cycle
+        assert not after.can_distribute_profit
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.member_lifecycle_review_events "
+            "WHERE tenant_id=$1 AND financial_effect_applied=false "
+            "AND bank_reconciled=false",a)==5
+        async def illegal_review_update(sess,conn):
+            await conn.execute(
+                "UPDATE public.member_lifecycle_review_events "
+                "SET financial_effect_applied=true WHERE tenant_id=$1",a)
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await as_actor("admin_a","a","TENANT_ADMIN",illegal_review_update)
+        with pytest.raises(HTTPException) as denied:
+            await as_actor("admin_b","b","TENANT_ADMIN",
+                lambda sess,conn:list_member_review_events(
+                    a,2027,uuid.UUID(admin_review.id),sess,conn))
+        assert denied.value.status_code==403
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.cycle_closings "
+            "WHERE tenant_id=ANY($1::uuid[])",[a,b])==0
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.memberships "
+            "WHERE tenant_id=$1 AND status<>'ATIVA'",a)==0
+        # Vínculo de revisor extra era apenas cenário temporário.
+        await admin.execute(
+            "DELETE FROM public.memberships WHERE tenant_id=$1 "
+            "AND user_id=$2 AND role='TENANT_ADMIN'",a,ids["shared"])
+        print("M1081_REVIEW_EVENTS_PG=PASS; MEMBER_CONTESTATION=PASS; "
+              "SECOND_ADMIN_INDEPENDENT=PASS; REVIEW_APPEAL=PASS; "
+              "EVENTS=5; PENDING_TECHNICAL_REVIEW=0; "
+              "BANK_RECONCILED=FALSE; REAL_PAYOUT=0")
         print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
               "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
               "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "
@@ -704,6 +843,9 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
             # Todas as entidades têm prefixo/UUID de laboratório e pertencem
             # a tenants criados aqui. Limpeza mesmo quando um assert falha.
             async with admin.transaction():
+                await admin.execute(
+                    "DELETE FROM public.member_lifecycle_review_events "
+                    "WHERE tenant_id=ANY($1::uuid[])",[a,b])
                 await admin.execute(
                     "DELETE FROM public.member_lifecycle_requests "
                     "WHERE tenant_id=ANY($1::uuid[])",[a,b])

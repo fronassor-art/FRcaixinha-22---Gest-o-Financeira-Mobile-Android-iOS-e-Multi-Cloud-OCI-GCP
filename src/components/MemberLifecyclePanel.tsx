@@ -3,6 +3,7 @@ import {AppState} from '../services/store';
 import {authService} from '../services/authService';
 import {financialApi} from '../services/financialApiService';
 import {LifecycleQueue,LifecycleCapabilities,LifecycleClosingGates} from '../services/memberLifecycleBoundary';
+import {MemberReviewTimelinePanel} from './MemberReviewTimelinePanel';
 import {TenantMember} from '../services/tenantReadBoundary';
 
 type Snapshot={key:string,status:'loading'|'ready'|'error',data?:LifecycleQueue};
@@ -18,6 +19,7 @@ export const MemberLifecyclePanel:React.FC<{state:AppState}>=({state})=>{
  const [closing,setClosing]=useState<LifecycleClosingGates|null>(null);
  const [members,setMembers]=useState<TenantMember[]>([]);
  const [selected,setSelected]=useState('');
+ const [selectedReview,setSelectedReview]=useState('');
  const [confirmed,setConfirmed]=useState(false);
  const [submission,setSubmission]=useState<Submission>({status:'idle'});
  const requestKey=useRef<string|null>(null);
@@ -25,7 +27,7 @@ export const MemberLifecyclePanel:React.FC<{state:AppState}>=({state})=>{
  useEffect(()=>{
    let mounted=true;
    const s=authService.captureSession();
-   setCap(null);setMembers([]);setSelected('');setConfirmed(false);
+   setCap(null);setMembers([]);setSelected('');setSelectedReview('');setConfirmed(false);
    setSubmission({status:'idle'});requestKey.current=null;
    if(!tenant||!['TENANT_ADMIN','TENANT_MEMBER'].includes(role))
      return()=>{mounted=false;};
@@ -146,6 +148,18 @@ export const MemberLifecyclePanel:React.FC<{state:AppState}>=({state})=>{
              <div>Vínculo: {item.membership_id}</div>
              <div>Situação: análise pendente</div>
              <div>Protocolo de teste: {item.policy_reference}</div>
+             <button type="button"
+               className="rounded-lg border border-slate-300 px-3 py-1 mt-2"
+               onClick={()=>setSelectedReview(
+                 selectedReview===item.id?'':item.id
+               )}>
+               {selectedReview===item.id?'Ocultar análise':'Ver análise e contestação'}
+             </button>
+             {selectedReview===item.id&&
+               <MemberReviewTimelinePanel
+                 key={item.id} state={state} request={item}
+                 onUpdated={()=>setRefresh(n=>n+1)}/>}
+
            </li>
          )}
        </ul>

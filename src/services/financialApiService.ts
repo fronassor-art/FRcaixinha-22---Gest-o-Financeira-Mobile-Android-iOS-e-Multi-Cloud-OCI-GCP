@@ -36,6 +36,10 @@ import {
   parseLifecycleQueue, parseLifecycleItem, parseLifecycleCapabilities,
   parseLifecycleClosingGates,
 } from './memberLifecycleBoundary';
+import {
+  ReviewCapabilities, ReviewEvent, ReviewTimeline, ReviewKind,
+  parseReviewCapabilities, parseReviewEvent, parseReviewTimeline,
+} from './memberReviewBoundary';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
@@ -456,6 +460,69 @@ class FinancialApiService {
   /** M531: consulta de risco registrada — não confirma Pix, nem bloqueia membro. */
   /** M601: auditoria cruzada exclusiva do admin, sem conciliação bancária. */
   /** M761: somente consulta de fila; não concede direitos ou pagamentos. */
+  /** Capacidades do segundo estágio: contrato de revisão sem dinheiro real. */
+  public async fetchReviewCapabilities(
+    tenantId:string,year:number
+  ):Promise<ReviewCapabilities>{
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(!Number.isSafeInteger(year)||year<2020||year>2100)
+      throw Error('Ciclo inválido');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle/review-capabilities'
+    );
+    return parseReviewCapabilities(raw,tenantId,year,role);
+  }
+
+  /** Timeline segura de documentação; nunca infere fechamento ou rateio. */
+  public async fetchMemberReviewTimeline(
+    tenantId:string,year:number,requestId:string
+  ):Promise<ReviewTimeline>{
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||
+       !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(requestId))
+      throw Error('Solicitação inválida');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle/requests/'+
+      encodeURIComponent(requestId)+'/review-events'
+    );
+    return parseReviewTimeline(raw,tenantId,requestId);
+  }
+
+  /** Escrita exclusiva sandbox por decisão de usuário e token da sessão. */
+  public async submitMemberReviewEventSandbox(
+    tenantId:string,year:number,requestId:string,
+    kind:ReviewKind,idempotencyKey:string,evidenceReference:string
+  ):Promise<ReviewEvent>{
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||
+       !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(requestId)||
+       !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(idempotencyKey)||
+       !/^[A-Za-z0-9._:-]{8,120}$/.test(evidenceReference))
+       throw Error('Evidência ou identificador de idempotência inválido');
+    if((kind==='MEMBER_CONTESTED'&&role!=='TENANT_MEMBER')||
+       (kind!=='MEMBER_CONTESTED'&&role!=='TENANT_ADMIN')||
+       ![
+         'ADMIN_DOCUMENTS_REQUESTED','ADMIN_REVIEW_ACCEPTED_SANDBOX',
+         'ADMIN_REVIEW_REJECTED_SANDBOX','MEMBER_CONTESTED'
+       ].includes(kind))
+       throw Error('Ação de revisão não autorizada para o perfil');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle/requests/'+
+      encodeURIComponent(requestId)+'/review-events',
+      {method:'POST',body:JSON.stringify({
+        event_kind:kind,idempotency_key:idempotencyKey,
+        evidence_reference:evidenceReference,
+      })}
+    );
+    const response=parseReviewEvent(raw,tenantId,requestId);
+    if(response.event_kind!==kind)
+       throw Error('O banco retornou evento diferente do solicitado');
+    return response;
+  }
+
   /** Controles de fechamento: somente administrador, nenhuma liquidação. */
   public async fetchLifecycleClosingGates(
     tenantId:string,year:number
