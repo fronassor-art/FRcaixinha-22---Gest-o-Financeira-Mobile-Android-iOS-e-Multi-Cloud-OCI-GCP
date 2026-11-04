@@ -53,6 +53,34 @@ class LifecycleRequestResponse(BaseModel):
     payment_authorized: bool = False
 
 
+class LifecycleClosingGatesResponse(BaseModel):
+    tenant_id: str
+    cycle_id: str
+    year: int
+    pending_voluntary_exits: int
+    pending_delinquency_reviews: int
+    registered_unsettled_contributions: int
+    unclosed_loans: int
+    status: str = "REVIEW_AND_BANK_EVIDENCE_REQUIRED"
+    bank_reconciled: bool = False
+    can_close_cycle: bool = False
+    can_distribute_profit: bool = False
+    real_payout_enabled: bool = False
+
+
+class LifecycleCapabilitiesResponse(BaseModel):
+    tenant_id: str
+    year: int
+    role: str
+    schema_ready: bool = False
+    sandbox_only: bool = True
+    can_submit_voluntary_exit: bool = False
+    can_submit_delinquency_review: bool = False
+    financial_effects_enabled: bool = False
+    bank_reconciled: bool = False
+    production_payments_enabled: bool = False
+
+
 class LifecycleListResponse(BaseModel):
     tenant_id: str
     year: int
@@ -115,6 +143,81 @@ async def _format(row):
         policy_reference=row["policy_reference"],
         status=row["status"],
         requested_at=row["requested_at"],
+    )
+
+
+@router.get("/capabilities",response_model=LifecycleCapabilitiesResponse)
+async def member_lifecycle_capabilities(
+    tenant_id:UUID,year:int,
+    session:AuthenticatedSession=Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    _auth(tenant_id,session)
+    await _cycle(tenant_id,year,conn)
+    try:
+        installed=await conn.fetchval(
+            "SELECT (to_regclass('public.member_lifecycle_requests') IS NOT NULL "
+            "AND to_regprocedure('public.lifecycle_submit_request_sandbox("
+            "uuid,uuid,uuid,varchar,uuid,varchar)') IS NOT NULL)"
+        )
+    except asyncpg.PostgresError as exc:
+        raise HTTPException(status_code=503,
+            detail="Verificação de capacidade indisponível.") from exc
+    isolated=(os.getenv("ENVIRONMENT","development")!="production" and
+              os.getenv("FRCAIXINHA_LIFECYCLE_SANDBOX")=="1" and
+              installed is True)
+    return LifecycleCapabilitiesResponse(
+        tenant_id=str(tenant_id),year=year,role=session.role,
+        schema_ready=bool(installed),
+        can_submit_voluntary_exit=isolated and session.role=="TENANT_MEMBER",
+        can_submit_delinquency_review=isolated and session.role=="TENANT_ADMIN",
+    )
+
+
+@router.get("/closing-gates",response_model=LifecycleClosingGatesResponse)
+async def member_lifecycle_closing_gates(
+    tenant_id:UUID,year:int,
+    session:AuthenticatedSession=Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Bloqueios operacionais do ciclo sem liquidação ou alteração de membros."""
+    _auth(tenant_id,session,role="TENANT_ADMIN")
+    cycle_id=await _cycle(tenant_id,year,conn)
+    try:
+        pending=await conn.fetchrow(
+            "SELECT count(*) FILTER (WHERE request_kind='VOLUNTARY_EXIT')::integer "
+            "AS exits, count(*) FILTER "
+            "(WHERE request_kind='DELINQUENCY_REVIEW')::integer AS reviews "
+            "FROM public.member_lifecycle_requests "
+            "WHERE tenant_id=$1 AND cycle_id=$2 AND status='PENDING_REVIEW'",
+            tenant_id,cycle_id,
+        )
+        unsettled=await conn.fetchval(
+            "SELECT count(*) FROM public.contributions "
+            "WHERE tenant_id=$1 AND cycle_id=$2 AND payment_status<>'QUITADA'",
+            tenant_id,cycle_id,
+        )
+        loans=await conn.fetchval(
+            "SELECT count(*) FROM public.loans "
+            "WHERE tenant_id=$1 AND cycle_id=$2 "
+            "AND status NOT IN ('QUITADO','CANCELADO','RECUSADO')",
+            tenant_id,cycle_id,
+        )
+    except (asyncpg.UndefinedTableError,asyncpg.InsufficientPrivilegeError,
+            asyncpg.InvalidSchemaNameError) as exc:
+        raise HTTPException(status_code=503,
+            detail="Conferência de encerramento requer schema 028 e RLS ativo.") from exc
+    if (pending is None or unsettled is None or loans is None or
+            any(type(x) is not int or x<0 for x in (
+                pending["exits"],pending["reviews"],unsettled,loans))):
+        raise HTTPException(status_code=503,
+            detail="Dados de conferência do ciclo inconsistentes.")
+    return LifecycleClosingGatesResponse(
+        tenant_id=str(tenant_id),cycle_id=str(cycle_id),year=year,
+        pending_voluntary_exits=pending["exits"],
+        pending_delinquency_reviews=pending["reviews"],
+        registered_unsettled_contributions=unsettled,
+        unclosed_loans=loans,
     )
 
 

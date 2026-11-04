@@ -11,6 +11,8 @@ from app.routers.member_lifecycle_sandbox import (
  administrative_member_lifecycle_queue,
  request_voluntary_exit_sandbox,
  request_delinquency_review_sandbox,
+ member_lifecycle_capabilities,
+ member_lifecycle_closing_gates,
 )
 
 T=UUID(int=1001)
@@ -242,10 +244,164 @@ async def test_sql_conflicting_policy_is_409_not_production_approval(monkeypatch
     assert exc.value.status_code==409
 
 
+
+
+@pytest.mark.asyncio
+async def test_capability_requires_auth_and_detects_unmigrated_schema(monkeypatch):
+    class CapDB(FakeDB):
+        def __init__(self,ready):
+            super().__init__()
+            self.ready=ready
+        async def fetchval(self,sql,*args):
+            assert "to_regclass" in sql and "to_regprocedure" in sql
+            return self.ready
+    monkeypatch.setenv("ENVIRONMENT","homologation")
+    monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX","1")
+    for role in ("TENANT_MEMBER","TENANT_ADMIN"):
+        db=CapDB(False)
+        cap=await member_lifecycle_capabilities(T,2027,session(role),db)
+        assert not cap.schema_ready
+        assert not cap.can_submit_voluntary_exit
+        assert not cap.can_submit_delinquency_review
+        assert not cap.production_payments_enabled
+        assert not cap.financial_effects_enabled
+    with pytest.raises(HTTPException) as exc:
+        await member_lifecycle_capabilities(T,2027,session("MASTER",None),CapDB(True))
+    assert exc.value.status_code==403
+
+
+@pytest.mark.asyncio
+async def test_capability_uses_role_and_environment_never_authorizes_money(monkeypatch):
+    class CapDB(FakeDB):
+        async def fetchval(self,sql,*args):
+            return True
+    for env,flag,role in (
+        ("development","1","TENANT_MEMBER"),
+        ("homologation","1","TENANT_ADMIN"),
+        ("staging","1","TENANT_MEMBER"),
+        ("production","1","TENANT_MEMBER"),
+        ("development","0","TENANT_ADMIN"),
+        ("development","","TENANT_MEMBER"),
+    ):
+        monkeypatch.setenv("ENVIRONMENT",env)
+        monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX",flag)
+        result=await member_lifecycle_capabilities(
+            T,2027,session(role),CapDB()
+        )
+        enabled=env!="production" and flag=="1"
+        assert result.schema_ready
+        assert result.can_submit_voluntary_exit==(enabled and role=="TENANT_MEMBER")
+        assert result.can_submit_delinquency_review==(enabled and role=="TENANT_ADMIN")
+        assert not result.production_payments_enabled
+        assert not result.financial_effects_enabled
+        assert not result.bank_reconciled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("serial",range(120))
+async def test_120_capability_snapshots_are_pure_simulation(monkeypatch,serial):
+    class CapDB(FakeDB):
+        async def fetchval(self,sql,*args):
+            return serial%2==0
+    monkeypatch.setenv("ENVIRONMENT","homologation")
+    monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX","1")
+    role="TENANT_MEMBER" if serial%3==0 else "TENANT_ADMIN"
+    response=await member_lifecycle_capabilities(
+        T,2027,session(role),CapDB()
+    )
+    assert response.schema_ready==(serial%2==0)
+    assert response.can_submit_voluntary_exit==(
+        serial%2==0 and role=="TENANT_MEMBER"
+    )
+    assert response.can_submit_delinquency_review==(
+        serial%2==0 and role=="TENANT_ADMIN"
+    )
+    assert not response.financial_effects_enabled
+    assert not response.bank_reconciled
+
+
+
+
+
+@pytest.mark.asyncio
+async def test_closing_gates_show_real_registered_pending_not_paid_money():
+    class GateDB(FakeDB):
+        async def fetchrow(self,sql,*args):
+            if "count(*) FILTER" in sql:
+                return {"exits":1,"reviews":2}
+            return await super().fetchrow(sql,*args)
+        async def fetchval(self,sql,*args):
+            if "FROM public.contributions" in sql:
+                return 23
+            if "FROM public.loans" in sql:
+                return 1
+            raise AssertionError(sql)
+    r=await member_lifecycle_closing_gates(
+        T,2027,session("TENANT_ADMIN"),GateDB()
+    )
+    assert r.pending_voluntary_exits==1
+    assert r.pending_delinquency_reviews==2
+    assert r.registered_unsettled_contributions==23
+    assert r.unclosed_loans==1
+    assert r.status=="REVIEW_AND_BANK_EVIDENCE_REQUIRED"
+    assert not r.can_close_cycle and not r.can_distribute_profit
+    assert not r.bank_reconciled and not r.real_payout_enabled
+
+
+@pytest.mark.asyncio
+async def test_closing_gate_requires_admin_without_running_query():
+    for actor in (
+        session(),session("MASTER",None),
+        session("TENANT_ADMIN",B)
+    ):
+        db=FakeDB()
+        with pytest.raises(HTTPException) as exc:
+            await member_lifecycle_closing_gates(T,2027,actor,db)
+        assert exc.value.status_code==403
+        assert db.calls==[]
+
+
+@pytest.mark.asyncio
+async def test_unmigrated_gate_fails_503_without_false_closure():
+    import asyncpg
+    class EmptyDB(FakeDB):
+        async def fetchrow(self,sql,*args):
+            if "count(*) FILTER" in sql:
+                raise asyncpg.UndefinedTableError("relation missing")
+            return await super().fetchrow(sql,*args)
+    with pytest.raises(HTTPException) as exc:
+        await member_lifecycle_closing_gates(
+            T,2027,session("TENANT_ADMIN"),EmptyDB()
+        )
+    assert exc.value.status_code==503
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n",range(125))
+async def test_125_closing_gate_pending_variations_cannot_enable_money(n):
+    class GateDB(FakeDB):
+        async def fetchrow(self,sql,*args):
+            if "count(*) FILTER" in sql:
+                return {"exits":n%5,"reviews":n%7}
+            return await super().fetchrow(sql,*args)
+        async def fetchval(self,sql,*args):
+            return n
+    r=await member_lifecycle_closing_gates(
+        T,2027,session("TENANT_ADMIN"),GateDB()
+    )
+    assert r.pending_voluntary_exits==n%5
+    assert r.pending_delinquency_reviews==n%7
+    assert r.registered_unsettled_contributions==n
+    assert r.unclosed_loans==n
+    assert not r.can_close_cycle and not r.can_distribute_profit
+    assert not r.real_payout_enabled
+
+
+
 def test_route_methods_cannot_update_member_status_or_cash():
     from app.main import app
     routes=[r for r in app.routes if "/member-lifecycle/" in getattr(r,"path","")]
-    assert len(routes)==4
+    assert len(routes)==6
     methods=set().union(*(r.methods for r in routes))
     assert methods=={"GET","POST"}
     assert not any("PATCH" in r.methods or "DELETE" in r.methods for r in routes)

@@ -31,7 +31,11 @@ import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
 import {FinancialIntegrityPreview,parseFinancialIntegrityPreview} from './financialIntegrityBoundary';
-import {LifecycleQueue,parseLifecycleQueue} from './memberLifecycleBoundary';
+import {
+  LifecycleQueue, LifecycleItem, LifecycleCapabilities, LifecycleClosingGates,
+  parseLifecycleQueue, parseLifecycleItem, parseLifecycleCapabilities,
+  parseLifecycleClosingGates,
+} from './memberLifecycleBoundary';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
@@ -452,6 +456,74 @@ class FinancialApiService {
   /** M531: consulta de risco registrada — não confirma Pix, nem bloqueia membro. */
   /** M601: auditoria cruzada exclusiva do admin, sem conciliação bancária. */
   /** M761: somente consulta de fila; não concede direitos ou pagamentos. */
+  /** Controles de fechamento: somente administrador, nenhuma liquidação. */
+  public async fetchLifecycleClosingGates(
+    tenantId:string,year:number
+  ):Promise<LifecycleClosingGates>{
+    const role=assertTenantReadScope(
+      this.currentTenantReader(),tenantId,'DASHBOARD'
+    );
+    if(role!=='TENANT_ADMIN'||!Number.isSafeInteger(year)||
+       year<2020||year>2100)
+      throw Error('Auditoria de encerramento exclusiva do administrador');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle/closing-gates'
+    );
+    return parseLifecycleClosingGates(raw,tenantId,year);
+  }
+
+  /** Servidor anuncia a capacidade real, nunca presumir escrita da UI. */
+  public async fetchMemberLifecycleCapabilities(
+    tenantId:string,year:number
+  ):Promise<LifecycleCapabilities>{
+    const role=assertTenantReadScope(
+      this.currentTenantReader(),tenantId,'DASHBOARD'
+    );
+    if(!Number.isSafeInteger(year)||year<2020||year>2100)
+      throw Error('Exercício inválido');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle/capabilities'
+    );
+    return parseLifecycleCapabilities(raw,tenantId,year,role);
+  }
+
+  /** Solicitações de TESTE: não executam Pix, bloqueio ou encerramento. */
+  public async submitMemberLifecycleSandbox(
+    tenantId:string,year:number,
+    kind:'VOLUNTARY_EXIT'|'DELINQUENCY_REVIEW',
+    key:string,memberId?:string
+  ):Promise<LifecycleItem>{
+    const role=assertTenantReadScope(
+      this.currentTenantReader(),tenantId,'DASHBOARD'
+    );
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||
+       !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(key))
+       throw Error('Idempotência/exercício de homologação inválido');
+    if((kind==='VOLUNTARY_EXIT'&&
+         (role!=='TENANT_MEMBER'||memberId!==undefined))||
+       (kind==='DELINQUENCY_REVIEW'&&
+         (role!=='TENANT_ADMIN'||!memberId||
+          !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(memberId))))
+       throw Error('Pedido não autorizado para o perfil');
+    const endpoint=kind==='VOLUNTARY_EXIT'
+       ?'/me/voluntary-exit'
+       :'/members/'+encodeURIComponent(memberId as string)+'/delinquency-review';
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle'+endpoint,
+      {method:'POST',body:JSON.stringify({
+        idempotency_key:key,policy_reference:'SANDBOX-MASTER-2027-NO-EFFECTS'
+      })}
+    );
+    const item=parseLifecycleItem(raw,tenantId);
+    if(item.request_kind!==kind||
+       (memberId!==undefined&&item.membership_id!==memberId))
+       throw Error('Pedido retornado com identidade ou tipo divergente');
+    return item;
+  }
+
   public async fetchMemberLifecycleQueue(
     tenantId:string,year:number
   ):Promise<LifecycleQueue>{

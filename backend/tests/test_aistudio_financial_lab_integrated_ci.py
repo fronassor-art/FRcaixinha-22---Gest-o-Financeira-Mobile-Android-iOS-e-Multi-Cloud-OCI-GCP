@@ -36,6 +36,8 @@ from app.routers.member_lifecycle_sandbox import (
     LifecycleSandboxRequest,
     request_voluntary_exit_sandbox,request_delinquency_review_sandbox,
     my_member_lifecycle_requests,administrative_member_lifecycle_queue,
+    member_lifecycle_capabilities,
+    member_lifecycle_closing_gates,
 )
 
 
@@ -553,6 +555,25 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
         # M761: fluxo de pedido e fila, com RLS e PostgreSQL real descartável.
         monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX","1")
         monkeypatch.setenv("ENVIRONMENT","development")
+        member_cap=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn: member_lifecycle_capabilities(a,2027,sess,conn))
+        admin_cap=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn: member_lifecycle_capabilities(a,2027,sess,conn))
+        assert member_cap.schema_ready and admin_cap.schema_ready
+        assert member_cap.can_submit_voluntary_exit
+        assert not member_cap.can_submit_delinquency_review
+        assert admin_cap.can_submit_delinquency_review
+        assert not admin_cap.can_submit_voluntary_exit
+        assert not member_cap.financial_effects_enabled
+        assert not admin_cap.production_payments_enabled
+        monkeypatch.setenv("ENVIRONMENT","production")
+        blocked_cap=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn: member_lifecycle_capabilities(a,2027,sess,conn))
+        assert blocked_cap.schema_ready
+        assert not blocked_cap.can_submit_delinquency_review
+        monkeypatch.setenv("ENVIRONMENT","development")
+        print("M921_SANDBOX_CAPABILITIES_PG=PASS; MEMBER_AND_ADMIN=SCOPED; "
+              "PRODUCTION=DENIED; NO_BANK_OR_MONEY=PASS")
         request_key=uuid.uuid4()
         member_exit=await as_actor("member_a2","a","TENANT_MEMBER",
             lambda s,c:request_voluntary_exit_sandbox(
@@ -635,6 +656,36 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
             "SELECT count(*) FROM public.cycle_closings "
             "WHERE tenant_id=ANY($1::uuid[])",[a,b],
         )==0
+        gates_a=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:member_lifecycle_closing_gates(a,2027,sess,conn))
+        assert (gates_a.pending_voluntary_exits,
+                gates_a.pending_delinquency_reviews,
+                gates_a.registered_unsettled_contributions,
+                gates_a.unclosed_loans)==(1,1,23,1)
+        assert not gates_a.bank_reconciled
+        assert not gates_a.can_close_cycle
+        assert not gates_a.can_distribute_profit
+        gates_b=await as_actor("admin_b","b","TENANT_ADMIN",
+            lambda sess,conn:member_lifecycle_closing_gates(b,2027,sess,conn))
+        assert (gates_b.pending_voluntary_exits,
+                gates_b.pending_delinquency_reviews,
+                gates_b.registered_unsettled_contributions,
+                gates_b.unclosed_loans)==(0,0,48,1)
+        assert not gates_b.real_payout_enabled
+        for name,side,role,target in (
+            ("member_a2","a","TENANT_MEMBER",a),
+            ("admin_a","a","TENANT_ADMIN",b),
+            ("master",None,"MASTER",a),
+        ):
+            with pytest.raises(HTTPException) as denied:
+                await as_actor(name,side,role,
+                    lambda sess,conn:member_lifecycle_closing_gates(
+                        target,2027,sess,conn))
+            assert denied.value.status_code==403
+        print("M921_CLOSING_GATES_REAL_PG=PASS; TENANTS=2; "
+              "A_PENDING_EXIT=1; A_PENDING_REVIEW=1; "
+              "A_REGISTERED_UNSETTLED=23; B_REGISTERED_UNSETTLED=48; "
+              "EXTERNAL_BANK_PROOF=FALSE; REAL_DISTRIBUTION=OFF")
         print("M761_LIFECYCLE_SANDBOX_PG=PASS; IDEMPOTENCY=PASS; "
               "ADMIN_REVIEW=PASS; OWN_HISTORY=PASS; TENANTS_ISOLATED=PASS; "
               "PRODUCTION_MONEY=OFF; NO_STATUS_OR_CLOSING_CHANGE=PASS")

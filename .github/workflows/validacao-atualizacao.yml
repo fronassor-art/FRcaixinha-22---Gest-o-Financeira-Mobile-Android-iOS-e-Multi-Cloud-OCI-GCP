@@ -72,6 +72,10 @@ jobs:
         run: npx tsx src/tests/financial_integrity_m760_ci.test.ts
       - name: M761 — Fila de solicitações e isolamento do painel
         run: npx tsx src/tests/member_lifecycle_sandbox_ci.test.ts
+      - name: M921 — Capacidade sandbox informada pelo servidor e solicitação com confirmação
+        run: npx tsx src/tests/member_lifecycle_capabilities_ci.test.ts
+      - name: M921 — Guardas de fechamento contratual com pendências reais
+        run: npx tsx src/tests/lifecycle_closing_gates_ci.test.ts
       - name: Validar previa anual operacional do Admin sem liquidação
         run: npx tsx src/tests/admin_annual_preview_ci.test.ts
       - name: Macropacote 160 — 20 validacoes de previa registrada
