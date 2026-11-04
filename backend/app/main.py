@@ -321,6 +321,26 @@ def backend_m2500_ci_only_persistence_contract():
     }
 
 
+@app.get("/api/health/features/m2600", include_in_schema=False)
+def backend_m2600_readonly_gateway_contract():
+    """Somente informativo; não consulta Mercado Pago/OCI ou PostgreSQL."""
+    from .mp_readonly_gateway import CONTRACT
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": CONTRACT,
+        "gateway_unwired": True,
+        "oci_staging_deployed": False,
+        "provider_connected": False,
+        "oauth_exchange_active": False,
+        "webhook_live_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
