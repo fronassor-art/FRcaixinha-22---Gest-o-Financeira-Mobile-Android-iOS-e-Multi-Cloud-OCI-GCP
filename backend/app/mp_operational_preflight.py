@@ -25,12 +25,13 @@ _REQUIRED = frozenset({
     "TRANSACTION_CURRENCY", "SETTLEMENT_CURRENCY", "SETTLEMENT_DATE",
 })
 _NUMERIC = re.compile(r"[0-9]{1,40}\Z")
+_SOURCE_ID = re.compile(r"[A-Za-z0-9_-]{1,100}\Z")
 _REFERENCE = re.compile(r"[A-Za-z0-9._:/-]{1,120}\Z")
 _MONEY = re.compile(r"-?[0-9]{1,13}(?:\.[0-9]{1,2})?\Z")
 _WEBHOOK_ID = re.compile(r"[A-Za-z0-9_-]{1,100}\Z")
 _REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{1,120}\Z")
 _HEX = re.compile(r"[0-9a-fA-F]{64}\Z")
-_TS = re.compile(r"[0-9]{13}\Z")
+_TS = re.compile(r"(?:[0-9]{10}|[0-9]{13})\Z")
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,7 @@ def preview_manual_settlement_csv(data: bytes, *, expected_seller_id: str) -> Of
             payment_id = row["SOURCE_ID"]
             seller_id = row["USER_ID"]
             reference = row["EXTERNAL_REFERENCE"]
-            if (not _NUMERIC.fullmatch(payment_id)
+            if (not _SOURCE_ID.fullmatch(payment_id)
                     or not _NUMERIC.fullmatch(seller_id)
                     or seller_id != expected_seller_id):
                 raise ValueError("Identidade de pagamento ou recebedor divergente")
@@ -190,7 +191,8 @@ def verify_webhook_hmac_offline(
     ts, digest = parts.get("ts", ""), parts.get("v1", "")
     if not _TS.fullmatch(ts) or not _HEX.fullmatch(digest):
         return False
-    if abs(now_ms - int(ts)) > max_age_ms:
+    event_ms = int(ts) * 1000 if len(ts) == 10 else int(ts)
+    if abs(now_ms - event_ms) > max_age_ms:
         return False
     manifest = f"id:{data_id};request-id:{request_id};ts:{ts};".encode("utf-8")
     expected = hmac.new(secret, manifest, hashlib.sha256).hexdigest()

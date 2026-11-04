@@ -92,7 +92,7 @@ def test_non_settlement_and_missing_reference_require_review():
 
 @pytest.mark.parametrize("r", [
     ROW.replace("2002;", "3003;", 1),
-    ROW.replace("900001;", "non-numeric;", 1),
+    ROW.replace("900001;", "invalid?source;", 1),
     ROW.replace("tenant:contribution-001", "=SUM(A1:A2)"),
     ROW.replace("BRL;BRL", "USD;BRL"),
     ROW.replace("BRL;BRL", "BRL;USD"),
@@ -103,6 +103,13 @@ def test_non_settlement_and_missing_reference_require_review():
 def test_reject_out_of_scope_or_malformed_rows(r):
     with pytest.raises(ValueError):
         preview_manual_settlement_csv(csv_bytes(r), expected_seller_id=SELLER)
+
+
+def test_alphanumeric_source_id_accepted_only_as_unverified():
+    row = ROW.replace("900001;", "pay_ABC-2027;", 1)
+    result = preview_manual_settlement_csv(csv_bytes(row), expected_seller_id=SELLER)
+    assert result.rows[0].payment_id == "pay_ABC-2027"
+    assert result.bank_reconciled is False
 
 
 def test_duplicate_source_id_and_header_rejected():
@@ -163,6 +170,11 @@ def test_hmac_valid_signature_does_not_enable_payment():
 ])
 def test_hmac_rejects_tampering_replays_and_wrong_context(overrides):
     assert verify(**overrides) is False
+
+
+def test_hmac_ten_digit_seconds_variant_not_misinterpreted():
+    assert verify(x_signature=sign(ts=NOW//1000)) is True
+    assert verify(x_signature=sign(ts=NOW//1000-400)) is False
 
 
 def test_hmac_strict_timestamp_and_clock_boundaries():
