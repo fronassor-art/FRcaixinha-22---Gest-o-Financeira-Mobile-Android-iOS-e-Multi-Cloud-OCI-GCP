@@ -45,7 +45,7 @@ def test_runtime_route_has_no_cache_and_no_auth_or_database_write():
 def test_local_script_never_includes_restart_or_database_mutation():
     script = (ROOT / "backend/scripts/aistudio_280_runtime_readonly.sh").read_text()
     assert "AI_STUDIO_M280_RUNTIME_V1" in script
-    assert "frcaixinha_aistudio_dev" in script
+    assert "frcaixinha_aistudio_pg18" in script
     assert "5433" in script
     assert "8000" in script
     assert "git rev-parse HEAD" in script
