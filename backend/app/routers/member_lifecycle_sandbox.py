@@ -45,6 +45,8 @@ class LifecycleRequestResponse(BaseModel):
     policy_reference: str
     status: str
     requested_at: datetime
+    latest_review_event: str | None = None
+    technical_review_pending: bool = True
     sandbox_only: bool = True
     bank_reconciled: bool = False
     financial_effect_applied: bool = False
@@ -143,6 +145,11 @@ async def _format(row):
         policy_reference=row["policy_reference"],
         status=row["status"],
         requested_at=row["requested_at"],
+        latest_review_event=row.get("latest_review_event"),
+        technical_review_pending=row.get("latest_review_event") not in (
+            "ADMIN_REVIEW_ACCEPTED_SANDBOX",
+            "ADMIN_REVIEW_REJECTED_SANDBOX",
+        ),
     )
 
 
@@ -240,12 +247,18 @@ async def my_member_lifecycle_requests(
     _auth(tenant_id,session,role="TENANT_MEMBER")
     cycle_id=await _cycle(tenant_id,year,conn)
     rows=await _fetch_request_rows(conn,
-        "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
-        "request_kind,policy_reference,status,requested_at "
-        "FROM public.member_lifecycle_requests "
-        "WHERE tenant_id=$1 AND cycle_id=$2 AND membership_id IN ("
+        "SELECT r.id,r.tenant_id,r.cycle_id,r.membership_id,r.requested_by_user_id,"
+        "r.request_kind,r.policy_reference,r.status,r.requested_at,"
+        "latest.event_kind AS latest_review_event "
+        "FROM public.member_lifecycle_requests r "
+        "LEFT JOIN LATERAL ("
+        "SELECT e.event_kind FROM public.member_lifecycle_review_events e "
+        "WHERE e.tenant_id=r.tenant_id AND e.request_id=r.id "
+        "ORDER BY e.event_seq DESC LIMIT 1"
+        ") latest ON TRUE "
+        "WHERE r.tenant_id=$1 AND r.cycle_id=$2 AND r.membership_id IN ("
         "SELECT public.rls_user_membership_ids($3::uuid,$1::uuid)) "
-        "ORDER BY requested_at DESC,id DESC LIMIT 101",
+        "ORDER BY r.requested_at DESC,r.id DESC LIMIT 101",
         tenant_id,cycle_id,UUID(session.user_id),
     )
     if len(rows)>LIMIT:
@@ -265,11 +278,17 @@ async def administrative_member_lifecycle_queue(
     _auth(tenant_id,session,role="TENANT_ADMIN")
     cycle_id=await _cycle(tenant_id,year,conn)
     rows=await _fetch_request_rows(conn,
-        "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
-        "request_kind,policy_reference,status,requested_at "
-        "FROM public.member_lifecycle_requests "
-        "WHERE tenant_id=$1 AND cycle_id=$2 "
-        "ORDER BY requested_at DESC,id DESC LIMIT 101",
+        "SELECT r.id,r.tenant_id,r.cycle_id,r.membership_id,r.requested_by_user_id,"
+        "r.request_kind,r.policy_reference,r.status,r.requested_at,"
+        "latest.event_kind AS latest_review_event "
+        "FROM public.member_lifecycle_requests r "
+        "LEFT JOIN LATERAL ("
+        "SELECT e.event_kind FROM public.member_lifecycle_review_events e "
+        "WHERE e.tenant_id=r.tenant_id AND e.request_id=r.id "
+        "ORDER BY e.event_seq DESC LIMIT 1"
+        ") latest ON TRUE "
+        "WHERE r.tenant_id=$1 AND r.cycle_id=$2 "
+        "ORDER BY r.requested_at DESC,r.id DESC LIMIT 101",
         tenant_id,cycle_id,
     )
     if len(rows)>LIMIT:
@@ -315,10 +334,16 @@ async def _submit(tenant_id:UUID,year:int,member_id:UUID,kind:str,
         raise HTTPException(status_code=503,detail="Registro não confirmado.")
     try:
         row=await conn.fetchrow(
-            "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
-            "request_kind,policy_reference,status,requested_at "
-            "FROM public.member_lifecycle_requests "
-            "WHERE tenant_id=$1 AND cycle_id=$2 AND id=$3",
+            "SELECT r.id,r.tenant_id,r.cycle_id,r.membership_id,r.requested_by_user_id,"
+            "r.request_kind,r.policy_reference,r.status,r.requested_at,"
+            "latest.event_kind AS latest_review_event "
+            "FROM public.member_lifecycle_requests r "
+            "LEFT JOIN LATERAL ("
+            "SELECT e.event_kind FROM public.member_lifecycle_review_events e "
+            "WHERE e.tenant_id=r.tenant_id AND e.request_id=r.id "
+            "ORDER BY e.event_seq DESC LIMIT 1"
+            ") latest ON TRUE "
+            "WHERE r.tenant_id=$1 AND r.cycle_id=$2 AND r.id=$3",
             tenant_id,cycle_id,UUID(str(identifier)),
         )
     except (asyncpg.UndefinedTableError,asyncpg.InsufficientPrivilegeError) as exc:

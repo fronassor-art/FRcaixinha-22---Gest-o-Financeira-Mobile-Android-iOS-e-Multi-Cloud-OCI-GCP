@@ -65,10 +65,15 @@ const item={
  id:I,tenant_id:T,cycle_id:C,membership_id:M,requested_by_user_id:U,
  request_kind:'VOLUNTARY_EXIT',policy_reference:'SANDBOX-MASTER-2027-NO-EFFECTS',
  status:'PENDING_REVIEW',requested_at:'2027-05-12T12:00:00+00:00',
+ latest_review_event:null,technical_review_pending:true,
  sandbox_only:true,bank_reconciled:false,financial_effect_applied:false,
  member_status_changed:false,profit_rights_modified:false,payment_authorized:false,
 };
 assert.equal(parseLifecycleItem(item,T).status,'PENDING_REVIEW');
+assert.equal(parseLifecycleItem({
+ ...item,latest_review_event:'ADMIN_REVIEW_REJECTED_SANDBOX',
+ technical_review_pending:false
+},T).technical_review_pending,false);
 
 const api=readFileSync('src/services/financialApiService.ts','utf8');
 const panel=readFileSync('src/components/MemberLifecyclePanel.tsx','utf8');

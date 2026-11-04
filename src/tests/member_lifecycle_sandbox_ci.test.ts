@@ -12,6 +12,7 @@ const item={
  id:Q,tenant_id:T,cycle_id:C,membership_id:M,requested_by_user_id:U,
  request_kind:'VOLUNTARY_EXIT',policy_reference:'CI-POLICY-2027-ACCEPTED',
  status:'PENDING_REVIEW',requested_at:'2027-05-12T12:00:00+00:00',
+ latest_review_event:null,technical_review_pending:true,
  sandbox_only:true,bank_reconciled:false,financial_effect_applied:false,
  member_status_changed:false,profit_rights_modified:false,payment_authorized:false,
 };
@@ -44,11 +45,23 @@ const bad=[
  {...item,profit_rights_modified:true},
  {...item,payment_authorized:true},
  {...item,requested_at:'invalid-date'},
+ {...item,latest_review_event:'CHARGE_PERSON'},
+ {...item,technical_review_pending:false},
+ {...item,latest_review_event:'ADMIN_REVIEW_ACCEPTED_SANDBOX',
+          technical_review_pending:true},
  {...item,extra:'extra'},
 ];
 for(const candidate of bad){
  assert.throws(()=>parseLifecycleItem(candidate,T));
 }
+assert.equal(parseLifecycleItem({
+ ...item,latest_review_event:'ADMIN_REVIEW_ACCEPTED_SANDBOX',
+ technical_review_pending:false
+},T).technical_review_pending,false);
+assert.equal(parseLifecycleItem({
+ ...item,latest_review_event:'MEMBER_CONTESTED',
+ technical_review_pending:true
+},T).technical_review_pending,true);
 const badQueue=[
  {...queue,tenant_id:B},
  {...queue,year:2028},

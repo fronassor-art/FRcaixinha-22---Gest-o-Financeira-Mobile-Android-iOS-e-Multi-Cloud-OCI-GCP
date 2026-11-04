@@ -146,7 +146,14 @@ export const MemberLifecyclePanel:React.FC<{state:AppState}>=({state})=>{
                ?'Saída voluntária':'Revisão de inadimplência'}</strong>
              <div>Identificador: {item.id}</div>
              <div>Vínculo: {item.membership_id}</div>
-             <div>Situação: análise pendente</div>
+             <div>Situação documental: {item.technical_review_pending
+               ?'revisão pendente':'revisão técnica concluída'}</div>
+             {item.latest_review_event&&
+               <div>Último evento: {item.latest_review_event}</div>}
+             <div className="text-xs text-slate-600">
+               O pedido original continua preservado. A situação documental
+               não determina bloqueio, restituição ou direito ao rateio.
+             </div>
              <div>Protocolo de teste: {item.policy_reference}</div>
              <button type="button"
                className="rounded-lg border border-slate-300 px-3 py-1 mt-2"

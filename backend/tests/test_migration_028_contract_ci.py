@@ -76,7 +76,15 @@ def test_local_termux_scripts_still_do_not_apply_028_without_authorization():
 def test_ci_explicitly_applies_only_to_disposable_postgresql_suites():
     w=(ROOT/".github/workflows/validacao-atualizacao.yml").read_text(encoding="utf-8")
     assert "028_member_lifecycle_sandbox_requests.sql" in w
-    assert "for i in $(seq 1 28)" in w
+    # A migração 028 deve continuar na sequência, sem exigir que seja a última.
+    # Fixar 028 impedia testar 029/030 e quebrava a CI sem falha de segurança.
+    matching=[line for line in w.splitlines() if "for i in $(seq 1 " in line]
+    assert len(matching)==1
+    last=int(matching[0].split("for i in $(seq 1 ",1)[1].split(")",1)[0])
+    assert 28<=last<=100
+    migrations=ROOT/"backend/migrations"
+    for number in range(1,last+1):
+        assert len(list(migrations.glob(f"{number:03d}_*.sql")))==1
     assert "PGDATABASE: frcaixinha_ci" in w
     assert "PostgreSQL 18 preflight" in w
     assert "PostgreSQL descartável" in w

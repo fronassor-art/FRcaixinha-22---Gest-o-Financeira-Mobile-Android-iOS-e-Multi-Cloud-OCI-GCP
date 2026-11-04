@@ -5,6 +5,7 @@ Só roda no GitHub Actions frcaixinha_ci, PostgreSQL 5432, usuários sintéticos
 Os lançamentos 'quitados' são CENÁRIOS HIPOTÉTICOS, nunca confirmação Pix.
 """
 import os
+import asyncio
 import uuid
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
@@ -823,6 +824,136 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
         assert await admin.fetchval(
             "SELECT count(*) FROM public.memberships "
             "WHERE tenant_id=$1 AND status<>'ATIVA'",a)==0
+        # M1241 — após conclusão documental, nova rodada preserva
+        # IDs, solicitações anteriores, seus 5 eventos e seus direitos.
+        historical=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=request_key,
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),sess,conn))
+        assert historical.id==member_exit.id
+        with pytest.raises(HTTPException) as err:
+            await as_actor("member_a2","a","TENANT_MEMBER",
+                lambda sess,conn:request_voluntary_exit_sandbox(
+                    a,2027,LifecycleSandboxRequest(
+                        idempotency_key=request_key,
+                        policy_reference="CI-OTHER-POLICY-2027",
+                    ),sess,conn))
+        assert err.value.status_code==409
+        second_key=uuid.uuid4()
+        second_exit=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=second_key,
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),sess,conn))
+        assert second_exit.id!=member_exit.id
+        second_retry=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=second_key,
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),sess,conn))
+        assert second_retry.id==second_exit.id
+        different_pending_key=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=uuid.uuid4(),
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),sess,conn))
+        assert different_pending_key.id==second_exit.id
+        second_review=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:request_delinquency_review_sandbox(
+                a,2027,memberships["member_a2"],
+                LifecycleSandboxRequest(
+                    idempotency_key=uuid.uuid4(),
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),sess,conn))
+        assert second_review.id!=admin_review.id
+        reopened_gates=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:member_lifecycle_closing_gates(a,2027,sess,conn))
+        assert reopened_gates.pending_voluntary_exits==1
+        assert reopened_gates.pending_delinquency_reviews==1
+        assert reopened_gates.registered_unsettled_contributions==23
+        assert reopened_gates.unclosed_loans==1
+        assert not reopened_gates.can_close_cycle
+
+        # Aceite técnico da segunda rodada, seguido de 16 solicitações
+        # concorrentes para a terceira: uma nova linha, sem duplicidade.
+        second_accepted=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:submit_member_review_event_sandbox(
+                a,2027,uuid.UUID(second_exit.id),
+                ReviewEventPayload(
+                    idempotency_key=uuid.uuid4(),
+                    event_kind="ADMIN_REVIEW_ACCEPTED_SANDBOX",
+                    evidence_reference="CI-SECOND-EXIT-2027-CLOSED",
+                ),sess,conn))
+        assert second_accepted.event_kind=="ADMIN_REVIEW_ACCEPTED_SANDBOX"
+
+        async def concurrent_open_case(n):
+            connection=await asyncpg.connect(app_dsn)
+            try:
+                async with connection.transaction():
+                    for guc,value in (
+                        ("app.current_user_id",str(ids["member_a2"])),
+                        ("app.current_role","TENANT_MEMBER"),
+                        ("app.current_tenant_id",str(a)),
+                    ):
+                        await connection.execute(
+                            "SELECT set_config($1,$2,true)",guc,value)
+                    return await connection.fetchval(
+                        "SELECT public.lifecycle_submit_request_sandbox("
+                        "$1::uuid,$2::uuid,$3::uuid,$4::varchar,"
+                        "$5::uuid,$6::varchar)",
+                        a,ids["cycle_a"],memberships["member_a2"],
+                        "VOLUNTARY_EXIT",uuid.uuid4(),
+                        "CI-POLICY-2027-ACCEPTED",
+                    )
+            finally:
+                await connection.close()
+
+        concurrent_ids=await asyncio.gather(
+            *(concurrent_open_case(n) for n in range(16))
+        )
+        assert len(set(concurrent_ids))==1
+        assert str(concurrent_ids[0]) not in (member_exit.id,second_exit.id)
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.member_lifecycle_requests "
+            "WHERE tenant_id=$1 AND membership_id=$2 "
+            "AND request_kind='VOLUNTARY_EXIT'",
+            a,memberships["member_a2"],
+        )==3
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.member_lifecycle_requests "
+            "WHERE tenant_id=$1 AND membership_id=$2 "
+            "AND request_kind='DELINQUENCY_REVIEW'",
+            a,memberships["member_a2"],
+        )==2
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.member_lifecycle_review_events "
+            "WHERE tenant_id=$1 AND financial_effect_applied=false "
+            "AND bank_reconciled=false",a,
+        )==6
+        final_gates=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:member_lifecycle_closing_gates(a,2027,sess,conn))
+        assert final_gates.pending_voluntary_exits==1
+        assert final_gates.pending_delinquency_reviews==1
+        assert not final_gates.can_close_cycle
+        assert not final_gates.real_payout_enabled
+        no_other_data=await as_actor("member_a","a","TENANT_MEMBER",
+            lambda sess,conn:my_member_lifecycle_requests(a,2027,sess,conn))
+        assert no_other_data.items==[]
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.cycle_closings "
+            "WHERE tenant_id=ANY($1::uuid[])",[a,b])==0
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.memberships "
+            "WHERE tenant_id=$1 AND status<>'ATIVA'",a)==0
+        print("M1241_CASE_ROUNDS_PG=PASS; HISTORICAL_IDEMPOTENCY=PASS; "
+              "REOPEN_AFTER_REVIEW=PASS; CONCURRENT_REQUESTS=16; "
+              "SINGLE_PENDING_ROUND=PASS; RLS_ISOLATED=PASS; "
+              "REAL_PAYOUT=OFF; FINANCIAL_EFFECT=NONE")
         # Vínculo de revisor extra era apenas cenário temporário.
         await admin.execute(
             "DELETE FROM public.memberships WHERE tenant_id=$1 "

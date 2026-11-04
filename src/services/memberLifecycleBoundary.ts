@@ -9,6 +9,10 @@ export interface LifecycleItem {
  policy_reference:string;
  status:'PENDING_REVIEW';
  requested_at:string;
+ latest_review_event:
+    'ADMIN_DOCUMENTS_REQUESTED'|'ADMIN_REVIEW_ACCEPTED_SANDBOX'|
+    'ADMIN_REVIEW_REJECTED_SANDBOX'|'MEMBER_CONTESTED'|null;
+ technical_review_pending:boolean;
  sandbox_only:true;
  bank_reconciled:false;
  financial_effect_applied:false;
@@ -31,6 +35,7 @@ const obj=(v:unknown):v is Record<string,unknown>=>
 const ITEM=new Set([
  'id','tenant_id','cycle_id','membership_id','requested_by_user_id',
  'request_kind','policy_reference','status','requested_at',
+ 'latest_review_event','technical_review_pending',
  'sandbox_only','bank_reconciled','financial_effect_applied',
  'member_status_changed','profit_rights_modified','payment_authorized'
 ]);
@@ -46,6 +51,15 @@ export function parseLifecycleItem(v:unknown,tenantId:string):LifecycleItem{
     v.tenant_id!==tenantId||
     !['VOLUNTARY_EXIT','DELINQUENCY_REVIEW'].includes(String(v.request_kind))||
     v.status!=='PENDING_REVIEW'||!validDate(v.requested_at)||
+    !(v.latest_review_event===null||
+      ['ADMIN_DOCUMENTS_REQUESTED','ADMIN_REVIEW_ACCEPTED_SANDBOX',
+       'ADMIN_REVIEW_REJECTED_SANDBOX','MEMBER_CONTESTED']
+       .includes(String(v.latest_review_event)))||
+    typeof v.technical_review_pending!=='boolean'||
+    v.technical_review_pending!== !(
+      v.latest_review_event==='ADMIN_REVIEW_ACCEPTED_SANDBOX'||
+      v.latest_review_event==='ADMIN_REVIEW_REJECTED_SANDBOX'
+    )||
     typeof v.policy_reference!=='string'||
     !/^[A-Za-z0-9._:-]{8,120}$/.test(v.policy_reference)||
     v.sandbox_only!==true||v.bank_reconciled!==false||
@@ -59,6 +73,8 @@ export function parseLifecycleItem(v:unknown,tenantId:string):LifecycleItem{
    request_kind:v.request_kind as LifecycleItem['request_kind'],
    policy_reference:v.policy_reference as string,
    status:'PENDING_REVIEW',requested_at:v.requested_at as string,
+   latest_review_event:v.latest_review_event as LifecycleItem['latest_review_event'],
+   technical_review_pending:v.technical_review_pending as boolean,
    sandbox_only:true,bank_reconciled:false,financial_effect_applied:false,
    member_status_changed:false,profit_rights_modified:false,
    payment_authorized:false

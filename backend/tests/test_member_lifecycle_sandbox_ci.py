@@ -13,6 +13,7 @@ from app.routers.member_lifecycle_sandbox import (
  request_delinquency_review_sandbox,
  member_lifecycle_capabilities,
  member_lifecycle_closing_gates,
+ _format,
 )
 
 T=UUID(int=1001)
@@ -396,6 +397,53 @@ async def test_125_closing_gate_pending_variations_cannot_enable_money(n):
     assert not r.can_close_cycle and not r.can_distribute_profit
     assert not r.real_payout_enabled
 
+
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n",range(160))
+async def test_160_review_outcomes_never_become_cash_or_membership_rights(n):
+    states=(
+        None,
+        "ADMIN_DOCUMENTS_REQUESTED",
+        "MEMBER_CONTESTED",
+        "ADMIN_REVIEW_ACCEPTED_SANDBOX",
+        "ADMIN_REVIEW_REJECTED_SANDBOX",
+    )
+    outcome=states[n%len(states)]
+    row=request_row("DELINQUENCY_REVIEW" if n%2 else "VOLUNTARY_EXIT")
+    row["latest_review_event"]=outcome
+    result=await _format(row)
+    assert result.latest_review_event==outcome
+    assert result.technical_review_pending==(outcome not in (
+        "ADMIN_REVIEW_ACCEPTED_SANDBOX",
+        "ADMIN_REVIEW_REJECTED_SANDBOX",
+    ))
+    assert result.status=="PENDING_REVIEW" # documento original imutável
+    assert not result.member_status_changed
+    assert not result.financial_effect_applied
+    assert not result.profit_rights_modified
+    assert not result.payment_authorized
+
+
+@pytest.mark.asyncio
+async def test_member_and_admin_read_latest_event_via_rls_lateral_join():
+    row=request_row()
+    row["latest_review_event"]="ADMIN_REVIEW_ACCEPTED_SANDBOX"
+    for fn,role in (
+        (my_member_lifecycle_requests,"TENANT_MEMBER"),
+        (administrative_member_lifecycle_queue,"TENANT_ADMIN"),
+    ):
+        db=FakeDB([row])
+        res=await fn(T,2027,session(role),db)
+        assert len(res.items)==1
+        assert res.items[0].latest_review_event=="ADMIN_REVIEW_ACCEPTED_SANDBOX"
+        assert not res.items[0].technical_review_pending
+        sql=db.calls[-1][1]
+        assert "LEFT JOIN LATERAL" in sql
+        assert "latest.event_kind AS latest_review_event" in sql
+        assert "ORDER BY e.event_seq DESC LIMIT 1" in sql
 
 
 def test_route_methods_cannot_update_member_status_or_cash():
