@@ -55,6 +55,11 @@ const n2=nextJournalNavigation(n1,{has_more:true,next_cursor:cursor});
 assert.equal(n2.page,2);
 assert.deepEqual(n2.cursors,[null,cursor]);
 assert.equal(previousJournalNavigation(n2).page,1);
+const backAndForward=nextJournalNavigation(previousJournalNavigation(n2),
+ {has_more:true,next_cursor:'bmV3'});
+assert.equal(backAndForward.page,2);
+assert.deepEqual(backAndForward.cursors,[null,'bmV3']);
+assert.deepEqual(n2.cursors,[null,cursor]);
 assert.equal(nextJournalNavigation(n2,{has_more:false,next_cursor:null}).page,2);
 assert.equal(nextJournalNavigation(n1,{has_more:true,next_cursor:null}).page,1);
 assert.equal(nextJournalNavigation({...n1,page:1000,cursors:Array(1000).fill(cursor)},

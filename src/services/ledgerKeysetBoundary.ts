@@ -22,7 +22,7 @@ export function parseLedgerKeysetPage(
     (raw.has_more===true&&raw.next_cursor===null)||
     (raw.has_more===false&&raw.next_cursor!==null))
     throw Error('Cursor contábil incompatível.');
- const legacy={...raw,page:1};
+ const legacy:Record<string,unknown>={...raw,page:1};
  delete legacy.next_cursor;
  const page=parseLedgerAccountJournalPage(legacy,tenantId,accountId,1,pageSize);
  return {
