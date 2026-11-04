@@ -279,6 +279,27 @@ def backend_m2300_operational_preflight_contract():
     }
 
 
+@app.get("/api/health/features/m2400", include_in_schema=False)
+def backend_m2400_connect_webhook_preflight_contract():
+    """Pré-validação de segurança sem conexão OAuth, token, rota webhook ou banco."""
+    from .mp_oauth_connect_preflight import CONTRACT as contract
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": contract,
+        "oauth_pkce_preflight_only": True,
+        "sandbox_webhook_signature_preflight_only": True,
+        "oauth_exchange_active": False,
+        "webhook_receiver_registered": False,
+        "webhook_inbox_persistent": False,
+        "provider_connected": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
