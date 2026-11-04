@@ -435,6 +435,23 @@ def backend_m3100_mp_provider_account_contract():
     }
 
 
+@app.get("/api/health/features/m3200", include_in_schema=False)
+def backend_m3200_oci_recovery_policy():
+    """Só contrato de recuperação, nunca estado real da OCI."""
+    from .oci_recovery_policy import CONTRACT
+    return {
+        "workstream":"AI_STUDIO",
+        "contract":CONTRACT,
+        "backup_recovery_policy_in_code":True,
+        "oci_staging_deployed":False,
+        "terraform_apply_authorized":False,
+        "financial_closing_authorized":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "real_payments_enabled":False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
