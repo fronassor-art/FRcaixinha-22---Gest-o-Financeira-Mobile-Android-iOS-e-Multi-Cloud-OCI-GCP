@@ -259,6 +259,26 @@ def backend_m2200_three_source_contract():
     }
 
 
+@app.get("/api/health/features/m2300", include_in_schema=False)
+def backend_m2300_operational_preflight_contract():
+    """Status do parser offline e validador puro HMAC, sem conexão com PSP."""
+    from .mp_operational_preflight import CONTRACT as mp_contract
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": mp_contract,
+        "offline_csv_preview_only": True,
+        "webhook_validator_not_registered": True,
+        "provider_connected": False,
+        "webhook_live_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+        "pix_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
