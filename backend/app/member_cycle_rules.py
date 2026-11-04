@@ -73,7 +73,7 @@ class CapitalMovement:
             raise ValueError("Movimento exige timestamp com fuso")
         if type(self.delta_cents) is not int or self.delta_cents == 0:
             raise ValueError("Movimento exige centavos inteiros não nulos")
-        if type(self.event_id) is not UUID:
+        if not isinstance(self.event_id, UUID):
             raise ValueError("Evento sem ID de auditoria")
 
 
