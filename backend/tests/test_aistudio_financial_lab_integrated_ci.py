@@ -29,6 +29,10 @@ from app.routers.loans import (
 from app.routers.member_cycle_previews import (
     get_my_cycle_risk_preview, get_admin_member_cycle_risk_preview,
 )
+from app.routers.financial_integrity_previews import (
+    get_tenant_financial_integrity_preview,
+)
+
 from app.member_cycle_rules import (
     MonthlyDueProof, CapitalMovement, ExitRequest, review_member_cycle,
 )
@@ -491,6 +495,55 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
         print("M531_RISK_API_PG_RLS=PASS; ADMIN_AND_MEMBER=PASS; "
               "MASTER_AND_CROSS_TENANT=DENIED; "
               "CONTRACTUAL_SANCTION=NOT_APPLIED; BANK_RECONCILED=FALSE")
+        # M601 — auditoria cruzada real: contribuições × contas ×
+        # políticas × pessoa/vínculo × 26 lançamentos com RLS do banco.
+        audit_a=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda s,c:get_tenant_financial_integrity_preview(a,2027,s,c))
+        assert audit_a.status=="REGISTERED_INTEGRITY_ONLY"
+        assert audit_a.findings==()
+        assert (audit_a.members_links,audit_a.members_distinct,
+                audit_a.member_role_links,audit_a.admin_role_links)==(5,4,4,1)
+        assert (audit_a.registered_contributions,audit_a.registered_due_cents,
+                audit_a.registered_paid_cents,audit_a.registered_open_cents)==(
+                    48,720000,382500,337500)
+        assert (audit_a.complete_count,audit_a.partial_count,
+                audit_a.pending_count)==(25,1,22)
+        assert audit_a.ledger_transactions==26
+        assert audit_a.balanced_transactions==26
+        assert audit_a.ledger_dr_cents==audit_a.ledger_cr_cents==382500
+        assert audit_a.linked_contributions==26
+        assert audit_a.linked_payment_cents==382500
+        assert audit_a.missing_ledger_count==0
+        assert audit_a.incorrect_link_count==0
+        assert audit_a.quota_value_cents==15000
+        assert audit_a.admin_percent=="15.00" and audit_a.member_percent=="85.00"
+        assert audit_a.cash_available_cents is None
+        assert audit_a.master_saas_revenue_cents is None
+        assert not audit_a.bank_reconciled and not audit_a.closing_authorized
+        audit_b=await as_actor("admin_b","b","TENANT_ADMIN",
+            lambda s,c:get_tenant_financial_integrity_preview(b,2027,s,c))
+        assert audit_b.findings==()
+        assert audit_b.quota_value_cents==17500
+        assert (audit_b.registered_contributions,audit_b.registered_due_cents,
+                audit_b.registered_paid_cents,audit_b.registered_open_cents)==(
+                    48,840000,0,840000)
+        assert audit_b.ledger_transactions==0
+        assert audit_b.balanced_transactions==0
+        assert audit_b.members_distinct==4
+        for name,side,role,target in (
+            ("admin_a","a","TENANT_ADMIN",b),
+            ("member_a","a","TENANT_MEMBER",a),
+            ("master",None,"MASTER",a),
+        ):
+            with pytest.raises(HTTPException) as denied:
+                await as_actor(name,side,role,
+                    lambda s,c:get_tenant_financial_integrity_preview(
+                        target,2027,s,c))
+            assert denied.value.status_code==403
+        print("M601_FINANCIAL_AUDIT_REAL_PG=PASS; "
+              "TWO_TENANTS_ISOLATED=PASS; REGISTERED_A_CENTS=382500; "
+              "LEDGER_A_CENTS=382500; CONTRIB_LEDGER_DIFF=0; "
+              "MASTER_SAAS_CROSSOVER=0; BANK_PROOF=NOT_ATTESTED")
         print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
               "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
               "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "

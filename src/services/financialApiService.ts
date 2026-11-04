@@ -30,6 +30,7 @@ import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
+import {FinancialIntegrityPreview,parseFinancialIntegrityPreview} from './financialIntegrityBoundary';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
@@ -448,6 +449,20 @@ class FinancialApiService {
 
   /** Prévia registrada no PostgreSQL para o Membro, sem cálculo de lucro. */
   /** M531: consulta de risco registrada — não confirma Pix, nem bloqueia membro. */
+  /** M601: auditoria cruzada exclusiva do admin, sem conciliação bancária. */
+  public async fetchTenantFinancialIntegrityPreview(
+    tenantId:string,year:number
+  ):Promise<FinancialIntegrityPreview>{
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'MEMBERS');
+    if(!Number.isSafeInteger(year)||year<2020||year>2100)
+      throw Error('Ciclo inválido');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/financial-integrity/preview'
+    );
+    return parseFinancialIntegrityPreview(raw,tenantId,year);
+  }
+
   public async fetchMemberCycleRiskPreview(
     tenantId:string,year:number,asOf:string,memberId?:string
   ):Promise<MemberCycleRiskPreview>{

@@ -7,6 +7,7 @@ Precisão Monetária: Uso de Decimal e centavos auditáveis com ROUND_HALF_UP.
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, AliasChoices
 
 # --- Schemas de Entrada / Saída para Autenticação ---
@@ -60,6 +61,46 @@ class ContextSwitchRequest(BaseModel):
     target_tenant_id: Optional[str] = None
 
 # --- Schemas de Contribuições e Cotas ---
+
+
+class FinancialIntegrityPreviewResponse(BaseModel):
+    """Prévia contábil e cadastral; não é saldo bancário nem fechamento."""
+    source: str
+    scope: str
+    tenant_id: UUID
+    cycle_id: UUID
+    year: int
+    status: str
+    findings: tuple[str, ...]
+    members_links: int
+    members_distinct: int
+    member_role_links: int
+    admin_role_links: int
+    quota_value_cents: Optional[int] = None
+    admin_percent: Optional[str] = None
+    member_percent: Optional[str] = None
+    registered_contributions: int
+    registered_due_cents: int
+    registered_paid_cents: int
+    registered_open_cents: int
+    complete_count: int
+    partial_count: int
+    pending_count: int
+    ledger_transactions: int
+    balanced_transactions: int
+    ledger_dr_cents: int
+    ledger_cr_cents: int
+    linked_contributions: int
+    linked_payment_cents: int
+    missing_ledger_count: int
+    incorrect_link_count: int
+    no_bank_evidence: bool = True
+    bank_reconciled: bool = False
+    cash_available_cents: None = None
+    member_profit_share_cents: None = None
+    master_saas_revenue_cents: None = None
+    closing_authorized: bool = False
+    transfer_authorized: bool = False
 
 
 class MemberCycleRiskPreviewResponse(BaseModel):

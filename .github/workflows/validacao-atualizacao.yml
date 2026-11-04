@@ -68,6 +68,8 @@ jobs:
         run: npx tsx src/tests/member_annual_preview_ci.test.ts
       - name: M531 — Parser e painel de inadimplência registrados, sem bloqueio financeiro
         run: npx tsx src/tests/member_cycle_risk_ci.test.ts
+      - name: M601 — Integridade cruzada do Livro-Razão e contribuições no aplicativo
+        run: npx tsx src/tests/financial_integrity_m760_ci.test.ts
       - name: Validar previa anual operacional do Admin sem liquidação
         run: npx tsx src/tests/admin_annual_preview_ci.test.ts
       - name: Macropacote 160 — 20 validacoes de previa registrada
@@ -230,6 +232,8 @@ jobs:
           python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
           python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
+          python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
@@ -369,6 +373,8 @@ jobs:
           python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
           python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
+          python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -482,6 +488,8 @@ jobs:
           python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
           python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
+          python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
       - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
         env:
           PYTHONPATH: backend
