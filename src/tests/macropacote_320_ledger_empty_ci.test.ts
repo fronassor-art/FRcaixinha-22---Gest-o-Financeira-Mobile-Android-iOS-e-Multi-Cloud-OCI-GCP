@@ -22,7 +22,7 @@ bad({...good,bank_reconciled:true});
 bad({...good,financial_closing_authorized:true});
 bad({...good,accounts:[account,account]});
 bad({...good,accounts:[account,{...account,id:B}]});
-bad({...good,accounts:[{...account,account_code:'1.1.1',id:B}]});
+bad({...good,accounts:[{...account,account_code:'',id:B}]});
 bad({...good,accounts:[{...account,account_code:'x;DROP'}]});
 bad({...good,accounts:[{...account,account_name:''}]});
 bad({...good,accounts:[{...account,account_name:'x\ninvalid'}]});
