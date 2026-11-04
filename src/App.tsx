@@ -234,6 +234,7 @@ export default function App() {
         { id: 'MEMBROS', label: 'Membros e Cotas', icon: Users },
         { id: 'CONTRIBUICOES', label: 'Contribuições', icon: Wallet },
         { id: 'EMPRESTIMOS', label: 'Empréstimos', icon: TrendingUp },
+        { id: 'LEDGER', label: 'Livro-Razão', icon: FileSpreadsheet },
         { id: 'FECHAMENTO', label: 'Fechamento', icon: Coins },
       ];
     }
