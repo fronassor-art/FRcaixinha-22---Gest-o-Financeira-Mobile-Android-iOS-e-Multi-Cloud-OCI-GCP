@@ -361,6 +361,28 @@ def backend_m2700_oci_plan_gate_contract():
     }
 
 
+@app.get("/api/health/features/m2800", include_in_schema=False)
+def backend_m2800_oci_mercado_pago_connectors_contract():
+    """Somente presença de código: sem chamadas, tokens ou infraestrutura reais."""
+    from .oci_secret_bridge import CONTRACT
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": CONTRACT,
+        "oci_sdk_adapter_in_code": True,
+        "mp_oauth_https_adapter_in_code": True,
+        "oci_staging_deployed": False,
+        "oci_vault_connected": False,
+        "mp_app_registered": False,
+        "mp_oauth_exchange_active": False,
+        "webhook_receiver_registered": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
