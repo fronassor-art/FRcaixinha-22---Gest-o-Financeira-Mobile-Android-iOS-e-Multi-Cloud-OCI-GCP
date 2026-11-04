@@ -14,6 +14,8 @@ import hashlib
 from pathlib import Path
 from . import ledger_keyset as _ledger_keyset
 from . import financial_sandbox_reconciliation as _financial_lab
+from . import synthetic_financial_journal as _synthetic_journal
+from . import annual_evidence_preflight as _annual_evidence
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations
 
 app = FastAPI(
@@ -173,6 +175,28 @@ def backend_m1720_feature_contract():
         "ledger_written": False,
         "financial_closing_authorized": False,
         "payout_authorized": False,
+        "runtime_git_sha_verified": False,
+    }
+
+
+@app.get("/api/health/features/m1880", include_in_schema=False)
+def backend_m1880_feature_contract():
+    """Somente capacidades de oráculos puros, SEM prova bancária ou I/O."""
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "journal_contract": _synthetic_journal.CONTRACT,
+        "annual_contract": _annual_evidence.CONTRACT,
+        "synthetic_only": True,
+        "hash_chain_proves_provider_origin": False,
+        "provider_get_connected": False,
+        "durable_event_store_connected": False,
+        "tenant_portfolio_cross_access": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+        "real_payments_enabled": False,
         "runtime_git_sha_verified": False,
     }
 
