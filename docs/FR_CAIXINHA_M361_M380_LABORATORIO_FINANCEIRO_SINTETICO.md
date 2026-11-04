@@ -5,7 +5,7 @@ Frente AI Studio Mobile, **independente** do repositório e banco FRcaixinha 2.2
 
 ## Objetivo
 Parar de declarar como "PASS" apenas telas vazias. Executar **SQL real**, **RLS real**, **funções reais do FastAPI** e **cálculos Decimal reais** sobre um conjunto fictício e descartável, com oráculo independente em centavos.
-O cenário roda exclusivamente na base `frcaixinha_ci` com PostgreSQL `127.0.0.1:5432` do GitHub Actions.
+O cenário roda exclusivamente na base `frcaixinha_ci` com PostgreSQL `127.0.0.1:5432` do GitHub Actions, **em duas matrizes separadas: PostgreSQL 16 e PostgreSQL 18**. Exige também `GITHUB_ACTIONS=true`, além da variável de laboratório.
 `FRCAIXINHA_CI_ISOLATED=1` sozinho não basta: DSNs, host, porta, database e papel administrativo são conferidos antes de conectar. O teste recusa o banco Termux `5433`, Oracle, produção, conexões remotas e DSNs diferentes.
 
 **Não há botão para ativar modo fictício no aplicativo operacional.** Este pacote é auditoria automatizada, não carga de teste para a caixinha real.
@@ -45,7 +45,7 @@ O cenário roda exclusivamente na base `frcaixinha_ci` com PostgreSQL `127.0.0.1
 ## Onde os resultados aparecem
 Arquivo: `backend/tests/test_aistudio_financial_lab_integrated_ci.py`.
 Workflow: `.github/workflows/validacao-atualizacao.yml`, job de **Migrações e testes de RLS em PostgreSQL descartável**.
-Resultado esperado no log do job: `LAB_INTEGRADO_SQL_SINTETICO=PASS`. Se houver discrepância nos valores/links/RLS, o job falha e o macropacote não é aprovado.
+Resultado esperado em cada log, sem captura de saída: `LAB_INTEGRADO_SQL_SINTETICO=PASS` e `LAB_CI_VALORES_EXATOS=PASS`, com os totais e cálculos em centavos. A bateria só é considerada aprovada depois que passar em **PostgreSQL 16 e 18**. Se houver discrepância nos valores/links/RLS, o job falha e o macropacote não é aprovado.
 
 ## Pendências reais — não encerrar por simulação
 1. **Conferência documental**: determinar política efetivamente aprovada para a caixinha inaugural AI Studio. Hoje o aplicativo mostra R$ 100,00 e 2027-12; não sobrepor por R$ 150,00 do teste ou de outro repositório.

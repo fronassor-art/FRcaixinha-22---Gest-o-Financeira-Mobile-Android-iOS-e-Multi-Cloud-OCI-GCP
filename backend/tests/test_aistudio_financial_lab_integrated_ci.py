@@ -28,7 +28,7 @@ from app.routers.loans import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("FRCAIXINHA_CI_ISOLATED") != "1",
+    os.getenv("FRCAIXINHA_CI_ISOLATED") != "1" or os.getenv("GITHUB_ACTIONS") != "true",
     reason="Somente no PostgreSQL descartável do GitHub Actions",
 )
 
@@ -377,6 +377,10 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
             "SELECT count(*) FROM public.loans "
             "WHERE tenant_id=ANY($1::uuid[]) AND status='DESEMBOLSADO'",
             [a,b])==0
+        print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
+              "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
+              "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "
+              "LIVRO_CR=382500_CENTAVOS; PRICE_A=835.96; PRICE_B=656.96")
         print("LAB_INTEGRADO_SQL_SINTETICO=PASS; USERS=8; TENANTS=2; ADMINS=2; "
               "MEMBERSHIPS=10; QUOTAS=8; CONTRIBUTIONS=96; "
               "LEDGER_TX=26; LEDGER_PAGES=2; LOANS_REQUESTED=2; "
