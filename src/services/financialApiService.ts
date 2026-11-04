@@ -30,6 +30,7 @@ import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
+import {MemberObligationsPreview,parseMemberObligations} from './memberObligationsBoundary';
 import {FinancialIntegrityPreview,parseFinancialIntegrityPreview} from './financialIntegrityBoundary';
 import {
   LifecycleQueue, LifecycleItem, LifecycleCapabilities, LifecycleClosingGates,
@@ -618,6 +619,31 @@ class FinancialApiService {
       '/cycles/'+year+'/financial-integrity/preview'
     );
     return parseFinancialIntegrityPreview(raw,tenantId,year);
+  }
+
+  /** M1401: cronograma cadastral, sem afirmar saldo bancário ou restituição. */
+  public async fetchMemberObligationsPreview(
+    tenantId:string,year:number,asOf:string,memberId?:string
+  ):Promise<MemberObligationsPreview>{
+    const role=assertTenantReadScope(
+      this.currentTenantReader(),tenantId,'DASHBOARD'
+    );
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||
+       !/^\d{4}-\d{2}-\d{2}$/.test(asOf))
+       throw Error('Exercício/data de obrigações inválidos');
+    if(role==='TENANT_MEMBER'&&memberId!==undefined)
+       throw Error('Membro não pode consultar outra associação');
+    if(role==='TENANT_ADMIN'&&(!memberId||
+       !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(memberId)))
+       throw Error('Administrador deve selecionar membro deste tenant');
+    const path=role==='TENANT_MEMBER'?'/me':
+       '/members/'+encodeURIComponent(memberId as string);
+    const raw:unknown=await this.request(
+       '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+       '/cycles/'+year+'/member-obligations'+path+
+       '?as_of='+encodeURIComponent(asOf)
+    );
+    return parseMemberObligations(raw,tenantId,year,role,memberId);
   }
 
   public async fetchMemberCycleRiskPreview(

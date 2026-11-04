@@ -30,6 +30,10 @@ from app.routers.loans import (
 from app.routers.member_cycle_previews import (
     get_my_cycle_risk_preview, get_admin_member_cycle_risk_preview,
 )
+from app.routers.member_obligations import (
+    get_my_member_obligations, get_admin_member_obligations,
+)
+
 from app.routers.financial_integrity_previews import (
     get_tenant_financial_integrity_preview,
 )
@@ -962,6 +966,109 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
               "SECOND_ADMIN_INDEPENDENT=PASS; REVIEW_APPEAL=PASS; "
               "EVENTS=5; PENDING_TECHNICAL_REVIEW=0; "
               "BANK_RECONCILED=FALSE; REAL_PAYOUT=0")
+        # M1401 — prévias RLS por membro com parcelas de empréstimo reais
+        # do banco CI, sem que qualquer pagamento seja feito.
+        preview_member_a=await as_actor("member_a","a","TENANT_MEMBER",
+            lambda sess,conn:get_my_member_obligations(
+                a,2027,date(2027,3,11),sess,conn))
+        assert preview_member_a.scope=="SELF_READ_ONLY"
+        assert preview_member_a.contribution_count==12
+        assert preview_member_a.contribution_due_cents==180000
+        assert preview_member_a.contribution_paid_recorded_cents==180000
+        assert preview_member_a.contribution_open_cents==0
+        assert preview_member_a.loan_proposal_count==1
+        assert preview_member_a.installment_count==5
+        assert preview_member_a.loan_now_principal_cents==0
+        assert preview_member_a.loan_now_interest_cents==0
+        assert preview_member_a.registered_now_open_cents==0
+        assert preview_member_a.net_exit_restitution_cents is None
+        assert not preview_member_a.bank_reconciled
+        assert not preview_member_a.payout_authorized
+
+        partial_member=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda sess,conn:get_my_member_obligations(
+                a,2027,date(2027,3,11),sess,conn))
+        assert (partial_member.contribution_count,
+                partial_member.contribution_due_cents,
+                partial_member.contribution_paid_recorded_cents,
+                partial_member.contribution_open_cents,
+                partial_member.contribution_now_open_cents,
+                partial_member.contribution_overdue_count)==(
+                    12,180000,22500,157500,22500,2)
+        assert partial_member.loan_proposal_count==0
+        assert partial_member.registered_now_open_cents==22500
+        assert partial_member.capital_reconciled_cents is None
+
+        preview_member_b=await as_actor("member_b","b","TENANT_MEMBER",
+            lambda sess,conn:get_my_member_obligations(
+                b,2027,date(2027,3,11),sess,conn))
+        assert preview_member_b.contribution_due_cents==210000
+        assert preview_member_b.contribution_paid_recorded_cents==0
+        assert preview_member_b.contribution_now_open_cents==52500
+        assert preview_member_b.loan_proposal_count==1
+        assert preview_member_b.loan_now_interest_cents==0
+
+        admin_snapshot=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda sess,conn:get_admin_member_obligations(
+                a,2027,memberships["member_a"],date(2027,3,11),sess,conn))
+        assert admin_snapshot.scope=="TENANT_ADMIN_READ_ONLY"
+        assert admin_snapshot.registered_now_open_cents==0
+        for name,side,role,lookup_tenant in (
+            ("admin_a","a","TENANT_ADMIN",b),
+            ("member_a","a","TENANT_MEMBER",a),
+            ("master",None,"MASTER",a),
+        ):
+            with pytest.raises(HTTPException) as forbidden:
+                await as_actor(name,side,role,
+                    lambda sess,conn:get_admin_member_obligations(
+                        lookup_tenant,2027,memberships["member_a"],
+                        date(2027,3,11),sess,conn))
+            assert forbidden.value.status_code==403
+
+        # No laboratório, marcar um empréstimo como desembolsado para
+        # CONFERIR a separação das parcelas. Não existe transação externa.
+        await admin.execute(
+            "UPDATE public.loans SET status='DESEMBOLSADO',disbursed_at=$1 "
+            "WHERE id=$2 AND tenant_id=$3",
+            datetime(2027,1,20,tzinfo=timezone.utc),ids["loan_a"],a)
+        schedule_check=await admin.fetchrow(
+            "SELECT coalesce(sum(principal_due-paid_principal) FILTER "
+            "(WHERE due_date<=$2),0) AS now_principal,"
+            "coalesce(sum(interest_due-paid_interest) FILTER "
+            "(WHERE due_date<=$2),0) AS now_interest,"
+            "coalesce(sum(principal_due-paid_principal) FILTER "
+            "(WHERE due_date>$2),0) AS future_principal,"
+            "coalesce(sum(interest_due-paid_interest) FILTER "
+            "(WHERE due_date>$2),0) AS future_interest "
+            "FROM public.loan_installments WHERE loan_id=$1 AND tenant_id=$3",
+            ids["loan_a"],date(2027,3,11),a)
+        active_snapshot=await as_actor("member_a","a","TENANT_MEMBER",
+            lambda sess,conn:get_my_member_obligations(
+                a,2027,date(2027,3,11),sess,conn))
+        assert active_snapshot.loan_active_count==1
+        assert active_snapshot.loan_proposal_count==0
+        assert active_snapshot.loan_now_principal_cents==int(
+            schedule_check["now_principal"]*100)
+        assert active_snapshot.loan_now_interest_cents==int(
+            schedule_check["now_interest"]*100)
+        assert active_snapshot.loan_future_principal_cents==int(
+            schedule_check["future_principal"]*100)
+        assert active_snapshot.loan_future_interest_cents==int(
+            schedule_check["future_interest"]*100)
+        assert active_snapshot.registered_now_open_cents==(
+            active_snapshot.loan_now_principal_cents+
+            active_snapshot.loan_now_interest_cents)
+        assert not active_snapshot.sanction_applied
+        assert not active_snapshot.payout_authorized
+        assert active_snapshot.net_exit_restitution_cents is None
+        assert active_snapshot.accrued_mora_cents is None
+        assert active_snapshot.accrued_fine_cents is None
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.cycle_closings "
+            "WHERE tenant_id=ANY($1::uuid[])",[a,b])==0
+        print("M1401_MEMBER_OBLIGATIONS_PG=PASS; TWO_TENANTS=RLS; "
+              "PROPOSAL_IS_NOT_DEBT=PASS; ACTIVE_LOAN_MATURED_VS_FUTURE=PASS; "
+              "MEMBER_EXIT_RESTITUTION=UNDETERMINED; REAL_FINANCIAL_ACTIONS=0")
         print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
               "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
               "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "

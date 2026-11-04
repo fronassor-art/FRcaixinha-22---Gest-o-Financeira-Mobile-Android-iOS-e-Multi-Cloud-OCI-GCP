@@ -5,6 +5,7 @@ import {MemberAnnualPreview} from '../services/memberAnnualPreview';
 import {formatBRL} from '../services/financialEngine';
 import {authService} from '../services/authService';
 import {MemberCycleRiskPanel} from './MemberCycleRiskPanel';
+import {MemberObligationsPanel} from './MemberObligationsPanel';
 import {FinancialIntegrityPanel} from './FinancialIntegrityPanel';
 import {MemberLifecyclePanel} from './MemberLifecyclePanel';
 
@@ -81,6 +82,7 @@ export const MemberAnnualPreviewView:React.FC<{state:AppState}>=({state})=>{
         </p>
       </div>}
     <MemberCycleRiskPanel state={state}/>
+    <MemberObligationsPanel state={state}/>
     <MemberLifecyclePanel state={state}/>
     {state.currentRole==='TENANT_ADMIN'&&<FinancialIntegrityPanel state={state}/>}
   </section>;
