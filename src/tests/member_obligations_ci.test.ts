@@ -38,12 +38,15 @@ assert.equal(r.profit_eligible,null);
 assert.equal(r.payout_authorized,false);
 
 const admin={...record,scope:'TENANT_ADMIN_READ_ONLY'};
+assert.throws(()=>parseMemberObligations(
+ {...admin,membership_id:B},T,2027,'TENANT_ADMIN',M
+));
 assert.equal(parseMemberObligations(admin,T,2027,'TENANT_ADMIN',M).scope,
  'TENANT_ADMIN_READ_ONLY');
 const malformed=[
  {...record,tenant_id:B},
  {...record,cycle_id:'NOT_UUID'},
- {...record,membership_id:B},
+
  {...record,cycle_year:2028},
  {...record,as_of:'2027-02-31'},
  {...record,source:'BANK_RECONCILED'},

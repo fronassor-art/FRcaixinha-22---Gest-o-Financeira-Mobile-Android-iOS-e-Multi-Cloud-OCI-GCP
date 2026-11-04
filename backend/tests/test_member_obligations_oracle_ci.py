@@ -177,7 +177,7 @@ def test_invalid_loan_installments_rejected(field,value):
         replace(installment(),**{field:value})
 
 
-@pytest.mark.parametrize("role",["QUITADA","PARCIAL","WRONG"])
+@pytest.mark.parametrize("role",["QUITADA","PENDENTE","WRONG"])
 def test_contribution_status_must_match_exact_amount(role):
     with pytest.raises(ValueError):
         contribution(paid=100,status=role)
