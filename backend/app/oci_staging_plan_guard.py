@@ -62,6 +62,13 @@ def _safe_value(address: str, after: Mapping[str, Any], unknown: Any) -> None:
         if field in unknown and not _empty(unknown[field]):
             _blocked()
 
+    # Network-policy fields on the wrong resource are invalid, not ignored.
+    if address != "oci_core_security_list.deny_all" and (
+        "ingress_security_rules" in after or "egress_security_rules" in after
+    ):
+        _blocked()
+    if address != "oci_core_route_table.isolated" and "route_rules" in after:
+        _blocked()
     if address == "oci_core_vcn.staging":
         if after.get("cidr_blocks") != ["10.77.0.0/16"]:
             _blocked()
