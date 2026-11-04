@@ -107,6 +107,8 @@ def preview_manual_settlement_csv(data: bytes, *, expected_seller_id: str) -> Of
                                    for v in raw.values())):
                 raise ValueError("Linha CSV malformada ou acima do limite")
             row = {k: v.strip() for k, v in raw.items()}
+            if any(raw[k] != row[k] for k in _REQUIRED):
+                raise ValueError("Campo obrigatório com espaços não-canônicos")
             payment_id = row["SOURCE_ID"]
             seller_id = row["USER_ID"]
             reference = row["EXTERNAL_REFERENCE"]
