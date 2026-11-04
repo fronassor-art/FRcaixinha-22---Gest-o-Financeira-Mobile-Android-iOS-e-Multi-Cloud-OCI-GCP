@@ -57,13 +57,13 @@ async def test_m2040_pg_ci_only_persistence_rls_idempotency_and_api():
     )}
     a,b = ids["tenant_a"],ids["tenant_b"]
     try:
-        for k in ("admin_a","admin_b","member_a","member_a2","member_b","master"):
+        for k in ("admin_a","admin_b","member_a","member_a2","member_b"):
             u=ids[k]
             await admin.execute(
-                "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "
-                "VALUES($1,$2,$3,$4,$5,$6)",
+                "INSERT INTO public.users(id,email,full_name,cpf,phone) "
+                "VALUES($1,$2,$3,$4,$5)",
                 u,f"{u}@example.invalid",f"CI {k}",str(u.int % 10**14).zfill(14),
-                str(u.int % 10**11).zfill(11),k=="master")
+                str(u.int % 10**11).zfill(11))
         for tenant,owner in ((a,ids["admin_a"]),(b,ids["admin_b"])):
             await admin.execute(
                 "INSERT INTO public.tenants(id,display_name,contracting_party_id,admin_user_id) "
