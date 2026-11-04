@@ -341,6 +341,26 @@ def backend_m2600_readonly_gateway_contract():
     }
 
 
+@app.get("/api/health/features/m2700", include_in_schema=False)
+def backend_m2700_oci_plan_gate_contract():
+    """Somente prova do código de verificação; NÃO é auditoria OCI em tempo real."""
+    from .oci_staging_plan_guard import CONTRACT
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": CONTRACT,
+        "oci_plan_guard_enabled": True,
+        "oci_staging_deployed": False,
+        "terraform_apply_authorized": False,
+        "oauth_exchange_active": False,
+        "provider_connected": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""

@@ -16,3 +16,14 @@ coverage/
 android/keystore.properties
 backend/.secrets/
 backups/
+
+# AI Studio OCI staging: manter planos/estados e inputs locais fora do GitHub.
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfvars.json
+**/*.auto.tfvars
+**/*.tfplan
+**/*tfplan.json
+**/*.plan.json
