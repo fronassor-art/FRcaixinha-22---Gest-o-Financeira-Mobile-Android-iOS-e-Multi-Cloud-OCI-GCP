@@ -119,6 +119,7 @@ jobs:
 
   android:
     name: Compilar APK debug
+    needs: [frontend, backend-sem-banco, postgres-isolado, postgres18-preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -210,6 +211,8 @@ jobs:
           python-version: '3.11'
       - name: Instalar dependências Python
         run: python -m pip install -r backend/requirements.txt
+      - name: Auditar cláusulas dos documentos mestres versionados
+        run: python backend/scripts/aistudio_contract_clause_extract_ci.py
       - name: Verificar importação do FastAPI
         env:
           PYTHONPATH: backend
