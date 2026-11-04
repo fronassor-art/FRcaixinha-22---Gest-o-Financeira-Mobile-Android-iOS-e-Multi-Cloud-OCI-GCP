@@ -32,6 +32,12 @@ from app.routers.member_cycle_previews import (
 from app.routers.financial_integrity_previews import (
     get_tenant_financial_integrity_preview,
 )
+from app.routers.member_lifecycle_sandbox import (
+    LifecycleSandboxRequest,
+    request_voluntary_exit_sandbox,request_delinquency_review_sandbox,
+    my_member_lifecycle_requests,administrative_member_lifecycle_queue,
+)
+
 
 from app.member_cycle_rules import (
     MonthlyDueProof, CapitalMovement, ExitRequest, review_member_cycle,
@@ -57,7 +63,7 @@ def ci_dsn(key, owner=False):
 
 
 @pytest.mark.asyncio
-async def test_integrated_real_sql_with_fictional_people_and_exact_money():
+async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeypatch):
     """2 admins; 2 caixas; 8 usuários, 10 vínculos, 8 cotas,
     96 contribuições, 2 propostas de crédito, 26 lançamentos balanceados.
     """
@@ -544,6 +550,94 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
               "TWO_TENANTS_ISOLATED=PASS; REGISTERED_A_CENTS=382500; "
               "LEDGER_A_CENTS=382500; CONTRIB_LEDGER_DIFF=0; "
               "MASTER_SAAS_CROSSOVER=0; BANK_PROOF=NOT_ATTESTED")
+        # M761: fluxo de pedido e fila, com RLS e PostgreSQL real descartável.
+        monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX","1")
+        monkeypatch.setenv("ENVIRONMENT","development")
+        request_key=uuid.uuid4()
+        member_exit=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda s,c:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=request_key,
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),s,c))
+        assert member_exit.request_kind=="VOLUNTARY_EXIT"
+        assert member_exit.status=="PENDING_REVIEW"
+        assert not member_exit.financial_effect_applied
+        assert not member_exit.member_status_changed
+        assert not member_exit.payment_authorized
+        repeated=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda s,c:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=request_key,
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),s,c))
+        assert repeated.id==member_exit.id
+        different_key=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda s,c:request_voluntary_exit_sandbox(
+                a,2027,LifecycleSandboxRequest(
+                    idempotency_key=uuid.uuid4(),
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),s,c))
+        assert different_key.id==member_exit.id
+        admin_review=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda s,c:request_delinquency_review_sandbox(
+                a,2027,memberships["member_a2"],
+                LifecycleSandboxRequest(
+                    idempotency_key=uuid.uuid4(),
+                    policy_reference="CI-POLICY-2027-ACCEPTED",
+                ),s,c))
+        assert admin_review.request_kind=="DELINQUENCY_REVIEW"
+        assert admin_review.id!=member_exit.id
+        mine=await as_actor("member_a2","a","TENANT_MEMBER",
+            lambda s,c:my_member_lifecycle_requests(a,2027,s,c))
+        assert len(mine.items)==1
+        assert mine.items[0].id==member_exit.id
+        queue=await as_actor("admin_a","a","TENANT_ADMIN",
+            lambda s,c:administrative_member_lifecycle_queue(a,2027,s,c))
+        assert len(queue.items)==2
+        assert {item.request_kind for item in queue.items}=={
+            "VOLUNTARY_EXIT","DELINQUENCY_REVIEW",
+        }
+        other=await as_actor("admin_b","b","TENANT_ADMIN",
+            lambda s,c:administrative_member_lifecycle_queue(b,2027,s,c))
+        assert other.items==[]
+        for name,side,role,target in (
+            ("member_a2","a","TENANT_MEMBER",b),
+            ("admin_a","a","TENANT_ADMIN",b),
+            ("master",None,"MASTER",a),
+        ):
+            with pytest.raises(HTTPException) as forbidden:
+                await as_actor(name,side,role,
+                    lambda s,c:administrative_member_lifecycle_queue(
+                        target,2027,s,c))
+            assert forbidden.value.status_code==403
+        # App role não possui mutações diretas, só função controlada.
+        async def illegal_update(session,conn):
+            await conn.execute(
+                "UPDATE public.member_lifecycle_requests "
+                "SET status='PENDING_REVIEW' WHERE tenant_id=$1",a)
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await as_actor("admin_a","a","TENANT_ADMIN",illegal_update)
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.member_lifecycle_requests WHERE tenant_id=$1",
+            a,
+        )==2
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.member_lifecycle_requests "
+            "WHERE tenant_id=$1 AND financial_effect_applied=false "
+            "AND bank_reconciled=false",a,
+        )==2
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.memberships "
+            "WHERE tenant_id=$1 AND status<>'ATIVA'",a,
+        )==0
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.cycle_closings "
+            "WHERE tenant_id=ANY($1::uuid[])",[a,b],
+        )==0
+        print("M761_LIFECYCLE_SANDBOX_PG=PASS; IDEMPOTENCY=PASS; "
+              "ADMIN_REVIEW=PASS; OWN_HISTORY=PASS; TENANTS_ISOLATED=PASS; "
+              "PRODUCTION_MONEY=OFF; NO_STATUS_OR_CLOSING_CHANGE=PASS")
         print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
               "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
               "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "
@@ -559,6 +653,9 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
             # Todas as entidades têm prefixo/UUID de laboratório e pertencem
             # a tenants criados aqui. Limpeza mesmo quando um assert falha.
             async with admin.transaction():
+                await admin.execute(
+                    "DELETE FROM public.member_lifecycle_requests "
+                    "WHERE tenant_id=ANY($1::uuid[])",[a,b])
                 await admin.execute(
                     "DELETE FROM public.tenants WHERE id=ANY($1::uuid[])",[a,b])
                 await admin.execute(

@@ -31,6 +31,7 @@ import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
 import {FinancialIntegrityPreview,parseFinancialIntegrityPreview} from './financialIntegrityBoundary';
+import {LifecycleQueue,parseLifecycleQueue} from './memberLifecycleBoundary';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
 import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
@@ -450,6 +451,23 @@ class FinancialApiService {
   /** Prévia registrada no PostgreSQL para o Membro, sem cálculo de lucro. */
   /** M531: consulta de risco registrada — não confirma Pix, nem bloqueia membro. */
   /** M601: auditoria cruzada exclusiva do admin, sem conciliação bancária. */
+  /** M761: somente consulta de fila; não concede direitos ou pagamentos. */
+  public async fetchMemberLifecycleQueue(
+    tenantId:string,year:number
+  ):Promise<LifecycleQueue>{
+    const role=assertTenantReadScope(
+      this.currentTenantReader(),tenantId,'DASHBOARD'
+    );
+    if(!Number.isSafeInteger(year)||year<2020||year>2100)
+      throw Error('Exercício inválido');
+    const endpoint=role==='TENANT_ADMIN'?'/admin-queue':'/me';
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycles/'+year+'/member-lifecycle'+endpoint
+    );
+    return parseLifecycleQueue(raw,tenantId,year,role);
+  }
+
   public async fetchTenantFinancialIntegrityPreview(
     tenantId:string,year:number
   ):Promise<FinancialIntegrityPreview>{

@@ -13,7 +13,7 @@ import asyncpg
 import hashlib
 from pathlib import Path
 from . import ledger_keyset as _ledger_keyset
-from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews
+from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -56,6 +56,7 @@ app.include_router(master.router, prefix=settings.API_V1_STR)
 app.include_router(contributions.router, prefix=settings.API_V1_STR)
 app.include_router(member_cycle_previews.router, prefix=settings.API_V1_STR)
 app.include_router(financial_integrity_previews.router, prefix=settings.API_V1_STR)
+app.include_router(member_lifecycle_sandbox.router, prefix=settings.API_V1_STR)
 app.include_router(loans.router, prefix=settings.API_V1_STR)
 app.include_router(ledger.router, prefix=settings.API_V1_STR)
 app.include_router(consents.router, prefix=settings.API_V1_STR)

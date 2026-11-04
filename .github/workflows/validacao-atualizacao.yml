@@ -70,6 +70,8 @@ jobs:
         run: npx tsx src/tests/member_cycle_risk_ci.test.ts
       - name: M601 — Integridade cruzada do Livro-Razão e contribuições no aplicativo
         run: npx tsx src/tests/financial_integrity_m760_ci.test.ts
+      - name: M761 — Fila de solicitações e isolamento do painel
+        run: npx tsx src/tests/member_lifecycle_sandbox_ci.test.ts
       - name: Validar previa anual operacional do Admin sem liquidação
         run: npx tsx src/tests/admin_annual_preview_ci.test.ts
       - name: Macropacote 160 — 20 validacoes de previa registrada
@@ -234,6 +236,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
@@ -328,6 +331,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/025_verifier_bound_session_issuance.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/026_credential_bound_proofs_and_session_revocation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/027_shared_login_attempt_limits.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/028_member_lifecycle_sandbox_requests.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -375,6 +379,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -442,7 +447,7 @@ jobs:
           python-version: '3.11'
       - name: Dependencias Python
         run: python -m pip install -r backend/requirements.txt
-      - name: Migrar 001-027 em UMA transacao no PostgreSQL 18 descartavel
+      - name: Migrar 001-028 em UMA transacao no PostgreSQL 18 descartavel
         env:
           PGHOST: 127.0.0.1
           PGPORT: '5432'
@@ -455,7 +460,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_auth LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           scripts=()
-          for i in $(seq 1 27); do
+          for i in $(seq 1 28); do
             printf -v n '%03d' "$i"
             files=(backend/migrations/"$n"_*.sql)
             test "${#files[@]}" -eq 1
@@ -490,6 +495,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
       - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
         env:
           PYTHONPATH: backend
