@@ -1,6 +1,6 @@
 """
-FRcaixinha 2.2 — Entrada Principal do Backend FastAPI
-Contrato Técnico Mestre (Cláusulas 1.2, 14.1 e 16.2)
+FRcaixinha AI Studio Mobile — Backend FastAPI exclusivo.
+Separado do projeto independente FRcaixinha 2.2.
 """
 
 from fastapi import FastAPI, Request, Response, HTTPException
@@ -31,7 +31,7 @@ async def security_headers_middleware(request: Request, call_next):
     # Tokens de sessão, convites e dados SaaS nunca devem ser guardados por
     # proxies, navegadores compartilhados ou previews externos.
     response.headers["Referrer-Policy"] = "no-referrer"
-    if request.url.path.startswith(("/api/v1/", "/api/health/ready")):
+    if request.url.path.startswith(("/api/v1/", "/api/health/ready", "/api/health/runtime")):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     return response
@@ -61,11 +61,30 @@ app.include_router(audit.router, prefix=settings.API_V1_STR)
 def health_check():
     return {
         "status": "ONLINE",
-        "app": "FRcaixinha 2.2",
+        "app": "FRcaixinha AI Studio Mobile",
         "framework": "FastAPI (Python)",
         "database_backend": "PostgreSQL com Row-Level Security (RLS)",
         "database_configured": settings.is_database_configured,
         "environment": "sandbox-development"
+    }
+
+
+@app.get("/api/health/runtime", include_in_schema=False)
+def backend_runtime_contract():
+    """Versao do contrato e limites de leitura ja carregados no processo Python.
+
+    Nenhum dado financeiro, URL de banco, usuario, token ou chave e consultado.
+    O contrato nao prova SHA Git, reconciliacao ou autorizacao de fechamento.
+    """
+    return {
+        "project": "FRCAIXINHA_AI_STUDIO_MOBILE",
+        "runtime_contract": "AI_STUDIO_M280_RUNTIME_V1",
+        "ledger_account_limit": ledger.MAX_LEDGER_ACCOUNTS,
+        "ledger_transaction_limit": ledger.MAX_LEDGER_TRANSACTIONS,
+        "ledger_entry_limit": ledger.MAX_LEDGER_ENTRIES_PER_TRANSACTION,
+        "financial_closing_authorized": False,
+        "bank_reconciled": False,
+        "runtime_git_sha_verified": False,
     }
 
 
