@@ -12,10 +12,11 @@ from ..models import (
     LedgerAccountResponse, LedgerTransactionResponse, LedgerEntryResponse,
     LedgerIntegrityPreviewResponse, LedgerAccountJournalEntryResponse,
     LedgerAccountJournalPageResponse, LedgerAccountDirectoryResponse,
-    LedgerAccountDirectoryItemResponse,
+    LedgerAccountDirectoryItemResponse, LedgerAccountJournalKeysetResponse,
 )
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
+from ..ledger_keyset import encode_cursor, decode_cursor, validate_rows
 
 router = APIRouter(prefix="/tenants/{tenant_id}/ledger", tags=["Livro-Razão e Contabilidade"])
 
@@ -392,4 +393,67 @@ async def list_ledger_account_entries(
         complete_ledger_verified=False,
         bank_reconciled=False,
         financial_closing_authorized=False,
+    )
+
+
+# M321-360: keyset read-only, sempre sujeito a sessao e RLS. Cursor nao e
+# segredo, autenticacao, conciliacao nem snapshot entre requisicoes.
+@router.get("/accounts/{account_id}/entries/keyset",
+            response_model=LedgerAccountJournalKeysetResponse)
+async def list_ledger_account_entries_keyset(
+    tenant_id: str,
+    account_id: str,
+    cursor: str | None = Query(None, max_length=400),
+    page_size: int = Query(25, ge=1, le=MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE),
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Extrato exclusivo do administrador.")
+    try:
+        tenant, account = uuid.UUID(tenant_id), uuid.UUID(account_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Identificador contábil inválido.")
+    if type(page_size) is not int or not 1 <= page_size <= MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE:
+        raise HTTPException(status_code=422, detail="Tamanho de página inválido.")
+    position = decode_cursor(cursor, tenant, account) if cursor is not None else None
+    active = await conn.fetchrow(
+        "SELECT id FROM public.ledger_accounts WHERE tenant_id=$1 AND id=$2 LIMIT 1",
+        tenant, account,
+    )
+    if active is None:
+        raise HTTPException(status_code=404, detail="Conta contábil não encontrada.")
+    if position is None:
+        rows = await conn.fetch("""
+            SELECT e.id,e.transaction_id,t.transaction_date,t.description,
+                   t.reference_id,e.entry_type,e.amount_cents
+            FROM public.ledger_entries e
+            JOIN public.ledger_transactions t
+              ON t.id=e.transaction_id AND t.tenant_id=e.tenant_id
+            WHERE e.tenant_id=$1 AND e.account_id=$2
+            ORDER BY t.transaction_date DESC,t.id DESC,e.id DESC
+            LIMIT $3
+        """, tenant, account, page_size + 1)
+    else:
+        rows = await conn.fetch("""
+            SELECT e.id,e.transaction_id,t.transaction_date,t.description,
+                   t.reference_id,e.entry_type,e.amount_cents
+            FROM public.ledger_entries e
+            JOIN public.ledger_transactions t
+              ON t.id=e.transaction_id AND t.tenant_id=e.tenant_id
+            WHERE e.tenant_id=$1 AND e.account_id=$2
+              AND (t.transaction_date,t.id,e.id) <
+                  ($3::timestamptz,$4::uuid,$5::uuid)
+            ORDER BY t.transaction_date DESC,t.id DESC,e.id DESC
+            LIMIT $6
+        """, tenant, account, *position, page_size + 1)
+    parsed = validate_rows(rows, page_size)
+    more = len(parsed) > page_size
+    return LedgerAccountJournalKeysetResponse(
+        tenant_id=str(tenant), account_id=str(account), page_size=page_size,
+        has_more=more, next_cursor=encode_cursor(tenant, account, rows[page_size-1])
+        if more else None,
+        entries=parsed[:page_size], complete_ledger_verified=False,
+        bank_reconciled=False, financial_closing_authorized=False,
     )

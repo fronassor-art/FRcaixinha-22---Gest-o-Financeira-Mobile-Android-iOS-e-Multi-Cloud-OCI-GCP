@@ -278,6 +278,20 @@ class LedgerAccountJournalPageResponse(BaseModel):
     entries: List[LedgerAccountJournalEntryResponse]
 
 
+class LedgerAccountJournalKeysetResponse(BaseModel):
+    """Extrato parcial por cursor: nunca autoriza conciliacao ou fechamento."""
+    source: str = "POSTGRESQL_RLS"
+    tenant_id: str
+    account_id: str
+    page_size: int
+    has_more: bool
+    next_cursor: Optional[str] = None
+    complete_ledger_verified: bool = False
+    bank_reconciled: bool = False
+    financial_closing_authorized: bool = False
+    entries: List[LedgerAccountJournalEntryResponse]
+
+
 class LedgerEntryResponse(BaseModel):
     id: str
     account_id: str
