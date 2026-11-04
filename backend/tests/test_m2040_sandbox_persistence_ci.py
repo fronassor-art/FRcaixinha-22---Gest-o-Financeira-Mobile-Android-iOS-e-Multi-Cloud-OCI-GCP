@@ -99,21 +99,21 @@ async def test_m2040_pg_ci_only_persistence_rls_idempotency_and_api():
                     app,a,ids["membership_a"],"98123451","APPROVED_FIXTURE",
                     15000,key=key)
                 assert first==same
-                async with app.transaction():
-                    with pytest.raises(asyncpg.PostgresError):
+                with pytest.raises(asyncpg.PostgresError):
+                    async with app.transaction():
                         await insert_fixture(
                             app,a,ids["membership_a"],"98123451",
                             "APPROVED_FIXTURE",14999,key=key)
-                async with app.transaction():
-                    with pytest.raises(asyncpg.PostgresError):
+                with pytest.raises(asyncpg.PostgresError):
+                    async with app.transaction():
                         await insert_fixture(
                             app,a,ids["membership_a"],"98123451",
                             "APPROVED_FIXTURE",15000)
                 refund=await insert_fixture(
                     app,a,ids["membership_a"],"98123451","REFUND_FIXTURE",1000)
                 assert refund!=first
-                async with app.transaction():
-                    with pytest.raises(asyncpg.PostgresError):
+                with pytest.raises(asyncpg.PostgresError):
+                    async with app.transaction():
                         await insert_fixture(
                             app,a,ids["membership_a"],"98123451",
                             "REFUND_FIXTURE",14001)
@@ -123,8 +123,8 @@ async def test_m2040_pg_ci_only_persistence_rls_idempotency_and_api():
                                      "APPROVED_FIXTURE",15000)
                 # RBAC: admin do outro tenant não pode inventar eventos de A.
                 await context(app,b,ids["admin_b"])
-                async with app.transaction():
-                    with pytest.raises(asyncpg.PostgresError):
+                with pytest.raises(asyncpg.PostgresError):
+                    async with app.transaction():
                         await insert_fixture(
                             app,a,ids["membership_a"],"98123453",
                             "APPROVED_FIXTURE",15000)
@@ -139,8 +139,8 @@ async def test_m2040_pg_ci_only_persistence_rls_idempotency_and_api():
                 await context(app,a,ids["member_a"],"TENANT_MEMBER")
                 assert await app.fetchval(
                     "SELECT count(*) FROM public.mp_sandbox_evidence_events")==3
-                async with app.transaction():
-                    with pytest.raises(asyncpg.PostgresError):
+                with pytest.raises(asyncpg.PostgresError):
+                    async with app.transaction():
                         await insert_fixture(app,a,ids["membership_a"],
                                              "98123455","APPROVED_FIXTURE",100)
                 page=await read_my_sandbox_evidence(
