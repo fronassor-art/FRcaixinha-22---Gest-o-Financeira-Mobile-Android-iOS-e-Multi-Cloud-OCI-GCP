@@ -123,12 +123,6 @@ def test_other_resources_and_bad_plan_schema_blocked(mod):
         audit_plan(p)
 
 
-@pytest.mark.parametrize("payload", [
-    b"",b"not JSON",b"null",b"[]",
-    b'{"format_version":"1.2","format_version":"1.3"}',
-    b'{"x":NaN}',
-    b"x"*8_000_001,
-])
 def test_planned_values_are_not_allowed_to_hide_public_rules():
     p=good_plan()
     values=next(x for x in p["planned_values"]["root_module"]["resources"]
@@ -152,6 +146,12 @@ def test_malformed_nested_plan_fails_closed_without_crashes(mutate):
         audit_plan(p)
 
 
+@pytest.mark.parametrize("payload", [
+    b"",b"not JSON",b"null",b"[]",
+    b'{"format_version":"1.2","format_version":"1.3"}',
+    b'{"x":NaN}',
+    b"x"*8_000_001,
+])
 def test_file_guard_rejects_incorrect_or_large_json(tmp_path,payload):
     path=tmp_path/"tfplan.json"
     path.write_bytes(payload)
