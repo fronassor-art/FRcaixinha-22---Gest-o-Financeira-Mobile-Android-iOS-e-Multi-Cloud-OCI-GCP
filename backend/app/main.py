@@ -470,6 +470,20 @@ def backend_m3300_webhook_stream_protection():
     }
 
 
+@app.get("/api/health/features/m3700", include_in_schema=False)
+def backend_m3700_pix_persistence_staging_contract():
+    return {
+        "workstream":"AI_STUDIO",
+        "contract":"AI_STUDIO_M3700_PIX_STAGING_PERSISTENCE_GUARD_V1",
+        "staging_migration_applied":False,
+        "real_payment_execution_active":False,
+        "oci_staging_deployed":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "financial_closing_authorized":False,
+    }
+
+
 @app.get("/api/health/features/m3800", include_in_schema=False)
 def backend_pix_automation_contract():
     from .routers.pix_automation import CONTRACT

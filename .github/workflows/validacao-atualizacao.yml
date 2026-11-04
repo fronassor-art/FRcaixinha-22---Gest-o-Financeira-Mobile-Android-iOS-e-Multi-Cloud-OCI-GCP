@@ -263,6 +263,7 @@ jobs:
           python -m pytest -q backend/tests/test_m3500_mp_pix_provider_ports_ci.py
           python -m pytest -q backend/tests/test_m3600_pix_workflow_ports_ci.py
           python -m pytest -q backend/tests/test_m3700_pix_staging_schema_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m3800_pix_app_automation_api_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
