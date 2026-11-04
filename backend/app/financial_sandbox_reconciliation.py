@@ -140,7 +140,7 @@ def _validate_receivers(platform_collector_id: str, tenants: Mapping[UUID, str])
 def _matching_identity(expected: DuePayment, payload: Mapping[str, Any],
                        platform: str, tenants: Mapping[UUID, str]) -> bool:
     """Verifica campos invariantes via validador existente, sem afirmar liquidação."""
-    if payload.get("status") not in PROVIDER_STATES:
+    if not isinstance(payload.get("status"), str) or payload["status"] not in PROVIDER_STATES:
         return False
     # Somente cópia temporária para reaproveitar validação da identidade/valor;
     # o status original determina os bloqueios, nunca é alterado no input.

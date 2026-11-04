@@ -97,7 +97,7 @@ def test_200_cent_exactness_checks(amount):
 
 @pytest.mark.parametrize("change", [
     {"id": 5}, {"collector_id": 3003}, {"external_reference": "tenant:other:pay"},
-    {"currency_id": "USD"}, {"live_mode": True}, {"status": "unknown"},
+    {"currency_id": "USD"}, {"live_mode": True}, {"status": "unknown"}, {"status": []},
     {"transaction_amount": Decimal("150.01")},
     {"transaction_amount": float(150)}, {"transaction_amount": True},
     {"transaction_amount": Decimal("NaN")}, {"transaction_amount": Decimal("Infinity")},
@@ -196,7 +196,7 @@ def test_no_live_mode_or_malformed_fixtures():
     with pytest.raises(ValueError):
         preview((intent(),), (fixture(intent()), fixture(intent())))
     with pytest.raises(ValueError):
-        preview((intent(), intent()))
+        preview((intent(), intent()), ())
     with pytest.raises(ValueError):
         preview((intent(),), (), as_of=datetime(2026, 11, 4, 18))
     with pytest.raises(ValueError):
