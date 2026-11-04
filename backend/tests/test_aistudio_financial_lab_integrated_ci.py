@@ -26,6 +26,10 @@ from app.routers.ledger import (
 from app.routers.loans import (
     compute_price_schedule, simulate_loan_price, list_tenant_loans,
 )
+from app.member_cycle_rules import (
+    MonthlyDueProof, CapitalMovement, ExitRequest, review_member_cycle,
+)
+
 
 pytestmark = pytest.mark.skipif(
     os.getenv("FRCAIXINHA_CI_ISOLATED") != "1" or os.getenv("GITHUB_ACTIONS") != "true",
@@ -377,6 +381,78 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money():
             "SELECT count(*) FROM public.loans "
             "WHERE tenant_id=ANY($1::uuid[]) AND status='DESEMBOLSADO'",
             [a,b])==0
+        # M401: usar linhas reais do PostgreSQL efêmero, não somente objetos
+        # artificiais de teste, para verificar os direitos e o bloqueio por ciclo.
+        async def proof_from_db(tenant, membership):
+            rows=await admin.fetch(
+                "SELECT id,competence,due_date,amount_due,amount_paid,"
+                "payment_status,paid_at FROM public.contributions "
+                "WHERE tenant_id=$1 AND membership_id=$2 ORDER BY competence",
+                tenant,membership,
+            )
+            proofs=[]
+            capital_events=[]
+            for item in rows:
+                due_amount=int(item["amount_due"]*100)
+                received=int(item["amount_paid"]*100)
+                settled=(item["paid_at"].date() if
+                         item["payment_status"]=="QUITADA" else None)
+                proofs.append(MonthlyDueProof(
+                    tenant,membership,item["competence"],item["due_date"],
+                    due_amount,received,settled,f"CI-DB-{item['id']}"
+                ))
+                if received:
+                    capital_events.append(CapitalMovement(
+                        tenant,membership,item["paid_at"],received,item["id"]
+                    ))
+            return tuple(proofs),tuple(capital_events)
+        seen_a=memberships["member_a2"]
+        hist,flows=await proof_from_db(a,seen_a)
+        assert len(hist)==12 and len(flows)==2
+        legal_pending=review_member_cycle(
+            a,seen_a,as_of=date(2027,12,31),dues=hist,movements=flows,
+            cycle_start=date(2027,1,1),cycle_end_exclusive=date(2028,1,1),
+            owner_box=True,legal_gate_approved=False,history_attested=True,
+        )
+        assert legal_pending.historic_three_unpaid_on==date(2027,4,11)
+        assert legal_pending.profit_eligible is None
+        assert legal_pending.principal_preserved_cents==22500
+        approved_synthetic=review_member_cycle(
+            a,seen_a,as_of=date(2027,12,31),dues=hist,movements=flows,
+            cycle_start=date(2027,1,1),cycle_end_exclusive=date(2028,1,1),
+            owner_box=True,legal_gate_approved=True,history_attested=True,
+        )
+        assert approved_synthetic.profit_eligible is False
+        assert approved_synthetic.capital_days_weight==Decimal(0)
+        assert approved_synthetic.principal_preserved_cents==22500
+        valid_member=memberships["member_a"]
+        clean_hist,clean_flows=await proof_from_db(a,valid_member)
+        voluntary=ExitRequest(a,valid_member,date(2027,12,31),uuid.uuid4())
+        pending_exit=review_member_cycle(
+            a,valid_member,as_of=date(2027,12,31),dues=clean_hist,
+            movements=clean_flows,cycle_start=date(2027,1,1),
+            cycle_end_exclusive=date(2028,1,1),owner_box=True,
+            legal_gate_approved=True,history_attested=True,
+            exit_request=voluntary,
+        )
+        assert pending_exit.exit_status=="REQUESTED_AWAITING_REVIEW"
+        assert pending_exit.profit_eligible is None
+        assert pending_exit.principal_preserved_cents==180000
+        other_hist,other_flows=await proof_from_db(
+            b,memberships["member_b"])
+        other=review_member_cycle(
+            b,memberships["member_b"],as_of=date(2027,12,31),
+            dues=other_hist,movements=other_flows,
+            cycle_start=date(2027,1,1),cycle_end_exclusive=date(2028,1,1),
+            owner_box=False,legal_gate_approved=True,history_attested=True,
+        )
+        assert other.status=="TENANT_POLICY_REVIEW_REQUIRED"
+        assert other.profit_eligible is None
+        assert other.principal_preserved_cents==0
+        print("LAB_MEMBER_CYCLE_CONTRACT=PASS; OWNER_THREE_MONTHS=OBSERVED; "
+              "OWNER_LEGAL_GATE=BLOCKED; OWNER_PRINCIPAL_CENTS=22500; "
+              "VOLUNTARY_EXIT=PENDING_REVIEW; "
+              "TENANT_CROSS_POLICY=BLOCKED; REAL_PAYOUT=0")
         print("LAB_CI_VALORES_EXATOS=PASS; A_DEVIDO=7200.00; A_PAGO=3825.00; "
               "A_ABERTO=3375.00; B_DEVIDO=8400.00; B_PAGO=0.00; "
               "B_ABERTO=8400.00; LIVRO_DR=382500_CENTAVOS; "
