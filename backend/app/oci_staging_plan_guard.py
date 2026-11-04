@@ -159,7 +159,7 @@ def audit_plan(plan: object) -> tuple[str, ...]:
 
 
 def audit_plan_file(file: Path) -> tuple[str, ...]:
-    if type(file) is not Path or not file.is_file():
+    if not isinstance(file, Path) or not file.is_file():
         _blocked()
     size = file.stat().st_size
     if not 0 < size <= MAX_BYTES:
