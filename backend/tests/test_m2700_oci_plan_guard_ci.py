@@ -129,6 +129,29 @@ def test_other_resources_and_bad_plan_schema_blocked(mod):
     b'{"x":NaN}',
     b"x"*8_000_001,
 ])
+def test_planned_values_are_not_allowed_to_hide_public_rules():
+    p=good_plan()
+    values=next(x for x in p["planned_values"]["root_module"]["resources"]
+                if x["address"]=="oci_core_security_list.deny_all")
+    values["values"]["egress_security_rules"]=[{"destination":"0.0.0.0/0"}]
+    with pytest.raises(StagingPlanBlocked):
+        audit_plan(p)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda p:p.update(planned_values=None),
+    lambda p:p.update(planned_values=[]),
+    lambda p:p["resource_changes"][0]["change"].update(actions=[{}]),
+    lambda p:p["planned_values"]["root_module"]["resources"][0].update(address=[]),
+    lambda p:p["planned_values"]["root_module"]["resources"][0].update(values="oops"),
+])
+def test_malformed_nested_plan_fails_closed_without_crashes(mutate):
+    p=good_plan()
+    mutate(p)
+    with pytest.raises(StagingPlanBlocked):
+        audit_plan(p)
+
+
 def test_file_guard_rejects_incorrect_or_large_json(tmp_path,payload):
     path=tmp_path/"tfplan.json"
     path.write_bytes(payload)

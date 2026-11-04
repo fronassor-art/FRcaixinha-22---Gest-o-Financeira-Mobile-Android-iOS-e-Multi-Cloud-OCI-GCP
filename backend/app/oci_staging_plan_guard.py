@@ -127,7 +127,8 @@ def audit_plan(plan: object) -> tuple[str, ...]:
         if type(change) is not dict:
             _blocked()
         actions = change.get("actions")
-        if type(actions) is not list or tuple(actions) not in _ALLOWED_ACTIONS:
+        if (type(actions) is not list or not all(type(x) is str for x in actions)
+                or tuple(actions) not in _ALLOWED_ACTIONS):
             _blocked()
         after = change.get("after")
         if type(after) is not dict:
@@ -137,7 +138,10 @@ def audit_plan(plan: object) -> tuple[str, ...]:
     if observed != set(RESOURCES):
         _blocked()
     # There must be no extra instances hidden in planned_values.
-    module = plan.get("planned_values", {}).get("root_module")
+    planned_values = plan.get("planned_values")
+    if type(planned_values) is not dict:
+        _blocked()
+    module = planned_values.get("root_module")
     if type(module) is not dict or module.get("child_modules"):
         _blocked()
     current = module.get("resources")
@@ -148,10 +152,14 @@ def audit_plan(plan: object) -> tuple[str, ...]:
         if type(resource) is not dict or resource.get("mode") != "managed":
             _blocked()
         address = resource.get("address")
-        if address not in RESOURCES or resource.get("type") != RESOURCES[address]:
+        if type(address) is not str or address not in RESOURCES or resource.get("type") != RESOURCES[address]:
             _blocked()
         if address in planned_addresses:
             _blocked()
+        after = resource.get("values")
+        if type(after) is not dict:
+            _blocked()
+        _safe_value(address, after, {})
         planned_addresses.add(address)
     if planned_addresses != observed:
         _blocked()
