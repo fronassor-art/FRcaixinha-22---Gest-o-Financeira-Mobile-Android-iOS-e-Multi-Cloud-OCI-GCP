@@ -140,3 +140,11 @@ Implementações propostas e testes vinculados: `backend/app/routers/ledger.py`,
 Prioridade P0: requisitos mestres, RLS/SECURITY DEFINER, identidade/roles, seeds, backup e trilha. P1: convites, contratos, SaaS, crédito, ledger autoritativo, Pix simulado e fechamento sintético. P2: OCI/GCP, OAuth MP em sandbox, observabilidade e jurídico. P3: PG18 descartável, atualizações físicas Android/iOS e backup/restauração. P4: produção real, que permanece bloqueada. Consultar tarefas A01–E04 do checkpoint executivo para preservar todas as 37 pendências históricas.
 
 **Regra central:** o Documento Mestre e o Contrato Técnico Mestre pertencem ao produto FR Caixinha e não a um repositório. Implementar sem confundir ambientes, sem resultados financeiros fictícios em telas autenticadas, e sem equiparar CI com autorização operacional.
+
+## Adendo de continuidade M320 — sem reclassificação da matriz
+
+Após o M300, o operador informou **4/7 PASS no APK 211** (commit `e33bae7`): Livro-Razão do Admin, prévia, Master/Membro segregados e bloqueio de operações reais. Os três testes restantes ficaram pendentes pela ausência de transações registradas na prévia. Esta falta de dados **não é PASS para paginação, nem FAIL do Android**.
+
+O [Macropacote M320](FR_CAIXINHA_MACROPACOTE_320_LEDGER_EMPTY_GATES.md) prepara diretório **sem saldo** para contas existentes mesmo quando o razão não tem transações, com guardas de tenant e papéis, parser estrito, máquina de estados e testes sintéticos. Se não existirem contas, a tela exibe ausência sem criar dados. As 40 entregas, 46 pendências e 12 bloqueios acima são fotografias do inventário M300, não contagens atualizadas automaticamente.
+
+**Guarda:** CI do M320, sincronização ff-only, reinício somente do FastAPI, diagnóstico runtime, APK físico e revisão independente são gates posteriores e específicos. O Documento Mestre e o Contrato Técnico Mestre seguem aplicáveis a ambas as frentes, com infra isolada.

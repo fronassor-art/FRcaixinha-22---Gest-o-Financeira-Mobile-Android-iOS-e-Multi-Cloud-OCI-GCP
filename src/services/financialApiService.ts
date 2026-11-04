@@ -31,6 +31,7 @@ import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {LedgerIntegrityPreview, parseLedgerIntegrityPreview} from './ledgerIntegrityPreview';
 import {LedgerAccountJournalPage, parseLedgerAccountJournalPage} from './ledgerAccountJournalBoundary';
+import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccountDirectoryBoundary';
 import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 
@@ -478,6 +479,15 @@ class FinancialApiService {
       `/api/v1/tenants/${encodeURIComponent(tenantId)}/ledger/integrity-preview`
     );
     return parseLedgerIntegrityPreview(raw,tenantId);
+  }
+
+  /** Diretório de contas sem saldos, inclusive com zero transações. */
+  public async fetchLedgerAccountDirectory(tenantId:string):Promise<LedgerAccountDirectory> {
+    this.assertLedgerAdmin(tenantId);
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/ledger/accounts/directory'
+    );
+    return parseLedgerAccountDirectory(raw,tenantId);
   }
 
   public async fetchLedgerAccounts(tenantId: string):Promise<DisplayLedgerAccount[]> {

@@ -11,7 +11,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from ..models import (
     LedgerAccountResponse, LedgerTransactionResponse, LedgerEntryResponse,
     LedgerIntegrityPreviewResponse, LedgerAccountJournalEntryResponse,
-    LedgerAccountJournalPageResponse,
+    LedgerAccountJournalPageResponse, LedgerAccountDirectoryResponse,
+    LedgerAccountDirectoryItemResponse,
 )
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
@@ -112,6 +113,77 @@ async def get_ledger_integrity_preview(
         LIMIT 501
     """, tenant)
     return _summarize_integrity_rows(rows, tenant_id)
+
+
+
+def _validate_directory_accounts(rows, tenant: uuid.UUID) -> list:
+    """Rejeita metadados de conta duplicados, cross-tenant ou malformados."""
+    _require_ledger_bound(rows, MAX_LEDGER_ACCOUNTS)
+    accounts = []
+    seen_ids, seen_codes = set(), set()
+    for row in rows:
+        try:
+            identifier = str(uuid.UUID(str(row["id"])))
+            owner = str(uuid.UUID(str(row["tenant_id"])))
+            code, name, kind = (row["account_code"], row["account_name"],
+                                row["account_type"])
+            if (
+                owner != str(tenant) or identifier in seen_ids
+                or not isinstance(code, str) or not 1 <= len(code) <= 24
+                or not code[0].isalnum()
+                or not all(c.isascii() and (c.isalnum() or c in "._-") for c in code)
+                or code in seen_codes
+                or not isinstance(name, str) or not 1 <= len(name.strip()) <= 160
+                or not isinstance(kind, str) or not 1 <= len(kind.strip()) <= 48
+                or any(ord(c) < 32 for c in name + kind)
+            ):
+                raise ValueError("Unsafe account metadata")
+        except (KeyError, TypeError, ValueError, OverflowError):
+            raise HTTPException(
+                status_code=503,
+                detail="Diretório contábil indisponível: metadados inválidos.",
+            )
+        seen_ids.add(identifier)
+        seen_codes.add(code)
+        accounts.append(LedgerAccountDirectoryItemResponse(
+            id=identifier, account_code=code, account_name=name, account_type=kind,
+        ))
+    return accounts
+
+
+@router.get("/accounts/directory", response_model=LedgerAccountDirectoryResponse)
+async def list_ledger_account_directory(
+    tenant_id: str,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Metadados das contas, SEM saldos, inclusive quando nao ha transacoes.
+
+    Esta consulta NAO autoriza auditoria, fechamento, valor de saldo ou
+    lançamentos financeiros, e nunca usa o Master para ler contas de tenants.
+    """
+    require_tenant_access(tenant_id, session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(status_code=403, detail="Diretório contábil exclusivo do administrador.")
+    try:
+        tenant = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Identificador de caixinha inválido.")
+    rows = await conn.fetch("""
+        SELECT id, tenant_id, account_code, account_name, account_type
+        FROM public.ledger_accounts
+        WHERE tenant_id=$1
+        ORDER BY account_code ASC, id ASC
+        LIMIT 501
+    """, tenant)
+    return LedgerAccountDirectoryResponse(
+        tenant_id=str(tenant),
+        accounts=_validate_directory_accounts(rows, tenant),
+        balance_values_hidden=True,
+        complete_ledger_verified=False,
+        bank_reconciled=False,
+        financial_closing_authorized=False,
+    )
 
 
 @router.get("/accounts", response_model=List[LedgerAccountResponse])

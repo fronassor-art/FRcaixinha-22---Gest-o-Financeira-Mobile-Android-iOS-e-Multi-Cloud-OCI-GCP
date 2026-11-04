@@ -227,6 +227,24 @@ class LedgerIntegrityPreviewResponse(BaseModel):
     financial_closing_authorized: bool = False
 
 
+class LedgerAccountDirectoryItemResponse(BaseModel):
+    id: str
+    account_code: str
+    account_name: str
+    account_type: str
+
+
+class LedgerAccountDirectoryResponse(BaseModel):
+    source: str = "POSTGRESQL_RLS"
+    scope: str = "TENANT_ADMIN_READ_ONLY"
+    tenant_id: str
+    accounts: List[LedgerAccountDirectoryItemResponse]
+    balance_values_hidden: bool = True
+    complete_ledger_verified: bool = False
+    bank_reconciled: bool = False
+    financial_closing_authorized: bool = False
+
+
 class LedgerAccountResponse(BaseModel):
     id: str
     tenant_id: str

@@ -104,6 +104,24 @@ def backend_feature_gates():
     }
 
 
+@app.get("/api/health/features/m320", include_in_schema=False)
+def backend_m320_feature_contract():
+    """Prova do modulo diretorio M320 carregado, sem consultar dados privados."""
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": "FR_CAIXINHA_M320_EMPTY_LEDGER_V1",
+        "account_directory_read_only": True,
+        "account_directory_max_accounts": ledger.MAX_LEDGER_ACCOUNTS,
+        "tenant_admin_only": True,
+        "empty_ledger_balance_values_hidden": True,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "runtime_git_sha_verified": False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""

@@ -34,6 +34,8 @@ O checkpoint de 01/11/2026, publicado antes desta correção do README, registra
 
 Referência consolidada atual: [Macropacote M300 — checklist amplo, entregas e pendências](docs/FR_CAIXINHA_MACROPACOTE_300_CHECKLIST_CONSOLIDADO.md). Este documento preserva a matriz histórica sem inflar sua conclusão.
 
+Evolução de homologação: [Macropacote M320 — diretório contábil sem saldos e gates](docs/FR_CAIXINHA_MACROPACOTE_320_LEDGER_EMPTY_GATES.md). APK 211 recebeu 4/7 PASS físicos (três testes de contas/paginação ainda não exercitados); a CI da versão M320 deve ser analisada separadamente antes de qualquer sincronização.
+
 Referências de trabalho:
 - [Checkpoint executivo de pendências](docs/CHECKPOINT_EXECUTIVO_PENDENCIAS_AI_STUDIO_2026-11-01.md)
 - [Matriz das 147 cláusulas](docs/MATRIZ_147_PENDENCIAS_AI_STUDIO_2026-11-01.md)

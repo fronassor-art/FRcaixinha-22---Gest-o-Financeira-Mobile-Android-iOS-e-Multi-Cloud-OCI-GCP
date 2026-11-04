@@ -2,8 +2,9 @@ import React,{useEffect,useState} from 'react';
 import {authService} from '../services/authService';
 import {financialApi} from '../services/financialApiService';
 import type {DisplayLedgerAccount} from '../services/ledgerDetailBoundary';
+import type {LedgerAccountDirectoryItem} from '../services/ledgerAccountDirectoryBoundary';
 import type {LedgerAccountJournalPage} from '../services/ledgerAccountJournalBoundary';
-interface Props {tenantId:string;account:DisplayLedgerAccount;onClose:()=>void}
+interface Props {tenantId:string;account:Pick<DisplayLedgerAccount,'id'|'account_code'|'account_name'>|LedgerAccountDirectoryItem;onClose:()=>void}
 interface Result {page:number;status:'loading'|'ready'|'error';data?:LedgerAccountJournalPage}
 export const LedgerAccountEntries:React.FC<Props>=({tenantId,account,onClose})=>{
  const [page,setPage]=useState(1);

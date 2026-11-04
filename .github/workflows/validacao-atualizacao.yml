@@ -76,6 +76,10 @@ jobs:
         run: npx tsx src/tests/macropacote_220_ledger_boundary_ci.test.ts
       - name: M300 — extrato contábil por conta, paginação e segregação
         run: npx tsx src/tests/macropacote_300_ledger_account_entries_ci.test.ts
+      - name: M320 — diretório sem saldos e segregação no frontend
+        run: npx tsx src/tests/macropacote_320_ledger_empty_ci.test.ts
+      - name: M320 — máquina de estados de visibilidade contábil
+        run: npx tsx src/tests/macropacote_320_visibility_policy_ci.test.ts
       - name: M300 — identidade FR Caixinha e contrato comum
         run: npx tsx src/tests/macropacote_300_product_identity_ci.test.ts
       - name: Macropacote 220 — validar comando somente leitura Termux
@@ -86,6 +90,7 @@ jobs:
           bash -n backend/scripts/aistudio_240_backup_integrity_readonly.sh
           bash -n backend/scripts/aistudio_280_runtime_readonly.sh
           bash -n backend/scripts/aistudio_300_checkpoint_readonly.sh
+          bash -n backend/scripts/aistudio_320_checkpoint_readonly.sh
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
@@ -220,6 +225,9 @@ jobs:
           python -m pytest -q backend/tests/test_macropacote_280_runtime_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_300_ledger_journal_ci.py
           python -m pytest -q backend/tests/test_macropacote_300_runtime_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_320_empty_directory_ci.py
+          python -m pytest -q backend/tests/test_macropacote_320_directory_http_ci.py
+          python -m pytest -q backend/tests/test_macropacote_320_runtime_ci.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
           python -m pytest -q backend/tests/test_aistudio_real_panels.py

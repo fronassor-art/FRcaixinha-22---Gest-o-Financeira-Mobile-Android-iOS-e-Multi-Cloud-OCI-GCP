@@ -4,6 +4,8 @@ import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
 import { authService } from '../services/authService';
 import type { LedgerIntegrityPreview } from '../services/ledgerIntegrityPreview';
+import type {LedgerAccountDirectory} from '../services/ledgerAccountDirectoryBoundary';
+import {ledgerReadMode} from '../services/ledgerVisibilityPolicy';
 import {validateLedgerAccountLinks} from '../services/ledgerDetailBoundary';
 import type {DisplayLedgerAccount,DisplayLedgerTransaction} from '../services/ledgerDetailBoundary';
 
@@ -14,6 +16,7 @@ interface Result {
   accounts: DisplayLedgerAccount[];
   transactions: DisplayLedgerTransaction[];
   integrity?: LedgerIntegrityPreview;
+  directory?: LedgerAccountDirectory;
 }
 
 export const LedgerView: React.FC<Props> = ({ state }) => {
@@ -24,13 +27,23 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
   useEffect(() => {
     let active = true;
     const snapshot=authService.captureSession();
+    setSelectedAccountId(null);
     setResult({ key, status: 'loading', accounts: [], transactions: [] });
     if (state.currentRole !== 'TENANT_ADMIN' || !state.currentTenantId || !state.currentUserId) {
       setResult({ key, status: 'error', accounts: [], transactions: [] });
       return () => { active = false; };
     }
     financialApi.fetchLedgerIntegrityPreview(state.currentTenantId).then(async integrity=>{
-      if(integrity.status!=='BALANCED')return {integrity,accounts:[] as DisplayLedgerAccount[],transactions:[] as DisplayLedgerTransaction[]};
+      if(integrity.status!=='BALANCED') {
+        // Somente em NO_TRANSACTIONS: solicitar nomes/códigos de contas,
+        // nunca saldos ou lançamentos simulados. Em REVIEW_REQUIRED não detalhar.
+        const directory=ledgerReadMode(integrity)==='DIRECTORY_WITHOUT_BALANCES'
+          ?await financialApi.fetchLedgerAccountDirectory(state.currentTenantId!)
+          :undefined;
+        return {integrity,directory,
+          accounts:[] as DisplayLedgerAccount[],
+          transactions:[] as DisplayLedgerTransaction[]};
+      }
       const [accounts,transactions]:[DisplayLedgerAccount[],DisplayLedgerTransaction[]]=await Promise.all([
         financialApi.fetchLedgerAccounts(state.currentTenantId),
         financialApi.fetchLedgerTransactions(state.currentTenantId),
@@ -42,10 +55,10 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
         throw Error('Detalhamento contábil incompatível.');
       }
       validateLedgerAccountLinks(accounts,transactions);
-      return {integrity,accounts,transactions};
-    }).then(({integrity,accounts,transactions})=>{
+      return {integrity,accounts,transactions,directory:undefined};
+    }).then(({integrity,accounts,transactions,directory})=>{
       if(active&&authService.isSessionSnapshotCurrent(snapshot))
-        setResult({key,status:'ready',integrity,accounts,transactions});
+        setResult({key,status:'ready',integrity,accounts,transactions,directory});
     }).catch(()=>{
       if(active&&authService.isSessionSnapshotCurrent(snapshot))
         setResult({key,status:'error',accounts:[],transactions:[]});
@@ -84,13 +97,35 @@ export const LedgerView: React.FC<Props> = ({ state }) => {
             ?'Partidas dobradas consistentes na prévia.'
             :current.integrity.status==='REVIEW_REQUIRED'
               ?'Divergência contábil: detalhamento bloqueado para revisão.'
-              :'Nenhuma transação contábil registrada; detalhamento não exibido.'}
+              :'Nenhuma transação contábil registrada; saldos e lançamentos consolidados não exibidos.'}
         </p>
         <p className="text-xs text-amber-900">
           Integridade matemática não é conciliação bancária, liberação de
           pagamentos, distribuição de lucros ou autorização de fechamento.
         </p>
       </div>}
+      {current.status === 'ready' && current.integrity?.status==='NO_TRANSACTIONS'
+        && current.directory && <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <h3 className="font-semibold text-slate-900">Plano de contas — sem saldos</h3>
+          <p className="text-xs text-amber-900">
+            Nenhuma transação registrada na prévia. Contas listadas apenas por
+            nome e código; valores, conciliação e fechamento não estão confirmados.
+          </p>
+          {current.directory.accounts.length===0&&<p className="text-sm text-slate-700">
+            Nenhuma conta contábil cadastrada para esta caixinha. Não há extrato a abrir.
+          </p>}
+          {current.directory.accounts.map(account=><article key={account.id}
+            className="rounded-lg border border-slate-200 p-3">
+            <p className="text-sm text-slate-600">{account.account_code} — {account.account_type}</p>
+            <h4 className="font-medium text-slate-900">{account.account_name}</h4>
+            <button type="button" onClick={()=>setSelectedAccountId(account.id)}
+              className="mt-2 rounded-lg border px-3 py-2 text-sm">Ver extrato da conta</button>
+          </article>)}
+          {current.directory.accounts.filter(a=>a.id===selectedAccountId).map(a=>
+            <LedgerAccountEntries key={key+':'+a.id}
+              tenantId={state.currentTenantId!} account={a}
+              onClose={()=>setSelectedAccountId(null)}/>)}
+        </div>}
       {current.status === 'ready' && current.integrity?.status==='BALANCED' && <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {current.accounts.map(a => (
