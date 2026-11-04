@@ -1,6 +1,6 @@
 """
-FRcaixinha 2.2 — Rotas do Livro-Razão Contábil (Partidas Dobradas Imutáveis)
-Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 14.1 e 16.4)
+FRcaixinha AI Studio Mobile — Leitura do Livro-Razão (partidas dobradas)
+Projeto isolado. Consultas autorizadas por sessao, tenant e RLS.
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP.
 """
 
@@ -15,6 +15,19 @@ from ..database import get_rls_db_connection
 router = APIRouter(prefix="/tenants/{tenant_id}/ledger", tags=["Livro-Razão e Contabilidade"])
 
 CENTS = Decimal("0.01")
+MAX_LEDGER_ACCOUNTS = 500
+MAX_LEDGER_TRANSACTIONS = 500
+MAX_LEDGER_ENTRIES_PER_TRANSACTION = 100
+
+
+def _require_ledger_bound(rows, limit: int):
+    """Recusa resposta truncada: nunca apresenta extrato incompleto como completo."""
+    if len(rows) > limit:
+        raise HTTPException(
+            status_code=503,
+            detail="Consulta contábil excede o limite seguro; paginação pendente.",
+        )
+    return rows
 
 
 def _summarize_integrity_rows(rows, tenant_id: str):
@@ -126,8 +139,10 @@ async def list_ledger_accounts(
         SELECT id, tenant_id, account_code, account_name, account_type, balance_cents
         FROM ledger_accounts
         WHERE tenant_id = $1
-        ORDER BY account_code ASC;
+        ORDER BY account_code ASC
+        LIMIT 501;
     """, uuid.UUID(tenant_id))
+    _require_ledger_bound(rows, MAX_LEDGER_ACCOUNTS)
 
     return [
         LedgerAccountResponse(
@@ -167,18 +182,23 @@ async def list_ledger_transactions(
         SELECT id, tenant_id, transaction_date, description, reference_id
         FROM ledger_transactions
         WHERE tenant_id = $1
-        ORDER BY transaction_date DESC;
+        ORDER BY transaction_date DESC, id DESC
+        LIMIT 501;
     """, uuid.UUID(tenant_id))
+    _require_ledger_bound(tx_rows, MAX_LEDGER_TRANSACTIONS)
 
     results = []
     for tx in tx_rows:
         entries = await conn.fetch("""
             SELECT e.id, e.account_id, a.account_name, e.entry_type, e.amount_cents
             FROM ledger_entries e
-            JOIN ledger_accounts a ON e.account_id = a.id
+            JOIN ledger_accounts a
+              ON e.account_id = a.id AND a.tenant_id = e.tenant_id
             WHERE e.transaction_id = $1 AND e.tenant_id = $2
-            ORDER BY e.entry_type DESC;
+            ORDER BY e.entry_type DESC, e.id ASC
+            LIMIT 101;
         """, tx["id"], uuid.UUID(tenant_id))
+        _require_ledger_bound(entries, MAX_LEDGER_ENTRIES_PER_TRANSACTION)
 
         results.append(LedgerTransactionResponse(
             id=str(tx["id"]),

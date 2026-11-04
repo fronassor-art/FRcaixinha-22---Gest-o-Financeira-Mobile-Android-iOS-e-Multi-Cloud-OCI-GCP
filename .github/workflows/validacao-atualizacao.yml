@@ -210,6 +210,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
           python -m pytest -q backend/tests/test_aistudio_240_gates.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_260_ledger_read_ci.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
           python -m pytest -q backend/tests/test_aistudio_real_panels.py
