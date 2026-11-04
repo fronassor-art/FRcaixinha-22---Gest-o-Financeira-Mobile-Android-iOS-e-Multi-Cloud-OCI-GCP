@@ -201,7 +201,7 @@ def analyze_financial_integrity(
         positive_int(c.due_cents, allow_zero=False)
         positive_int(c.paid_cents)
         if c.paid_cents>c.due_cents:
-            issues.add("OVERPAID_CONTRIBUTIONS")
+            raise ValueError("Contribuição paga acima do devido; bloqueada para revisão")
         expected=("QUITADA" if c.paid_cents==c.due_cents else
                   "PARCIAL" if c.paid_cents>0 else "PENDENTE")
         if c.payment_status not in counts or c.payment_status!=expected:

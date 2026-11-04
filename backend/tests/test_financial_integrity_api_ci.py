@@ -148,10 +148,10 @@ async def test_member_overpayment_fails_closed():
                     competence="2027-01",amount_due=Decimal("150.00"),
                     amount_paid=Decimal("151.00"),payment_status="QUITADA")]
             return await super().fetch(query,*args)
-    r=await get_tenant_financial_integrity_preview(T,2027,session(),Overpay())
-    assert r.status=="REVIEW_REQUIRED"
-    assert "OVERPAID_CONTRIBUTIONS" in r.findings
-    assert r.registered_open_cents==0
+    with pytest.raises(HTTPException) as exc:
+        await get_tenant_financial_integrity_preview(
+            T,2027,session(),Overpay())
+    assert exc.value.status_code==503
 
 
 def test_route_is_get_only_and_session_protected():
