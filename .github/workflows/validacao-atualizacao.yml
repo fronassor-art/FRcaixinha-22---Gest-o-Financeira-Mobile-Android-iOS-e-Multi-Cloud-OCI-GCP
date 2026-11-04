@@ -237,6 +237,7 @@ jobs:
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
+          python -m pytest -q backend/tests/test_migration_028_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
@@ -380,6 +381,7 @@ jobs:
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
+          python -m pytest -q backend/tests/test_migration_028_contract_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -496,6 +498,7 @@ jobs:
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
+          python -m pytest -q backend/tests/test_migration_028_contract_ci.py
       - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
         env:
           PYTHONPATH: backend

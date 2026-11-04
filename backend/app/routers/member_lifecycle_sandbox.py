@@ -7,6 +7,7 @@ Sem a feature flag explícita, POST sempre falha fechado.
 from __future__ import annotations
 
 import os
+import asyncpg
 from uuid import UUID
 from datetime import datetime
 
@@ -92,6 +93,18 @@ async def _cycle(tenant_id:UUID,year:int,conn):
     return UUID(str(row["id"]))
 
 
+async def _fetch_request_rows(conn,sql,*args):
+    """Falha explícita se 028 ainda não existe; não cria dados sintéticos."""
+    try:
+        return await conn.fetch(sql,*args)
+    except (asyncpg.UndefinedTableError,asyncpg.InvalidSchemaNameError,
+            asyncpg.InsufficientPrivilegeError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Fila indisponível: banco de homologação sem migration 028 ou RLS.",
+        ) from exc
+
+
 async def _format(row):
     return LifecycleRequestResponse(
         id=str(row["id"]),tenant_id=str(row["tenant_id"]),
@@ -113,7 +126,7 @@ async def my_member_lifecycle_requests(
 ):
     _auth(tenant_id,session,role="TENANT_MEMBER")
     cycle_id=await _cycle(tenant_id,year,conn)
-    rows=await conn.fetch(
+    rows=await _fetch_request_rows(conn,
         "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
         "request_kind,policy_reference,status,requested_at "
         "FROM public.member_lifecycle_requests "
@@ -137,7 +150,7 @@ async def administrative_member_lifecycle_queue(
 ):
     _auth(tenant_id,session,role="TENANT_ADMIN")
     cycle_id=await _cycle(tenant_id,year,conn)
-    rows=await conn.fetch(
+    rows=await _fetch_request_rows(conn,
         "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
         "request_kind,policy_reference,status,requested_at "
         "FROM public.member_lifecycle_requests "
@@ -167,21 +180,36 @@ async def _submit(tenant_id:UUID,year:int,member_id:UUID,kind:str,
             tenant_id,cycle_id,member_id,kind,
             payload.idempotency_key,payload.policy_reference,
         )
-    except Exception as exc:
-        # Nunca expor detalhes da função de segurança do banco.
+    except (asyncpg.UndefinedFunctionError,asyncpg.UndefinedTableError,
+            asyncpg.InvalidSchemaNameError,
+            asyncpg.InsufficientPrivilegeError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Fluxo de homologação ainda não preparado neste banco.",
+        ) from exc
+    except asyncpg.PostgresError as exc:
         raise HTTPException(
             status_code=409,
             detail="Solicitação não aceita: contexto, política ou idempotência inválidos.",
         ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviço de homologação indisponível: operação não confirmada.",
+        ) from exc
     if identifier is None:
         raise HTTPException(status_code=503,detail="Registro não confirmado.")
-    row=await conn.fetchrow(
-        "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
-        "request_kind,policy_reference,status,requested_at "
-        "FROM public.member_lifecycle_requests "
-        "WHERE tenant_id=$1 AND cycle_id=$2 AND id=$3",
-        tenant_id,cycle_id,UUID(str(identifier)),
-    )
+    try:
+        row=await conn.fetchrow(
+            "SELECT id,tenant_id,cycle_id,membership_id,requested_by_user_id,"
+            "request_kind,policy_reference,status,requested_at "
+            "FROM public.member_lifecycle_requests "
+            "WHERE tenant_id=$1 AND cycle_id=$2 AND id=$3",
+            tenant_id,cycle_id,UUID(str(identifier)),
+        )
+    except (asyncpg.UndefinedTableError,asyncpg.InsufficientPrivilegeError) as exc:
+        raise HTTPException(status_code=503,
+            detail="Registro não consultável: migration 028/RLS indisponível.") from exc
     if row is None:
         raise HTTPException(status_code=503,detail="Solicitação não acessível após registro.")
     return await _format(row)

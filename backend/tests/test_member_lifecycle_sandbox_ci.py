@@ -197,6 +197,51 @@ def test_121_unique_idempotency_keys_do_not_create_financial_authorization(kind)
     assert not hasattr(request,"admin_override")
 
 
+
+
+@pytest.mark.asyncio
+async def test_unmigrated_database_get_returns_explicit_503():
+    import asyncpg
+    class NoMigration(FakeDB):
+        async def fetch(self,sql,*args):
+            raise asyncpg.UndefinedTableError("relation not found")
+    with pytest.raises(HTTPException) as exc:
+        await my_member_lifecycle_requests(T,2027,session(),NoMigration())
+    assert exc.value.status_code==503
+    assert "migration 028" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_unmigrated_database_write_returns_explicit_503(monkeypatch):
+    import asyncpg
+    monkeypatch.setenv("ENVIRONMENT","homologation")
+    monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX","1")
+    class NoFunction(FakeDB):
+        async def fetchval(self,sql,*args):
+            raise asyncpg.UndefinedFunctionError("function missing")
+    with pytest.raises(HTTPException) as exc:
+        await request_voluntary_exit_sandbox(
+            T,2027,body(),session(),NoFunction()
+        )
+    assert exc.value.status_code==503
+    assert "banco" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_sql_conflicting_policy_is_409_not_production_approval(monkeypatch):
+    import asyncpg
+    monkeypatch.setenv("ENVIRONMENT","homologation")
+    monkeypatch.setenv("FRCAIXINHA_LIFECYCLE_SANDBOX","1")
+    class Conflict(FakeDB):
+        async def fetchval(self,sql,*args):
+            raise asyncpg.UniqueViolationError("conflicting policy")
+    with pytest.raises(HTTPException) as exc:
+        await request_delinquency_review_sandbox(
+            T,2027,MEM,body(),session("TENANT_ADMIN"),Conflict()
+        )
+    assert exc.value.status_code==409
+
+
 def test_route_methods_cannot_update_member_status_or_cash():
     from app.main import app
     routes=[r for r in app.routes if "/member-lifecycle/" in getattr(r,"path","")]
