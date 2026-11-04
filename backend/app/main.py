@@ -401,6 +401,24 @@ def backend_m2900_staging_webhook_contract():
     }
 
 
+@app.get("/api/health/features/m3000", include_in_schema=False)
+def backend_m3000_oci_staging_server_contract():
+    """Separado da API local; nenhum webhook ou OCI real no Termux."""
+    from .oci_mp_staging_server import CONTRACT
+    return {
+        "workstream":"AI_STUDIO",
+        "contract":CONTRACT,
+        "oci_staging_server_module":True,
+        "oci_staging_deployed":False,
+        "webhook_receiver_registered_in_main":False,
+        "mp_provider_connected":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "real_payments_enabled":False,
+        "financial_closing_authorized":False,
+    }
+
+
 @app.get("/api/health/ready")
 async def backend_readiness():
     """Verifica conexões e esquema de homologação sem modificar o PostgreSQL."""
