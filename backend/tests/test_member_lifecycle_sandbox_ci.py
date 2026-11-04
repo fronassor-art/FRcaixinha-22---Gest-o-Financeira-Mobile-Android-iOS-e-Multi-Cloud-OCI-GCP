@@ -401,7 +401,20 @@ async def test_125_closing_gate_pending_variations_cannot_enable_money(n):
 def test_route_methods_cannot_update_member_status_or_cash():
     from app.main import app
     routes=[r for r in app.routes if "/member-lifecycle/" in getattr(r,"path","")]
-    assert len(routes)==6
+    # Tres rotas documentais foram adicionadas no M1240.
+    # Conferir por nomes evita que uma nova rota insegura passe pelo teste.
+    expected={
+       "member_lifecycle_capabilities",
+       "member_lifecycle_closing_gates",
+       "my_member_lifecycle_requests",
+       "administrative_member_lifecycle_queue",
+       "request_voluntary_exit_sandbox",
+       "request_delinquency_review_sandbox",
+       "lifecycle_review_capabilities",
+       "list_member_review_events",
+       "submit_member_review_event_sandbox",
+    }
+    assert {r.name for r in routes}==expected
     methods=set().union(*(r.methods for r in routes))
     assert methods=={"GET","POST"}
     assert not any("PATCH" in r.methods or "DELETE" in r.methods for r in routes)

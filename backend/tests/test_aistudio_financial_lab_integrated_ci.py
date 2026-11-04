@@ -616,8 +616,11 @@ async def test_integrated_real_sql_with_fictional_people_and_exact_money(monkeyp
         assert admin_review.id!=member_exit.id
         mine=await as_actor("member_a2","a","TENANT_MEMBER",
             lambda s,c:my_member_lifecycle_requests(a,2027,s,c))
-        assert len(mine.items)==1
-        assert mine.items[0].id==member_exit.id
+        assert len(mine.items)==2
+        assert {item.id for item in mine.items}=={member_exit.id,admin_review.id}
+        assert {item.request_kind for item in mine.items}=={
+            "VOLUNTARY_EXIT","DELINQUENCY_REVIEW"
+        }
         queue=await as_actor("admin_a","a","TENANT_ADMIN",
             lambda s,c:administrative_member_lifecycle_queue(a,2027,s,c))
         assert len(queue.items)==2
