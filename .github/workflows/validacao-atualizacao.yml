@@ -220,6 +220,7 @@ jobs:
         run: |
           python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
           python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
+          python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
@@ -356,6 +357,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_login_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_roles_e2e_ci.py
           python -m pytest -q -s --asyncio-mode=auto backend/tests/test_aistudio_financial_lab_integrated_ci.py
+          python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -464,7 +466,9 @@ jobs:
           FRCAIXINHA_CI_ISOLATED: '1'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           DATABASE_URL: postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_ci
-        run: python -m pytest -q -s --asyncio-mode=auto backend/tests/test_aistudio_financial_lab_integrated_ci.py
+        run: |
+          python -m pytest -q -s --asyncio-mode=auto backend/tests/test_aistudio_financial_lab_integrated_ci.py
+          python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
       - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
         env:
           PYTHONPATH: backend
