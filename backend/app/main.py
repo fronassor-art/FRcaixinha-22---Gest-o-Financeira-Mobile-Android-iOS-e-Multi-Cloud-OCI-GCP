@@ -19,7 +19,7 @@ from . import annual_evidence_preflight as _annual_evidence
 from . import financial_three_source_preflight as _three_source
 import os
 from .routers import sandbox_evidence_ci as _sandbox_evidence_ci
-from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations
+from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations, pix_automation
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -70,6 +70,7 @@ app.include_router(ledger.router, prefix=settings.API_V1_STR)
 app.include_router(consents.router, prefix=settings.API_V1_STR)
 app.include_router(closings.router, prefix=settings.API_V1_STR)
 app.include_router(audit.router, prefix=settings.API_V1_STR)
+app.include_router(pix_automation.router, prefix=settings.API_V1_STR)
 
 # M2040: endpoints de evidencias SINTETICAS apenas na CI efemera com opt-in.
 # Nao registrar no Termux ou em producao mesmo que a flag esteja ligada.
@@ -466,6 +467,20 @@ def backend_m3300_webhook_stream_protection():
         "bank_reconciled":False,
         "ledger_written":False,
         "real_payments_enabled":False,
+    }
+
+
+@app.get("/api/health/features/m3800", include_in_schema=False)
+def backend_pix_automation_contract():
+    from .routers.pix_automation import CONTRACT
+    return {
+        "workstream":"AI_STUDIO","contract":CONTRACT,
+        "member_pix_workflow_code_present":True,
+        "loan_payout_management_in_app":True,
+        "real_payments_enabled":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "financial_closing_authorized":False,
     }
 
 

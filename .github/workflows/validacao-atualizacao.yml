@@ -259,6 +259,10 @@ jobs:
           python -m pytest -q backend/tests/test_m3100_provider_account_role_ci.py
           python -m pytest -q backend/tests/test_m3200_oci_recovery_policy_ci.py
           python -m pytest -q backend/tests/test_m3300_mp_webhook_ingress_ci.py
+          python -m pytest -q backend/tests/test_m3400_pix_automation_contract_ci.py
+          python -m pytest -q backend/tests/test_m3500_mp_pix_provider_ports_ci.py
+          python -m pytest -q backend/tests/test_m3600_pix_workflow_ports_ci.py
+          python -m pytest -q backend/tests/test_m3700_pix_staging_schema_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
