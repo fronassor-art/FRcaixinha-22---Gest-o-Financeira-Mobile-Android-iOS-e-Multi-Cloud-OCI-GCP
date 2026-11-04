@@ -16,6 +16,8 @@ from . import ledger_keyset as _ledger_keyset
 from . import financial_sandbox_reconciliation as _financial_lab
 from . import synthetic_financial_journal as _synthetic_journal
 from . import annual_evidence_preflight as _annual_evidence
+import os
+from .routers import sandbox_evidence_ci as _sandbox_evidence_ci
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations
 
 app = FastAPI(
@@ -67,6 +69,17 @@ app.include_router(ledger.router, prefix=settings.API_V1_STR)
 app.include_router(consents.router, prefix=settings.API_V1_STR)
 app.include_router(closings.router, prefix=settings.API_V1_STR)
 app.include_router(audit.router, prefix=settings.API_V1_STR)
+
+# M2040: endpoints de evidencias SINTETICAS apenas na CI efemera com opt-in.
+# Nao registrar no Termux ou em producao mesmo que a flag esteja ligada.
+_M2040_CI_EVIDENCE_READS = (
+    os.getenv("FRCAIXINHA_CI_ISOLATED") == "1"
+    and os.getenv("AI_STUDIO_M2040_CI_EVIDENCE_READS") == "1"
+    and os.getenv("ENVIRONMENT", "development") != "production"
+)
+if _M2040_CI_EVIDENCE_READS:
+    app.include_router(_sandbox_evidence_ci.router, prefix=settings.API_V1_STR)
+
 
 @app.get("/api/health")
 def health_check():
@@ -193,6 +206,29 @@ def backend_m1880_feature_contract():
         "durable_event_store_connected": False,
         "tenant_portfolio_cross_access": False,
         "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+        "real_payments_enabled": False,
+        "runtime_git_sha_verified": False,
+    }
+
+
+@app.get("/api/health/features/m2040", include_in_schema=False)
+def backend_m2040_feature_contract():
+    """Status de laboratorio CI; nao prova de pagamento, capital ou fechamento."""
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M2040_CI_SANDBOX_PERSISTENCE_V1",
+        "database_migration_applied_locally": False,
+        "ci_only_synthetic_schema_in_repository": True,
+        "synthetic_read_routes_registered": _M2040_CI_EVIDENCE_READS,
+        "provider_get_connected": False,
+        "oauth_connect_active": False,
+        "real_webhooks_active": False,
+        "bank_reconciled": False,
+        "financial_effect_applied": False,
         "ledger_written": False,
         "financial_closing_authorized": False,
         "payout_authorized": False,

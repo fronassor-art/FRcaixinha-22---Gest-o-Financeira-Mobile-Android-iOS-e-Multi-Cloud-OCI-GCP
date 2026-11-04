@@ -245,6 +245,7 @@ jobs:
           python -m pytest -q backend/tests/test_member_obligations_oracle_ci.py
           python -m pytest -q backend/tests/test_m1720_financial_sandbox_ci.py
           python -m pytest -q backend/tests/test_m1880_financial_evidence_ci.py
+          python -m pytest -q backend/tests/test_m2040_sandbox_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
@@ -350,6 +351,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/028_member_lifecycle_sandbox_requests.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/029_member_lifecycle_review_events.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/030_member_lifecycle_case_rounds.sql
+          # CI-only, fora do diretorio de migracoes do Termux.
+          PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -404,6 +407,7 @@ jobs:
           python -m pytest -q backend/tests/test_migration_029_contract_ci.py
           python -m pytest -q backend/tests/test_migration_030_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m2040_sandbox_persistence_ci.py
 
       - name: Testar prontidão FastAPI com PostgreSQL descartável
         env:
@@ -493,6 +497,7 @@ jobs:
           done
           scripts+=(-f backend/scripts/aistudio_post_migration_roles.sql)
           psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
+          PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_pg18_app"
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_auth LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
@@ -526,6 +531,7 @@ jobs:
           python -m pytest -q backend/tests/test_migration_029_contract_ci.py
           python -m pytest -q backend/tests/test_migration_030_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m2040_sandbox_persistence_ci.py
       - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
         env:
           PYTHONPATH: backend
