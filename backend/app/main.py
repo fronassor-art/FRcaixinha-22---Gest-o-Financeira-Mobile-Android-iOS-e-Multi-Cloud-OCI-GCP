@@ -10,6 +10,9 @@ from .dependencies import auth_database_url, auth_verifier_database_url
 from .security import auth_rate_limit_key
 import asyncio
 import asyncpg
+import hashlib
+from pathlib import Path
+from . import ledger_keyset as _ledger_keyset
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit
 
 app = FastAPI(
@@ -118,6 +121,32 @@ def backend_m320_feature_contract():
         "financial_closing_authorized": False,
         "real_payments_enabled": False,
         "bank_reconciled": False,
+        "runtime_git_sha_verified": False,
+    }
+
+
+# M360: hashes dos arquivos .py capturados no instante do import.
+# Nunca equiparar a hash do bytecode ou SHA completo do commit executado.
+_M360_SOURCE_AT_IMPORT = {
+    "main_py": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    "ledger_py": hashlib.sha256(Path(ledger.__file__).read_bytes()).hexdigest(),
+    "ledger_keyset_py": hashlib.sha256(Path(_ledger_keyset.__file__).read_bytes()).hexdigest(),
+}
+
+
+@app.get("/api/health/features/m360", include_in_schema=False)
+def backend_m360_feature_contract():
+    return {
+        "product": "FR Caixinha",
+        "workstream": "AI_STUDIO",
+        "contract": "FR_CAIXINHA_M360_KEYSET_V1",
+        "keyset_read_only": True,
+        "page_max": ledger.MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE,
+        "tenant_admin_only": True,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "source_fingerprints_at_import": _M360_SOURCE_AT_IMPORT,
         "runtime_git_sha_verified": False,
     }
 

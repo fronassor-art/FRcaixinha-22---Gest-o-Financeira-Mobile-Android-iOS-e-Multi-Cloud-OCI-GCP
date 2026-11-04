@@ -93,6 +93,7 @@ jobs:
           bash -n backend/scripts/aistudio_280_runtime_readonly.sh
           bash -n backend/scripts/aistudio_300_checkpoint_readonly.sh
           bash -n backend/scripts/aistudio_320_checkpoint_readonly.sh
+          bash -n backend/scripts/aistudio_360_checkpoint_readonly.sh
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
@@ -231,6 +232,7 @@ jobs:
           python -m pytest -q backend/tests/test_macropacote_320_directory_http_ci.py
           python -m pytest -q backend/tests/test_macropacote_320_runtime_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_360_keyset_ci.py
+          python -m pytest -q backend/tests/test_macropacote_360_runtime_ci.py
           python -m pytest -q backend/tests/test_termux_local_backend.py
           python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
           python -m pytest -q backend/tests/test_aistudio_real_panels.py
