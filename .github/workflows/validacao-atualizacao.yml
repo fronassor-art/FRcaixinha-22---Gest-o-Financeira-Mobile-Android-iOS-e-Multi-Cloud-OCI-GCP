@@ -211,6 +211,8 @@ jobs:
           python-version: '3.11'
       - name: Instalar dependências Python
         run: python -m pip install -r backend/requirements.txt
+      - name: Preparar extrator de clausulas PDF somente CI
+        run: python -m pip install --no-deps pypdf==5.9.0
       - name: Auditar cláusulas dos documentos mestres versionados
         run: python backend/scripts/aistudio_contract_clause_extract_ci.py
       - name: Verificar importação do FastAPI
