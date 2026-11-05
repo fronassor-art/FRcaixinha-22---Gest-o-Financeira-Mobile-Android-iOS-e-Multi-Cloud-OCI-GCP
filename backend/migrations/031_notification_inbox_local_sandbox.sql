@@ -83,7 +83,7 @@ BEGIN
      (p_role='MASTER' AND p_tenant IS NULL AND u.is_master=true)
      OR (
        p_role IN ('TENANT_ADMIN','TENANT_MEMBER')
-       AND p_tenant IS NOT NULL AND u.is_master=false
+       AND p_tenant IS NOT NULL
        AND EXISTS(SELECT 1 FROM public.memberships m
          JOIN public.tenants t ON t.id=m.tenant_id
          WHERE m.user_id=p_user AND m.tenant_id=p_tenant
@@ -109,6 +109,8 @@ CREATE POLICY notification_local_read_own ON public.notification_inbox
 );
 
 -- No user-supplied recipient, tenant, title, event, money or HTML.
+-- A user with is_master=true may also hold active tenant roles; the active role
+-- must be validated through membership, never inferred from is_master alone.
 -- Transaction-local SQL context is set by the authenticated backend.
 CREATE OR REPLACE FUNCTION public.notification_local_create_selftest()
  RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER
@@ -188,7 +190,7 @@ BEGIN
  IF NOT FOUND OR NOT (
    (s.active_role='MASTER' AND s.active_tenant_id IS NULL AND s.is_master=true)
    OR (s.active_role IN ('TENANT_ADMIN','TENANT_MEMBER')
-       AND s.active_tenant_id IS NOT NULL AND s.is_master=false
+       AND s.active_tenant_id IS NOT NULL
        AND EXISTS(SELECT 1 FROM public.memberships m
           JOIN public.tenants t ON t.id=m.tenant_id
           WHERE m.user_id=s.user_id AND m.tenant_id=s.active_tenant_id
