@@ -90,6 +90,10 @@ def validate_orders_independent_settlement(
             or type(bank) is not OrdersSettlementEvidence
             or provider_read.provider_response_structure_verified is not True
             or provider_read.ready_for_independent_settlement_lookup is not True
+            or provider_read.status!="processed"
+            or provider_read.status_detail!="accredited"
+            or provider_read.payment_status!="processed"
+            or provider_read.payment_detail!="accredited"
             or bank.tenant_id!=command.obligation.tenant_id
             or bank.account_id!=command.obligation.provider_account_id
             or bank.operation_id!=command.operation_id
@@ -104,6 +108,7 @@ def validate_orders_independent_settlement(
             or any(c not in "0123456789abcdef" for c in bank.bank_statement_hash)
             or type(bank.bank_settled_at) is not datetime
             or bank.bank_settled_at.tzinfo is None
+            or bank.bank_settled_at.utcoffset() is None
             or bank.bank_settlement_attested is not True
             or bank.account_binding_attested is not True
             or bank.independent_statement_source is not True):
@@ -141,7 +146,8 @@ class OrdersCollectionAutomation:
                     or result.status!="action_required"
                     or result.status_detail!="waiting_transfer"
                     or result.capital_recognized is not False
-                    or result.bank_reconciled is not False):
+                    or result.bank_reconciled is not False
+                    or result.ledger_written is not False):
                 raise FinancialOperationBlocked("Order criada sem estado validado")
             await self.journal.write_checkout(command,result)
             return result
@@ -153,8 +159,20 @@ class OrdersCollectionAutomation:
         self,*,command:PixPaymentCommand,order_id:str,
         loan_allocation:LoanAllocation|None=None,
     )->OrdersPaymentReceipt|None:
+        # Verify the persisted reservation BEFORE trusting GET/notification.
+        # A caller-supplied Order ID is never sufficient to choose a payee.
+        persisted=await self.journal.lookup_checkout(command.operation_id)
+        if (type(persisted) is not OrdersPixCheckout
+                or persisted.operation_id!=command.operation_id
+                or persisted.order_id!=order_id
+                or persisted.amount_cents!=command.amount_cents
+                or persisted.bank_reconciled is not False
+                or persisted.ledger_written is not False):
+            raise FinancialOperationBlocked("Order sem reserva comprovada")
         report=await self.provider.get(command=command,order_id=order_id)
-        if type(report) is not OrdersReadReport or report.order_id!=order_id:
+        if (type(report) is not OrdersReadReport
+                or report.order_id!=order_id
+                or report.payment_id!=persisted.payment_id):
             raise FinancialOperationBlocked("Consulta Orders inválida")
         if not report.ready_for_independent_settlement_lookup:
             return None

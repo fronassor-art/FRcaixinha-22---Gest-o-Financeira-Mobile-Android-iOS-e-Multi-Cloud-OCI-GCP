@@ -110,6 +110,11 @@ class Journal:
         return self.posts[command.operation_id]
 
 
+async def prepare_persisted_checkout(journal,cmd):
+    assert await journal.reserve_idempotent(cmd)=="NEW"
+    await journal.write_checkout(cmd,result(cmd))
+
+
 class Statement:
     def __init__(self):self.available=False
     async def fetch_and_attest(self,*,command,verified_get):
@@ -144,6 +149,7 @@ async def test_timeout_ambiguous_never_auto_reposts():
 async def test_webhook_or_provider_get_is_not_bank_reconciliation():
     provider=Provider();journal=Journal();statement=Statement()
     run=OrdersCollectionAutomation(provider=provider,journal=journal,statements=statement)
+    await prepare_persisted_checkout(journal,command())
     assert await run.reconcile(command=command(),order_id=ORD) is None
     assert not journal.posts
     statement.available=True
@@ -157,6 +163,7 @@ async def test_synthetic_three_source_commit_contract_idempotent():
     provider=Provider();journal=Journal();statement=Statement()
     statement.available=True
     run=OrdersCollectionAutomation(provider=provider,journal=journal,statements=statement)
+    await prepare_persisted_checkout(journal,command())
     receipt=await run.reconcile(command=command(),order_id=ORD)
     assert receipt.bank_reconciled
     assert receipt.order_id==ORD
@@ -173,6 +180,7 @@ async def test_loan_payment_requires_interest_principal_allocation():
     statement.available=True
     run=OrdersCollectionAutomation(provider=provider,journal=journal,statements=statement)
     loan=command(ObligationKind.LOAN_INSTALLMENT)
+    await prepare_persisted_checkout(journal,loan)
     with pytest.raises(FinancialOperationBlocked):
         await run.reconcile(command=loan,order_id=ORD)
     split=apply_loan_installment(

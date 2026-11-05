@@ -25,7 +25,8 @@ def test_sql_chain_scripts_isolated_and_ordered():
                 "035_pix_payment_automation_staging_only.sql",
                 "036_signed_orders_inbox_staging_only.sql",
                 "037_orders_payment_link_staging_only.sql",
-                "038_orders_reservation_staging_only.sql"):
+                "038_orders_reservation_staging_only.sql",
+                "039_orders_reconciliation_holds_staging_only.sql"):
         location=s.index(mig)
         assert location>previous
         previous=location
@@ -42,10 +43,11 @@ def test_m034_atomic_and_not_termux():
     assert "frcaixinha.mp_staging_authorized" in script
 
 def test_no_staging_files_in_local_migration_directory():
-    for n in range(34,39):
+    for n in range(34,40):
         assert not list((ROOT/"migrations").glob(f"{n:03}_*"))
     assert not list((ROOT/"migrations").glob("039_mp_*"))
     for p in ("033_staging_orders_fixture_ci_only.sql",
+              "036_staging_hold_probe_ci_only.sql",
               "034_staging_orders_worker_probe_ci_only.sql",
               "035_staging_webhook_probe_ci_only.sql"):
         f=ROOT/"ci_migrations"/p

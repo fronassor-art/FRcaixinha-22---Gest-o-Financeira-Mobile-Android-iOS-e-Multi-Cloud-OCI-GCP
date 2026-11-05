@@ -484,6 +484,35 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+@app.get("/api/health/features/m7200", include_in_schema=False)
+def backend_m7200_accounting_recovery_contract():
+    from .mp_orders_holds import CONTRACT as HOLDS
+    from .mp_orders_partial_refund import CONTRACT as PARTIAL_REFUND
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M7200_RECONCILIATION_HOLDS_DISPOSABLE_LEDGER_V1",
+        "reconciliation_holds_contract": HOLDS,
+        "partial_refund_contract": PARTIAL_REFUND,
+        "staging_reconciliation_hold_schema_prepared": True,
+        "disposable_pg16_pg18_ledger_test_present": True,
+        "orders_persisted_checkout_binding_hardened": True,
+        "partial_refund_preview_present": True,
+        "reconciliation_incident_logged_to_real_bank": False,
+        "staging_m039_applied_locally": False,
+        "oci_staging_deployed": False,
+        "real_provider_connected": False,
+        "real_bank_statement_reader_connected": False,
+        "real_bank_balance_reader_connected": False,
+        "real_payments_enabled": False,
+        "real_pix_payout_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m6400", include_in_schema=False)
 def backend_m6400_financial_staging_preflight():
     from .mp_orders_ledger_plan import CONTRACT as LEDGER

@@ -55,7 +55,8 @@ for file in \
   backend/staging_migrations/035_pix_payment_automation_staging_only.sql \
   backend/staging_migrations/036_signed_orders_inbox_staging_only.sql \
   backend/staging_migrations/037_orders_payment_link_staging_only.sql \
-  backend/staging_migrations/038_orders_reservation_staging_only.sql
+  backend/staging_migrations/038_orders_reservation_staging_only.sql \
+  backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql
 do
   PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
@@ -72,7 +73,16 @@ PGUSER=frcaixinha_mp_financial_worker \
 PGUSER=frcaixinha_mp_webhook_ingest \
   psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/035_staging_webhook_probe_ci_only.sql
-echo "STAGING_034_038_DISPOSABLE_POSTGRES=PASS"
+PGUSER=frcaixinha_mp_financial_worker \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/036_staging_hold_probe_ci_only.sql
+echo "=== M6700 — SERIALIZABLE ledger synthetic commits and rollback ==="
+CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+ backend/tests/test_m6700_disposable_ledger_atomicity_ci.py
+echo "M6700_LEDGER_DISPOSABLE=PASS"
+
+echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
 echo "OCI_APPLY=NOT_EXECUTED"
 echo "REAL_MONEY=OFF"
