@@ -32,6 +32,7 @@ class NoticeKind(str, Enum):
     FINANCIAL_STATUS_UNVERIFIED = "FINANCIAL_STATUS_UNVERIFIED"
     CLOSING_REVIEW_PENDING = "CLOSING_REVIEW_PENDING"
     SECURITY_SESSION_ALERT = "SECURITY_SESSION_ALERT"
+    SELF_TEST = "SELF_TEST"
 
 
 class NoticeChannel(str, Enum):
@@ -60,6 +61,7 @@ _ROLES = {
     NoticeKind.FINANCIAL_STATUS_UNVERIFIED: frozenset((NoticeRole.TENANT_ADMIN,NoticeRole.TENANT_MEMBER)),
     NoticeKind.CLOSING_REVIEW_PENDING: frozenset((NoticeRole.TENANT_ADMIN,)),
     NoticeKind.SECURITY_SESSION_ALERT: frozenset(NoticeRole),
+    NoticeKind.SELF_TEST: frozenset(NoticeRole),
 }
 
 _TEMPLATES = {
@@ -98,6 +100,10 @@ _TEMPLATES = {
     NoticeKind.CLOSING_REVIEW_PENDING: (
         "Fechamento em revisão",
         "Há uma etapa de conferência. Este aviso não autoriza fechamento ou Pix."
+    ),
+    NoticeKind.SELF_TEST: (
+        "Aviso de teste interno",
+        "Teste do recebimento interno realizado nesta conta. Nenhum pagamento ou envio externo foi executado."
     ),
     NoticeKind.SECURITY_SESSION_ALERT: (
         "Segurança de acesso",
