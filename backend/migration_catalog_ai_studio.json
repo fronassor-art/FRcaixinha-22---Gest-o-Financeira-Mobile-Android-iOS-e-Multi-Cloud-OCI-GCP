@@ -1,0 +1,431 @@
+{
+  "schema": "AI_STUDIO_MIGRATION_CATALOG_V1",
+  "project": "FR_CAIXINHA_AI_STUDIO_ONLY",
+  "branch": "atualizacao-ai-studio-9b46a63187",
+  "not_authority_to_deploy": true,
+  "source_of_truth": "repository + read-only Termux catalog audit",
+  "rules": {
+    "never_apply_ci_only_sql_to_termux": true,
+    "never_apply_staging_only_sql_to_termux": true,
+    "mandatory_local_equivalent_before_mobile_functional_test": true,
+    "mandatory_local_backup_and_post_apply_verification": true,
+    "no_real_payments_from_schema_parity": true,
+    "do_not_claim_local_applied_from_CI": true
+  },
+  "entries": [
+    {
+      "id": "ci_migrations:031",
+      "source_path": "backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "ci_migrations:032",
+      "source_path": "backend/ci_migrations/032_mp_connect_inbox_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "ci_migrations:033",
+      "source_path": "backend/ci_migrations/033_staging_orders_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "ci_migrations:034",
+      "source_path": "backend/ci_migrations/034_staging_orders_worker_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "ci_migrations:035",
+      "source_path": "backend/ci_migrations/035_staging_webhook_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "ci_migrations:036",
+      "source_path": "backend/ci_migrations/036_staging_hold_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "ci_migrations:037",
+      "source_path": "backend/ci_migrations/037_staging_incident_audit_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null
+    },
+    {
+      "id": "migrations:001",
+      "source_path": "backend/migrations/001_initial_schema.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:002",
+      "source_path": "backend/migrations/002_financial_extensions.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:003",
+      "source_path": "backend/migrations/003_canonical_ledger_and_pix.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:004",
+      "source_path": "backend/migrations/004_quota_read_isolation.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:005",
+      "source_path": "backend/migrations/005_restrict_identity_privileges.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:006",
+      "source_path": "backend/migrations/006_auth_test_access.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:007",
+      "source_path": "backend/migrations/007_contribution_read_isolation.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:008",
+      "source_path": "backend/migrations/008_persistent_auth_sessions.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:009",
+      "source_path": "backend/migrations/009_tenant_context_and_references.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:010",
+      "source_path": "backend/migrations/010_ledger_integrity.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:011",
+      "source_path": "backend/migrations/011_platform_license_catalog.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:012",
+      "source_path": "backend/migrations/012_minimize_application_identity_access.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:013",
+      "source_path": "backend/migrations/013_users_identity_rls.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:014",
+      "source_path": "backend/migrations/014_account_lifecycle_preparation.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:015",
+      "source_path": "backend/migrations/015_contract_versions_and_acceptance.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:016",
+      "source_path": "backend/migrations/016_saas_preparations_no_billing.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:017",
+      "source_path": "backend/migrations/017_saas_payment_activation.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:018",
+      "source_path": "backend/migrations/018_invite_email_verification.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:019",
+      "source_path": "backend/migrations/019_named_contexts_and_session_inventory.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:020",
+      "source_path": "backend/migrations/020_session_bound_named_contexts.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:021",
+      "source_path": "backend/migrations/021_session_bound_memberships.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:022",
+      "source_path": "backend/migrations/022_auth_session_issuance_limits.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:023",
+      "source_path": "backend/migrations/023_session_context_guarded_transition.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:024",
+      "source_path": "backend/migrations/024_token_bound_session_lifecycle.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:025",
+      "source_path": "backend/migrations/025_verifier_bound_session_issuance.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:026",
+      "source_path": "backend/migrations/026_credential_bound_proofs_and_session_revocation.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:027",
+      "source_path": "backend/migrations/027_shared_login_attempt_limits.sql",
+      "classification": "BASELINE_LOCAL",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": null,
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+    },
+    {
+      "id": "migrations:028",
+      "source_path": "backend/migrations/028_member_lifecycle_sandbox_requests.sql",
+      "classification": "CI_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.member_lifecycle_requests",
+      "local_evidence": null
+    },
+    {
+      "id": "migrations:029",
+      "source_path": "backend/migrations/029_member_lifecycle_review_events.sql",
+      "classification": "CI_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.member_lifecycle_review_events",
+      "local_evidence": null
+    },
+    {
+      "id": "migrations:030",
+      "source_path": "backend/migrations/030_member_lifecycle_case_rounds.sql",
+      "classification": "CI_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.member_lifecycle_requests",
+      "local_evidence": null
+    },
+    {
+      "id": "migrations:031",
+      "source_path": "backend/migrations/031_notification_inbox_local_sandbox.sql",
+      "classification": "APPLIED_LOCAL_EVIDENCE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.notification_inbox",
+      "local_evidence": "USER_LOG_2026-11-05_PG18_5433_34_TABLES_RLS_VALIDATED"
+    },
+    {
+      "id": "staging_migrations:034",
+      "source_path": "backend/staging_migrations/034_mp_signed_webhook_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_signed_webhook_inbox_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:035",
+      "source_path": "backend/staging_migrations/035_pix_payment_automation_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_pix_collection_operations_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:036",
+      "source_path": "backend/staging_migrations/036_signed_orders_inbox_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_signed_order_inbox_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:037",
+      "source_path": "backend/staging_migrations/037_orders_payment_link_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_orders_provider_reads_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:038",
+      "source_path": "backend/staging_migrations/038_orders_reservation_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_pix_collection_operations_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:039",
+      "source_path": "backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_orders_reconciliation_holds_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:040",
+      "source_path": "backend/staging_migrations/040_orders_incident_audit_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_orders_incident_audit_staging",
+      "local_evidence": null
+    },
+    {
+      "id": "staging_migrations:041",
+      "source_path": "backend/staging_migrations/041_notifications_inbox_outbox_staging_ci_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.notification_outbox_staging",
+      "local_evidence": null
+    }
+  ]
+}
