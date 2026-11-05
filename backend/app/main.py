@@ -484,6 +484,29 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+@app.get("/api/health/features/m4000", include_in_schema=False)
+def backend_m4000_pix_macro_contract():
+    from .pix_automation_contract import CONTRACT as DOMAIN
+    from .mp_pix_execution import CONTRACT as GATEWAY
+    from .pix_automation_workflows import CONTRACT as WORKFLOW
+    return {
+        "workstream":"AI_STUDIO",
+        "contract":"AI_STUDIO_M4000_PIX_LOAN_AUTOMATION_MACRO_V1",
+        "domain_contract":DOMAIN,
+        "provider_contract":GATEWAY,
+        "workflow_contract":WORKFLOW,
+        "pix_app_routes_registered":True,
+        "real_pix_collection_active":False,
+        "real_pix_payout_active":False,
+        "oci_staging_deployed":False,
+        "staging_035_applied":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "financial_closing_authorized":False,
+        "real_payments_enabled":False,
+    }
+
+
 @app.get("/api/health/features/m3800", include_in_schema=False)
 def backend_pix_automation_contract():
     from .routers.pix_automation import CONTRACT
