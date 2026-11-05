@@ -106,3 +106,66 @@ async def change(
       "real_payments_enabled":False,
       "existing_contributions_repriced":False,
     }
+
+
+class CycleOpeningPreviewRequest(BaseModel):
+    """An admin must choose the quota amount explicitly for their next cycle."""
+    model_config=ConfigDict(extra="forbid")
+    year: int=Field(strict=True,ge=2027,le=2100)
+    amount_cents: int=Field(strict=True,ge=15000,le=1000000)
+    reason: str=Field(min_length=12,max_length=500)
+
+
+@router.post("/opening-preview")
+async def opening_preview(
+    tenant_id: UUID,payload: CycleOpeningPreviewRequest,
+    session: AuthenticatedSession=Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Safe, read-only preparation; not yet an authorized cycle creation."""
+    from datetime import date
+    _admin(tenant_id,session)
+    if len(payload.reason.strip())<12:
+        raise HTTPException(422,"Justificativa de abertura insuficiente.")
+    tenant=await conn.fetchrow(
+        "SELECT id,status,admin_user_id FROM public.tenants WHERE id=$1",tenant_id,
+    )
+    if tenant is None or str(tenant["admin_user_id"])!=session.user_id:
+        raise HTTPException(403,"Responsável administrativo não confirmado.")
+    active=await conn.fetchval(
+        "SELECT count(*) FROM public.memberships "
+        "WHERE tenant_id=$1 AND user_id=$2 "
+        "AND role='TENANT_ADMIN' AND status='ATIVA'",
+        tenant_id,UUID(session.user_id),
+    )
+    if active!=1:
+        raise HTTPException(403,"Vínculo administrativo ativo não confirmado.")
+    cycles=await conn.fetch(
+        "SELECT year,status FROM public.cycles WHERE tenant_id=$1 "
+        "ORDER BY year DESC LIMIT 200",tenant_id,
+    )
+    reasons=[]
+    if tenant["status"]!="ATIVO":
+        reasons.append("TENANT_INACTIVE")
+    if any(c["year"]==payload.year for c in cycles):
+        reasons.append("YEAR_ALREADY_EXISTS")
+    if any(c["status"]!="LIQUIDADO" for c in cycles):
+        reasons.append("PREVIOUS_CYCLE_NOT_CLOSED")
+    if date(payload.year,1,1)<=date.today():
+        reasons.append("YEAR_START_NOT_FUTURE")
+    return {
+        "contract":"AI_STUDIO_M20800_CYCLE_OPENING_PREVIEW_V1",
+        "source":"POSTGRESQL_RLS_AUTHENTICATED_ADMIN",
+        "tenant_id":str(tenant_id),"year":payload.year,
+        "start_date":date(payload.year,1,1).isoformat(),
+        "end_date":date(payload.year,12,31).isoformat(),
+        "amount_cents":payload.amount_cents,
+        "minimum_amount_cents":15000,
+        "price_explicitly_entered":True,
+        "historical_obligations_unchanged":True,
+        "blocked_reasons":reasons,
+        "preconditions_satisfied":not reasons,
+        "cycle_creation_enabled":False,
+        "financial_effect":False,
+        "reason_recorded":False,
+    }

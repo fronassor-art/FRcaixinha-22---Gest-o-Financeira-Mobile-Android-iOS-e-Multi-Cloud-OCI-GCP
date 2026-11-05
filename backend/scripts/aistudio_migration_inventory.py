@@ -80,7 +80,7 @@ def repo_check():
     print("M19200_MIGRATION_SQL_COUNT="+str(len(filesystem)))
     print("M19200_LOCAL_031=EVIDENCE_USER_LOG_NOT_CI")
     print("M19200_NEEDS_LOCAL_EQUIVALENT=0")
-    print("M20700_LOCAL_043=SOURCE_ONLY_UNTIL_DB_ATTESTED")
+    print("M20700_LOCAL_043=LOCAL_DB_ATTESTATION_REQUIRED")
     print("M19300_SOURCE_LOCAL_028_030=VERSIONED_DB_VERIFICATION_REQUIRED")
     print("M20100_SOURCE_LOCAL_034_041=VERSIONED_DB_VERIFICATION_REQUIRED")
     print("M19200_CI_STAGING_NEVER_LOCAL_APPLY=PASS")
@@ -236,6 +236,37 @@ def local_readonly():
                     print("M20400_LOCAL_042=OBJECTS_RLS_VERIFIED")
                 else:
                     print("M20400_LOCAL_042=NOT_APPLIED")
+                if n==45:
+                    conditions=conn.execute(
+                      "SELECT conname,convalidated,pg_get_constraintdef(oid) "
+                      "FROM pg_constraint WHERE conname IN "
+                      "('policy_minimum_150_new','quota_minimum_150_new')"
+                    ).fetchall()
+                    if len(conditions)==2:
+                        if any(c[1] or '150' not in c[2] for c in conditions):
+                            return deny("M20700 invalid minimum constraints")
+                        defaults=conn.execute(
+                          "SELECT count(*) FROM information_schema.columns "
+                          "WHERE table_schema='public' AND "
+                          "((table_name='policies' AND column_name='contribution_per_quota') "
+                          "OR (table_name='quotas' AND column_name='value_brl')) "
+                          "AND column_default IS NOT NULL"
+                        ).fetchone()[0]
+                        auth=conn.execute(
+                          "SELECT to_regprocedure("
+                          "'public.cycle_price_change_legacy_m20400(text,uuid,uuid,bigint,text,uuid)') IS NOT NULL "
+                          "AND has_function_privilege('frc_ai_app',"
+                          "'public.cycle_price_change(text,uuid,uuid,bigint,text,uuid)','EXECUTE') "
+                          "AND NOT has_function_privilege('frc_ai_app',"
+                          "'public.cycle_price_change_legacy_m20400(text,uuid,uuid,bigint,text,uuid)','EXECUTE')"
+                        ).fetchone()[0]
+                        if defaults!=0 or not auth:
+                            return deny("M20700 defaults or grants unsafe")
+                        print("M20700_LOCAL_043=OBJECTS_AND_MINIMUM_VERIFIED")
+                    elif len(conditions)==0:
+                        print("M20700_LOCAL_043=NOT_APPLIED")
+                    else:
+                        return deny("M20700 partial migration 043")
                 print("M20200_MIGRATIONS="+str(n)+"_TABLES_VERIFIED_NO_REAPPLY")
                 print("M19200_READ_ONLY=PASS")
                 return 0
