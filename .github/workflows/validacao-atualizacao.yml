@@ -313,6 +313,8 @@ jobs:
           python -m pytest -q backend/tests/test_m19000_notifications_local_static_ci.py
           python -m pytest -q backend/tests/test_m19000_termux_local_control_ci.py
           python -m pytest -q backend/tests/test_m19100_incremental_ci.py
+          python backend/scripts/aistudio_migration_inventory.py repo-check
+          python -m pytest -q backend/tests/test_m19200_migration_inventory_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
