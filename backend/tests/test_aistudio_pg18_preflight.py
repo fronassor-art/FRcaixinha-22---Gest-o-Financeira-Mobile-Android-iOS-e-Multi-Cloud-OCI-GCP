@@ -227,8 +227,8 @@ async def test_pg18_migrations_master_rls_and_append_only_price():
             "VALUES($1,$2,$3,'TENANT_ADMIN')", member_id, tenant_id, admin_id
         )
         await admin.execute(
-            "INSERT INTO public.quotas(tenant_id,membership_id,quota_number)"
-            "VALUES($1,$2,1)", tenant_id, member_id
+            "INSERT INTO public.quotas(tenant_id,membership_id,quota_number,value_brl)"
+            "VALUES($1,$2,1,150.00)", tenant_id, member_id
         )
         tx = application.transaction()
         await tx.start()

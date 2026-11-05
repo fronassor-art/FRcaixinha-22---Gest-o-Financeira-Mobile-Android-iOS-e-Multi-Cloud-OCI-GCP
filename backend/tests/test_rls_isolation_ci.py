@@ -69,7 +69,7 @@ async def isolated_rows():
             ("quota_b", "tenant_b", "membership_b", 1),
         ]:
             await admin.execute(
-                "INSERT INTO quotas (id,tenant_id,membership_id,quota_number,value_brl) VALUES ($1,$2,$3,$4,100)",
+                "INSERT INTO quotas (id,tenant_id,membership_id,quota_number,value_brl) VALUES ($1,$2,$3,$4,150.00)",
                 ids[quota], ids[tenant], ids[membership], number,
             )
         yield app, ids
@@ -433,7 +433,7 @@ async def test_financial_rows_rls_and_composite_tenant_references(isolated_rows)
         assert not await conn.fetchval("SELECT has_table_privilege(current_user,'public.ledger_transactions','UPDATE')")
         with pytest.raises(asyncpg.ForeignKeyViolationError):
             await admin.execute(
-                'INSERT INTO quotas(tenant_id,membership_id,quota_number,value_brl) VALUES($1,$2,99,100)',
+                'INSERT INTO quotas(tenant_id,membership_id,quota_number,value_brl) VALUES($1,$2,99,150.00)',
                 ids['tenant_a'], ids['membership_b'])
         with pytest.raises(asyncpg.ForeignKeyViolationError):
             await admin.execute(
@@ -781,7 +781,7 @@ async def test_price_with_real_postgresql_policy_and_rls(isolated_rows):
         await admin.execute(
             "INSERT INTO public.policies(tenant_id,cycle_id,monthly_interest_rate,"
             "max_installments,contribution_per_quota,admin_pct,member_pct,status) "
-            "VALUES($1,$2,0.2000,6,100.00,15.00,85.00,'ACTIVE')",
+            "VALUES($1,$2,0.2000,6,150.00,15.00,85.00,'ACTIVE')",
             ids["tenant_a"],cycle)
         async def simulate(user,tenant,role):
             session=AuthenticatedSession(str(user),role,str(tenant),
