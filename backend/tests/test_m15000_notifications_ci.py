@@ -236,7 +236,6 @@ def test_auth_context_has_capabilities_but_inbox_503(role,tenant,is_master):
     ("MASTER",None,False),
     ("MASTER",str(T),True),
     ("TENANT_MEMBER",None,False),
-    ("TENANT_ADMIN",str(T),True),
     ("OUTRO",str(T),False),
 ])
 def test_wrong_active_context_denied(role,tenant,is_master):
@@ -246,5 +245,24 @@ def test_wrong_active_context_denied(role,tenant,is_master):
     try:
         with TestClient(app) as client:
             assert client.get("/api/v1/notifications/capabilities").status_code==403
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("role",["TENANT_ADMIN","TENANT_MEMBER"])
+def test_master_identity_with_valid_tenant_role_is_not_rejected_by_shape(role):
+    """The same person may be Master and hold independent tenant memberships."""
+    async def fake_session():
+        return AuthenticatedSession(str(U),role,str(T),"u@example.invalid","Teste",True)
+    app.dependency_overrides[get_current_session]=fake_session
+    try:
+        with TestClient(app) as client:
+            r=client.get("/api/v1/notifications/capabilities")
+            assert r.status_code==200
+            assert r.json()["role"]==role
+            assert r.json()["bank_reconciled"] is False
+            assert r.json()["real_payments_enabled"] is False
+            # No private Postgres local: shaping a session cannot produce an inbox.
+            assert r.json()["inbox_schema_connected"] is False
     finally:
         app.dependency_overrides.clear()
