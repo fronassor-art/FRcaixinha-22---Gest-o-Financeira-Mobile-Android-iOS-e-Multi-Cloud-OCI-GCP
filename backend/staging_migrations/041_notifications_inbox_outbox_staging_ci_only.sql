@@ -76,9 +76,22 @@ CREATE POLICY notification_recipient_context_ci ON public.notification_inbox_sta
  AND recipient_role=current_setting('app.current_role',true)
  AND tenant_id IS NOT DISTINCT FROM
      NULLIF(current_setting('app.current_tenant_id',true),'')::uuid
+ AND EXISTS (
+   SELECT 1 FROM public.users u
+   WHERE u.id=notification_inbox_staging.recipient_user_id
+     AND u.status='ACTIVE'
+     AND (notification_inbox_staging.recipient_role<>'MASTER' OR u.is_master)
+ )
  AND (
    (recipient_role='MASTER' AND tenant_id IS NULL)
-   OR (recipient_role IN ('TENANT_ADMIN','TENANT_MEMBER') AND tenant_id IS NOT NULL)
+   OR (recipient_role IN ('TENANT_ADMIN','TENANT_MEMBER') AND tenant_id IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM public.memberships m
+       WHERE m.user_id=notification_inbox_staging.recipient_user_id
+         AND m.tenant_id=notification_inbox_staging.tenant_id
+         AND m.role=notification_inbox_staging.recipient_role
+         AND m.status='ATIVA'
+     ))
  ));
 
 -- No arbitrary free-form text, contact data, or payout in the entrypoint.

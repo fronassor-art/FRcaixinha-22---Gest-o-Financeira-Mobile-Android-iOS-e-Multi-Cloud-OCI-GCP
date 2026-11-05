@@ -487,6 +487,35 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m17000", include_in_schema=False)
+def backend_m17000_notification_source_boundary():
+    """Signed synthetic policy exercises, without production source binding."""
+    from .notification_origin_attestation import CONTRACT as SOURCE_CONTRACT
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M17000_NOTIFICATION_ORIGIN_PAGE_GUARDS_V1",
+        "origin_contract": SOURCE_CONTRACT,
+        "synthetic_hmac_source_validation": True,
+        "timestamp_skew_limit_checked": True,
+        "role_recipient_scope_checked": True,
+        "staging_041_active_link_policy_prepared": True,
+        "authenticated_production_events": False,
+        "production_signing_key_configured": False,
+        "real_inbox_api_connected": False,
+        "local_migration_applied": False,
+        "oci_staging_deployed": False,
+        "in_app_delivery_active": False,
+        "email_send_active": False,
+        "push_send_active": False,
+        "whatsapp_send_active": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m16000", include_in_schema=False)
 def backend_m16000_notification_database_ci_contract():
     return {
