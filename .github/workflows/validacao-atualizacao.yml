@@ -315,6 +315,7 @@ jobs:
           python -m pytest -q backend/tests/test_m19100_incremental_ci.py
           python backend/scripts/aistudio_migration_inventory.py repo-check
           python -m pytest -q backend/tests/test_m19200_migration_inventory_ci.py
+          python -m pytest -q backend/tests/test_m19300_local_lifecycle_parity_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
@@ -417,9 +418,15 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f backend/migrations/025_verifier_bound_session_issuance.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/026_credential_bound_proofs_and_session_revocation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/027_shared_login_attempt_limits.sql
-          psql -v ON_ERROR_STOP=1 -f backend/migrations/028_member_lifecycle_sandbox_requests.sql
-          psql -v ON_ERROR_STOP=1 -f backend/migrations/029_member_lifecycle_review_events.sql
-          psql -v ON_ERROR_STOP=1 -f backend/migrations/030_member_lifecycle_case_rounds.sql
+          # CI original: backend/migrations/028_member_lifecycle_sandbox_requests.sql
+          # CI original: backend/migrations/029_member_lifecycle_review_events.sql
+          # CI original: backend/migrations/030_member_lifecycle_case_rounds.sql
+          # Run exact local forks against disposable PostgreSQL 16.
+          PGOPTIONS='-c frcaixinha.lifecycle_local_ci=1' \
+            psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -f backend/local_migrations/028_member_lifecycle_sandbox_requests.sql \
+            -f backend/local_migrations/029_member_lifecycle_review_events.sql \
+            -f backend/local_migrations/030_member_lifecycle_case_rounds.sql
           PGOPTIONS='-c frcaixinha.notifications_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/migrations/031_notification_inbox_local_sandbox.sql
           # CI-only, fora do diretorio de migracoes do Termux.
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
@@ -573,14 +580,18 @@ jobs:
           scripts=()
           for i in $(seq 1 30); do
             printf -v n '%03d' "$i"
-            files=(backend/migrations/"$n"_*.sql)
+            if (( i >= 28 )); then
+              files=(backend/local_migrations/"$n"_*.sql)
+            else
+              files=(backend/migrations/"$n"_*.sql)
+            fi
             test "${#files[@]}" -eq 1
             test -f "${files[0]}"
             scripts+=(-f "${files[0]}")
           done
           scripts+=(-f backend/migrations/031_notification_inbox_local_sandbox.sql)
           scripts+=(-f backend/scripts/aistudio_post_migration_roles.sql)
-          PGOPTIONS='-c frcaixinha.notifications_local_ci=1' \
+          PGOPTIONS='-c frcaixinha.notifications_local_ci=1 -c frcaixinha.lifecycle_local_ci=1' \
             psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
