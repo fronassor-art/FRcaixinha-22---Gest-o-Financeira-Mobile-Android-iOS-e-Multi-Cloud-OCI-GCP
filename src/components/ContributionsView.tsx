@@ -24,12 +24,14 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   const [revision, setRevision] = useState(0);
   const [checkout, setCheckout] = useState<ProviderPixCheckout | null>(null);
   const [pixBusyId, setPixBusyId] = useState<string | null>(null);
+  const [pixCapability,setPixCapability]=useState<{key:string;enabled:boolean}>({key:'',enabled:false});
   const [pixFeedback, setPixFeedback] = useState('');
   useEffect(() => {
     // Never keep another tenant's QR or financial feedback after role switch.
     setCheckout(null);
     setPixFeedback('');
     setPixBusyId(null);
+    setPixCapability({key:'',enabled:false});
   }, [key]);
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', items: [] });
 
@@ -41,6 +43,9 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       setResult({ key, status: 'error', items: [], message: 'Não há uma caixinha disponível para esta conta.' });
       return () => { active = false; };
     }
+    financialApi.fetchPixAutomationCapabilities(tenant).then(value => {
+      if(active)setPixCapability({key,enabled:value.pix_collection_enabled===true});
+    }).catch(()=>{if(active)setPixCapability({key,enabled:false});});
     financialApi.fetchContributions(tenant).then(items => {
       if (active) setResult({ key, status: 'ready', items });
     }).catch(() => {
@@ -51,7 +56,10 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
 
   async function generateMonthlyPix(contributionId: string) {
     const tenant = state.currentTenantId;
-    if (!tenant) return;
+    if (!tenant || !(pixCapability.key===key && pixCapability.enabled)) {
+      setPixFeedback('Pix indisponível: integração de pagamentos ainda não autorizada.');
+      return;
+    }
     const snapshot = authService.captureSession();
     const startKey = key;
     setPixBusyId(contributionId);
@@ -73,6 +81,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     }
   }
 
+  const pixEnabled=pixCapability.key===key && pixCapability.enabled;
   // Nunca mostre a resposta da conta anterior durante uma troca de sessão.
   const current = result.key === key ? result : { key, status: 'loading' as const, items: [] };
   return (
@@ -87,9 +96,9 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
           <RefreshCw className="h-4 w-4" aria-hidden="true" /> Atualizar
         </button>
       </div>
-      <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+      {!pixEnabled && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         Pagamentos por Pix ainda não estão disponíveis. Nenhum valor é marcado como pago sem conciliação.
-      </p>
+      </p>}
       {pixFeedback && <p role="status" className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800">
         {pixFeedback}
       </p>}
@@ -114,10 +123,10 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
                 </dl>
                 {c.payment_status !== 'QUITADA' && c.amount_due > c.amount_paid && (
                   <button type="button"
-                    disabled={pixBusyId !== null}
+                    disabled={!pixEnabled || pixBusyId !== null}
                     onClick={() => generateMonthlyPix(c.id)}
                     className="mt-4 w-full rounded-lg bg-emerald-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">
-                    {pixBusyId === c.id ? 'Solicitando...' : 'Gerar Pix desta competência'}
+                    {!pixEnabled ? 'Pix indisponível — aguardando integração' : pixBusyId === c.id ? 'Solicitando...' : 'Gerar Pix desta competência'}
                   </button>
                 )}
               </article>

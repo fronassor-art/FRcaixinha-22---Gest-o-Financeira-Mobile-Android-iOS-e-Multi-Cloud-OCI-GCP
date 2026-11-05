@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import {ChevronLeft,ChevronRight} from 'lucide-react';
+import {startTabHistory,visitTab,stepTab,canStepTab} from './services/tabHistory';
 import {
   LayoutDashboard,
   Users,
@@ -57,7 +59,12 @@ import { createForegroundSessionGuard } from './services/sessionResumeGuard';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
-  const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
+  const [tabHistory,setTabHistory] = useState(()=>startTabHistory('DASHBOARD'));
+  const activeTab=tabHistory.entries[tabHistory.index]??'DASHBOARD';
+  const setActiveTab=(tab:string)=>{
+    const role=appStore.getState().currentRole;
+    setTabHistory(old=>visitTab(old,tab,dest=>isRoleTabAllowed(role,dest)));
+  };
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(() => authService.getUser());
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
   const [resumeValidationPending, setResumeValidationPending] = useState(false);
@@ -157,14 +164,14 @@ export default function App() {
     appStore.setAuthenticatedContext(user);
     setSecurityOpen(false);
     setMoreOpen(false);
-    setActiveTab(user.role === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD');
+    setTabHistory(startTabHistory(initialRoleTab(user.role)));
   };
 
   const handleLogout = async () => {
     await authService.logout();
     setAuthenticatedUser(null);
     appStore.clearAuthenticatedContext();
-    setActiveTab('DASHBOARD');
+    setTabHistory(startTabHistory('DASHBOARD'));
     setSecurityOpen(false);
     setMoreOpen(false);
   };
@@ -172,7 +179,7 @@ export default function App() {
   // Papel ativo validado no servidor; bloqueia renderizacoes de outras funcoes.
   useEffect(() => {
     if (!isRoleTabAllowed(state.currentRole, activeTab)) {
-      setActiveTab(initialRoleTab(state.currentRole));
+      setTabHistory(startTabHistory(initialRoleTab(state.currentRole)));
     }
   }, [state.currentRole, activeTab]);
 
@@ -293,6 +300,22 @@ export default function App() {
       <div role="note" className="shrink-0 bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
         Ambiente de homologação · operações financeiras reais indisponíveis
       </div>
+      {/* Role-local tab history. The arrows do not move between identities. */}
+      <nav aria-label="Histórico de telas" className="flex shrink-0 items-center justify-between border-b border-emerald-100 bg-white/95 px-3 py-1.5 text-sm text-emerald-900">
+        <button type="button" aria-label="Voltar à tela anterior"
+          disabled={!canStepTab(tabHistory,-1)}
+          onClick={()=>{setTabHistory(old=>stepTab(old,-1));setMoreOpen(false);}}
+          className="inline-flex min-h-10 items-center gap-1 rounded-lg px-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40">
+          <ChevronLeft className="h-5 w-5" aria-hidden="true"/> Voltar
+        </button>
+        <span className="text-xs text-emerald-800" aria-live="polite">{tabHistory.index+1} de {tabHistory.entries.length}</span>
+        <button type="button" aria-label="Avançar para a próxima tela"
+          disabled={!canStepTab(tabHistory,1)}
+          onClick={()=>{setTabHistory(old=>stepTab(old,1));setMoreOpen(false);}}
+          className="inline-flex min-h-10 items-center gap-1 rounded-lg px-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40">
+          Avançar <ChevronRight className="h-5 w-5" aria-hidden="true"/>
+        </button>
+      </nav>
       {/* Secondary Subnav Bar */}
       <nav className="hidden shrink-0 md:block border-b border-[#b4cfb5] bg-[#e7f1e7]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto py-2">
