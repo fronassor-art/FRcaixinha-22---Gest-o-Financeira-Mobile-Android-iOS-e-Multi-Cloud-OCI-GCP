@@ -104,6 +104,13 @@ CI_MP_NOTIFICATION_APP_URL="postgresql://${NOTIFY_APP_ROLE}:ci-test-only@127.0.0
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
  backend/tests/test_m16000_notifications_postgres_ci.py
 echo "M16000_POSTGRES_DISPOSABLE=PASS"
+echo "=== M18000: authenticated-scope CI-only inbox adapter ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+CI_MP_NOTIFICATION_PRODUCER_URL='postgresql://frcaixinha_notify_producer_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+CI_MP_NOTIFICATION_APP_URL="postgresql://${NOTIFY_APP_ROLE}:ci-test-only@127.0.0.1:5432/frcaixinha_staging" \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+ backend/tests/test_m18000_notification_ci_adapter_postgres.py
+echo "M18000_CI_INBOX_ADAPTER=PASS"
 echo "=== M6700 — SERIALIZABLE ledger synthetic commits and rollback ==="
 CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \

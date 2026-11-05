@@ -18,3 +18,9 @@ A sessão de teste e os GUCs SQL ainda são simulados e alteráveis se a credenc
 - P1: e-mail/push/WhatsApp somente com opt-in aplicável, provas de entrega, filas/retentativas e auditoria independente.
 - P2: homologação APK em Master/Admin/Membro e AT-01–50, acessibilidade e atualização da matriz de 147 cláusulas.
 - Financeiro: Connect, webhooks, conciliação bancária tripla, ledger e fechamento seguem bloqueados.
+
+
+## Prova física adicional
+- backend/tests/test_m18000_notification_ci_adapter_postgres.py tem nove ensaios que só executam sob CI GitHub Actions com PostgreSQL frcaixinha_staging descartável; usa duas caixinhas sintéticas, Master e Member.
+- Testes da consulta paginada, cursor, isolamento por papel/usuário, substituição de GUC antigo em conexão reutilizada, marcação de leitura idempotente, ausência de acesso direto à tabela outbox e ao cadastro users.
+- O adaptador permanece proibido de entrar na rota de produção; usar credencial SQL diretamente permitiria forjar os GUCs e por isso a autenticação efetiva ainda exige desenho adicional.
