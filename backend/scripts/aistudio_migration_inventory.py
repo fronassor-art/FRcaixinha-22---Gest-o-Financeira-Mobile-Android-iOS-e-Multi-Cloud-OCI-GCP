@@ -50,7 +50,7 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
-          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"
@@ -79,7 +79,8 @@ def repo_check():
     print("M19200_REGISTRY_HASHES=PASS")
     print("M19200_MIGRATION_SQL_COUNT="+str(len(filesystem)))
     print("M19200_LOCAL_031=EVIDENCE_USER_LOG_NOT_CI")
-    print("M19200_NEEDS_LOCAL_EQUIVALENT=8")
+    print("M19200_NEEDS_LOCAL_EQUIVALENT=0")
+    print("M20100_LOCAL_034_041=PREPARED_NOT_APPLIED")
     print("M19300_LOCAL_028_030=PREPARED_NOT_APPLIED")
     print("M19200_CI_STAGING_NEVER_LOCAL_APPLY=PASS")
     return manifest

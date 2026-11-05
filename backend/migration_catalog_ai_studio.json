@@ -114,6 +114,86 @@
       "source_blob_sha": "c55606ea99e10cdb0d21b288bd51ae960a36699a"
     },
     {
+      "id": "local_migrations:034",
+      "source_path": "backend/local_migrations/034_local_webhook_evidence.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m034_webhook_evidence",
+      "local_evidence": null,
+      "source_blob_sha": "0e6786c7cec28751432ea66ebe013a3aecbd79be"
+    },
+    {
+      "id": "local_migrations:035",
+      "source_path": "backend/local_migrations/035_local_pix_dryrun.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m035_pix_dryrun",
+      "local_evidence": null,
+      "source_blob_sha": "4cf22a6f6699e70c9023b9cfacc3176f831f4787"
+    },
+    {
+      "id": "local_migrations:036",
+      "source_path": "backend/local_migrations/036_local_orders_inbox.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m036_orders_inbox",
+      "local_evidence": null,
+      "source_blob_sha": "69c6f4298b8bda7dc2e0b3f9319820ebe7db9d3f"
+    },
+    {
+      "id": "local_migrations:037",
+      "source_path": "backend/local_migrations/037_local_orders_read_evidence.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m037_order_evidence",
+      "local_evidence": null,
+      "source_blob_sha": "3a31738accb3571a437d323be36e3f8ce2a9a29f"
+    },
+    {
+      "id": "local_migrations:038",
+      "source_path": "backend/local_migrations/038_local_orders_reservations.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m038_order_reservation",
+      "local_evidence": null,
+      "source_blob_sha": "efc10a7f1540f3768ea055109ff9a16e5489b73d"
+    },
+    {
+      "id": "local_migrations:039",
+      "source_path": "backend/local_migrations/039_local_reconciliation_holds.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m039_reconciliation_hold",
+      "local_evidence": null,
+      "source_blob_sha": "b8908f8c999ce9c2b2436c76807acd893d4c4db8"
+    },
+    {
+      "id": "local_migrations:040",
+      "source_path": "backend/local_migrations/040_local_incident_audit.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m040_incident_audit",
+      "local_evidence": null,
+      "source_blob_sha": "f3c802577722defe16572f6ed51a451194ac7221"
+    },
+    {
+      "id": "local_migrations:041",
+      "source_path": "backend/local_migrations/041_local_notification_outbox.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.local_m041_notification_outbox",
+      "local_evidence": null,
+      "source_blob_sha": "a6982b597e9afd38535de854c540447f2fe8f910"
+    },
+    {
       "id": "migrations:001",
       "source_path": "backend/migrations/001_initial_schema.sql",
       "classification": "BASELINE_LOCAL",
