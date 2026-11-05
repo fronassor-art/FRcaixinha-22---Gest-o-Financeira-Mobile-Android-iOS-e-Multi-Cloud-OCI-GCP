@@ -405,13 +405,14 @@ class FinancialApiService {
 
   public async changeCycleContributionPrice(
     tenantId:string,cycleId:string,amountCents:number,reason:string,
+    idempotencyKey:string,
   ):Promise<CyclePriceChangeResult>{
     assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
     const raw:unknown=await this.request(
       '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price',
       {method:'POST',body:JSON.stringify({
         cycle_id:cycleId,amount_cents:amountCents,
-        reason,idempotency_key:crypto.randomUUID(),
+        reason,idempotency_key:idempotencyKey,
       })});
     return parseCyclePriceChange(raw);
   }

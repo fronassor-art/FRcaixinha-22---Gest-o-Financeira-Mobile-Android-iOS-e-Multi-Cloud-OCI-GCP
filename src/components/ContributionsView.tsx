@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
@@ -8,6 +8,7 @@ import { authService } from '../services/authService';
 import { RealPixCheckout } from './RealPixCheckout';
 import type { ProviderPixCheckout } from '../services/pixAutomationBoundary';
 import {CycleContributionPolicy,parseCyclePriceInput} from '../services/cyclePriceBoundary';
+import {CyclePriceAttempt,reuseOrCreateCyclePriceAttempt} from '../services/cyclePriceAttempt';
 
 interface ContributionsViewProps {
   state: AppState;
@@ -31,6 +32,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   const [cycleInput,setCycleInput]=useState('');
   const [cycleReason,setCycleReason]=useState('');
   const [cycleBusy,setCycleBusy]=useState(false);
+  const cycleAttemptRef=useRef<CyclePriceAttempt|null>(null);
   const [cycleMessage,setCycleMessage]=useState('');
   useEffect(() => {
     // Never keep another tenant's QR or financial feedback after role switch.
@@ -43,6 +45,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     setCycleInput('');
     setCycleReason('');
     setCycleBusy(false);
+    cycleAttemptRef.current=null;
   }, [key]);
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', items: [] });
 
@@ -83,18 +86,28 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
 
   async function submitCyclePrice(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();
-    if(state.currentRole!=='TENANT_ADMIN'||!state.currentTenantId)return;
+    if(state.currentRole!=='TENANT_ADMIN'||!state.currentTenantId||cycleBusy)return;
     const policy=cyclePrice.key===key?cyclePrice.policy:null;
     if(!policy)return;
+    const snapshot=authService.captureSession();
     try{
       const amount=parseCyclePriceInput(cycleInput);
-      if(cycleReason.trim().length<12||cycleReason.trim().length>500)
+      const reason=cycleReason.trim();
+      if(reason.length<12||reason.length>500)
         throw new Error('Informe um motivo de auditoria com pelo menos 12 caracteres.');
-      const snapshot=authService.captureSession();
+      // M20500: retry the identical request with its original idempotency key.
+      // Changing tenant, role, cycle, amount or reason creates a new request.
+      const attempt=reuseOrCreateCyclePriceAttempt(cycleAttemptRef.current,{
+        scope:key,cycleId:policy.cycle_id,amountCents:amount,reason,
+      },()=>crypto.randomUUID());
+      cycleAttemptRef.current=attempt;
       setCycleBusy(true);setCycleMessage('');
       const response=await financialApi.changeCycleContributionPrice(
-        state.currentTenantId,policy.cycle_id,amount,cycleReason.trim());
+        state.currentTenantId,attempt.cycleId,attempt.amountCents,
+        attempt.reason,attempt.idempotencyKey);
       if(!authService.isSessionSnapshotCurrent(snapshot))return;
+      if(cycleAttemptRef.current?.idempotencyKey===attempt.idempotencyKey)
+        cycleAttemptRef.current=null;
       setCycleMessage(response.change_status==='APPLIED'
         ? 'Valor atualizado e auditado. Nenhuma contribuição anterior foi modificada.'
         : 'Solicitação de revisão registrada. Cobranças já emitidas não foram alteradas.');
@@ -102,8 +115,12 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       if(authService.isSessionSnapshotCurrent(snapshot))
         setCyclePrice({key,policy:revised,error:''});
     }catch(error){
-      setCycleMessage(error instanceof Error?error.message:'Não foi possível registrar a revisão.');
-    }finally{setCycleBusy(false);}
+      // Never expose an old account's response after logout or role switch.
+      if(authService.isSessionSnapshotCurrent(snapshot))
+        setCycleMessage(error instanceof Error?error.message:'Não foi possível registrar a revisão.');
+    }finally{
+      if(authService.isSessionSnapshotCurrent(snapshot))setCycleBusy(false);
+    }
   }
 
   async function generateMonthlyPix(contributionId: string) {
