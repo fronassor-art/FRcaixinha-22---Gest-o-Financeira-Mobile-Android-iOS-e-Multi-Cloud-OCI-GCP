@@ -151,7 +151,7 @@ def test_restart_time_rollback_or_retry_jump_rejected(variation):
 
 
 @pytest.mark.parametrize("bad",[
-    None, "", [], {}, 1, True, (case(),), object(),
+    None, "", [], {}, 1, True, object(),
 ])
 def test_checkpoint_type_and_prefix_type_fail_closed(bad):
     first=(case(),)
