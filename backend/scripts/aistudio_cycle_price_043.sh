@@ -21,13 +21,13 @@ printf '\n' >/dev/tty
 [[ -n "$PW" ]] || deny "empty password"
 export PGPASSWORD="$PW"; unset PW
 sql(){ psql -X -q -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5433 -U frc_ai_owner -d frcaixinha_aistudio_dev "$@"; }
-DB_IDENTITY="$(sql -tAc "SELECT current_database(),current_user,inet_server_port(),current_setting('data_directory')" | tr -d " ")
+DB_IDENTITY=$(sql -tAc "SELECT concat_ws('|',current_database(),current_user,inet_server_port(),current_setting('data_directory'))")
 [[ "$DB_IDENTITY" == "frcaixinha_aistudio_dev|frc_ai_owner|5433|$PGDATA" ]] || deny "wrong database identity"
-[[ "$(sql -tAc "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'" | tr -d " ")" == 45 ]] || deny "expected 45 tables"
-CONSTRAINTS="$(sql -tAc "SELECT count(*) FROM pg_constraint WHERE conname IN ('policy_minimum_150_new','quota_minimum_150_new')" | tr -d " ")"
+[[ "$(sql -tAc "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'")" == 45 ]] || deny "expected 45 tables"
+CONSTRAINTS=$(sql -tAc "SELECT count(*) FROM pg_constraint WHERE conname IN ('policy_minimum_150_new','quota_minimum_150_new')")
 if [[ "$MODE" == verify ]]; then
   [[ "$CONSTRAINTS" == 2 ]] || deny "minimum constraints missing"
-  DEFAULTS="$(sql -tAc "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND ((table_name='policies' AND column_name='contribution_per_quota') OR (table_name='quotas' AND column_name='value_brl')) AND column_default IS NOT NULL" | tr -d " ")"
+  DEFAULTS=$(sql -tAc "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND ((table_name='policies' AND column_name='contribution_per_quota') OR (table_name='quotas' AND column_name='value_brl')) AND column_default IS NOT NULL")
   [[ "$DEFAULTS" == 0 ]] || deny "legacy default still enabled"
   echo "M20700_LOCAL_043_VERIFY=PASS"
   exit 0

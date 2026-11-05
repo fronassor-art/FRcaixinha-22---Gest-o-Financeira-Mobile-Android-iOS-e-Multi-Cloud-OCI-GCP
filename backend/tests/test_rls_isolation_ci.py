@@ -394,7 +394,7 @@ async def test_financial_rows_rls_and_composite_tenant_references(isolated_rows)
                 'VALUES($1,$2,$3,$4,$5,$6)', cycle, tenant, year,
                 date(2027,1,1), date(2027,12,31), date(2028,1,10))
             await admin.execute(
-                'INSERT INTO policies(id,tenant_id,cycle_id) VALUES($1,$2,$3)',
+                'INSERT INTO policies(id,tenant_id,cycle_id,contribution_per_quota) VALUES($1,$2,$3,150.00)',
                 policy, tenant, cycle)
         for loan, tenant, cycle, policy, member in (
             (loan_a, ids['tenant_a'], cycle_a, policy_a, ids['membership_a']),
@@ -517,7 +517,7 @@ async def test_admin_member_loan_is_marked_and_blocked_in_real_postgres(isolated
         await admin.execute(
             "INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) VALUES($1,$2,2027,$3,$4,$5)",
             cycle, ids['tenant_a'], date(2027,1,1), date(2027,12,31), date(2028,1,10))
-        await admin.execute("INSERT INTO policies(id,tenant_id,cycle_id) VALUES($1,$2,$3)",
+        await admin.execute("INSERT INTO policies(id,tenant_id,cycle_id,contribution_per_quota) VALUES($1,$2,$3,150.00)",
                             policy, ids['tenant_a'], cycle)
         member = AuthenticatedSession(str(ids['admin_a']), 'TENANT_MEMBER', str(ids['tenant_a']),
                                       'synthetic@example.invalid', 'Administrador sintético', False)
@@ -574,8 +574,8 @@ async def test_policy_price_simulation_uses_live_tenant_cycle_and_rejects_cross_
             )
             await admin.execute(
                 "INSERT INTO public.policies "
-                "(tenant_id,cycle_id,monthly_interest_rate,max_installments) "
-                "VALUES($1,$2,$3,$4)",
+                "(tenant_id,cycle_id,monthly_interest_rate,max_installments,contribution_per_quota) "
+                "VALUES($1,$2,$3,$4,150.00)",
                 ids[tenant], cycle_id, Decimal(rate), months,
             )
         session = AuthenticatedSession(
