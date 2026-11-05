@@ -80,8 +80,8 @@ def repo_check():
     print("M19200_MIGRATION_SQL_COUNT="+str(len(filesystem)))
     print("M19200_LOCAL_031=EVIDENCE_USER_LOG_NOT_CI")
     print("M19200_NEEDS_LOCAL_EQUIVALENT=0")
-    print("M20100_LOCAL_034_041=PREPARED_NOT_APPLIED")
-    print("M19300_LOCAL_028_030=PREPARED_NOT_APPLIED")
+    print("M19300_SOURCE_LOCAL_028_030=VERSIONED_DB_VERIFICATION_REQUIRED")
+    print("M20100_SOURCE_LOCAL_034_041=VERSIONED_DB_VERIFICATION_REQUIRED")
     print("M19200_CI_STAGING_NEVER_LOCAL_APPLY=PASS")
     return manifest
 
@@ -142,8 +142,70 @@ def local_readonly():
                 print("M19200_030_ROUNDS="+("INDEX_PRESENT" if has030 else "NOT_IN_LOCAL"))
                 print("M19200_STAGING_034_041=CI_OR_OCI_ONLY_NOT_TERMUX")
                 print("M19200_CI_031_037=DISPOSABLE_ONLY")
+                # M20200: report the runtime DB, not a generic source-code state.
+                # Both the precise table count and all core contracts are required.
+                if n!=44:
+                    return deny("M20200 expected exactly 44 public tables, found "+str(n))
+                lifecycle=("public.member_lifecycle_requests","public.member_lifecycle_review_events")
+                if not all(exists(t) for t in lifecycle) or not has030:
+                    return deny("M20200 lifecycle 028-030 objects missing")
+                for name in lifecycle:
+                    secure=conn.execute(
+                      "SELECT COALESCE((SELECT relrowsecurity AND relforcerowsecurity "
+                      "FROM pg_class WHERE oid=to_regclass(%s)),false)",(name,)
+                    ).fetchone()[0]
+                    app_select=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',%s,'SELECT')",(name,)
+                    ).fetchone()[0]
+                    app_insert=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',%s,'INSERT')",(name,)
+                    ).fetchone()[0]
+                    app_update=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',%s,'UPDATE')",(name,)
+                    ).fetchone()[0]
+                    auth_select=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_auth',%s,'SELECT')",(name,)
+                    ).fetchone()[0]
+                    if not secure or not app_select or app_insert or app_update or auth_select:
+                        return deny("M20200 unsafe lifecycle role/RLS: "+name)
+                print("M20200_LOCAL_028_030=OBJECTS_RLS_VERIFIED")
+                local_names=(
+                  "local_m034_webhook_evidence","local_m035_pix_dryrun",
+                  "local_m036_orders_inbox","local_m037_order_evidence",
+                  "local_m038_order_reservation","local_m039_reconciliation_hold",
+                  "local_m040_incident_audit","local_m041_notification_outbox",
+                )
+                for table in local_names:
+                    name="public."+table
+                    if not exists(name):
+                        return deny("M20200 local parity missing "+table)
+                    secure=conn.execute(
+                      "SELECT relrowsecurity AND relforcerowsecurity "
+                      "FROM pg_class WHERE oid=to_regclass(%s)",(name,)
+                    ).fetchone()[0]
+                    privs=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',%s,'SELECT') "
+                      "OR has_table_privilege('frc_ai_app',%s,'INSERT') "
+                      "OR has_table_privilege('frc_ai_auth',%s,'SELECT') "
+                      "OR has_table_privilege('frc_ai_auth',%s,'UPDATE')",
+                      (name,name,name,name),
+                    ).fetchone()[0]
+                    if not secure or privs:
+                        return deny("M20200 unsafe local parity RLS or grants "+table)
+                triggers=conn.execute(
+                  "SELECT count(*) FROM pg_trigger "
+                  "WHERE tgname IN ('local_m040_immutable_row',"
+                  "'local_m040_immutable_truncate') AND tgenabled='O'"
+                ).fetchone()[0]
+                if triggers!=2:
+                    return deny("M20200 M040 immutability triggers missing")
+                if not n031:
+                    return deny("M20200 notification inbox 031 missing/unsafe")
+                print("M20200_LOCAL_031=OBJECTS_RLS_VERIFIED")
+                print("M20200_LOCAL_034_041=8_TABLES_RLS_VERIFIED")
+                print("M20200_MIGRATIONS=44_TABLES_VERIFIED_NO_REAPPLY")
                 print("M19200_READ_ONLY=PASS")
-                return 0 if n031 else 2
+                return 0
     except Exception as e:
         print("M19200_DB_READ_ERROR="+type(e).__name__,file=sys.stderr)
         return 2

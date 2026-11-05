@@ -28,9 +28,26 @@ def test_repo_gate_pass_and_local_gate_fails_closed():
     assert "M19200_REGISTRY_HASHES=PASS" in p.stdout
     assert "M19200_MIGRATION_SQL_COUNT=57" in p.stdout
     assert "M19200_NEEDS_LOCAL_EQUIVALENT=0" in p.stdout
-    assert "M20100_LOCAL_034_041=PREPARED_NOT_APPLIED" in p.stdout
-    assert "M19300_LOCAL_028_030=PREPARED_NOT_APPLIED" in p.stdout
+    assert "M20100_SOURCE_LOCAL_034_041=VERSIONED_DB_VERIFICATION_REQUIRED" in p.stdout
+    assert "M19300_SOURCE_LOCAL_028_030=VERSIONED_DB_VERIFICATION_REQUIRED" in p.stdout
     q=subprocess.run([sys.executable,str(path),"local-readonly"],capture_output=True,text=True,timeout=20)
     assert q.returncode!=0
     assert "M19200_BLOQUEADO" in q.stderr
     assert "SET TRANSACTION READ ONLY" in path.read_text()
+
+
+def test_inventory_local_runtime_verifies_all_44_structures():
+    src=(ROOT/"backend/scripts/aistudio_migration_inventory.py").read_text()
+    for term in (
+        'M20200_LOCAL_028_030=OBJECTS_RLS_VERIFIED',
+        'M20200_LOCAL_031=OBJECTS_RLS_VERIFIED',
+        'M20200_LOCAL_034_041=8_TABLES_RLS_VERIFIED',
+        'M20200_MIGRATIONS=44_TABLES_VERIFIED_NO_REAPPLY',
+        "if n!=44:",
+        "local_m041_notification_outbox",
+        "local_m040_immutable_truncate",
+        "has_table_privilege('frc_ai_auth'",
+        'SET TRANSACTION READ ONLY',
+    ):
+        assert term in src,term
+    assert "PREPARED_NOT_APPLIED" not in src
