@@ -83,7 +83,16 @@ async def _schema_ready() -> bool:
 def _must_be_local() -> None:
     if not _local_enabled():
         raise HTTPException(status_code=503,
-            detail="Notificações internas exigem migração 031 e API local autenticada")
+            detail="Operação bloqueada: notificações internas exigem migração 031 e API local autenticada")
+
+
+async def _authorized_local_scope(
+    session: AuthenticatedSession=Depends(get_current_session),
+) -> AuthenticatedSession:
+    # Resolve before opening a DB transaction: wrong role=403, disabled=503.
+    _scope(session)
+    _must_be_local()
+    return session
 
 
 def _normalize(row: asyncpg.Record) -> dict:
@@ -157,7 +166,7 @@ async def notification_readiness(
 async def list_notifications(
     limit: int=Query(default=20,ge=1,le=50),
     cursor: str | None=Query(default=None,max_length=1400),
-    session: AuthenticatedSession=Depends(get_current_session),
+    session: AuthenticatedSession=Depends(_authorized_local_scope),
     conn: asyncpg.Connection=Depends(get_rls_db_connection),
 ):
     scope=_scope(session)
@@ -207,7 +216,7 @@ async def list_notifications(
 
 @router.post("/self-test",status_code=status.HTTP_201_CREATED)
 async def create_selftest_notice(
-    session: AuthenticatedSession=Depends(get_current_session),
+    session: AuthenticatedSession=Depends(_authorized_local_scope),
     conn: asyncpg.Connection=Depends(get_rls_db_connection),
 ):
     _scope(session)
@@ -227,7 +236,7 @@ async def create_selftest_notice(
 @router.post("/{notice_id}/read")
 async def mark_notification_read(
     notice_id: UUID,
-    session: AuthenticatedSession=Depends(get_current_session),
+    session: AuthenticatedSession=Depends(_authorized_local_scope),
     conn: asyncpg.Connection=Depends(get_rls_db_connection),
 ):
     _scope(session)
