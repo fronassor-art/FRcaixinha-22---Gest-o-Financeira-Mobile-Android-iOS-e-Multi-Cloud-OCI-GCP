@@ -13,7 +13,7 @@ def test_backend_m6400_fails_closed_even_after_code_present():
     assert d["ledger_plan_contract"]=="AI_STUDIO_M6000_ORDERS_BALANCED_LEDGER_PLAN_V1"
     assert d["reversal_plan_contract"]=="AI_STUDIO_M6100_NONDESTRUCTIVE_REVERSAL_PLAN_V1"
     assert d["liquidity_contract"]=="AI_STUDIO_M6200_TENANT_LOAN_LIQUIDITY_PREFLIGHT_V1"
-    assert d["staging_chain_ci_contract"]=="CI_PG16_M034_M038_V1"
+    assert d["staging_chain_ci_contract"]=="CI_PG16_PG18_M034_M038_V1"
     for key in (
         "ledger_plan_code_present",
         "reversal_preview_code_present",

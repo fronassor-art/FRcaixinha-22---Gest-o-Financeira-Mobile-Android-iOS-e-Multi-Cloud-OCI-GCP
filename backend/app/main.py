@@ -495,7 +495,7 @@ def backend_m6400_financial_staging_preflight():
         "ledger_plan_contract": LEDGER,
         "reversal_plan_contract": REVERSAL,
         "liquidity_contract": LIQUIDITY,
-        "staging_chain_ci_contract": "CI_PG16_M034_M038_V1",
+        "staging_chain_ci_contract": "CI_PG16_PG18_M034_M038_V1",
         "staging_migrations_applied": False,
         "staging_sql_chain_executed_in_termux": False,
         "oci_staging_deployed": False,

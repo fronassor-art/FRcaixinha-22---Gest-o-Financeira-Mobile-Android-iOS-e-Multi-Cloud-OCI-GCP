@@ -599,6 +599,17 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M6300 — PostgreSQL 18 staging descartável, replay e worker RBAC
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: bash backend/scripts/aistudio_staging_chain_ci.sh
+
   exportar-fonte-ai-studio:
     name: Empacotar codigo-fonte para AI Studio
     runs-on: ubuntu-latest

@@ -20,7 +20,7 @@ Todas as funções novas de Livro-Razão/estorno são **planos puros, sem I/O**.
 - [x] 02. Exigir PostgreSQL em 127.0.0.1:5432 e banco `frcaixinha_ci` já provisionado exclusivamente na CI.
 - [x] 03. Proibir se existir previamente banco `frcaixinha_staging` no executor.
 - [x] 04. Criar papéis de worker separados, com `NOSUPERUSER` e `NOBYPASSRLS`.
-- [x] 05. Clonar banco exclusivamente sintético para `frcaixinha_staging` no container temporário.
+- [x] 05. Clonar banco exclusivamente sintético para `frcaixinha_staging` em cada container temporário.
 - [x] 06. Aplicar em ordem SQL 034, 035, 036, 037, 038 com as flags de staging, **sem OCI e sem Termux**.
 - [x] 07. Envolver toda a migração 034 em `BEGIN/COMMIT`, evitando migração parcialmente publicada.
 - [x] 08. Corrigir regex de Vault OCID em 034/035 sem exceder limite da engine PostgreSQL: sufixo ASCII e `char_length` entre 21 e 525.
@@ -73,7 +73,7 @@ Todas as funções novas de Livro-Razão/estorno são **planos puros, sem I/O**.
 
 ### M6300–M6400: CI, saúde e auditoria
 
-- [x] 40. Acrescentar ensaio SQL ao job PostgreSQL descartável no GitHub Actions.
+- [x] 40. Acrescentar ensaio SQL aos jobs PostgreSQL 16 e PostgreSQL 18 descartáveis no GitHub Actions.
 - [x] 41. Acrescentar testes da cadeia CI, das partidas dobradas, estornos e liquidez ao job de API.
 - [x] 42. Criar contrato HTTP `/api/health/features/m6400`.
 - [x] 43. Mostrar explicitamente operações reais, extrato externo, journal efetivo, OCI, Money Out e migrações locais como **false**.
