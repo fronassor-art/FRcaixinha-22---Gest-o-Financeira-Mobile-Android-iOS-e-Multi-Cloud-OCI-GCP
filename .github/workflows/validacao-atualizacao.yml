@@ -124,6 +124,8 @@ jobs:
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
+      - name: M20400 política de valor por ciclo sem repricing silencioso
+        run: npx tsx src/tests/m20400_cycle_price_ui_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
         run: npx tsx src/tests/financial_read_boundary_ci.test.ts
       - name: Validar reautenticacao ao retornar do segundo plano
@@ -319,6 +321,7 @@ jobs:
           python -m pytest -q backend/tests/test_m19200_migration_inventory_ci.py
           python -m pytest -q backend/tests/test_m19300_local_lifecycle_parity_ci.py
           python -m pytest -q backend/tests/test_m20100_local_parity_schema_ci.py
+          python -m pytest -q backend/tests/test_m20400_cycle_price_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
@@ -432,6 +435,8 @@ jobs:
             -f backend/local_migrations/030_member_lifecycle_case_rounds.sql
           PGOPTIONS='-c frcaixinha.notifications_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/migrations/031_notification_inbox_local_sandbox.sql
           bash backend/scripts/aistudio_local_parity_034_041_ci.sh
+          PGOPTIONS='-c frcaixinha.cycle_price_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/042_cycle_contribution_price_audit.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20400_cycle_policy_functional_ci.sql
           # CI-only, fora do diretorio de migracoes do Termux.
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
@@ -598,6 +603,8 @@ jobs:
           PGOPTIONS='-c frcaixinha.notifications_local_ci=1 -c frcaixinha.lifecycle_local_ci=1' \
             psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
           bash backend/scripts/aistudio_local_parity_034_041_ci.sh
+          PGOPTIONS='-c frcaixinha.cycle_price_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/042_cycle_contribution_price_audit.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20400_cycle_policy_functional_ci.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
