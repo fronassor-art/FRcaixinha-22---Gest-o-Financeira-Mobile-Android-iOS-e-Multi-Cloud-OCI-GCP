@@ -107,10 +107,11 @@ def store() -> None:
         "real_payments_enabled": False,
     }, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     token = ""
-    tmp = BASE / ("mp-sandbox-" + str(os.getpid()) + ".partial.age")
+    tmp = BASE / ("mp-sandbox-" + str(os.getpid()) + "-" + __import__("secrets").token_hex(12) + ".partial.age")
     try:
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        os.close(fd)
+        if tmp.exists() or tmp.is_symlink():
+            fail("Arquivo temporário já existe")
+        os.umask(0o077)
         done = subprocess.run(
             ["age", "--passphrase", "--output", str(tmp)],
             input=payload, stdout=subprocess.DEVNULL, check=False,
