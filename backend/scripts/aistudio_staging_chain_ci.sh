@@ -56,7 +56,7 @@ for file in \
   backend/staging_migrations/036_signed_orders_inbox_staging_only.sql \
   backend/staging_migrations/037_orders_payment_link_staging_only.sql \
   backend/staging_migrations/038_orders_reservation_staging_only.sql \
-  backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql
+  backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql \
   backend/staging_migrations/040_orders_incident_audit_staging_only.sql
 do
   PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1" \
