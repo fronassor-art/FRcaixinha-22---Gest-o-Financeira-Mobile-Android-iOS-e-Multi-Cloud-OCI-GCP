@@ -485,6 +485,33 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+
+@app.get("/api/health/features/m8600", include_in_schema=False)
+def backend_m8600_discrepancy_circuit_contract():
+    from .mp_orders_evidence_discrepancy import CONTRACT as EVIDENCE
+    from .mp_orders_readonly_circuit import CONTRACT as CIRCUIT
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M8600_DISCREPANCY_CIRCUIT_OFFLINE_V1",
+        "evidence_contract": EVIDENCE,
+        "circuit_contract": CIRCUIT,
+        "three_source_claim_comparison_only": True,
+        "readonly_circuit_policy_only": True,
+        "cross_tenant_evidence_rejected": True,
+        "review_digest_persisted": False,
+        "recovery_circuit_persistent": False,
+        "real_provider_connected": False,
+        "real_bank_statement_reader_connected": False,
+        "oci_staging_deployed": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m7900", include_in_schema=False)
 def backend_m7900_incident_readonly_contract():
     from .mp_orders_incident_ops import CONTRACT as INCIDENTS
