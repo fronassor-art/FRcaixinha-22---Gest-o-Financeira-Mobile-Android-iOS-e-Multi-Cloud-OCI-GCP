@@ -237,7 +237,9 @@ def replay_unresolved_history(
         tenant_id=first_decision.tenant_id,
         provider_account_id=base.provider_account_id,
         operation_id=base.operation_id,
-        order_id=first.recovery.order_id,
+        # Bind the alias registry to the Order claimed by the evidence,
+        # even when the recovery snapshot has no trusted Order ID yet.
+        order_id=first_ids[2],
         payment_id=first_ids[3],
         steps=tuple(steps), last_digest=digest,
         unique_snapshots=len(steps), exact_replays_suppressed=suppressed,

@@ -363,6 +363,21 @@ def test_batch_rejects_order_or_payment_alias(collision):
         summarize_tenant_replay_histories(T,((a,),(b,)))
 
 
+def test_missing_recovery_order_does_not_bypass_claimed_order_alias():
+    a=case()
+    b=case(operation_id="P_"+"b"*32,payment_id="PAY"+"Z"*12)
+    # Neither recovery has a verified remote Order ID. The claims still
+    # advertise the same Order, which must not silently bypass alias guard.
+    a=replace(a,recovery=replace(a.recovery,order_id=None))
+    b=replace(b,recovery=replace(b.recovery,order_id=None))
+    h=replay_unresolved_history((a,))
+    assert h.order_id == ORDER
+    assert not h.steps[0].read_candidate_policy_only
+    assert_all_financial_flags_false(h)
+    with pytest.raises(FinancialOperationBlocked):
+        summarize_tenant_replay_histories(T,((a,),(b,)))
+
+
 def test_batch_cross_tenant_is_rejected():
     with pytest.raises(FinancialOperationBlocked):
         summarize_tenant_replay_histories(T,((case(tenant_id=OTHER),),))
