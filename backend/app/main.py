@@ -486,6 +486,32 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m12000", include_in_schema=False)
+def backend_m12000_replay_rollback_contract():
+    from .mp_orders_replay_history import CONTRACT as HISTORY
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M12000_REPLAY_ROLLBACK_GUARD_OFFLINE_V1",
+        "history_contract": HISTORY,
+        "offline_monotonic_history_guard": True,
+        "rollback_and_duplicate_snapshot_rejected": True,
+        "cross_tenant_order_payment_alias_rejected": True,
+        "closed_auth_state_remains_blocked": True,
+        "history_persisted": False,
+        "operator_authenticated": False,
+        "distributed_idempotency_registry": False,
+        "real_provider_connected": False,
+        "real_bank_statement_connected": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+        "oci_staging_deployed": False,
+    }
+
+
 @app.get("/api/health/features/m11000", include_in_schema=False)
 def backend_m11000_retry_alias_integrity_contract():
     return {
