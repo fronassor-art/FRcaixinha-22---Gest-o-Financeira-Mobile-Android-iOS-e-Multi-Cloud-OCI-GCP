@@ -327,6 +327,7 @@ jobs:
           python -m pytest -q backend/tests/test_m20100_local_parity_schema_ci.py
           python -m pytest -q backend/tests/test_m20400_cycle_price_ci.py
           python -m pytest -q backend/tests/test_m20600_floor_static_ci.py
+          python -m pytest -q backend/tests/test_m20700_pg_quota_floor_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
@@ -442,6 +443,8 @@ jobs:
           bash backend/scripts/aistudio_local_parity_034_041_ci.sh
           PGOPTIONS='-c frcaixinha.cycle_price_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/042_cycle_contribution_price_audit.sql
           psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20400_cycle_policy_functional_ci.sql
+          PGOPTIONS='-c frcaixinha.quota_floor_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/043_cycle_contribution_contract_minimum.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20700_quota_floor_functional_ci.sql
           # CI-only, fora do diretorio de migracoes do Termux.
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
@@ -610,6 +613,8 @@ jobs:
           bash backend/scripts/aistudio_local_parity_034_041_ci.sh
           PGOPTIONS='-c frcaixinha.cycle_price_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/042_cycle_contribution_price_audit.sql
           psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20400_cycle_policy_functional_ci.sql
+          PGOPTIONS='-c frcaixinha.quota_floor_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/043_cycle_contribution_contract_minimum.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20700_quota_floor_functional_ci.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"

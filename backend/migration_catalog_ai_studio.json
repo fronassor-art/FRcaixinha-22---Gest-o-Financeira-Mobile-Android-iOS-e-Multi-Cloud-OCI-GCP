@@ -204,6 +204,16 @@
       "source_blob_sha": "c22a36eead8608076ad18cef489988d88fa0475f"
     },
     {
+      "id": "local_migrations:043",
+      "source_path": "backend/local_migrations/043_cycle_contribution_contract_minimum.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.policies",
+      "local_evidence": null,
+      "source_blob_sha": "48f975da0e015434b39a6e1b2d9664841038a752"
+    },
+    {
       "id": "migrations:001",
       "source_path": "backend/migrations/001_initial_schema.sql",
       "classification": "BASELINE_LOCAL",
