@@ -82,10 +82,15 @@ export const LoansAutomationPanel: React.FC<Props> = ({
   function installmentPix(loanId: string, installmentId: string) {
     const tenant = state.currentTenantId;
     if (!tenant) return;
+    const originalSession = authService.captureSession();
     void run(installmentId, async () => {
       const checkoutResult = await financialApi.createLoanInstallmentPix(
         tenant, loanId, installmentId,
       );
+      // A delayed response cannot reopen the previous tenant's Pix after switch.
+      if (!authService.isSessionSnapshotCurrent(originalSession)) {
+        return 'Contexto alterado. Cobrança descartada da tela.';
+      }
       setCheckout(checkoutResult);
       return 'Cobrança Pix criada e vinculada à parcela. Aguardando conciliação.';
     });
