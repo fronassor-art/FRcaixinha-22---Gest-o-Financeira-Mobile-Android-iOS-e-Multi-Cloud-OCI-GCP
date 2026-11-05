@@ -324,6 +324,14 @@ def build_payout_pix_request(
             or not _REF.fullmatch(order.idempotency_key)
             or provider_profile != "BR_TRANSACTION_INTENTS_PROCESS_V1"):
         raise ProviderRequestBlocked("Perfil Payouts não homologado")
+    # Official Money Out production requires commercial approval and a
+    # cryptographically signed exact request body. This M4000 port has no
+    # audited signing implementation: deny ALL production creation instead
+    # of sending a legally meaningful unsigned Pix transfer.
+    if credentials.environment == "PRODUCAO":
+        raise ProviderRequestBlocked(
+            "Money Out produção bloqueado até assinatura e habilitação comercial"
+        )
     credentials.require(purpose="OUT",network=False)
     recipient.validate()
     if recipient.destination_id != str(order.destination_id):
@@ -355,6 +363,7 @@ def build_payout_pix_request(
             "Accept":"application/json",
             "X-Idempotency-Key":order.idempotency_key,
             "X-test-token":"true" if credentials.environment=="HOMOLOGACAO" else "false",
+            "X-enforce-signature":"false",
         },
         content=raw,
     )

@@ -60,6 +60,8 @@ jobs:
         run: npx tsx src/tests/loan_simulation_feedback_ci.test.ts
       - name: Validar Pix oficial sem baixa manual
         run: npx tsx src/tests/pix_automation_boundary_ci.test.ts
+      - name: Validar Orders Pix MLB com IDs ORD e PAY
+        run: npx tsx src/tests/mp_orders_pix_boundary_ci.test.ts
       - name: Validar cronograma Price e rejeicao de simulacao tardia
         run: npx tsx src/tests/loan_simulation_integrity_ci.test.ts
       - name: Macropacote 180 — Price, sessao e consentimento
@@ -266,6 +268,13 @@ jobs:
           python -m pytest -q backend/tests/test_m3600_pix_workflow_ports_ci.py
           python -m pytest -q backend/tests/test_m3700_pix_staging_schema_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m3800_pix_app_automation_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4100_orders_pix_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4200_oauth_rotation_ci.py
+          python -m pytest -q backend/tests/test_m4300_money_out_gate_ci.py
+          python -m pytest -q backend/tests/test_m4400_orders_webhook_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4500_orders_staging_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4600_orders_workflow_ci.py
+          python -m pytest -q backend/tests/test_m4700_orders_schema_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

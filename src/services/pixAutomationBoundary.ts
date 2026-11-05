@@ -5,8 +5,11 @@
 export type ProviderPixCheckout = {
   operation_id: string;
   payment_id: string;
+  order_id?: string;
+  checkout_type?: 'orders_pix';
+  status_detail?: 'waiting_transfer';
   amount_cents: number;
-  status: 'pending' | 'in_process';
+  status: 'pending' | 'in_process' | 'action_required';
   qr_code: string;
   qr_code_base64?: string;
   ticket_url?: string;
@@ -19,6 +22,7 @@ export type FinancialReceipt = {
   receipt_id: string;
   operation_id: string;
   payment_id: string;
+  order_id?: string;
   amount_cents: number;
   status: 'CONFIRMADO_CONCILIADO';
   bank_reconciled: true;
@@ -28,6 +32,8 @@ export type FinancialReceipt = {
 
 const hexOrBase64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const id = /^[0-9]{1,40}$/;
+const orderId = /^ORD[A-Z0-9]{12,77}$/;
+const orderPaymentId = /^PAY[A-Z0-9]{12,77}$/;
 const operation = /^P_[0-9a-f]{32}$/;
 
 export function parseProviderPixCheckout(raw: unknown): ProviderPixCheckout {
@@ -35,11 +41,19 @@ export function parseProviderPixCheckout(raw: unknown): ProviderPixCheckout {
     throw new Error('Cobrança Pix indisponível.');
   }
   const d = raw as Record<string, unknown>;
+  const isOrders = d.checkout_type === 'orders_pix';
+  const idsValid = isOrders
+    ? typeof d.order_id === 'string' && orderId.test(d.order_id)
+      && typeof d.payment_id === 'string' && orderPaymentId.test(d.payment_id)
+      && d.status === 'action_required' && d.status_detail === 'waiting_transfer'
+    : d.checkout_type === undefined && d.order_id === undefined
+      && d.status_detail === undefined
+      && typeof d.payment_id === 'string' && id.test(d.payment_id)
+      && ['pending','in_process'].includes(String(d.status));
   if (typeof d.operation_id !== 'string' || !operation.test(d.operation_id)
-      || typeof d.payment_id !== 'string' || !id.test(d.payment_id)
+      || !idsValid
       || typeof d.amount_cents !== 'number'
       || !Number.isSafeInteger(d.amount_cents) || d.amount_cents <= 0
-      || !['pending','in_process'].includes(String(d.status))
       || typeof d.qr_code !== 'string' || !d.qr_code
       || d.qr_code.length > 4096
       || d.capital_recognized !== false
@@ -65,9 +79,13 @@ export function parseFinancialReceipt(raw: unknown, operationId: string): Financ
     throw new Error('Comprovante ainda não confirmado pelo servidor.');
   }
   const d = raw as Record<string, unknown>;
+  const receiptIdValid = d.order_id === undefined
+    ? typeof d.payment_id === 'string' && id.test(d.payment_id)
+    : typeof d.order_id === 'string' && orderId.test(d.order_id)
+      && typeof d.payment_id === 'string' && orderPaymentId.test(d.payment_id);
   if (!operation.test(operationId) || d.operation_id !== operationId
       || typeof d.receipt_id !== 'string' || d.receipt_id.length < 20
-      || typeof d.payment_id !== 'string' || !id.test(d.payment_id)
+      || !receiptIdValid
       || typeof d.amount_cents !== 'number' ||
       !Number.isSafeInteger(d.amount_cents) || d.amount_cents <= 0
       || d.status !== 'CONFIRMADO_CONCILIADO'

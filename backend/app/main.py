@@ -484,6 +484,36 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+@app.get("/api/health/features/m4800", include_in_schema=False)
+def backend_m4800_orders_automation_contract():
+    from .mp_orders_api import CONTRACT as ORDERS
+    from .mp_oauth_rotation import CONTRACT as OAUTH
+    from .mp_money_out_policy import CONTRACT as MONEY_OUT
+    from .mp_orders_webhook import CONTRACT as ORDERS_WEBHOOK
+    from .mp_orders_workflow import CONTRACT as WORKFLOW
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M4800_MLB_ORDERS_CONNECT_MONEYOUT_MACRO_V1",
+        "orders_contract": ORDERS,
+        "oauth_contract": OAUTH,
+        "money_out_contract": MONEY_OUT,
+        "webhook_contract": ORDERS_WEBHOOK,
+        "workflow_contract": WORKFLOW,
+        "orders_gateway_code_present": True,
+        "orders_webhook_not_publicly_mounted": True,
+        "oauth_tokens_server_only": True,
+        "money_out_unsigned_production_blocked": True,
+        "orders_staging_migrations_applied": False,
+        "oci_staging_deployed": False,
+        "provider_connected": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "real_payments_enabled": False,
+    }
+
+
 @app.get("/api/health/features/m4000", include_in_schema=False)
 def backend_m4000_pix_macro_contract():
     from .pix_automation_contract import CONTRACT as DOMAIN

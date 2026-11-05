@@ -37,7 +37,9 @@ export const RealPixCheckout: React.FC<Props> = ({ checkout, tenantId, onClose }
       if (!authService.isSessionSnapshotCurrent(snapshot)) return;
       const verified = parseFinancialReceipt(data, checkout.operation_id);
       if (verified.payment_id !== checkout.payment_id ||
-          verified.amount_cents !== checkout.amount_cents) {
+          verified.amount_cents !== checkout.amount_cents ||
+          (checkout.checkout_type === 'orders_pix' &&
+           verified.order_id !== checkout.order_id)) {
         throw new Error('Comprovante não corresponde a esta cobrança.');
       }
       setReceipt(verified);
@@ -86,7 +88,9 @@ export const RealPixCheckout: React.FC<Props> = ({ checkout, tenantId, onClose }
           </button>
         </div>
         <p className="break-all text-xs text-slate-600">
-          Operação: {checkout.operation_id} • Pagamento: {checkout.payment_id}
+          Operação: {checkout.operation_id}
+          {checkout.order_id ? ` • Order: ${checkout.order_id}` : ''}
+          • Pagamento: {checkout.payment_id}
         </p>
         {!receipt ? (
           <button type="button" disabled={busy} onClick={checkReceipt}
