@@ -30,6 +30,7 @@ import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {CycleContributionPolicy,parseCycleContributionPolicy,CyclePriceChangeResult,parseCyclePriceChange} from './cyclePriceBoundary';
+import {CycleOpeningPreview,parseCycleOpeningPreview} from './cycleOpeningBoundary';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
 import {MemberObligationsPreview,parseMemberObligations} from './memberObligationsBoundary';
@@ -415,6 +416,14 @@ class FinancialApiService {
         reason,idempotency_key:idempotencyKey,
       })});
     return parseCyclePriceChange(raw);
+  }
+
+  public async previewCycleOpening(tenantId:string,year:number,amountCents:number,reason:string):Promise<CycleOpeningPreview>{
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price/opening-preview',
+      {method:'POST',body:JSON.stringify({year,amount_cents:amountCents,reason})});
+    return parseCycleOpeningPreview(raw,tenantId);
   }
 
   public async fetchContributions(tenantId: string): Promise<DisplayContribution[]> {

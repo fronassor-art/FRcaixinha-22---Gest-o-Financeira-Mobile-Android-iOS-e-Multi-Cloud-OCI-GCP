@@ -9,6 +9,7 @@ import { RealPixCheckout } from './RealPixCheckout';
 import type { ProviderPixCheckout } from '../services/pixAutomationBoundary';
 import {CycleContributionPolicy,parseCyclePriceInput} from '../services/cyclePriceBoundary';
 import {CyclePriceAttempt,reuseOrCreateCyclePriceAttempt} from '../services/cyclePriceAttempt';
+import {CycleOpeningPreviewPanel} from './CycleOpeningPreviewPanel';
 
 interface ContributionsViewProps {
   state: AppState;
@@ -208,6 +209,10 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
           {cycleMessage && <p role="status" className="text-sm text-slate-800">{cycleMessage}</p>}
         </section>
       )}
+      {state.currentRole==='TENANT_ADMIN' && state.currentTenantId &&
+        <CycleOpeningPreviewPanel key={key} tenantId={state.currentTenantId}
+          suggestedYear={cyclePrice.key===key && cyclePrice.policy ? cyclePrice.policy.cycle_year+1 : undefined}/>
+      }
       {pixFeedback && <p role="status" className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800">
         {pixFeedback}
       </p>}
