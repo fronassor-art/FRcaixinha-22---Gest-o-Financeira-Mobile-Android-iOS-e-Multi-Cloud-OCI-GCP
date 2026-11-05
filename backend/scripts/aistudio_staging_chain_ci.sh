@@ -27,6 +27,18 @@ CREATE ROLE frcaixinha_mp_financial_worker LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
+echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
+if PGOPTIONS="-c frcaixinha.mp_staging_authorized=1" \
+    psql -X -v ON_ERROR_STOP=1 \
+    -f backend/staging_migrations/034_mp_signed_webhook_staging_only.sql \
+    >/dev/null 2>&1; then
+  echo "BLOCKED: wrong database accepted staging migration"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.mp_seller_connections_staging') IS NULL")" = "t"
+echo "M034_WRONG_DATABASE_ROLLBACK=PASS"
+
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging

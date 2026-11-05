@@ -14,6 +14,7 @@ def test_sql_chain_scripts_isolated_and_ordered():
         "pg_database WHERE datname='frcaixinha_staging'",
         "createdb -T frcaixinha_ci frcaixinha_staging",
         "NOSUPERUSER NOBYPASSRLS",
+        "M034_WRONG_DATABASE_ROLLBACK=PASS",
         "033_staging_orders_fixture_ci_only.sql",
         "034_staging_orders_worker_probe_ci_only.sql",
         "035_staging_webhook_probe_ci_only.sql",
