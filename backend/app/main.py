@@ -486,6 +486,29 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m14000", include_in_schema=False)
+def backend_m14000_disposable_audit_contract():
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M14000_STAGING_INCIDENT_AUDIT_DISPOSABLE_V1",
+        "staging_sql_prepared": True,
+        "ci_only_pg16_pg18_exercised": True,
+        "append_only_event_policy": True,
+        "staging_worker_rpc_scope": True,
+        "local_migration_applied": False,
+        "oci_staging_deployed": False,
+        "real_audit_history_connected": False,
+        "operator_authenticated": False,
+        "bank_reconciled": False,
+        "real_payments_enabled": False,
+        "financial_effect_applied": False,
+        "ledger_written": False,
+        "payout_authorized": False,
+        "financial_closing_authorized": False,
+        "real_provider_get_active": False,
+    }
+
+
 @app.get("/api/health/features/m13000", include_in_schema=False)
 def backend_m13000_checkpoint_readiness_contract():
     from .mp_orders_replay_checkpoint import CONTRACT as CHECKPOINT

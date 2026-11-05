@@ -57,6 +57,7 @@ for file in \
   backend/staging_migrations/037_orders_payment_link_staging_only.sql \
   backend/staging_migrations/038_orders_reservation_staging_only.sql \
   backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql
+  backend/staging_migrations/040_orders_incident_audit_staging_only.sql
 do
   PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
@@ -76,6 +77,16 @@ PGUSER=frcaixinha_mp_webhook_ingest \
 PGUSER=frcaixinha_mp_financial_worker \
   psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/036_staging_hold_probe_ci_only.sql
+echo "=== M14000 — APPEND-ONLY SYNTHETIC CI PROBE ==="
+PGUSER=frcaixinha_mp_financial_worker \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/037_staging_incident_audit_probe_ci_only.sql
+echo "=== M14000 — PostgreSQL transactional audit regression ==="
+CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+CI_MP_AUDIT_WORKER_URL='postgresql://frcaixinha_mp_financial_worker:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+ backend/tests/test_m14000_staging_audit_persistence_ci.py
+echo "M14000_POSTGRES_DISPOSABLE=PASS"
 echo "=== M6700 — SERIALIZABLE ledger synthetic commits and rollback ==="
 CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
