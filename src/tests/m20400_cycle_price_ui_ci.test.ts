@@ -4,7 +4,9 @@ const tenant='00000000-0000-4000-8000-000000000001';
 const cycle='00000000-0000-4000-8000-000000000002';
 assert.equal(parseCyclePriceInput('150,00'),15000);
 assert.equal(parseCyclePriceInput('150.5'),15050);
-assert.equal(parseCyclePriceInput('1'),100);
+assert.equal(parseCyclePriceInput('200'),20000);
+assert.throws(()=>parseCyclePriceInput('100,00'));
+assert.throws(()=>parseCyclePriceInput('149,99'));
 for(const bad of ['0','-1','1.234','1e2','R$ 150','10000,01','NaN','','1,000', '  ']){
  assert.throws(()=>parseCyclePriceInput(bad),/valor|Informe/i,bad);
 }

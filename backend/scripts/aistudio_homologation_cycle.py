@@ -123,6 +123,8 @@ def main():
             conn.rollback()
             print("HOMOLOG_PREVIEW=PASS; ESCRITAS=0")
             return
+        if not cycle or not policy:
+            block("script legado R$100 proibido de abrir novos ciclos; exige valor explícito do administrador")
         if input("Confirme somente dados financeiros de TESTE digitando HOMOLOGAR_AI_STUDIO_2027: ").strip()!="HOMOLOGAR_AI_STUDIO_2027":
             conn.rollback()
             block("sem confirmação")

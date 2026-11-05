@@ -23,7 +23,7 @@ CONTRACT="AI_STUDIO_M20400_CYCLE_PRICE_REVIEW_V1"
 class PriceChange(BaseModel):
     model_config=ConfigDict(extra="forbid")
     cycle_id: UUID
-    amount_cents: int=Field(strict=True,ge=100,le=1000000)
+    amount_cents: int=Field(strict=True,ge=15000,le=1000000)
     reason: str=Field(min_length=12,max_length=500)
     idempotency_key: UUID
 
@@ -68,6 +68,8 @@ async def status(
       "start_date":row["start_date"].isoformat(),
       "end_date":row["end_date"].isoformat(),
       "amount_cents":row["amount_cents"],
+      "minimum_contribution_cents":15000,
+      "legacy_below_minimum":row["amount_cents"]<15000,
       "policy_version":row["policy_version"],
       "registered_contributions":row["registered_contributions"],
       "can_edit":row["can_edit"],

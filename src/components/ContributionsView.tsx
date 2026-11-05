@@ -75,7 +75,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       financialApi.fetchCycleContributionPolicy(state.currentTenantId).then(policy=>{
         if(!active)return;
         setCyclePrice({key,policy,error:''});
-        setCycleInput((policy.amount_cents/100).toFixed(2).replace('.',','));
+        setCycleInput(((policy.pending_requested_cents??Math.max(policy.amount_cents,15000))/100).toFixed(2).replace('.',','));
       }).catch(()=>{
         if(active)setCyclePrice({key,policy:null,error:
           'Política do ciclo indisponível. Confirme a migração 042 e a sessão.'});
@@ -93,6 +93,8 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     try{
       const amount=parseCyclePriceInput(cycleInput);
       const reason=cycleReason.trim();
+      if(policy.pending_requested_cents===amount)
+        throw new Error('Revisão deste valor já registrada. Aguarde a análise antes de reenviar.');
       if(reason.length<12||reason.length>500)
         throw new Error('Informe um motivo de auditoria com pelo menos 12 caracteres.');
       // M20500: retry the identical request with its original idempotency key.
@@ -171,11 +173,13 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       {state.currentRole==='TENANT_ADMIN' && cyclePrice.key===key && (
         <section aria-label="Valor da contribuição por ciclo" className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4">
           <h3 className="font-semibold text-emerald-950">Valor por cota do ciclo</h3>
+          <p className="text-sm text-slate-700">Cada administrador define o valor do próprio ciclo, com <strong>mínimo de R$ 150,00 por cota</strong>. O valor não é universal ou fixado para todas as caixinhas.</p>
           {cyclePrice.error && <p role="alert" className="text-sm text-rose-800">{cyclePrice.error}</p>}
           {cyclePrice.policy && <>
             <p className="text-sm text-slate-700">
               Ciclo {cyclePrice.policy.cycle_year} ({cyclePrice.policy.start_date.split('-').reverse().join('/')} a {cyclePrice.policy.end_date.split('-').reverse().join('/')}) · valor registrado: <strong>{formatBRL(cyclePrice.policy.amount_cents/100)}</strong>.
             </p>
+            {cyclePrice.policy.amount_cents<15000 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Atenção: valor legado abaixo do mínimo contratual. Foi criado pela configuração histórica de homologação; a regularização requer revisão auditada. Cobranças existentes não são alteradas automaticamente.</p>}
             {cyclePrice.policy.registered_contributions>0 && <p className="text-sm text-amber-800">
               Existem {cyclePrice.policy.registered_contributions} competências registradas. Mudanças precisam de revisão auditada e não alteram cobranças automaticamente.
             </p>}

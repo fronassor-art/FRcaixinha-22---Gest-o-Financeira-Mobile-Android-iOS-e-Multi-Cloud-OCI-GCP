@@ -49,8 +49,8 @@ export function parseCyclePriceInput(raw:string):number{
  const m=/^([1-9]\d{0,4})(?:[.,](\d{1,2}))?$/.exec(raw.trim());
  if(!m)throw new Error('Informe o valor com até duas casas decimais.');
  const cents=Number(m[1])*100+Number((m[2]??'').padEnd(2,'0'));
- if(!Number.isSafeInteger(cents)||cents<100||cents>1000000)
- throw new Error('Valor por cota fora do intervalo permitido (R$ 1 a R$ 10.000).');
+ if(!Number.isSafeInteger(cents)||cents<15000||cents>1000000)
+ throw new Error('Valor por cota fora do intervalo permitido (mínimo R$ 150 a R$ 10.000).');
  return cents;
 }
 export function parseCyclePriceChange(raw:unknown):CyclePriceChangeResult{

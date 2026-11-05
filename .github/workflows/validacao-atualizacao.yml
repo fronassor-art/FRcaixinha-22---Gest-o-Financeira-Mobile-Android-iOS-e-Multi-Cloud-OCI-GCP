@@ -128,6 +128,8 @@ jobs:
         run: npx tsx src/tests/m20400_cycle_price_ui_ci.test.ts
       - name: M20500 reenvio idempotente de cota por sessão e caixinha
         run: npx tsx src/tests/m20500_cycle_price_retry_ci.test.ts
+      - name: M20600 piso contratual de R$150 por cota
+        run: npx tsx src/tests/m20600_floor_ui_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
         run: npx tsx src/tests/financial_read_boundary_ci.test.ts
       - name: Validar reautenticacao ao retornar do segundo plano
@@ -324,6 +326,7 @@ jobs:
           python -m pytest -q backend/tests/test_m19300_local_lifecycle_parity_ci.py
           python -m pytest -q backend/tests/test_m20100_local_parity_schema_ci.py
           python -m pytest -q backend/tests/test_m20400_cycle_price_ci.py
+          python -m pytest -q backend/tests/test_m20600_floor_static_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
