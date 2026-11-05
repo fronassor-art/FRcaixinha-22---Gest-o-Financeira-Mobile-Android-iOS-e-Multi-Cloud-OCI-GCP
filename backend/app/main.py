@@ -19,7 +19,7 @@ from . import annual_evidence_preflight as _annual_evidence
 from . import financial_three_source_preflight as _three_source
 import os
 from .routers import sandbox_evidence_ci as _sandbox_evidence_ci
-from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations, pix_automation, notifications
+from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations, pix_automation, notifications, cycle_contribution_price
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -60,6 +60,7 @@ app.include_router(tenants.router, prefix=settings.API_V1_STR)
 app.include_router(invitations.router, prefix=settings.API_V1_STR)
 app.include_router(master.router, prefix=settings.API_V1_STR)
 app.include_router(contributions.router, prefix=settings.API_V1_STR)
+app.include_router(cycle_contribution_price.router, prefix=settings.API_V1_STR)
 app.include_router(member_cycle_previews.router, prefix=settings.API_V1_STR)
 app.include_router(financial_integrity_previews.router, prefix=settings.API_V1_STR)
 app.include_router(member_lifecycle_sandbox.router, prefix=settings.API_V1_STR)
