@@ -484,6 +484,37 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+@app.get("/api/health/features/m6400", include_in_schema=False)
+def backend_m6400_financial_staging_preflight():
+    from .mp_orders_ledger_plan import CONTRACT as LEDGER
+    from .mp_orders_ledger_plan import REVERSAL_CONTRACT as REVERSAL
+    from .loan_credit_liquidity import CONTRACT as LIQUIDITY
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M6400_STAGING_SQL_LEDGER_LIQUIDITY_PREFLIGHT_V1",
+        "ledger_plan_contract": LEDGER,
+        "reversal_plan_contract": REVERSAL,
+        "liquidity_contract": LIQUIDITY,
+        "staging_chain_ci_contract": "CI_PG16_M034_M038_V1",
+        "staging_migrations_applied": False,
+        "staging_sql_chain_executed_in_termux": False,
+        "oci_staging_deployed": False,
+        "ledger_plan_code_present": True,
+        "reversal_preview_code_present": True,
+        "credit_liquidity_preflight_code_present": True,
+        "oci_apply_authorized": False,
+        "real_bank_balance_reader_connected": False,
+        "real_bank_statement_reader_connected": False,
+        "provider_connected": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m5600", include_in_schema=False)
 def backend_m5600_orders_journal_preflight_contract():
     from .mp_orders_reservation import CONTRACT as RESERVATION

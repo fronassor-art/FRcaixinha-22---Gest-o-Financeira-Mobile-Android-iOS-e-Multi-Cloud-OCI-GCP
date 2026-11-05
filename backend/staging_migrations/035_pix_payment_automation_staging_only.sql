@@ -26,7 +26,8 @@ CREATE TABLE public.mp_pix_member_destinations_staging (
  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE RESTRICT,
  membership_id uuid NOT NULL REFERENCES public.memberships(id) ON DELETE RESTRICT,
  -- ONLY an OCI Vault OCID; never Pix key / CPF / bank account in database.
- secret_ocid text NOT NULL CHECK(secret_ocid ~ '^ocid1[.]secret[.][A-Za-z0-9._-]{8,512}$'),
+ secret_ocid text NOT NULL CHECK(secret_ocid ~ '^ocid1[.]secret[.][A-Za-z0-9._-]+$'
+   AND char_length(secret_ocid) BETWEEN 21 AND 525),
  masked_key varchar(80) NOT NULL,
  fingerprint char(64) NOT NULL CHECK (fingerprint ~ '^[a-f0-9]{64}$'),
  owner_verification_ref varchar(128) NOT NULL,

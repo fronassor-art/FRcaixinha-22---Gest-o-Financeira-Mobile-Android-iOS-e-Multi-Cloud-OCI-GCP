@@ -20,7 +20,8 @@ CREATE TABLE public.mp_seller_connections_staging (
  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE RESTRICT,
  seller_id varchar(40) NOT NULL UNIQUE CHECK (seller_id ~ '^[0-9]{1,40}$'),
  webhook_secret_ocid text NOT NULL
-   CHECK (webhook_secret_ocid ~ '^ocid1[.]secret[.][A-Za-z0-9._-]{8,512}$'),
+   CHECK (webhook_secret_ocid ~ '^ocid1[.]secret[.][A-Za-z0-9._-]+$'
+   AND char_length(webhook_secret_ocid) BETWEEN 21 AND 525),
  verified_at timestamptz NOT NULL,
  revoked_at timestamptz,
  PRIMARY KEY(tenant_id,seller_id),

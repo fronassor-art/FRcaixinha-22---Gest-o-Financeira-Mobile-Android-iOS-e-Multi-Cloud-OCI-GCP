@@ -283,6 +283,9 @@ jobs:
           python -m pytest -q backend/tests/test_m5400_price_payout_date_ci.py
           python -m pytest -q backend/tests/test_m5500_final_financial_gates_ci.py
           python -m pytest -q backend/tests/test_m5700_staging_chain_guard_ci.py
+          python -m pytest -q backend/tests/test_m6000_ledger_reversal_preview_ci.py
+          python -m pytest -q backend/tests/test_m6200_credit_liquidity_ci.py
+          python -m pytest -q backend/tests/test_m6400_final_gates_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
