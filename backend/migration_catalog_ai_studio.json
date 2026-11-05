@@ -20,7 +20,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "c4435aca8f9cf0305ecbd5200a5640f510094ab5"
     },
     {
       "id": "ci_migrations:032",
@@ -29,7 +30,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "c6a4eb6df5c6cfe328193aafd497e669fc30499a"
     },
     {
       "id": "ci_migrations:033",
@@ -38,7 +40,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "5b0b4988b77d6140c8a3f36cb9a580f877e946b3"
     },
     {
       "id": "ci_migrations:034",
@@ -47,7 +50,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "38250ea05d12c295cd5c5b373f70547e674427ea"
     },
     {
       "id": "ci_migrations:035",
@@ -56,7 +60,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "8e1a10455e7418667272aa6f5b16dd498d0b4f23"
     },
     {
       "id": "ci_migrations:036",
@@ -65,7 +70,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "067b01d97b9d893f277355dd8f965720823d648b"
     },
     {
       "id": "ci_migrations:037",
@@ -74,7 +80,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "059f038de685a52808b12ede917900809cf6ae96"
     },
     {
       "id": "migrations:001",
@@ -83,7 +90,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "23d8428e0cce66dfee32ed4ad8d482ab15424fb0"
     },
     {
       "id": "migrations:002",
@@ -92,7 +100,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "6b83eba75a5dfec25cf7227c2b9ca73269698798"
     },
     {
       "id": "migrations:003",
@@ -101,7 +110,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "de6eb2fc6c40d5a3794097e94a47aebb6cc50376"
     },
     {
       "id": "migrations:004",
@@ -110,7 +120,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "8bc5bece9d9c5c229b4b1235b4aeee7c0d76d671"
     },
     {
       "id": "migrations:005",
@@ -119,7 +130,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "b35553c13957e7306eff714ffa8772dcb49dabc3"
     },
     {
       "id": "migrations:006",
@@ -128,7 +140,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "44180ab5a6b4fa8cbd10315b4a7d81888f5a97c1"
     },
     {
       "id": "migrations:007",
@@ -137,7 +150,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "a3e536ffd297bc8f37bb65be2416865712967ff2"
     },
     {
       "id": "migrations:008",
@@ -146,7 +160,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "a8d4dac4e03eabc5bc8888b3fa0174b3475268f1"
     },
     {
       "id": "migrations:009",
@@ -155,7 +170,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "9e57bd4bfe714bfbb4c1984f617ff98333aafb94"
     },
     {
       "id": "migrations:010",
@@ -164,7 +180,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "bf0daa1287cb952af978c4affdcf556dd30e1621"
     },
     {
       "id": "migrations:011",
@@ -173,7 +190,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "99b2cb73b6b581896c659294b54185beaeb75e6e"
     },
     {
       "id": "migrations:012",
@@ -182,7 +200,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "248f193d0f10893d71fd63cc729981de425d115e"
     },
     {
       "id": "migrations:013",
@@ -191,7 +210,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "c9de114ff031c7fd577a3adc705ff778cef0826c"
     },
     {
       "id": "migrations:014",
@@ -200,7 +220,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "4dabdeeacfcd995dd3a784be80a4caf84e24a3f1"
     },
     {
       "id": "migrations:015",
@@ -209,7 +230,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "216e9d9d3d6808708cf1d813091ea75d208fb930"
     },
     {
       "id": "migrations:016",
@@ -218,7 +240,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "cd8711e92f5a676bdb48bdd9ad20a1ad37484436"
     },
     {
       "id": "migrations:017",
@@ -227,7 +250,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "4d615839105b47eb82955e4e49432555358d77f2"
     },
     {
       "id": "migrations:018",
@@ -236,7 +260,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "97862d35ba1b82f1644d9ceb4a7084af140bc48e"
     },
     {
       "id": "migrations:019",
@@ -245,7 +270,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "cacffd7a707f3ea87427b7419d3f89f545768147"
     },
     {
       "id": "migrations:020",
@@ -254,7 +280,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "354babeae958b5067a9a7ae54c24bbe8bc6e193e"
     },
     {
       "id": "migrations:021",
@@ -263,7 +290,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "b07f245375467fb60481bcc813287d645387d9b0"
     },
     {
       "id": "migrations:022",
@@ -272,7 +300,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "9c6a2749f39429f67800947e2d5f506473930928"
     },
     {
       "id": "migrations:023",
@@ -281,7 +310,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "3a0db3dc8d5a4e6fd45612a65fcf47e0246c9994"
     },
     {
       "id": "migrations:024",
@@ -290,7 +320,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "d9a4319673de557d3975811c1efdc5f62b4618ff"
     },
     {
       "id": "migrations:025",
@@ -299,7 +330,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "073fad4422adcc05374b0323f6f49a0fb0507290"
     },
     {
       "id": "migrations:026",
@@ -308,7 +340,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "ff21ec90721165adf9e2a2042b2c96e4db0be030"
     },
     {
       "id": "migrations:027",
@@ -317,7 +350,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": null,
-      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED"
+      "local_evidence": "BASELINE_OBJECTS_PRESENT_IN_TERMUX_NOT_PER_FILE_ATTESTED",
+      "source_blob_sha": "432004d36e4cbdb072a2192ec28408f3101a168a"
     },
     {
       "id": "migrations:028",
@@ -326,7 +360,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.member_lifecycle_requests",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "8cb0835b85a92654f30c1965372fd61348423877"
     },
     {
       "id": "migrations:029",
@@ -335,7 +370,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.member_lifecycle_review_events",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "9668b5b58ce12bea19b02e1cf0f89862d58888bf"
     },
     {
       "id": "migrations:030",
@@ -344,7 +380,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.member_lifecycle_requests",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "5e2a10c29bccae7ed57c2355afeb0ef2618a1fe5"
     },
     {
       "id": "migrations:031",
@@ -353,7 +390,8 @@
       "requires_local_equivalent_before_use": false,
       "do_not_apply_source_to_termux": false,
       "inspect_object": "public.notification_inbox",
-      "local_evidence": "USER_LOG_2026-11-05_PG18_5433_34_TABLES_RLS_VALIDATED"
+      "local_evidence": "USER_LOG_2026-11-05_PG18_5433_34_TABLES_RLS_VALIDATED",
+      "source_blob_sha": "c748b182a4712d07a0f7921ca36dc744f3188d2e"
     },
     {
       "id": "staging_migrations:034",
@@ -362,7 +400,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_signed_webhook_inbox_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "540e014eff1308ac92ff6feb2f28350a1263fee8"
     },
     {
       "id": "staging_migrations:035",
@@ -371,7 +410,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_pix_collection_operations_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "c3122c031ebe8a60a26b0dd28bd52b3a9bab0f15"
     },
     {
       "id": "staging_migrations:036",
@@ -380,7 +420,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_signed_order_inbox_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "856ba2577d18b461b15f7f310dc17e806b7930e1"
     },
     {
       "id": "staging_migrations:037",
@@ -389,7 +430,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_orders_provider_reads_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "80bd607cb5fe4595772f79827fd8d79fdee37fae"
     },
     {
       "id": "staging_migrations:038",
@@ -398,7 +440,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_pix_collection_operations_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "68a558422c917d38b21ea37350e795f60fa78222"
     },
     {
       "id": "staging_migrations:039",
@@ -407,7 +450,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_orders_reconciliation_holds_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "fdfb92d764162de559ce87d21268bfb7d2d539ac"
     },
     {
       "id": "staging_migrations:040",
@@ -416,7 +460,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.mp_orders_incident_audit_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "b79ba3966a5af464f68831651ac69f6ee6f46566"
     },
     {
       "id": "staging_migrations:041",
@@ -425,7 +470,8 @@
       "requires_local_equivalent_before_use": true,
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.notification_outbox_staging",
-      "local_evidence": null
+      "local_evidence": null,
+      "source_blob_sha": "96038a8398d78e1ac147ac2c15cd02a79a8df77b"
     }
   ]
 }
