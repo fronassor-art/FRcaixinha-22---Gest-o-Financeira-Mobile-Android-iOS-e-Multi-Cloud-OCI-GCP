@@ -6,7 +6,7 @@ assert.equal(parseCyclePriceInput('150,00'),15000);
 assert.equal(parseCyclePriceInput('150.5'),15050);
 assert.equal(parseCyclePriceInput('1'),100);
 for(const bad of ['0','-1','1.234','1e2','R$ 150','10000,01','NaN','','1,000', '  ']){
- assert.throws(()=>parseCyclePriceInput(bad),undefined,bad);
+ assert.throws(()=>parseCyclePriceInput(bad),/valor|Informe/i,bad);
 }
 const source={
  contract:'AI_STUDIO_M20400_CYCLE_PRICE_REVIEW_V1',
