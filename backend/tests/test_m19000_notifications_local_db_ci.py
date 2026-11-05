@@ -165,3 +165,59 @@ async def test_09_app_cannot_forge_session_event():
     "SELECT has_function_privilege(current_user,"
     "'public.notification_local_session_issued(text)','EXECUTE')")
  finally:await c.close()
+
+
+async def test_10_master_identity_multi_role_notifications_are_isolated():
+ """The same Master user can have independently authorized tenant roles."""
+ admin=await owner()
+ app_conn=await app()
+ auth=await asyncpg.connect(AUTH,timeout=8)
+ try:
+  assert await admin.fetchval("SELECT is_master FROM public.users WHERE id=$1",M) is True
+  for role in ("TENANT_ADMIN","TENANT_MEMBER"):
+   await admin.execute(
+    "INSERT INTO public.memberships(tenant_id,user_id,role,status) "
+    "VALUES($1,$2,$3,'ATIVA') ON CONFLICT(tenant_id,user_id,role) DO NOTHING",
+    T,M,role)
+   assert await admin.fetchval(
+    "SELECT EXISTS(SELECT 1 FROM public.memberships "
+    "WHERE tenant_id=$1 AND user_id=$2 AND role=$3 AND status='ATIVA')",
+    T,M,role) is True
+
+  for role in ("TENANT_ADMIN","TENANT_MEMBER"):
+   async with app_conn.transaction():
+    await scope(app_conn,M,T,role)
+    notice=await app_conn.fetchval("SELECT public.notification_local_create_selftest()")
+    assert notice
+    own=await app_conn.fetch(
+     "SELECT id,recipient_role FROM public.notification_inbox")
+    assert len(own)==1 and own[0]["id"]==notice and own[0]["recipient_role"]==role
+
+   raw=f"M19000-CI-only-Master-three-contexts-{role}-session-token"
+   session_id=await admin.fetchval(
+    "INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) "
+    "VALUES($1,$2,$3,$4,NOW()+interval '15 minutes') RETURNING id",
+    hashlib.sha256(raw.encode()).hexdigest(),M,role,T)
+   event=await auth.fetchval(
+    "SELECT public.notification_local_session_issued($1::text)",raw)
+   assert event is not None
+   async with app_conn.transaction():
+    await scope(app_conn,M,T,role)
+    observed=await app_conn.fetchrow(
+     "SELECT id,event_id,kind FROM public.notification_inbox WHERE id=$1",event)
+    assert observed and observed["event_id"]==session_id
+    assert observed["kind"]=="SECURITY_SESSION_ALERT"
+
+  async with app_conn.transaction():
+   await scope(app_conn,M,None,"MASTER")
+   own=await app_conn.fetch(
+    "SELECT tenant_id,recipient_role FROM public.notification_inbox")
+   assert own and all(r["tenant_id"] is None and r["recipient_role"]=="MASTER" for r in own)
+  async with app_conn.transaction():
+   await scope(app_conn,M,B,"TENANT_MEMBER")
+   assert await app_conn.fetchval(
+    "SELECT count(*) FROM public.notification_inbox")==0
+ finally:
+  await auth.close()
+  await app_conn.close()
+  await admin.close()
