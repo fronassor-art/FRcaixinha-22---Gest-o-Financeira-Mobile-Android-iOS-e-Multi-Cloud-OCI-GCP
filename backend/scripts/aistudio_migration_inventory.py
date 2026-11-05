@@ -50,7 +50,7 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
-          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"
@@ -145,7 +145,7 @@ def local_readonly():
                 print("M19200_CI_031_037=DISPOSABLE_ONLY")
                 # M20200: report the runtime DB, not a generic source-code state.
                 # Both the precise table count and all core contracts are required.
-                if n not in (44,45):
+                if n not in (44,45,46):
                     return deny("M20200 expected 44 or 45 public tables, found "+str(n))
                 lifecycle=("public.member_lifecycle_requests","public.member_lifecycle_review_events")
                 if not all(exists(t) for t in lifecycle) or not has030:
@@ -204,7 +204,7 @@ def local_readonly():
                     return deny("M20200 notification inbox 031 missing/unsafe")
                 print("M20200_LOCAL_031=OBJECTS_RLS_VERIFIED")
                 print("M20200_LOCAL_034_041=8_TABLES_RLS_VERIFIED")
-                if n==45:
+                if n>=45:
                     obj="public.cycle_contribution_price_audit"
                     if not exists(obj):
                         return deny("M20400 audit table missing")
@@ -236,7 +236,7 @@ def local_readonly():
                     print("M20400_LOCAL_042=OBJECTS_RLS_VERIFIED")
                 else:
                     print("M20400_LOCAL_042=NOT_APPLIED")
-                if n==45:
+                if n>=45:
                     conditions=conn.execute(
                       "SELECT conname,convalidated,pg_get_constraintdef(oid) "
                       "FROM pg_constraint WHERE conname IN "
@@ -267,6 +267,28 @@ def local_readonly():
                         print("M20700_LOCAL_043=NOT_APPLIED")
                     else:
                         return deny("M20700 partial migration 043")
+                if n==46:
+                    obj="public.cycle_opening_audit"
+                    if not exists(obj):return deny("M21000 audit table missing")
+                    secure=conn.execute(
+                     "SELECT relrowsecurity AND relforcerowsecurity "
+                     "FROM pg_class WHERE oid=to_regclass(%s)",(obj,)
+                    ).fetchone()[0]
+                    granted=conn.execute(
+                     "SELECT has_function_privilege('frc_ai_app',"
+                     "'public.cycle_open_create(text,uuid,integer,bigint,text,uuid)','EXECUTE') "
+                     "AND NOT has_table_privilege('frc_ai_app',%s,'INSERT')",(obj,)
+                    ).fetchone()[0]
+                    trigger_count=conn.execute(
+                     "SELECT count(*) FROM pg_trigger WHERE tgname IN "
+                     "('cycle_opening_immutable_row','cycle_opening_immutable_truncate') "
+                     "AND tgenabled='O'"
+                    ).fetchone()[0]
+                    if not secure or not granted or trigger_count!=2:
+                        return deny("M21000 RLS, grants or append-only triggers invalid")
+                    print("M21000_LOCAL_044=OBJECTS_AND_ROLE_BOUNDARY_VERIFIED")
+                else:
+                    print("M21000_LOCAL_044=NOT_APPLIED")
                 print("M20200_MIGRATIONS="+str(n)+"_TABLES_VERIFIED_NO_REAPPLY")
                 print("M19200_READ_ONLY=PASS")
                 return 0
