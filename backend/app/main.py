@@ -487,6 +487,31 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m16000", include_in_schema=False)
+def backend_m16000_notification_database_ci_contract():
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M16000_NOTIFICATION_STAGING_PG_CI_ONLY_V1",
+        "disposable_outbox_inbox_schema_prepared": True,
+        "disposable_pg16_pg18_tests_registered": True,
+        "ci_only_recipient_rls_policy": True,
+        "ci_only_read_receipt_contract": True,
+        "local_migration_applied": False,
+        "oci_staging_deployed": False,
+        "real_inbox_api_connected": False,
+        "authenticated_producer_connected": False,
+        "in_app_delivery_active": False,
+        "email_send_active": False,
+        "push_send_active": False,
+        "whatsapp_send_active": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m15000", include_in_schema=False)
 def backend_m15000_notification_policy_contract():
     from .notifications_policy import CONTRACT as POLICY
