@@ -189,7 +189,7 @@ def triage_tenant_page(
         or type(limit) is not int or not 1 <= limit <= 100
     ):
         raise FinancialOperationBlocked("Consulta operacional inválida")
-    seen: dict[tuple[str, HoldReason], str] = {}
+    seen: dict[tuple[str, HoldReason], UnresolvedIncident] = {}
     rows: list[tuple[UnresolvedIncident, IncidentTriage]] = []
     for incident in incidents:
         validate_incident(incident)
@@ -197,11 +197,12 @@ def triage_tenant_page(
             raise FinancialOperationBlocked("Consulta de incidentes cruza caixinhas")
         key = (incident.operation_id, incident.reason)
         if key in seen:
-            # Even identical duplicates are never a basis for an extra action.
-            if seen[key] != incident.evidence_sha256:
-                raise FinancialOperationBlocked("Evidência de retenção divergente")
+            # Replays must match the complete original tenant/seller/reporter/time
+            # binding, not merely a copied evidence fingerprint.
+            if seen[key] != incident:
+                raise FinancialOperationBlocked("Contexto de retenção divergente")
             continue
-        seen[key] = incident.evidence_sha256
+        seen[key] = incident
         rows.append((incident, triage_incident(incident)))
     rank = {IncidentPriority.CRITICAL: 0,
             IncidentPriority.HIGH: 1, IncidentPriority.REVIEW: 2}

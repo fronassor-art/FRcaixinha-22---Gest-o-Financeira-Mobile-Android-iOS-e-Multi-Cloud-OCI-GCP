@@ -147,6 +147,21 @@ def test_tenant_page_prioritizes_and_deduplicates():
     assert len(triage_tenant_page(T,incidents))==2
 
 
+def test_same_hash_cannot_hide_different_seller_or_reporter():
+    with pytest.raises(FinancialOperationBlocked):
+        triage_tenant_page(
+            T, (case(), case(provider_account_id="3003"))
+        )
+    with pytest.raises(FinancialOperationBlocked):
+        triage_tenant_page(
+            T, (case(), case(reported_by=R1))
+        )
+    with pytest.raises(FinancialOperationBlocked):
+        triage_tenant_page(
+            T, (case(), case(opened_at=D + timedelta(seconds=1)))
+        )
+
+
 def test_tenant_page_rejects_cross_tenant_and_conflicts():
     with pytest.raises(FinancialOperationBlocked):
         triage_tenant_page(T,(case(),case(tenant_id=OTHER)))
