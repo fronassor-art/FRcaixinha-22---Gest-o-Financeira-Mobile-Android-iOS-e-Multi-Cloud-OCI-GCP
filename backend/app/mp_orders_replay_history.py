@@ -114,7 +114,8 @@ def replay_unresolved_history(
     previous_window: datetime | None = None
     previous_failure_count: int | None = None
     previous_timeline: tuple = ()
-    ever_restricted = False
+    seller_revoked_seen = False
+    binding_invalid_seen = False
     terminal_auth_seen = False
     processed_seen = False
     steps: list[ReplayStep] = []
@@ -185,8 +186,9 @@ def replay_unresolved_history(
                 raise FinancialOperationBlocked(
                     "Status processado retrocedido sem evidência de estorno"
                 )
-            if ever_restricted and (
-                r.seller_approved or r.tenant_binding_verified
+            if (
+                (seller_revoked_seen and r.seller_approved)
+                or (binding_invalid_seen and r.tenant_binding_verified)
             ):
                 raise FinancialOperationBlocked(
                     "Vínculo de seller/tenant restaurado sem nova autenticação"
@@ -198,8 +200,9 @@ def replay_unresolved_history(
         previous_window = c.failure_window_opened_at
         previous_failure_count = c.failures_in_window
         previous_timeline = snapshot.timeline
-        ever_restricted = ever_restricted or (
-            not r.seller_approved or not r.tenant_binding_verified
+        seller_revoked_seen = seller_revoked_seen or not r.seller_approved
+        binding_invalid_seen = (
+            binding_invalid_seen or not r.tenant_binding_verified
         )
         terminal_auth_seen = terminal_auth_seen or r.signal in _TERMINAL_AUTH
         processed_seen = processed_seen or r.signal is _PROCESSED
