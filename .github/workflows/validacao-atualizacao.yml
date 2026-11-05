@@ -297,6 +297,7 @@ jobs:
           python -m pytest -q backend/tests/test_m10200_case_integrity_ci.py
           python -m pytest -q backend/tests/test_m11000_retry_alias_integrity_ci.py
           python -m pytest -q backend/tests/test_m12000_replay_rollback_ci.py
+          python -m pytest -q backend/tests/test_m13000_checkpoint_readiness_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

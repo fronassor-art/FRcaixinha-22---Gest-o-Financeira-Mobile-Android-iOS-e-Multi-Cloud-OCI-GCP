@@ -486,6 +486,35 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m13000", include_in_schema=False)
+def backend_m13000_checkpoint_readiness_contract():
+    from .mp_orders_replay_checkpoint import CONTRACT as CHECKPOINT
+    from .mp_orders_staging_readiness import CONTRACT as READINESS
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M13000_CHECKPOINT_READINESS_OFFLINE_V1",
+        "restart_contract": CHECKPOINT,
+        "readiness_contract": READINESS,
+        "snapshot_prefix_consistency_checked": True,
+        "claimed_high_watermark_compared": True,
+        "staging_requirements_enumerated": True,
+        "readiness_claims_typed": True,
+        "checkpoint_persisted": False,
+        "checkpoint_source_authenticated": False,
+        "operator_identity_authenticated": False,
+        "globally_unique_idempotency": False,
+        "real_bank_reconciled": False,
+        "independent_bank_evidence_verified": False,
+        "oci_staging_deployed": False,
+        "real_payments_enabled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "payout_authorized": False,
+        "financial_closing_authorized": False,
+        "migration_apply_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m12000", include_in_schema=False)
 def backend_m12000_replay_rollback_contract():
     from .mp_orders_replay_history import CONTRACT as HISTORY
