@@ -17,6 +17,9 @@ def test_schema_and_atomic_local_wrapper():
  assert "session_user NOT IN ('frc_ai_auth'" in sql
  assert "GRANT EXECUTE ON FUNCTION public.notification_local_session_issued(text)" in sql
  assert "frcaixinha_auth_role" in sql
+ # Master is a person attribute; verified Admin/Member membership remains valid.
+ assert "AND p_tenant IS NOT NULL AND u.is_master=false" not in sql
+ assert "AND s.active_tenant_id IS NOT NULL AND s.is_master=false" not in sql
  auth=(ROOT/"app/routers/auth.py").read_text()
  assert "notification_local_session_issued" in auth
  assert auth.index("auth_promote_pending_session")<auth.index("notification_local_session_issued")
