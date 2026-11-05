@@ -33,9 +33,9 @@ if [[ "$mode" == audit ]]; then
 fi
 
 [[ "$(printenv AI_STUDIO_INCREMENTAL_M031 || true)" == YES ]] ||
-  fail "requer AI_STUDIO_LOCAL_MIGRATION=YES"
+  fail "requer AI_STUDIO_INCREMENTAL_M031=YES"
 read -r -p "Digite AUTORIZO_SOMENTE_NOTIFICACOES_031 para continuar: " confirm
-[[ "$confirm" == AUTORIZO_MIGRACAO_AI_STUDIO ]] || fail "sem confirmacao"
+[[ "$confirm" == AUTORIZO_SOMENTE_NOTIFICACOES_031 ]] || fail "sem confirmacao"
 
 dir="$HOME/.local/share/frcaixinha-aistudio-mobile/backups"
 [[ ! -L "$dir" ]] || fail "pasta backup e symlink"

@@ -12,5 +12,7 @@ def test_incremental_installer_is_safe_without_termux():
               "age --passphrase","--single-transaction","031_notification_inbox_local_sandbox.sql",
               "aistudio_post_migration_roles.sql","M19100_MIGRACAO_031_INCREMENTAL=PASS"):
         assert k in s,k
+    assert '[[ "$confirm" == AUTORIZO_SOMENTE_NOTIFICACOES_031 ]]' in s
+    assert "AUTORIZO_MIGRACAO_AI_STUDIO" not in s
     assert "AI_STUDIO_APPLY_MIGRATIONS=YES" not in s
     assert '"$root/backend/scripts/aistudio_db_local.sh" apply' not in s
