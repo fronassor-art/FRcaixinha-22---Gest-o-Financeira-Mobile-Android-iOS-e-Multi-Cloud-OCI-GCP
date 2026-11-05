@@ -111,6 +111,17 @@ CI_MP_NOTIFICATION_APP_URL="postgresql://${NOTIFY_APP_ROLE}:ci-test-only@127.0.0
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
  backend/tests/test_m18000_notification_ci_adapter_postgres.py
 echo "M18000_CI_INBOX_ADAPTER=PASS"
+echo "=== M19000 authorized-local-schema simulation in ephemeral CI ==="
+PGOPTIONS="-c frcaixinha.notifications_local_ci=1" \
+ psql -X -v ON_ERROR_STOP=1 --single-transaction \
+ -f backend/migrations/031_notification_inbox_local_sandbox.sql >/dev/null
+echo "M19000_M031_DISPOSABLE=PASS"
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+CI_MP_NOTIFICATION_APP_URL="postgresql://${NOTIFY_APP_ROLE}:ci-test-only@127.0.0.1:5432/frcaixinha_staging" \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+ backend/tests/test_m19000_notifications_local_db_ci.py
+echo "M19000_DISPOSABLE_INBOX=PASS"
 echo "=== M6700 — SERIALIZABLE ledger synthetic commits and rollback ==="
 CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \

@@ -40,6 +40,8 @@ jobs:
         run: npx tsx src/tests/role_scope_ui.test.ts
       - name: M15000 — central de notificações sem entrega simulada
         run: npx tsx src/tests/m15000_notifications_ui.test.ts
+      - name: M19000 — inbox funcional na UI
+        run: npx tsx src/tests/m19000_notifications_functional_ui.test.ts
       - name: Regressao Livro-Razao acessivel somente ao administrador
         run: npx tsx src/tests/ledger_menu_visibility_ci.test.ts
       - name: Validar caminhos de primeiro acesso sem auto-cadastro
@@ -306,6 +308,7 @@ jobs:
           python -m pytest -q backend/tests/test_m17000_signed_notification_origin_ci.py
           python -m pytest -q backend/tests/test_m17000_notification_page_cursor_ci.py
           python -m pytest -q backend/tests/test_m18000_notification_session_gate_ci.py
+          python -m pytest -q backend/tests/test_m19000_notifications_local_static_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

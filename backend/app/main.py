@@ -488,12 +488,15 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 @app.get("/api/health/features/m19000", include_in_schema=False)
-def backend_m19000_local_notification_contract():
-    from .routers.notifications import _local_enabled
+async def backend_m19000_local_notification_contract():
+    from .routers.notifications import _local_enabled, _schema_ready
+    schema_ready = await _schema_ready()
     return {
         "workstream": "AI_STUDIO",
         "contract": "AI_STUDIO_M19000_LOCAL_IN_APP_NOTIFICATIONS_V1",
         "local_notification_flag_configured": _local_enabled(),
+        "local_inbox_schema_verified": schema_ready,
+        "local_in_app_ready": schema_ready,
         "local_inbox_schema_expected_after_031": True,
         "selftest_route_registered": True,
         "read_receipt_route_registered": True,

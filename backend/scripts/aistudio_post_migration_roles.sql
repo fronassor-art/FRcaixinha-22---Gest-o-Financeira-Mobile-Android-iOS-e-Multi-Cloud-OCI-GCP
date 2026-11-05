@@ -156,5 +156,17 @@ BEGIN
           'public.auth_active_memberships(text)','EXECUTE') THEN
     RAISE EXCEPTION 'Estrutura de identidade MASTER incompleta';
   END IF;
+  IF to_regclass('public.notification_inbox') IS NULL
+    OR NOT EXISTS(SELECT 1 FROM pg_class
+      WHERE oid='public.notification_inbox'::regclass
+        AND relrowsecurity AND relforcerowsecurity)
+    OR NOT has_table_privilege('frc_ai_app','public.notification_inbox','SELECT')
+    OR has_table_privilege('frc_ai_app','public.notification_inbox','INSERT')
+    OR has_table_privilege('frc_ai_app','public.notification_inbox','UPDATE')
+    OR NOT has_function_privilege('frc_ai_app',
+        'public.notification_local_create_selftest()','EXECUTE')
+    OR NOT has_function_privilege('frc_ai_app',
+        'public.notification_local_mark_read(uuid)','EXECUTE')
+  THEN RAISE EXCEPTION 'BLOQUEADO: M031 de notificacoes locais nao aprovada'; END IF;
 END
 $verify$;
