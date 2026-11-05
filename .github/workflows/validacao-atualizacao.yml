@@ -316,6 +316,7 @@ jobs:
           python backend/scripts/aistudio_migration_inventory.py repo-check
           python -m pytest -q backend/tests/test_m19200_migration_inventory_ci.py
           python -m pytest -q backend/tests/test_m19300_local_lifecycle_parity_ci.py
+          python -m pytest -q backend/tests/test_m20100_local_parity_schema_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
@@ -428,6 +429,7 @@ jobs:
             -f backend/local_migrations/029_member_lifecycle_review_events.sql \
             -f backend/local_migrations/030_member_lifecycle_case_rounds.sql
           PGOPTIONS='-c frcaixinha.notifications_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/migrations/031_notification_inbox_local_sandbox.sql
+          bash backend/scripts/aistudio_local_parity_034_041_ci.sh
           # CI-only, fora do diretorio de migracoes do Termux.
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
@@ -593,6 +595,7 @@ jobs:
           scripts+=(-f backend/scripts/aistudio_post_migration_roles.sql)
           PGOPTIONS='-c frcaixinha.notifications_local_ci=1 -c frcaixinha.lifecycle_local_ci=1' \
             psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
+          bash backend/scripts/aistudio_local_parity_034_041_ci.sh
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
