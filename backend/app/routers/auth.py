@@ -129,6 +129,18 @@ async def login(payload: LoginRequest, response: Response):
                     'SELECT public.auth_login_rate_success($1::text)',rate_key)
                 if not cleared:
                     raise HTTPException(status_code=503, detail='Protecao de autenticacao indisponivel.')
+                # Origem REAL e verificada do alerta interno de sessão:
+                # o token recém-promovido é revalidado no próprio PostgreSQL.
+                # Só modo local AI Studio autorizado; sem envio externo.
+                if (os.getenv('AI_STUDIO_IN_APP_NOTIFICATIONS') == 'YES'
+                        and os.getenv('FRCAIXINHA_TERMUX_LOCAL_API') == '1'):
+                    notification_id = await conn.fetchval(
+                        'SELECT public.notification_local_session_issued($1::text)',
+                        raw_token)
+                    if notification_id is None:
+                        raise HTTPException(status_code=503,
+                                            detail='Aviso de seguranca da sessao nao persistido.')
+
         finally:
             await conn.close()
     except HTTPException as error:

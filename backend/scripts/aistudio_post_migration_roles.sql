@@ -167,6 +167,10 @@ BEGIN
         'public.notification_local_create_selftest()','EXECUTE')
     OR NOT has_function_privilege('frc_ai_app',
         'public.notification_local_mark_read(uuid)','EXECUTE')
+    OR NOT has_function_privilege('frc_ai_auth',
+        'public.notification_local_session_issued(text)','EXECUTE')
+    OR has_function_privilege('frc_ai_app',
+        'public.notification_local_session_issued(text)','EXECUTE')
   THEN RAISE EXCEPTION 'BLOQUEADO: M031 de notificacoes locais nao aprovada'; END IF;
 END
 $verify$;

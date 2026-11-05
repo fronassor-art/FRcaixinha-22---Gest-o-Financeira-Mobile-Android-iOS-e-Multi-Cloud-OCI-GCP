@@ -38,11 +38,17 @@ CREATE TABLE public.notification_inbox (
   recipient_role IN ('MASTER','TENANT_ADMIN','TENANT_MEMBER')),
  event_id uuid NOT NULL CHECK(
   event_id<>'00000000-0000-0000-0000-000000000000'::uuid),
- kind varchar(30) NOT NULL DEFAULT 'SELF_TEST' CHECK(kind='SELF_TEST'),
- title varchar(100) NOT NULL CHECK(
-  title='Aviso de teste interno'),
- message varchar(280) NOT NULL CHECK(
-  message='Teste do recebimento interno realizado nesta conta. Nenhum pagamento ou envio externo foi executado.'),
+ kind varchar(30) NOT NULL DEFAULT 'SELF_TEST' CHECK(
+  kind IN ('SELF_TEST','SECURITY_SESSION_ALERT')),
+ title varchar(100) NOT NULL,
+ message varchar(280) NOT NULL,
+ CHECK(
+  (kind='SELF_TEST' AND title='Aviso de teste interno'
+   AND message='Teste do recebimento interno realizado nesta conta. Nenhum pagamento ou envio externo foi executado.')
+  OR
+  (kind='SECURITY_SESSION_ALERT' AND title='Novo acesso à conta'
+   AND message='Uma sessão foi iniciada nesta conta. Se não reconhece, revise suas sessões.')
+ ),
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  read_at timestamptz,
  CHECK((recipient_role='MASTER' AND tenant_id IS NULL) OR
@@ -159,3 +165,53 @@ GRANT EXECUTE ON FUNCTION public.notification_local_mark_read(uuid) TO frcaixinh
 
 -- No direct INSERT/UPDATE/DELETE to the app role. No real domain event
 -- producer, no external provider and no financial effect from this migration.
+
+-- Server-issued session event: requires a valid, promoted and unrevoked
+-- raw token checked inside PostgreSQL. No caller may select a recipient.
+CREATE OR REPLACE FUNCTION public.notification_local_session_issued(p_raw_token text)
+ RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER
+ SET search_path=pg_catalog,public,pg_temp AS $fn$
+DECLARE
+ s record; created uuid;
+BEGIN
+ IF session_user NOT IN ('frc_ai_auth','frcaixinha_auth_ci','frcaixinha_pg18_auth')
+ OR p_raw_token IS NULL OR length(p_raw_token) NOT BETWEEN 32 AND 512
+ THEN RAISE EXCEPTION 'M031 DENIED: only authenticated session issuer'; END IF;
+ SELECT sess.id,sess.user_id,sess.active_role,sess.active_tenant_id,
+        u.is_master
+ INTO s
+ FROM public.sessions sess JOIN public.users u ON u.id=sess.user_id
+ WHERE sess.token_hash=encode(public.digest(p_raw_token,'sha256'),'hex')
+   AND sess.revoked_at IS NULL AND sess.expires_at>CLOCK_TIMESTAMP()
+   AND u.status='ACTIVE'
+ LIMIT 1;
+ IF NOT FOUND OR NOT (
+   (s.active_role='MASTER' AND s.active_tenant_id IS NULL AND s.is_master=true)
+   OR (s.active_role IN ('TENANT_ADMIN','TENANT_MEMBER')
+       AND s.active_tenant_id IS NOT NULL AND s.is_master=false
+       AND EXISTS(SELECT 1 FROM public.memberships m
+          JOIN public.tenants t ON t.id=m.tenant_id
+          WHERE m.user_id=s.user_id AND m.tenant_id=s.active_tenant_id
+           AND m.role=s.active_role AND m.status='ATIVA' AND t.status='ATIVO'))
+ ) THEN
+   RAISE EXCEPTION 'M031 DENIED: session is not verified and active';
+ END IF;
+ INSERT INTO public.notification_inbox
+   (tenant_id,recipient_user_id,recipient_role,event_id,kind,title,message)
+ VALUES (s.active_tenant_id,s.user_id,s.active_role,s.id,
+    'SECURITY_SESSION_ALERT','Novo acesso à conta',
+    'Uma sessão foi iniciada nesta conta. Se não reconhece, revise suas sessões.')
+ ON CONFLICT ON CONSTRAINT notification_local_unique_event DO NOTHING
+ RETURNING id INTO created;
+ IF created IS NULL THEN
+   SELECT id INTO created FROM public.notification_inbox
+    WHERE tenant_id IS NOT DISTINCT FROM s.active_tenant_id
+      AND recipient_user_id=s.user_id AND recipient_role=s.active_role
+      AND event_id=s.id;
+ END IF;
+ RETURN created;
+END $fn$;
+REVOKE ALL ON FUNCTION public.notification_local_session_issued(text)
+ FROM PUBLIC,frcaixinha_app_role,frcaixinha_verifier_role;
+GRANT EXECUTE ON FUNCTION public.notification_local_session_issued(text)
+ TO frcaixinha_auth_role;
