@@ -496,6 +496,8 @@ def backend_m17000_notification_source_boundary():
         "contract": "AI_STUDIO_M17000_NOTIFICATION_ORIGIN_PAGE_GUARDS_V1",
         "origin_contract": SOURCE_CONTRACT,
         "synthetic_hmac_source_validation": True,
+        "scoped_hmac_keyset_cursor_prepared": True,
+        "recipient_page_integrity_checked": True,
         "timestamp_skew_limit_checked": True,
         "role_recipient_scope_checked": True,
         "staging_041_active_link_policy_prepared": True,

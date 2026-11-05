@@ -304,6 +304,7 @@ jobs:
           python -m pytest -q backend/tests/test_m15000_notifications_ci.py
           python -m pytest -q backend/tests/test_m16000_notifications_staging_static_ci.py
           python -m pytest -q backend/tests/test_m17000_signed_notification_origin_ci.py
+          python -m pytest -q backend/tests/test_m17000_notification_page_cursor_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

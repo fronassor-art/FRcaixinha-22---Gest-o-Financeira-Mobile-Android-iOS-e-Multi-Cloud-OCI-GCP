@@ -25,3 +25,12 @@ Migração 041 de staging (apenas GitHub Actions descartável) fortalecida para 
 - Pendências P2: três perfis no aparelho, notificações reais e acessibilidade, evidências AT-01–50.
 
 Nenhuma migração local/OCI, nenhum dinheiro real, nenhum fechamento ou pagamento foi autorizado.
+
+
+## M17000 também entrega o contrato de paginação estrita (não conectado)
+
+- \`backend/app/notification_inbox_page_boundary.py\`: valida contrato das linhas \`notification_inbox_staging\`, usuário, papel, tenant, datas com timezone e ordenação keyset estrita.
+- Cursor HMAC-SHA256 de domínio exclusivo, vinculado a destinatário/papel/tenant, com TTL de 15 minutos e margem de relógio 30 s, checagem de assinatura constant-time, base64 canônico.
+- Limite de 1 a 50 registros + 1, rejeição de registros repetidos, respostas fora de ordem, scopes e carimbos forjados; página com \`unread_count=None\` para evitar contagem falsa.
+- A API ainda responde 503 com sessão válida, pois a migração 041 não foi aplicada no Termux e não há autenticação produtiva das fontes.
+- Testes \`backend/tests/test_m17000_notification_page_cursor_ci.py\` cobrem adversários e limites, sem acesso SQL ou envio de mensagens.
