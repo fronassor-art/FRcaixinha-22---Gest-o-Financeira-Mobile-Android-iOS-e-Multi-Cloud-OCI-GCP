@@ -111,12 +111,18 @@ CI_MP_NOTIFICATION_APP_URL="postgresql://${NOTIFY_APP_ROLE}:ci-test-only@127.0.0
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
  backend/tests/test_m18000_notification_ci_adapter_postgres.py
 echo "M18000_CI_INBOX_ADAPTER=PASS"
+if [ "$NOTIFY_APP_ROLE" = "frcaixinha_ci" ]; then
+  NOTIFY_AUTH_ROLE="frcaixinha_auth_ci"
+else
+  NOTIFY_AUTH_ROLE="frcaixinha_pg18_auth"
+fi
 echo "=== M19000 notification schema inherited from disposable frcaixinha_ci ==="
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.notification_inbox') IS NOT NULL")" = "t"
 echo "M19000_M031_DISPOSABLE=PASS"
 GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
 CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
 CI_MP_NOTIFICATION_APP_URL="postgresql://${NOTIFY_APP_ROLE}:ci-test-only@127.0.0.1:5432/frcaixinha_staging" \
+CI_MP_NOTIFICATION_AUTH_URL="postgresql://${NOTIFY_AUTH_ROLE}:ci-test-only@127.0.0.1:5432/frcaixinha_staging" \
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
  backend/tests/test_m19000_notifications_local_db_ci.py
 echo "M19000_DISPOSABLE_INBOX=PASS"

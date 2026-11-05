@@ -1,5 +1,6 @@
 """M19000 physical notification local migration, PG16 and PG18 disposable."""
 import os
+import hashlib
 import asyncpg
 import pytest
 from uuid import UUID
@@ -8,7 +9,12 @@ APP=os.getenv("CI_MP_NOTIFICATION_APP_URL","")
 ADMIN=os.getenv("CI_MP_DISPOSABLE_DATABASE_URL","")
 VALID={"postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging",
 "postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_staging"}
-READY=os.getenv("GITHUB_ACTIONS")=="true" and os.getenv("FRCAIXINHA_CI_ISOLATED")=="1" and APP in VALID and ADMIN=="postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging"
+AUTH=os.getenv("CI_MP_NOTIFICATION_AUTH_URL","")
+VALID_AUTH={
+ "postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging",
+ "postgresql://frcaixinha_pg18_auth:ci-test-only@127.0.0.1:5432/frcaixinha_staging",
+}
+READY=os.getenv("GITHUB_ACTIONS")=="true" and os.getenv("FRCAIXINHA_CI_ISOLATED")=="1" and APP in VALID and AUTH in VALID_AUTH and ADMIN=="postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging"
 pytestmark=[pytest.mark.asyncio,pytest.mark.skipif(not READY,reason="disposable staging only")]
 T=UUID("ffffffff-0000-4000-8000-000000000011")
 B=UUID("ffffffff-0000-4000-8000-000000000012")
@@ -116,4 +122,46 @@ async def test_07_no_financial_claims_or_external_delivery():
   for x in r:
    assert x["kind"]=="SELF_TEST" and x["title"]=="Aviso de teste interno"
    assert "Nenhum pagamento ou envio externo" in x["message"]
+ finally:await c.close()
+
+
+async def test_08_server_issued_session_notice_is_real_inbox_event():
+ """Synthetic bearer verified by DB. Only session service can publish."""
+ owner=await asyncpg.connect(ADMIN,timeout=8)
+ auth=await asyncpg.connect(AUTH,timeout=8)
+ app_conn=await app()
+ raw="M19000-CI-only-session-token-long-enough-20261105-01"
+ try:
+  session_id=await owner.fetchval(
+   "INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) "
+   "VALUES($1,$2,'TENANT_MEMBER',$3,NOW()+interval '15 minutes') RETURNING id",
+   hashlib.sha256(raw.encode()).hexdigest(),U,T)
+  alert=await auth.fetchval(
+    "SELECT public.notification_local_session_issued($1::text)",raw)
+  assert alert is not None
+  assert await auth.fetchval(
+    "SELECT public.notification_local_session_issued($1::text)",raw)==alert
+  async with app_conn.transaction():
+   await scope(app_conn)
+   found=await app_conn.fetchrow(
+    "SELECT id,kind,title,message,event_id FROM public.notification_inbox WHERE id=$1",alert)
+   assert found["event_id"]==session_id
+   assert found["kind"]=="SECURITY_SESSION_ALERT"
+   assert found["title"]=="Novo acesso à conta"
+   assert "sessão" in found["message"]
+  with pytest.raises(asyncpg.PostgresError):
+   await auth.fetchval("SELECT public.notification_local_session_issued('not-a-real-token')")
+ finally:
+  await app_conn.close()
+  await auth.close()
+  await owner.close()
+
+async def test_09_app_cannot_forge_session_event():
+ c=await app()
+ try:
+  async with c.transaction():
+   await scope(c)
+   assert not await c.fetchval(
+    "SELECT has_function_privilege(current_user,"
+    "'public.notification_local_session_issued(text)','EXECUTE')")
  finally:await c.close()

@@ -13,6 +13,14 @@ def test_schema_and_atomic_local_wrapper():
     "UNIQUE NULLS NOT DISTINCT"):
   assert x in sql,x
  assert "GRANT INSERT ON TABLE public.notification_inbox" not in sql
+ assert "notification_local_session_issued" in sql
+ assert "session_user NOT IN ('frc_ai_auth'" in sql
+ assert "GRANT EXECUTE ON FUNCTION public.notification_local_session_issued(text)" in sql
+ assert "frcaixinha_auth_role" in sql
+ auth=(ROOT/"app/routers/auth.py").read_text()
+ assert "notification_local_session_issued" in auth
+ assert auth.index("auth_promote_pending_session")<auth.index("notification_local_session_issued")
+
  assert not sql.lstrip().startswith("BEGIN;") and not sql.strip().endswith("COMMIT;")
  body=(ROOT/"scripts/aistudio_db_local.sh").read_text()
  assert "027 031; do" in body and "--single-transaction" in body
