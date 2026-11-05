@@ -22,7 +22,7 @@ VALID_APPS={
 CI=(os.getenv("GITHUB_ACTIONS")=="true"
     and os.getenv("FRCAIXINHA_CI_ISOLATED")=="1"
     and ADMIN==EXPECTED_ADMIN and PRODUCER==EXPECTED_WORKER and APP in VALID_APPS)
-pytestmark=(pytest.mark.asyncio,pytest.mark.skipif(not CI,reason="disposable CI only"))
+pytestmark=[pytest.mark.asyncio,pytest.mark.skipif(not CI,reason="disposable CI only")]
 
 def eid(n:int):return UUID(f"eeeeeeee-0000-4000-8000-{n:012d}")
 
