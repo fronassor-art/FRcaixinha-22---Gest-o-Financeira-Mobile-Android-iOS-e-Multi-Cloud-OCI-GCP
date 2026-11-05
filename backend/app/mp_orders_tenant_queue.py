@@ -38,6 +38,9 @@ class RecoveryQueuePreview:
     scanned: int
     get_candidates: tuple[str, ...]
     pending_or_blocked: int
+    eligible_candidates: int = 0
+    deferred_candidates: int = 0
+    blocked_cases: int = 0
     safety_hold_active: bool = True
     tenant_authentication_performed: bool = False
     rate_limit_persisted: bool = False
@@ -120,7 +123,7 @@ def readonly_queue_preview(
         or not 1 <= max_candidates <= 10
     ):
         raise FinancialOperationBlocked("Parâmetros de fila não homologados")
-    candidates: list[tuple[str, str]] = []
+    candidates: list[str] = []
     seen: dict[str, RecoveryCase] = {}
     for case in cases:
         if type(case) is not RecoveryCase:
@@ -136,8 +139,13 @@ def readonly_queue_preview(
             or c.tenant_id != tenant_id
             or c.provider_account_id != provider_account_id
             or c.operation_id != incident.operation_id
+            or c.observed_at != r.now
+            or c.seller_approved != r.seller_approved
+            or c.tenant_binding_verified != r.tenant_binding_verified
         ):
-            raise FinancialOperationBlocked("Fila cruza caixinha, seller ou operação")
+            raise FinancialOperationBlocked(
+                "Fila cruza caixinha, seller, operação ou snapshot autenticado"
+            )
         if incident.operation_id in seen:
             if case != seen[incident.operation_id]:
                 raise FinancialOperationBlocked("Replay de operação com contexto divergente")
@@ -151,11 +159,14 @@ def readonly_queue_preview(
             rplan.action is SafeRecoveryAction.READ_ORDER_ONLY
             and cplan.action is ReadonlyAction.GET_CANDIDATE_ONLY
         ):
-            candidates.append((incident.operation_id, incident.operation_id))
+            candidates.append(incident.operation_id)
     candidates.sort()
+    selected = candidates[:max_candidates]
     return RecoveryQueuePreview(
         tenant_id=tenant_id, provider_account_id=provider_account_id,
-        scanned=len(seen),
-        get_candidates=tuple(op for _, op in candidates[:max_candidates]),
-        pending_or_blocked=len(seen)-len(candidates[:max_candidates]),
+        scanned=len(seen), get_candidates=tuple(selected),
+        pending_or_blocked=len(seen)-len(selected),
+        eligible_candidates=len(candidates),
+        deferred_candidates=len(candidates)-len(selected),
+        blocked_cases=len(seen)-len(candidates),
     )

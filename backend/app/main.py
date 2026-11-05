@@ -486,6 +486,30 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m10200", include_in_schema=False)
+def backend_m10200_case_integrity_contract():
+    from .mp_orders_case_integrity import CONTRACT as INTEGRITY
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M10200_CASE_INTEGRITY_BOUNDARIES_V1",
+        "integrity_contract": INTEGRITY,
+        "cross_component_binding_preflight": True,
+        "queue_snapshot_consistency_preflight": True,
+        "case_audit_persisted": False,
+        "case_sources_authenticated": False,
+        "distributed_recovery_lease_active": False,
+        "real_orders_get_active": False,
+        "real_bank_statement_connected": False,
+        "oci_staging_deployed": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m9400", include_in_schema=False)
 def backend_m9400_case_timeline_queue_contract():
     from .mp_orders_incident_timeline import CONTRACT as TIMELINE
