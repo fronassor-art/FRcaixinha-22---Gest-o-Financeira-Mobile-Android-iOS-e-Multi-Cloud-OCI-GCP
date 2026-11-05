@@ -501,7 +501,7 @@ async def backend_m19000_local_notification_contract():
         "selftest_route_registered": True,
         "read_receipt_route_registered": True,
         "keyset_cursor_server_scope_enabled": True,
-        "local_migration_applied": False,
+        "local_migration_applied": schema_ready,
         "external_email_active": False,
         "external_push_active": False,
         "external_whatsapp_active": False,

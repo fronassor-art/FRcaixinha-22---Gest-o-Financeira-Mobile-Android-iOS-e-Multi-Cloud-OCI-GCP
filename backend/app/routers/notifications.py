@@ -69,10 +69,17 @@ async def _schema_ready() -> bool:
         conn=await asyncpg.connect(settings.DATABASE_URL,timeout=3)
         try:
             return (await conn.fetchval(
-                "SELECT to_regclass('public.notification_inbox') IS NOT NULL "
-                "AND has_table_privilege(current_user,'public.notification_inbox','SELECT') "
-                "AND NOT has_table_privilege(current_user,'public.notification_inbox','INSERT') "
-                "AND NOT has_table_privilege(current_user,'public.notification_inbox','UPDATE')"
+                "SELECT COALESCE((SELECT c.relrowsecurity AND c.relforcerowsecurity "
+                "FROM pg_class c WHERE c.oid=to_regclass('public.notification_inbox')),FALSE) "
+                "AND has_table_privilege(current_user,to_regclass('public.notification_inbox'),'SELECT') "
+                "AND NOT has_table_privilege(current_user,to_regclass('public.notification_inbox'),'INSERT') "
+                "AND NOT has_table_privilege(current_user,to_regclass('public.notification_inbox'),'UPDATE') "
+                "AND has_function_privilege(current_user,"
+                "to_regprocedure('public.notification_local_create_selftest()'),'EXECUTE') "
+                "AND has_function_privilege(current_user,"
+                "to_regprocedure('public.notification_local_mark_read(uuid)'),'EXECUTE') "
+                "AND has_function_privilege('frc_ai_auth',"
+                "to_regprocedure('public.notification_local_session_issued(text)'),'EXECUTE')"
             )) is True
         finally:
             await conn.close()
