@@ -25,6 +25,12 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   const [checkout, setCheckout] = useState<ProviderPixCheckout | null>(null);
   const [pixBusyId, setPixBusyId] = useState<string | null>(null);
   const [pixFeedback, setPixFeedback] = useState('');
+  useEffect(() => {
+    // Never keep another tenant's QR or financial feedback after role switch.
+    setCheckout(null);
+    setPixFeedback('');
+    setPixBusyId(null);
+  }, [key]);
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', items: [] });
 
   useEffect(() => {

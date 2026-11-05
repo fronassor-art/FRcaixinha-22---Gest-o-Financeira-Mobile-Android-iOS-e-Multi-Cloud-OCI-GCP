@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AppState } from '../services/store';
 import type { DisplayLoan } from '../services/loanReadBoundary';
 import type { LoanSimulation } from '../services/loanSimulationBoundary';
@@ -22,6 +22,12 @@ export const LoansAutomationPanel: React.FC<Props> = ({
   const [checkout, setCheckout] = useState<ProviderPixCheckout | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const contextKey = [state.currentUserId,state.currentTenantId,state.currentRole].join(':');
+  useEffect(() => {
+    setCheckout(null);
+    setWorking(null);
+    setMessage('');
+  }, [contextKey]);
 
   async function run(key: string, job: () => Promise<string>) {
     const snapshot = authService.captureSession();
