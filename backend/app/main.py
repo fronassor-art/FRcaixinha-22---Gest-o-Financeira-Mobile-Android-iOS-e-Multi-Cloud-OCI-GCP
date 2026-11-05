@@ -487,6 +487,34 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m18000", include_in_schema=False)
+def backend_m18000_notification_ci_auth_gateway():
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M18000_NOTIFICATION_CI_SESSION_GATE_V1",
+        "session_scope_guard_prepared": True,
+        "ci_disposable_reader_prepared": True,
+        "read_receipt_ci_only_prepared": True,
+        "ci_keyset_cursor_integrated": True,
+        "route_readiness_requires_auth": True,
+        "app_uses_real_inbox": False,
+        "real_inbox_api_connected": False,
+        "real_read_receipt_active": False,
+        "production_event_source_authenticated": False,
+        "local_migration_applied": False,
+        "oci_staging_deployed": False,
+        "in_app_delivery_active": False,
+        "email_send_active": False,
+        "push_send_active": False,
+        "whatsapp_send_active": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m17000", include_in_schema=False)
 def backend_m17000_notification_source_boundary():
     """Signed synthetic policy exercises, without production source binding."""
