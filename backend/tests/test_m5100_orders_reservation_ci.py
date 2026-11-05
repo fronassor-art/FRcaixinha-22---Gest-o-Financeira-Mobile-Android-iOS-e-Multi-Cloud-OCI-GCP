@@ -99,7 +99,7 @@ async def test_new_reservation_uses_exact_tenant_and_idempotency_key():
     cmd=command(attempt=2)
     assert cmd.attempt==2
     assert await journal.reserve_idempotent(cmd)=="NEW"
-    call=next(x for x in db.calls if "mp_orders_staging_reserve(" in x[1])
+    call=next(x for x in db.calls if "SELECT public.mp_orders_staging_reserve(" in x[1])
     assert call[2][0]==T
     assert call[2][6]==cmd.amount_cents
     assert call[2][7]==2
@@ -143,7 +143,7 @@ async def test_wrong_database_or_role_blocked():
     journal=StagingOrdersJournal(Pool(db),tenant_id=T,provider_account_id="2002")
     with pytest.raises(OrdersStagingBlocked):
         await journal.reserve_idempotent(command())
-    assert not any("mp_orders_staging_reserve(" in x[1] for x in db.calls)
+    assert not any("SELECT public.mp_orders_staging_reserve(" in x[1] for x in db.calls)
 
 
 @pytest.mark.asyncio

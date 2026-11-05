@@ -30,7 +30,7 @@ def test_same_utc_instant_may_belong_to_prior_local_calendar_day():
 
 
 def test_schedules_balanced_and_date_not_from_approval():
-    result=schedule(datetime(2027,1,28,tzinfo=timezone.utc))
+    result=schedule(datetime(2027,1,28,12,tzinfo=timezone.utc))
     assert result.first_period_days==13
     assert result.schedule[0].due_date=="2027-02-10"
     assert sum(x.amortization_portion for x in result.schedule)==Decimal("500.00")
