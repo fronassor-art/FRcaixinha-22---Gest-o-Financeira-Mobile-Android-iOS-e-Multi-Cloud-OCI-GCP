@@ -78,7 +78,8 @@ async def test_04_other_tenant_no_read_receipt():
    await scope(c,U,B)
    assert await c.fetchval("SELECT count(*) FROM public.notification_inbox")==0
    with pytest.raises(asyncpg.PostgresError):
-    await c.fetchval("SELECT public.notification_local_create_selftest()")
+    async with c.transaction():
+     await c.fetchval("SELECT public.notification_local_create_selftest()")
  finally:await c.close()
 
 async def test_05_suspended_member_blocked():
@@ -89,7 +90,8 @@ async def test_05_suspended_member_blocked():
    await scope(c)
    assert await c.fetchval("SELECT count(*) FROM public.notification_inbox")==0
    with pytest.raises(asyncpg.PostgresError):
-    await c.fetchval("SELECT public.notification_local_create_selftest()")
+    async with c.transaction():
+     await c.fetchval("SELECT public.notification_local_create_selftest()")
  finally:
   await admin.execute("UPDATE public.memberships SET status='ATIVA' WHERE tenant_id=$1 AND user_id=$2 AND role='TENANT_MEMBER'",T,U)
   await c.close();await admin.close()
@@ -102,7 +104,8 @@ async def test_06_10_notice_rate_limit():
    for _ in range(9):
     assert await c.fetchval("SELECT public.notification_local_create_selftest()")
    with pytest.raises(asyncpg.PostgresError):
-    await c.fetchval("SELECT public.notification_local_create_selftest()")
+    async with c.transaction():
+     await c.fetchval("SELECT public.notification_local_create_selftest()")
  finally:await c.close()
 
 async def test_07_no_financial_claims_or_external_delivery():
