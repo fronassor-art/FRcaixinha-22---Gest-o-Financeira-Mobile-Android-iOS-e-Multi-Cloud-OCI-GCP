@@ -85,8 +85,28 @@ async def read_disposable_notification_page(
             marker[0] if marker else None,marker[1] if marker else None,
             limit+1,
         )
+        # asyncpg can return its own pgproto.UUID class, which is not
+        # exactly uuid.UUID. Explicitly normalize only the three UUID
+        # columns, preserving the strict page validator (no relaxed types).
+        normalized = []
+        for row in data:
+            item = dict(row)
+            for key in ("id", "tenant_id", "recipient_user_id"):
+                raw = item[key]
+                if raw is None:
+                    if key != "tenant_id":
+                        raise FinancialOperationBlocked("UUID nulo no registro")
+                    continue
+                try:
+                    value = UUID(str(raw))
+                except (ValueError, TypeError, AttributeError) as exc:
+                    raise FinancialOperationBlocked("UUID não canônico do banco") from exc
+                if value.int == 0 or str(value) != str(raw):
+                    raise FinancialOperationBlocked("UUID adulterado no banco")
+                item[key] = value
+            normalized.append(item)
         return preview_notification_page(
-            tuple(dict(r) for r in data),scope,secret=secret,
+            tuple(normalized),scope,secret=secret,
             now=now,limit=limit,after=after
         )
 
