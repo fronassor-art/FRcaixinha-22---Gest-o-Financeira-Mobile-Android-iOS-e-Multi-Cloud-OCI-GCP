@@ -4,6 +4,9 @@ import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
 import { DisplayContribution, contributionScopeKey } from '../services/contributionsData';
 import { formatBRL } from '../services/financialEngine';
+import { authService } from '../services/authService';
+import { RealPixCheckout } from './RealPixCheckout';
+import type { ProviderPixCheckout } from '../services/pixAutomationBoundary';
 
 interface ContributionsViewProps {
   state: AppState;
@@ -19,6 +22,9 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   // O papel integra a chave: uma resposta do perfil administrador nunca pode ser exibida no perfil membro.
   const key = contributionScopeKey(state.currentUserId, state.currentTenantId, state.currentRole);
   const [revision, setRevision] = useState(0);
+  const [checkout, setCheckout] = useState<ProviderPixCheckout | null>(null);
+  const [pixBusyId, setPixBusyId] = useState<string | null>(null);
+  const [pixFeedback, setPixFeedback] = useState('');
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', items: [] });
 
   useEffect(() => {
@@ -37,6 +43,30 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     return () => { active = false; };
   }, [key, revision, state.currentRole]);
 
+  async function generateMonthlyPix(contributionId: string) {
+    const tenant = state.currentTenantId;
+    if (!tenant) return;
+    const snapshot = authService.captureSession();
+    const startKey = key;
+    setPixBusyId(contributionId);
+    setPixFeedback('Solicitando QR Code vinculado à competência...');
+    setCheckout(null);
+    try {
+      const response = await financialApi.createContributionPix(tenant, contributionId);
+      if (!authService.isSessionSnapshotCurrent(snapshot) ||
+          startKey !== contributionScopeKey(state.currentUserId, state.currentTenantId, state.currentRole)) return;
+      setCheckout(response);
+      setPixFeedback('Cobrança identificada. Aguarde a confirmação externa.');
+    } catch (error) {
+      if (authService.isSessionSnapshotCurrent(snapshot)) {
+        setPixFeedback(error instanceof Error ? error.message :
+          'Pix indisponível até integração e conciliação homologadas.');
+      }
+    } finally {
+      if (authService.isSessionSnapshotCurrent(snapshot)) setPixBusyId(null);
+    }
+  }
+
   // Nunca mostre a resposta da conta anterior durante uma troca de sessão.
   const current = result.key === key ? result : { key, status: 'loading' as const, items: [] };
   return (
@@ -54,6 +84,9 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         Pagamentos por Pix ainda não estão disponíveis. Nenhum valor é marcado como pago sem conciliação.
       </p>
+      {pixFeedback && <p role="status" className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800">
+        {pixFeedback}
+      </p>}
       <div aria-live="polite">
         {current.status === 'loading' && <p className="py-4 text-sm text-slate-600">Carregando contribuições...</p>}
         {current.status === 'error' && <div role="alert" className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />{current.message}</div>}
@@ -73,11 +106,23 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
                   <div><dt className="text-slate-600">Valor pago</dt><dd className="font-semibold text-slate-900">{formatBRL(c.amount_paid)}</dd></div>
                   <div className="col-span-2 border-t border-slate-100 pt-3"><dt className="text-slate-600">Saldo em aberto</dt><dd className="text-base font-bold text-slate-900">{formatBRL(Math.max(0, c.amount_due - c.amount_paid))}</dd></div>
                 </dl>
+                {c.payment_status !== 'QUITADA' && c.amount_due > c.amount_paid && (
+                  <button type="button"
+                    disabled={pixBusyId !== null}
+                    onClick={() => generateMonthlyPix(c.id)}
+                    className="mt-4 w-full rounded-lg bg-emerald-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">
+                    {pixBusyId === c.id ? 'Solicitando...' : 'Gerar Pix desta competência'}
+                  </button>
+                )}
               </article>
             ))}
           </div>
         )}
       </div>
+      {checkout && state.currentTenantId && (
+        <RealPixCheckout checkout={checkout} tenantId={state.currentTenantId}
+                         onClose={() => setCheckout(null)} />
+      )}
     </section>
   );
 };

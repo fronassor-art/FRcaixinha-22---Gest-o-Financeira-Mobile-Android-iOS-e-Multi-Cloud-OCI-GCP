@@ -58,6 +58,8 @@ jobs:
         run: npx tsx src/tests/tenant_read_boundary_ci.test.ts
       - name: Diagnosticar causas seguras de bloqueio Price no APK
         run: npx tsx src/tests/loan_simulation_feedback_ci.test.ts
+      - name: Validar Pix oficial sem baixa manual
+        run: npx tsx src/tests/pix_automation_boundary_ci.test.ts
       - name: Validar cronograma Price e rejeicao de simulacao tardia
         run: npx tsx src/tests/loan_simulation_integrity_ci.test.ts
       - name: Macropacote 180 — Price, sessao e consentimento

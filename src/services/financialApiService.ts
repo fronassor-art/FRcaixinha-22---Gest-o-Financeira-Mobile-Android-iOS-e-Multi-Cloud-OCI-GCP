@@ -9,6 +9,7 @@
  */
 
 import { authService, getApiBaseUrl, AuthSessionSnapshot } from './authService';
+import {parseProviderPixCheckout, ProviderPixCheckout, parseFinancialReceipt, FinancialReceipt} from './pixAutomationBoundary';
 import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 import { parseMasterAdminRegistry, adminRegistryQuery, MasterAdminRegistryPage } from './masterAdminRegistry';
 import {parseMasterSaasPortfolio, MasterSaasPortfolio, SaasStatusFilter} from './masterSaasPortfolio';
@@ -405,6 +406,60 @@ class FinancialApiService {
       method: 'POST',
       body: JSON.stringify({ amount }),
     });
+  }
+
+  // --- Pix automatizado e gerenciado pelo aplicativo (provider server-only) ---
+  public async fetchPixAutomationCapabilities(tenantId: string): Promise<{
+    pix_collection_enabled: boolean; pix_payout_enabled: boolean;
+  }> {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/capabilities`);
+  }
+
+  public async contributionPixQuote(tenantId: string, contributionId: string) {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    return this.request<any>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/contributions/${encodeURIComponent(contributionId)}/quote`);
+  }
+
+  public async createContributionPix(tenantId: string, contributionId: string): Promise<ProviderPixCheckout> {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    const raw: unknown = await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/contributions/${encodeURIComponent(contributionId)}/pix`,
+      {method:'POST'});
+    return parseProviderPixCheckout(raw);
+  }
+
+  public async createLoanInstallmentPix(
+    tenantId: string, loanId: string, installmentId: string
+  ): Promise<ProviderPixCheckout> {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    const raw: unknown = await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/loans/${encodeURIComponent(loanId)}/installments/${encodeURIComponent(installmentId)}/pix`,
+      {method:'POST'});
+    return parseProviderPixCheckout(raw);
+  }
+
+  public async loanDisbursementPreview(tenantId: string, loanId: string) {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    return this.request<any>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/loans/${encodeURIComponent(loanId)}/disbursement-preview`);
+  }
+
+  public async authorizeLoanPixPayout(tenantId: string, loanId: string) {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    return this.request<any>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/loans/${encodeURIComponent(loanId)}/payout`,
+      {method:'POST'});
+  }
+
+  public async getPixAutomationReceipt(
+    tenantId: string, operationId: string
+  ): Promise<FinancialReceipt> {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'DASHBOARD');
+    const raw: unknown = await this.request(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/financial-automation/receipts/${encodeURIComponent(operationId)}`);
+    return parseFinancialReceipt(raw, operationId);
   }
 
   // --- Empréstimos e Tabela Price ---
