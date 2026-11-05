@@ -7,6 +7,7 @@ import { formatBRL } from '../services/financialEngine';
 import { authService } from '../services/authService';
 import { RealPixCheckout } from './RealPixCheckout';
 import type { ProviderPixCheckout } from '../services/pixAutomationBoundary';
+import {CycleContributionPolicy,parseCyclePriceInput} from '../services/cyclePriceBoundary';
 
 interface ContributionsViewProps {
   state: AppState;
@@ -26,12 +27,22 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   const [pixBusyId, setPixBusyId] = useState<string | null>(null);
   const [pixCapability,setPixCapability]=useState<{key:string;enabled:boolean}>({key:'',enabled:false});
   const [pixFeedback, setPixFeedback] = useState('');
+  const [cyclePrice,setCyclePrice]=useState<{key:string;policy:CycleContributionPolicy|null;error:string}>({key:'',policy:null,error:''});
+  const [cycleInput,setCycleInput]=useState('');
+  const [cycleReason,setCycleReason]=useState('');
+  const [cycleBusy,setCycleBusy]=useState(false);
+  const [cycleMessage,setCycleMessage]=useState('');
   useEffect(() => {
     // Never keep another tenant's QR or financial feedback after role switch.
     setCheckout(null);
     setPixFeedback('');
     setPixBusyId(null);
     setPixCapability({key:'',enabled:false});
+    setCyclePrice({key:'',policy:null,error:''});
+    setCycleMessage('');
+    setCycleInput('');
+    setCycleReason('');
+    setCycleBusy(false);
   }, [key]);
   const [result, setResult] = useState<Result>({ key: '', status: 'loading', items: [] });
 
@@ -53,6 +64,47 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     });
     return () => { active = false; };
   }, [key, revision, state.currentRole]);
+
+  // M20400: admin-only policy retrieval; never show tenant A data in tenant B.
+  useEffect(()=>{
+    let active=true;
+    if(state.currentRole==='TENANT_ADMIN' && state.currentTenantId){
+      financialApi.fetchCycleContributionPolicy(state.currentTenantId).then(policy=>{
+        if(!active)return;
+        setCyclePrice({key,policy,error:''});
+        setCycleInput((policy.amount_cents/100).toFixed(2).replace('.',','));
+      }).catch(()=>{
+        if(active)setCyclePrice({key,policy:null,error:
+          'Política do ciclo indisponível. Confirme a migração 042 e a sessão.'});
+      });
+    }
+    return ()=>{active=false};
+  },[key,state.currentRole,state.currentTenantId]);
+
+  async function submitCyclePrice(event:React.FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    if(state.currentRole!=='TENANT_ADMIN'||!state.currentTenantId)return;
+    const policy=cyclePrice.key===key?cyclePrice.policy:null;
+    if(!policy)return;
+    try{
+      const amount=parseCyclePriceInput(cycleInput);
+      if(cycleReason.trim().length<12||cycleReason.trim().length>500)
+        throw new Error('Informe um motivo de auditoria com pelo menos 12 caracteres.');
+      const snapshot=authService.captureSession();
+      setCycleBusy(true);setCycleMessage('');
+      const response=await financialApi.changeCycleContributionPrice(
+        state.currentTenantId,policy.cycle_id,amount,cycleReason.trim());
+      if(!authService.isSessionSnapshotCurrent(snapshot))return;
+      setCycleMessage(response.change_status==='APPLIED'
+        ? 'Valor atualizado e auditado. Nenhuma contribuição anterior foi modificada.'
+        : 'Solicitação de revisão registrada. Cobranças já emitidas não foram alteradas.');
+      const revised=await financialApi.fetchCycleContributionPolicy(state.currentTenantId);
+      if(authService.isSessionSnapshotCurrent(snapshot))
+        setCyclePrice({key,policy:revised,error:''});
+    }catch(error){
+      setCycleMessage(error instanceof Error?error.message:'Não foi possível registrar a revisão.');
+    }finally{setCycleBusy(false);}
+  }
 
   async function generateMonthlyPix(contributionId: string) {
     const tenant = state.currentTenantId;
@@ -99,6 +151,42 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       {!pixEnabled && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         Pagamentos por Pix ainda não estão disponíveis. Nenhum valor é marcado como pago sem conciliação.
       </p>}
+      {state.currentRole==='TENANT_ADMIN' && cyclePrice.key===key && (
+        <section aria-label="Valor da contribuição por ciclo" className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4">
+          <h3 className="font-semibold text-emerald-950">Valor por cota do ciclo</h3>
+          {cyclePrice.error && <p role="alert" className="text-sm text-rose-800">{cyclePrice.error}</p>}
+          {cyclePrice.policy && <>
+            <p className="text-sm text-slate-700">
+              Ciclo {cyclePrice.policy.cycle_year} ({cyclePrice.policy.start_date.split('-').reverse().join('/')} a {cyclePrice.policy.end_date.split('-').reverse().join('/')}) · valor registrado: <strong>{formatBRL(cyclePrice.policy.amount_cents/100)}</strong>.
+            </p>
+            {cyclePrice.policy.registered_contributions>0 && <p className="text-sm text-amber-800">
+              Existem {cyclePrice.policy.registered_contributions} competências registradas. Mudanças precisam de revisão auditada e não alteram cobranças automaticamente.
+            </p>}
+            {cyclePrice.policy.pending_requested_cents!==null && <p className="text-sm text-amber-800">
+              Revisão solicitada: {formatBRL(cyclePrice.policy.pending_requested_cents/100)} (ainda não aplicada).
+            </p>}
+            <form className="grid gap-3 sm:grid-cols-2" onSubmit={event=>{void submitCyclePrice(event);}}>
+              <label className="grid gap-1 text-sm text-slate-800">
+                Novo valor por cota (R$)
+                <input value={cycleInput} onChange={e=>setCycleInput(e.target.value)}
+                  inputMode="decimal" maxLength={10} aria-label="Novo valor por cota"
+                  className="rounded-lg border border-slate-300 px-3 py-2" required/>
+              </label>
+              <label className="grid gap-1 text-sm text-slate-800">
+                Motivo da alteração
+                <input value={cycleReason} onChange={e=>setCycleReason(e.target.value)}
+                  maxLength={500} minLength={12} aria-label="Motivo da alteração da cota"
+                  className="rounded-lg border border-slate-300 px-3 py-2" required/>
+              </label>
+              <button type="submit" disabled={cycleBusy}
+                className="rounded-lg bg-emerald-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2">
+                {cycleBusy?'Registrando...':cyclePrice.policy.can_edit?'Salvar valor por cota e auditar':'Solicitar revisão auditada de valor'}
+              </button>
+            </form>
+          </>}
+          {cycleMessage && <p role="status" className="text-sm text-slate-800">{cycleMessage}</p>}
+        </section>
+      )}
       {pixFeedback && <p role="status" className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800">
         {pixFeedback}
       </p>}

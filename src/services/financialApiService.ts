@@ -29,6 +29,7 @@ import {
 import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
+import {CycleContributionPolicy,parseCycleContributionPolicy,CyclePriceChangeResult,parseCyclePriceChange} from './cyclePriceBoundary';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
 import {MemberObligationsPreview,parseMemberObligations} from './memberObligationsBoundary';
@@ -392,6 +393,27 @@ class FinancialApiService {
 
   public async fetchQuotas(tenantId: string) {
     return this.request<any[]>(`/api/v1/tenants/${tenantId}/quotas`);
+  }
+
+  // M20400: policy from verified PostgreSQL session, not a UI seed.
+  public async fetchCycleContributionPolicy(tenantId:string):Promise<CycleContributionPolicy>{
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price');
+    return parseCycleContributionPolicy(raw,tenantId);
+  }
+
+  public async changeCycleContributionPrice(
+    tenantId:string,cycleId:string,amountCents:number,reason:string,
+  ):Promise<CyclePriceChangeResult>{
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price',
+      {method:'POST',body:JSON.stringify({
+        cycle_id:cycleId,amount_cents:amountCents,
+        reason,idempotency_key:crypto.randomUUID(),
+      })});
+    return parseCyclePriceChange(raw);
   }
 
   public async fetchContributions(tenantId: string): Promise<DisplayContribution[]> {
