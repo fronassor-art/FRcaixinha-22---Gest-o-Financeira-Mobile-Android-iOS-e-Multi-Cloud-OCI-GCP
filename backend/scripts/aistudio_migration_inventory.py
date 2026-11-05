@@ -12,7 +12,7 @@ import sys
 
 ROOT=Path(__file__).resolve().parents[2]
 CATALOG=ROOT/"backend/migration_catalog_ai_studio.json"
-FAMILIES=("migrations","ci_migrations","staging_migrations")
+FAMILIES=("migrations","local_migrations","ci_migrations","staging_migrations")
 BRANCH="atualizacao-ai-studio-9b46a63187"
 PGDATA="/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18"
 
@@ -40,7 +40,7 @@ def repo_check():
     registered={}
     for e in manifest["entries"]:
         path=e["source_path"]
-        m=re.fullmatch(r"backend/(migrations|ci_migrations|staging_migrations)/(\d{3})_[\w-]+[.]sql",path)
+        m=re.fullmatch(r"backend/(migrations|local_migrations|ci_migrations|staging_migrations)/(\d{3})_[\w-]+[.]sql",path)
         if not m or path in registered or not (ROOT/path).is_file():
             raise ValueError("invalid/duplicate migration: "+path)
         family,number=m.group(1),int(m.group(2))
@@ -50,13 +50,14 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"
         )
         if e["classification"]!=expected:
             raise ValueError("classification does not match location: "+path)
-        forbidden=family!="migrations" or number in (28,29,30)
+        forbidden=family in ("ci_migrations","staging_migrations") or (family=="migrations" and number in (28,29,30))
         if e["do_not_apply_source_to_termux"] is not forbidden:
             raise ValueError("source marked unsafe for Termux: "+path)
         gitsha=subprocess.check_output(["git","hash-object",path],cwd=ROOT,text=True).strip()
@@ -78,7 +79,8 @@ def repo_check():
     print("M19200_REGISTRY_HASHES=PASS")
     print("M19200_MIGRATION_SQL_COUNT="+str(len(filesystem)))
     print("M19200_LOCAL_031=EVIDENCE_USER_LOG_NOT_CI")
-    print("M19200_NEEDS_LOCAL_EQUIVALENT=11")
+    print("M19200_NEEDS_LOCAL_EQUIVALENT=8")
+    print("M19300_LOCAL_028_030=PREPARED_NOT_APPLIED")
     print("M19200_CI_STAGING_NEVER_LOCAL_APPLY=PASS")
     return manifest
 

@@ -84,6 +84,36 @@
       "source_blob_sha": "059f038de685a52808b12ede917900809cf6ae96"
     },
     {
+      "id": "local_migrations:028",
+      "source_path": "backend/local_migrations/028_member_lifecycle_sandbox_requests.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.member_lifecycle_requests",
+      "local_evidence": null,
+      "source_blob_sha": "2e02ad243c42bd981899c4dd3d67d11f974f36a7"
+    },
+    {
+      "id": "local_migrations:029",
+      "source_path": "backend/local_migrations/029_member_lifecycle_review_events.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.member_lifecycle_review_events",
+      "local_evidence": null,
+      "source_blob_sha": "c9842d3b60bfbb269674ea0a5bbabf8eb20e6d2b"
+    },
+    {
+      "id": "local_migrations:030",
+      "source_path": "backend/local_migrations/030_member_lifecycle_case_rounds.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.member_lifecycle_requests",
+      "local_evidence": null,
+      "source_blob_sha": "c55606ea99e10cdb0d21b288bd51ae960a36699a"
+    },
+    {
       "id": "migrations:001",
       "source_path": "backend/migrations/001_initial_schema.sql",
       "classification": "BASELINE_LOCAL",
