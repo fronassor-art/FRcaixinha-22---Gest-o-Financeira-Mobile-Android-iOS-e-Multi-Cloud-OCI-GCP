@@ -114,7 +114,7 @@ BEGIN
         ON op.tenant_id=h.tenant_id AND op.operation_id=h.operation_id
       WHERE h.tenant_id=p_tenant AND h.operation_id=p_operation
         AND h.reason_code=p_reason AND op.environment='HOMOLOGACAO'
-        AND h.hold_active IS DISTINCT FROM false
+        AND h.bank_reconciled=false AND h.financial_effect_applied=false
     )
  THEN
    RAISE EXCEPTION 'M040 DENIED: unauthenticated or unscoped incident append';
