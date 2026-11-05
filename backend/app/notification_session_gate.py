@@ -50,12 +50,14 @@ def validate_notification_session_shape(
         tenant = UUID(session.tenant_id) if session.tenant_id else None
     except (TypeError, ValueError) as exc:
         raise FinancialOperationBlocked("Identidade de sessão inválida") from exc
+    # is_master is a person's platform attribute, not the active tenant role.
+    # A Master may hold verified Admin/Member memberships; upstream checks them.
     if (
         uid.int == 0 or str(uid) != session.user_id
         or (tenant is not None and (
             tenant.int == 0 or str(tenant) != session.tenant_id))
         or (role is NoticeRole.MASTER) != (tenant is None)
-        or (role is NoticeRole.MASTER) != session.is_master
+        or (role is NoticeRole.MASTER and not session.is_master)
     ):
         raise FinancialOperationBlocked("Papel e caixinha inconsistentes")
     return NotificationSessionGate(
