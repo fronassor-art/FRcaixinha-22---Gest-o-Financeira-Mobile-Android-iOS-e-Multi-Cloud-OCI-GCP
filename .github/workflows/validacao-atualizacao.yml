@@ -282,6 +282,7 @@ jobs:
           python -m pytest -q backend/tests/test_m5300_orders_recovery_ci.py
           python -m pytest -q backend/tests/test_m5400_price_payout_date_ci.py
           python -m pytest -q backend/tests/test_m5500_final_financial_gates_ci.py
+          python -m pytest -q backend/tests/test_m5700_staging_chain_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
@@ -465,6 +466,17 @@ jobs:
           FRCAIXINHA_CI_ISOLATED: '1'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
         run: python -m pytest -q backend/tests/test_bootstrap_ci.py backend/tests/test_tenant_provisioning_ci.py
+
+      - name: M5700 — ensaiar migrações Orders 034-038 em staging descartável
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: bash backend/scripts/aistudio_staging_chain_ci.sh
 
       - name: Backup cifrado age e restauração descartável
         env:

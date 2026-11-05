@@ -1,6 +1,8 @@
 -- AI Studio M2900: STAGING OCI ONLY. NOT Termux/CI/production.
 -- Requires DBA-controlled isolated database and dedicated login created first.
 -- CREATE ROLE frcaixinha_mp_webhook_ingest LOGIN ... NOBYPASSRLS NOSUPERUSER
+-- Atomic from preflight through grants: any failure rolls back all objects.
+BEGIN;
 DO $guard$
 BEGIN
  IF current_database() <> 'frcaixinha_staging'
@@ -131,3 +133,5 @@ GRANT EXECUTE ON FUNCTION public.mp_staging_resolve_seller(varchar),
  public.mp_staging_append_signed_webhook(
    uuid,varchar,varchar,varchar,varchar,varchar,varchar,varchar,boolean)
  TO frcaixinha_mp_webhook_ingest;
+
+COMMIT;
