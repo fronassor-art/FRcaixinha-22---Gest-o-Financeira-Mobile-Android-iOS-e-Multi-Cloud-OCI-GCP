@@ -251,3 +251,25 @@ async def test_10_no_financial_or_delivery_effects():
    assert not r["financial_effect_applied"]
   assert await c.fetchval("SELECT count(*) FROM public.notification_inbox_staging")==len(data)
  finally:await c.close()
+
+
+async def test_11_suspended_member_cannot_read_existing_inbox():
+ """Existing notifications do not survive a disabled membership in RLS."""
+ adm=await admin()
+ app_conn=await app()
+ try:
+  # This test operates only on a disposable synthetic database.
+  await adm.execute(
+   "UPDATE public.memberships SET status='SUSPENSA' "
+   "WHERE tenant_id=$1 AND user_id=$2 AND role='TENANT_MEMBER'",
+   T,AUSER)
+  async with app_conn.transaction():
+   await context(app_conn,AUSER,T,'TENANT_MEMBER')
+   assert await inbox(app_conn)==[]
+ finally:
+  await adm.execute(
+   "UPDATE public.memberships SET status='ATIVA' "
+   "WHERE tenant_id=$1 AND user_id=$2 AND role='TENANT_MEMBER'",
+   T,AUSER)
+  await app_conn.close()
+  await adm.close()

@@ -34,3 +34,6 @@ Nenhuma migração local/OCI, nenhum dinheiro real, nenhum fechamento ou pagamen
 - Limite de 1 a 50 registros + 1, rejeição de registros repetidos, respostas fora de ordem, scopes e carimbos forjados; página com \`unread_count=None\` para evitar contagem falsa.
 - A API ainda responde 503 com sessão válida, pois a migração 041 não foi aplicada no Termux e não há autenticação produtiva das fontes.
 - Testes \`backend/tests/test_m17000_notification_page_cursor_ci.py\` cobrem adversários e limites, sem acesso SQL ou envio de mensagens.
+
+
+**Correção de privilégio mínimo na CI:** a política RLS chama \`notification_active_recipient_staging_ci()\` para verificar usuário ativo e vínculo ativo sem conceder \`SELECT\` genérico na tabela \`users\` ao papel app. A função é \`SECURITY DEFINER\`, escopada ao DB descartável, sessão/role/tenant de teste e com \`REVOKE\`/grant específico. Trata-se ainda de um esquema experimental não apto a produção. O teste PG físico verifica também que suspender membro torna suas notificações invisíveis, sem deletá-las nem conceder acesso ao Master.

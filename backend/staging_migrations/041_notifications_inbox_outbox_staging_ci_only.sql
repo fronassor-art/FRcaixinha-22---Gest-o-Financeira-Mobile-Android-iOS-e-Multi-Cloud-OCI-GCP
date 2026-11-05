@@ -70,29 +70,56 @@ REVOKE ALL ON public.notification_outbox_staging,public.notification_inbox_stagi
  frcaixinha_verifier_role,frcaixinha_mp_financial_worker,
  frcaixinha_mp_webhook_ingest,frcaixinha_notify_producer_ci;
 GRANT SELECT ON public.notification_inbox_staging TO frcaixinha_app_role;
+-- Status/membership guard lives in a narrowly scoped SECURITY DEFINER
+-- predicate. App role NEVER gets generic SELECT on users or memberships.
+-- The CI GUC context still must not be treated as real authentication.
+CREATE OR REPLACE FUNCTION public.notification_active_recipient_staging_ci(
+ p_user uuid,p_tenant uuid,p_role varchar
+) RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER
+ SET search_path=pg_catalog,public,pg_temp AS $guard_recipient$
+DECLARE valid_identity boolean;
+BEGIN
+ IF current_database()<>'frcaixinha_staging'
+    OR session_user NOT IN ('frcaixinha_ci','frcaixinha_pg18_app')
+    OR p_user IS NULL OR p_user='00000000-0000-0000-0000-000000000000'::uuid
+    OR p_role NOT IN ('MASTER','TENANT_ADMIN','TENANT_MEMBER')
+    OR p_user IS DISTINCT FROM
+      NULLIF(current_setting('app.current_user_id',true),'')::uuid
+    OR p_tenant IS DISTINCT FROM
+      NULLIF(current_setting('app.current_tenant_id',true),'')::uuid
+    OR p_role IS DISTINCT FROM current_setting('app.current_role',true)
+ THEN RETURN false; END IF;
+ SELECT EXISTS(
+   SELECT 1 FROM public.users u WHERE u.id=p_user AND u.status='ACTIVE'
+     AND (p_role<>'MASTER' OR u.is_master=true)
+     AND (
+       (p_role='MASTER' AND p_tenant IS NULL)
+       OR (p_role IN ('TENANT_ADMIN','TENANT_MEMBER')
+         AND p_tenant IS NOT NULL AND EXISTS(
+           SELECT 1 FROM public.memberships m
+           WHERE m.user_id=p_user AND m.tenant_id=p_tenant
+             AND m.role=p_role AND m.status='ATIVA'
+         ))
+     )
+ ) INTO valid_identity;
+ RETURN valid_identity IS TRUE;
+END $guard_recipient$;
+REVOKE ALL ON FUNCTION public.notification_active_recipient_staging_ci(
+ uuid,uuid,varchar) FROM PUBLIC,frcaixinha_auth_role,
+ frcaixinha_verifier_role,frcaixinha_notify_producer_ci,
+ frcaixinha_mp_financial_worker,frcaixinha_mp_webhook_ingest;
+GRANT EXECUTE ON FUNCTION public.notification_active_recipient_staging_ci(
+ uuid,uuid,varchar) TO frcaixinha_app_role;
+
 CREATE POLICY notification_recipient_context_ci ON public.notification_inbox_staging
  FOR SELECT TO frcaixinha_app_role USING (
  recipient_user_id=NULLIF(current_setting('app.current_user_id',true),'')::uuid
  AND recipient_role=current_setting('app.current_role',true)
  AND tenant_id IS NOT DISTINCT FROM
      NULLIF(current_setting('app.current_tenant_id',true),'')::uuid
- AND EXISTS (
-   SELECT 1 FROM public.users u
-   WHERE u.id=notification_inbox_staging.recipient_user_id
-     AND u.status='ACTIVE'
-     AND (notification_inbox_staging.recipient_role<>'MASTER' OR u.is_master)
- )
- AND (
-   (recipient_role='MASTER' AND tenant_id IS NULL)
-   OR (recipient_role IN ('TENANT_ADMIN','TENANT_MEMBER') AND tenant_id IS NOT NULL
-     AND EXISTS (
-       SELECT 1 FROM public.memberships m
-       WHERE m.user_id=notification_inbox_staging.recipient_user_id
-         AND m.tenant_id=notification_inbox_staging.tenant_id
-         AND m.role=notification_inbox_staging.recipient_role
-         AND m.status='ATIVA'
-     ))
- ));
+ AND public.notification_active_recipient_staging_ci(
+     recipient_user_id,tenant_id,recipient_role)
+);
 
 -- No arbitrary free-form text, contact data, or payout in the entrypoint.
 CREATE OR REPLACE FUNCTION public.notification_enqueue_staging_ci(

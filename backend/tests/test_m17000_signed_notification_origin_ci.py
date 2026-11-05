@@ -33,9 +33,12 @@ def sign(data, secret=SECRET):
     return hmac.new(secret, DOMAIN + blob, sha256).hexdigest()
 
 
-def check(data=None, signature=None, secret=SECRET, now=NOW):
+_ABSENT = object()
+
+
+def check(data=None, signature=_ABSENT, secret=SECRET, now=NOW):
     candidate = sample() if data is None else data
-    signature = sign(candidate, secret) if signature is None else signature
+    signature = sign(candidate, SECRET) if signature is _ABSENT else signature
     return verify_synthetic_origin(candidate, signature, secret, now=now)
 
 
