@@ -91,7 +91,7 @@ def test_first_event_must_be_reporter_genesis(field,value):
 
 
 @pytest.mark.parametrize("changes",[
-    {"sequence":2}, {"action":TimelineAction.OPENED},
+    {"sequence":1}, {"action":TimelineAction.OPENED},
     {"recorded_at":DATE-timedelta(seconds=1)},
     {"previous_digest":"G"*64},
     {"second_reviewer_id":REPORTER},
