@@ -50,7 +50,7 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
-          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"
@@ -144,8 +144,8 @@ def local_readonly():
                 print("M19200_CI_031_037=DISPOSABLE_ONLY")
                 # M20200: report the runtime DB, not a generic source-code state.
                 # Both the precise table count and all core contracts are required.
-                if n!=44:
-                    return deny("M20200 expected exactly 44 public tables, found "+str(n))
+                if n not in (44,45):
+                    return deny("M20200 expected 44 or 45 public tables, found "+str(n))
                 lifecycle=("public.member_lifecycle_requests","public.member_lifecycle_review_events")
                 if not all(exists(t) for t in lifecycle) or not has030:
                     return deny("M20200 lifecycle 028-030 objects missing")
@@ -203,7 +203,39 @@ def local_readonly():
                     return deny("M20200 notification inbox 031 missing/unsafe")
                 print("M20200_LOCAL_031=OBJECTS_RLS_VERIFIED")
                 print("M20200_LOCAL_034_041=8_TABLES_RLS_VERIFIED")
-                print("M20200_MIGRATIONS=44_TABLES_VERIFIED_NO_REAPPLY")
+                if n==45:
+                    obj="public.cycle_contribution_price_audit"
+                    if not exists(obj):
+                        return deny("M20400 audit table missing")
+                    secure=conn.execute(
+                      "SELECT relrowsecurity AND relforcerowsecurity "
+                      "FROM pg_class WHERE oid=to_regclass(%s)",(obj,)
+                    ).fetchone()[0]
+                    grants=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',%s,'INSERT') "
+                      "OR has_table_privilege('frc_ai_app',%s,'UPDATE') "
+                      "OR has_table_privilege('frc_ai_auth',%s,'SELECT')",
+                      (obj,obj,obj)
+                    ).fetchone()[0]
+                    funcs=conn.execute(
+                      "SELECT has_function_privilege('frc_ai_app',"
+                      "'public.cycle_price_status(text,uuid)','EXECUTE') "
+                      "AND has_function_privilege('frc_ai_app',"
+                      "'public.cycle_price_change(text,uuid,uuid,bigint,text,uuid)','EXECUTE') "
+                      "AND NOT has_function_privilege('frc_ai_app',"
+                      "'public.cycle_price_admin_actor(text,uuid)','EXECUTE')"
+                    ).fetchone()[0]
+                    immutable=conn.execute(
+                      "SELECT count(*) FROM pg_trigger "
+                      "WHERE tgname IN ('cycle_price_immutable_row',"
+                      "'cycle_price_immutable_truncate') AND tgenabled='O'"
+                    ).fetchone()[0]
+                    if not secure or grants or not funcs or immutable!=2:
+                        return deny("M20400 audit RLS, grants or triggers invalid")
+                    print("M20400_LOCAL_042=OBJECTS_RLS_VERIFIED")
+                else:
+                    print("M20400_LOCAL_042=NOT_APPLIED")
+                print("M20200_MIGRATIONS="+str(n)+"_TABLES_VERIFIED_NO_REAPPLY")
                 print("M19200_READ_ONLY=PASS")
                 return 0
     except Exception as e:

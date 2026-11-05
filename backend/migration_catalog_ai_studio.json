@@ -194,6 +194,16 @@
       "source_blob_sha": "a6982b597e9afd38535de854c540447f2fe8f910"
     },
     {
+      "id": "local_migrations:042",
+      "source_path": "backend/local_migrations/042_cycle_contribution_price_audit.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.cycle_contribution_price_audit",
+      "local_evidence": null,
+      "source_blob_sha": "c22a36eead8608076ad18cef489988d88fa0475f"
+    },
+    {
       "id": "migrations:001",
       "source_path": "backend/migrations/001_initial_schema.sql",
       "classification": "BASELINE_LOCAL",
