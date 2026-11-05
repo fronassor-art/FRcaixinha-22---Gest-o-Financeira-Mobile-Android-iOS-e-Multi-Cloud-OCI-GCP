@@ -175,6 +175,8 @@ def main():
             "AUTH_VERIFIER_DATABASE_URL": dsn(VERIFIER,verifier_password),
             "AUTH_RATE_LIMIT_HMAC_KEY": secrets.token_urlsafe(48),
             "AUTH_SECRET": secrets.token_urlsafe(48),
+            "AI_STUDIO_IN_APP_NOTIFICATIONS": "YES",
+            "IN_APP_CURSOR_HMAC_KEY": secrets.token_urlsafe(48),
         }
         # Nao sobrescreve nenhum arquivo existente. O_EXCL impede race/symlink.
         write_env_exclusively(env)

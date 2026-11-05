@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Somente AI Studio em Termux; backup age antes de migrações 001-027.
+# Somente AI Studio em Termux; backup age antes de migrações 001-027 e 031.
 set -euo pipefail
 umask 077
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -61,7 +61,7 @@ trap - EXIT
 sha256sum "$backup"
 age --decrypt "$backup" | pg_restore --list >/dev/null
 echo "BACKUP_ENCRYPTED_VERIFIED=PASS; $backup"
-echo "=== MIGRACAO 001-027, TRANSACAO UNICA ==="
+echo "=== MIGRACAO 001-027 + 031, TRANSACAO UNICA ==="
 AI_STUDIO_APPLY_MIGRATIONS=YES bash "$root/backend/scripts/aistudio_db_local.sh" apply
 echo "=== VALIDACAO POS MIGRACAO: LEITURA ==="
 bash "$root/backend/scripts/aistudio_db_local.sh" verify

@@ -159,4 +159,3 @@ GRANT EXECUTE ON FUNCTION public.notification_local_mark_read(uuid) TO frcaixinh
 
 -- No direct INSERT/UPDATE/DELETE to the app role. No real domain event
 -- producer, no external provider and no financial effect from this migration.
-COMMIT;

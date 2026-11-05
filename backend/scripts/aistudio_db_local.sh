@@ -67,7 +67,7 @@ apply)
   fi
 
   args=(-f "$root/backend/scripts/aistudio_migration_guard.sql")
-  for n in 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027; do
+  for n in 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027 031; do
     files=("$root"/backend/migrations/"$n"_*.sql)
     if [[ "${#files[@]}" != 1 ]] || [[ ! -f "${files[0]}" ]]; then
       echo "BLOQUEADO: arquivo da migracao $n ausente ou duplicado" >&2
@@ -76,7 +76,7 @@ apply)
     args+=(-f "${files[0]}")
   done
   args+=(-f "$root/backend/scripts/aistudio_post_migration_roles.sql")
-  echo "Aplicando 001-027 + papeis na MESMA transacao PostgreSQL; falhas causam ROLLBACK."
+  echo "Aplicando 001-027 + 031 notificacoes + papeis na MESMA transacao PostgreSQL; falhas causam ROLLBACK."
   "${psql_base[@]}" --single-transaction "${args[@]}"
   echo "AI_STUDIO_MIGRATIONS=APPLIED (execute verify antes do login)"
   ;;
@@ -96,6 +96,12 @@ SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity
  WHERE n.nspname='public'
    AND c.relname IN ('tenants','memberships','quotas','loans','ledger_accounts')
  ORDER BY c.relname;
+SELECT to_regclass('public.notification_inbox') AS inbox_local;
+SELECT c.relrowsecurity,c.relforcerowsecurity FROM pg_class c
+ WHERE c.oid='public.notification_inbox'::regclass;
+SELECT has_table_privilege('frc_ai_app','public.notification_inbox','SELECT') AS app_inbox_read,
+       has_table_privilege('frc_ai_app','public.notification_inbox','INSERT') AS app_inbox_insert_forbidden,
+       has_table_privilege('frc_ai_app','public.notification_inbox','UPDATE') AS app_inbox_update_forbidden;
 SELECT count(*) AS total_master FROM public.users WHERE is_master;
 COMMIT;
 SQL
