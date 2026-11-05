@@ -14,8 +14,10 @@ async def notification_capabilities(
 ):
     if session.role not in ("MASTER", "TENANT_ADMIN", "TENANT_MEMBER"):
         raise HTTPException(403,detail="Perfil não autorizado")
-    if (session.role=="MASTER" and (not session.is_master or session.tenant_id))
-        or (session.role!="MASTER" and (not session.tenant_id or session.is_master)):
+    if (
+        (session.role == "MASTER" and (not session.is_master or session.tenant_id))
+        or (session.role != "MASTER" and (not session.tenant_id or session.is_master))
+    ):
         raise HTTPException(403,detail="Contexto inconsistente")
     return {
         "workstream":"AI_STUDIO",
