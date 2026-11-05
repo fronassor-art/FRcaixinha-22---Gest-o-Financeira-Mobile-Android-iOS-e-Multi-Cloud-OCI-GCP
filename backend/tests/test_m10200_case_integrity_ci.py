@@ -288,7 +288,8 @@ def test_m9400_queue_counts_deferred_candidates_distinctly():
     case=make_case()
     one=RecoveryCase(case.recovery,case.circuit)
     other_incident=replace(case.incident,operation_id="P_"+"b"*32)
-    other_recovery=replace(case.recovery,incident=other_incident)
+    other_recovery=replace(
+        case.recovery,incident=other_incident,order_id="ORD"+"Z"*12)
     other_circuit=replace(case.circuit,operation_id=other_incident.operation_id)
     two=RecoveryCase(other_recovery,other_circuit)
     preview=readonly_queue_preview(TENANT,"2002",(one,two),max_candidates=1)

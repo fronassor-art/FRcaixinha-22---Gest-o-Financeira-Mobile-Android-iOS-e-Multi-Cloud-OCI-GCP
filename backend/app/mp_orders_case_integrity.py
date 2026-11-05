@@ -7,7 +7,9 @@ No provider I/O, SQL, payments, ledger, settlement, payout or hold release.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from hashlib import sha256
+import json
 from uuid import UUID
 
 from .mp_orders_evidence_discrepancy import (
@@ -108,6 +110,7 @@ def inspect_integrated_case(case: IntegratedCaseSnapshot) -> IntegratedCaseDecis
         or c.observed_at != r.now
         or c.seller_approved != r.seller_approved
         or c.tenant_binding_verified != r.tenant_binding_verified
+        or c.recovery_attempts != r.attempts
         or case.timeline[-1].recorded_at > r.now
         or any(source.observed_at > r.now for source in (
             case.claimed_evidence.provider,
@@ -130,17 +133,53 @@ def inspect_integrated_case(case: IntegratedCaseSnapshot) -> IntegratedCaseDecis
         and recovery.action is SafeRecoveryAction.READ_ORDER_ONLY
         and circuit.action is ReadonlyAction.GET_CANDIDATE_ONLY
     )
-    payload = "|".join((
-        "AI_STUDIO_M9900_UNVERIFIED_BUNDLE",
-        str(incident.tenant_id), incident.operation_id,
-        incident.provider_account_id, incident.reason.value,
-        incident.evidence_sha256, timeline.head_digest,
-        evidence.case_fingerprint, priority.value,
-        evidence.outcome.value, recovery.action.value,
-        circuit.action.value, str(r.order_id or "-"),
-        r.now.isoformat(),
-        "HOLD_UNRESOLVED_NO_AUTHORITY",
-    ))
+    # M10300: record every decision-relevant recovery/circuit field.
+    # A changed retry count or backoff timestamp MUST alter the digest even
+    # when the advisory action remains the same. Still not a signature.
+    def instant(value: datetime | None) -> str | None:
+        return (value.astimezone(timezone.utc).isoformat()
+                if value is not None else None)
+
+    payload = json.dumps({
+        "domain": "AI_STUDIO_M11000_UNVERIFIED_CASE_V2",
+        "tenant_id": str(incident.tenant_id),
+        "operation_id": incident.operation_id,
+        "seller": incident.provider_account_id,
+        "reason": incident.reason.value,
+        "incident_evidence": incident.evidence_sha256,
+        "opened_at": instant(incident.opened_at),
+        "reported_by": str(incident.reported_by),
+        "timeline_digest": timeline.head_digest,
+        "timeline_events": timeline.event_count,
+        "timeline_last_action": timeline.last_action.value,
+        "claimed_sources_fingerprint": evidence.case_fingerprint,
+        "evidence_outcome": evidence.outcome.value,
+        "priority": priority.value,
+        "recovery": {
+            "order_id": r.order_id,
+            "signal": r.signal.value,
+            "attempts": r.attempts,
+            "observed_at": instant(r.now),
+            "retry_after_seconds": r.retry_after_seconds,
+            "seller_approved_claim": r.seller_approved,
+            "tenant_bound_claim": r.tenant_binding_verified,
+            "proposed_action": recovery.action.value,
+            "retry_not_before": instant(recovery.next_get_at),
+        },
+        "circuit": {
+            "failure_window_opened_at": instant(c.failure_window_opened_at),
+            "failures_in_window": c.failures_in_window,
+            "last_failure_at": instant(c.last_failure_at),
+            "recovery_attempts": c.recovery_attempts,
+            "seller_approved_claim": c.seller_approved,
+            "tenant_bound_claim": c.tenant_binding_verified,
+            "proposed_action": circuit.action.value,
+            "retry_not_before": instant(circuit.retry_not_before),
+        },
+        "read_candidate_policy_only": read_candidate,
+        "hold_active": True,
+        "economic_effects_authorized": False,
+    }, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
     return IntegratedCaseDecision(
         tenant_id=incident.tenant_id,
         operation_id=incident.operation_id,
@@ -163,6 +202,8 @@ def count_integrated_cases_for_tenant(
     ):
         raise FinancialOperationBlocked("Contador de casos sem escopo permitido")
     unique: dict[str, IntegratedCaseSnapshot] = {}
+    order_owners: dict[tuple[str, str], str] = {}
+    payment_owners: dict[tuple[str, str], str] = {}
     for case in cases:
         decision = inspect_integrated_case(case)
         if decision.tenant_id != tenant_id:
@@ -172,6 +213,17 @@ def count_integrated_cases_for_tenant(
             if case != unique[key]:
                 raise FinancialOperationBlocked("Replay de caso com histórico diferente")
             continue
+        source = case.claimed_evidence.provider
+        for owners, provider_id, label in (
+            (order_owners, source.order_id, "Order"),
+            (payment_owners, source.payment_id, "Payment"),
+        ):
+            alias_key = (source.provider_account_id, provider_id)
+            original = owners.setdefault(alias_key, key)
+            if original != key:
+                raise FinancialOperationBlocked(
+                    f"{label} reaproveitado entre operações da mesma caixinha"
+                )
         unique[key] = case
     priorities = {p: 0 for p in IncidentPriority}
     get_candidates = 0

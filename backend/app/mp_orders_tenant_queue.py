@@ -125,6 +125,7 @@ def readonly_queue_preview(
         raise FinancialOperationBlocked("Parâmetros de fila não homologados")
     candidates: list[str] = []
     seen: dict[str, RecoveryCase] = {}
+    order_owners: dict[str, str] = {}
     for case in cases:
         if type(case) is not RecoveryCase:
             raise FinancialOperationBlocked("Caso de recuperação malformado")
@@ -142,6 +143,7 @@ def readonly_queue_preview(
             or c.observed_at != r.now
             or c.seller_approved != r.seller_approved
             or c.tenant_binding_verified != r.tenant_binding_verified
+            or c.recovery_attempts != r.attempts
         ):
             raise FinancialOperationBlocked(
                 "Fila cruza caixinha, seller, operação ou snapshot autenticado"
@@ -151,6 +153,12 @@ def readonly_queue_preview(
                 raise FinancialOperationBlocked("Replay de operação com contexto divergente")
             continue
         seen[incident.operation_id] = case
+        if r.order_id is not None:
+            owner = order_owners.setdefault(r.order_id, incident.operation_id)
+            if owner != incident.operation_id:
+                raise FinancialOperationBlocked(
+                    "Orders reutilizado por operações diferentes na fila"
+                )
         rplan = plan_readonly_recovery(r)
         cplan = decide_readonly_circuit(c)
         # Never select an unknown/processed Order, revoked seller or a case

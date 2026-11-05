@@ -486,6 +486,30 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m11000", include_in_schema=False)
+def backend_m11000_retry_alias_integrity_contract():
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M11000_RETRY_ALIAS_INTEGRITY_OFFLINE_V1",
+        "complete_retry_snapshot_fingerprint": True,
+        "strict_recovery_attempt_binding": True,
+        "local_batch_order_payment_alias_rejected": True,
+        "deterministic_negative_synthetic_regressions": True,
+        "persisted_deduplication_registry": False,
+        "real_provider_order_get": False,
+        "real_bank_evidence": False,
+        "operator_signatures_verified": False,
+        "audit_log_persisted": False,
+        "oci_staging_deployed": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "payout_authorized": False,
+        "financial_closing_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m10200", include_in_schema=False)
 def backend_m10200_case_integrity_contract():
     from .mp_orders_case_integrity import CONTRACT as INTEGRITY
