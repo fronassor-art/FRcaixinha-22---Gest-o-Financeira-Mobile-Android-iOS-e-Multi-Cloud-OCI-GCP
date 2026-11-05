@@ -23,6 +23,11 @@ done
 
 echo "=== VERIFICACAO PREVIA: LEITURA ==="
 bash "$root/backend/scripts/aistudio_db_local.sh" check
+# The initial installer is strictly for EMPTY databases. If data exists,
+# use the M19100 inventory and then the reviewed incremental M031 procedure.
+count="$(psql -X -v ON_ERROR_STOP=1 -W -At -h 127.0.0.1 -p 5433 -U frc_ai_owner -d frcaixinha_aistudio_dev -c "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'")"
+[[ "$count" =~ ^[0-9]+$ ]] || fail "contagem do banco invalida"
+[[ "$count" == 0 ]] || fail "MIGRACAO INICIAL BLOQUEADA: banco possui $count tabelas, use auditoria incremental M19100"
 if [[ "$mode" == preflight ]]; then
   echo "PREFLIGHT=PASS; nenhuma migracao executada"
   exit 0
