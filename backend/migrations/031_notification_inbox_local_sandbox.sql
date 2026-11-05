@@ -14,7 +14,7 @@ BEGIN
    AND current_setting('server_version_num')::integer>=180000
    AND current_setting('server_version_num')::integer<190000
  ) OR (
-   current_database()='frcaixinha_staging'
+   current_database() IN ('frcaixinha_staging','frcaixinha_ci')
    AND session_user='postgres'
    AND current_setting('frcaixinha.notifications_local_ci',true)='1'
  ));
