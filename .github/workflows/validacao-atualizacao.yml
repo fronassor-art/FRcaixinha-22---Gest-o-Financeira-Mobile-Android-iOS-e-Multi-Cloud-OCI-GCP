@@ -42,6 +42,8 @@ jobs:
         run: npx tsx src/tests/m15000_notifications_ui.test.ts
       - name: M19000 — inbox funcional na UI
         run: npx tsx src/tests/m19000_notifications_functional_ui.test.ts
+      - name: M19000 — politica Android loopback somente debug
+        run: npx tsx src/tests/m19000_android_loopback_ci.test.ts
       - name: Regressao Livro-Razao acessivel somente ao administrador
         run: npx tsx src/tests/ledger_menu_visibility_ci.test.ts
       - name: Validar caminhos de primeiro acesso sem auto-cadastro
