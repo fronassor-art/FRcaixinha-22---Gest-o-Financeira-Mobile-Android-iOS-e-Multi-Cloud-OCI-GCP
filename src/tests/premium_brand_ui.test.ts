@@ -35,7 +35,7 @@ assert.match(dashboard,/role === 'TENANT_ADMIN'/);
 assert.doesNotMatch(dashboard,/R\$\s*1\.850/);
 assert.doesNotMatch(dashboard,/setTimeout\(|Math.random\(/);
 assert.deepEqual(tabsAllowedToRole('TENANT_MEMBER'),
-  ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO']);
+  ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO','NOTIFICACOES']);
 
 const app=file('src/App.tsx');
 assert.doesNotMatch(app,/handleContextSwitch|profilePickerOpen|Trocar perfil/);
