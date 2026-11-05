@@ -484,6 +484,34 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+
+@app.get("/api/health/features/m7900", include_in_schema=False)
+def backend_m7900_incident_readonly_contract():
+    from .mp_orders_incident_ops import CONTRACT as INCIDENTS
+    from .mp_orders_recovery_scheduler import CONTRACT as RECOVERY
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M7900_INCIDENT_REVIEW_READONLY_RECOVERY_V1",
+        "incident_contract": INCIDENTS,
+        "recovery_contract": RECOVERY,
+        "immutable_review_preview": True,
+        "bounded_get_retry_policy": True,
+        "cross_tenant_case_rejected": True,
+        "two_reviewer_preview": True,
+        "incident_review_persisted_in_staging": False,
+        "staging_m039_applied_locally": False,
+        "oci_staging_deployed": False,
+        "real_provider_connected": False,
+        "real_bank_statement_reader_connected": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m7200", include_in_schema=False)
 def backend_m7200_accounting_recovery_contract():
     from .mp_orders_holds import CONTRACT as HOLDS
