@@ -293,6 +293,7 @@ jobs:
           python -m pytest -q backend/tests/test_m7200_final_gates_ci.py
           python -m pytest -q backend/tests/test_m7900_incident_recovery_ci.py
           python -m pytest -q backend/tests/test_m8600_discrepancy_circuit_ci.py
+          python -m pytest -q backend/tests/test_m9400_incident_timeline_queue_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

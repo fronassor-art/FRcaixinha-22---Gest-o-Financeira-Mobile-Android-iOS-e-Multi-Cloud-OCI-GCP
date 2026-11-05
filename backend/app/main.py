@@ -486,6 +486,31 @@ def backend_m3700_pix_persistence_staging_contract():
 
 
 
+@app.get("/api/health/features/m9400", include_in_schema=False)
+def backend_m9400_case_timeline_queue_contract():
+    from .mp_orders_incident_timeline import CONTRACT as TIMELINE
+    from .mp_orders_tenant_queue import CONTRACT as QUEUE
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M9400_CASE_TIMELINE_QUEUE_PREFLIGHT_V1",
+        "timeline_contract": TIMELINE,
+        "queue_contract": QUEUE,
+        "deterministic_chain_preview": True,
+        "bounded_per_tenant_get_candidates": True,
+        "cross_tenant_queue_rejected": True,
+        "audit_event_persisted": False,
+        "operator_identity_authenticated": False,
+        "get_worker_live": False,
+        "oci_staging_deployed": False,
+        "real_payments_enabled": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m8600", include_in_schema=False)
 def backend_m8600_discrepancy_circuit_contract():
     from .mp_orders_evidence_discrepancy import CONTRACT as EVIDENCE
