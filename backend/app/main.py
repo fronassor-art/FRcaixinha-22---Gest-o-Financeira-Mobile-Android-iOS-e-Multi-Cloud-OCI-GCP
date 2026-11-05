@@ -19,7 +19,7 @@ from . import annual_evidence_preflight as _annual_evidence
 from . import financial_three_source_preflight as _three_source
 import os
 from .routers import sandbox_evidence_ci as _sandbox_evidence_ci
-from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations, pix_automation
+from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations, pix_automation, notifications
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -71,6 +71,7 @@ app.include_router(consents.router, prefix=settings.API_V1_STR)
 app.include_router(closings.router, prefix=settings.API_V1_STR)
 app.include_router(audit.router, prefix=settings.API_V1_STR)
 app.include_router(pix_automation.router, prefix=settings.API_V1_STR)
+app.include_router(notifications.router, prefix=settings.API_V1_STR)
 
 # M2040: endpoints de evidencias SINTETICAS apenas na CI efemera com opt-in.
 # Nao registrar no Termux ou em producao mesmo que a flag esteja ligada.
@@ -484,6 +485,32 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+
+
+@app.get("/api/health/features/m15000", include_in_schema=False)
+def backend_m15000_notification_policy_contract():
+    from .notifications_policy import CONTRACT as POLICY
+    return {
+        "workstream":"AI_STUDIO",
+        "contract":"AI_STUDIO_M15000_NOTIFICATION_POLICY_OFFLINE_V1",
+        "policy_contract":POLICY,
+        "notification_kinds_validated":True,
+        "recipient_tenant_role_binding_policy":True,
+        "external_channel_consent_policy":True,
+        "deterministic_dedupe_preview":True,
+        "notification_center_ui_available":True,
+        "durable_inbox_persisted":False,
+        "in_app_dispatch_active":False,
+        "email_send_active":False,
+        "push_send_active":False,
+        "whatsapp_send_active":False,
+        "schedule_approved":False,
+        "real_payments_enabled":False,
+        "bank_reconciled":False,
+        "ledger_written":False,
+        "payout_authorized":False,
+        "financial_closing_authorized":False,
+    }
 
 
 @app.get("/api/health/features/m14000", include_in_schema=False)

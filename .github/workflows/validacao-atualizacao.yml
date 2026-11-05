@@ -38,6 +38,8 @@ jobs:
         run: npx tsx src/tests/macropacote_140_auth_boundary_ci.test.ts
       - name: Verificar segregacao do menu de cada perfil
         run: npx tsx src/tests/role_scope_ui.test.ts
+      - name: M15000 — central de notificações sem entrega simulada
+        run: npx tsx src/tests/m15000_notifications_ui.test.ts
       - name: Regressao Livro-Razao acessivel somente ao administrador
         run: npx tsx src/tests/ledger_menu_visibility_ci.test.ts
       - name: Validar caminhos de primeiro acesso sem auto-cadastro
@@ -299,6 +301,7 @@ jobs:
           python -m pytest -q backend/tests/test_m12000_replay_rollback_ci.py
           python -m pytest -q backend/tests/test_m13000_checkpoint_readiness_ci.py
           python -m pytest -q backend/tests/test_m14000_staging_audit_static_ci.py
+          python -m pytest -q backend/tests/test_m15000_notifications_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

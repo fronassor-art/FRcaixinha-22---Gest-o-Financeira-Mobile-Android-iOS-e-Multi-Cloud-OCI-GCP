@@ -2,9 +2,9 @@ import type { UserRole } from '../types';
 
 // Fonte unica de autorizacao para renderizar abas apos troca de contexto.
 const TABS: Record<UserRole, readonly string[]> = {
-  MASTER: ['DASHBOARD','CAIXINHAS','LICENCAS','ADMINISTRADORES','ONBOARDING','SUPORTE','NUVEM','AUDITORIA'],
-  TENANT_ADMIN: ['DASHBOARD','MEMBROS','CONTRIBUICOES','EMPRESTIMOS','LEDGER','FECHAMENTO'],
-  TENANT_MEMBER: ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO'],
+  MASTER: ['DASHBOARD','CAIXINHAS','LICENCAS','ADMINISTRADORES','ONBOARDING','SUPORTE','NUVEM','AUDITORIA','NOTIFICACOES'],
+  TENANT_ADMIN: ['DASHBOARD','MEMBROS','CONTRIBUICOES','EMPRESTIMOS','LEDGER','FECHAMENTO','NOTIFICACOES'],
+  TENANT_MEMBER: ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO','NOTIFICACOES'],
 };
 export const tabsAllowedToRole = (role: UserRole): readonly string[] => TABS[role];
 export const isRoleTabAllowed = (role: UserRole, tab: string): boolean =>

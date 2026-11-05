@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { tabsAllowedToRole, isRoleTabAllowed, initialRoleTab } from '../services/roleScope';
 
 assert.deepEqual(tabsAllowedToRole('TENANT_MEMBER'),[
-  'MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO',
+  'MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO','NOTIFICACOES',
 ]);
 assert.equal(initialRoleTab('TENANT_MEMBER'),'MEU_PAINEL');
 for(const tab of [
@@ -18,3 +18,7 @@ for(const tab of ['MEMBROS','FECHAMENTO','MEU_PAINEL','MEU_RESULTADO']){
 assert.equal(isRoleTabAllowed('TENANT_ADMIN','FECHAMENTO'),true);
 assert.equal(isRoleTabAllowed('TENANT_MEMBER','MEU_RESULTADO'),true);
 console.log('PASS: papel membro nao autoriza telas globais ou administrativas');
+
+for (const role of ['MASTER','TENANT_ADMIN','TENANT_MEMBER'] as const) {
+  assert.equal(isRoleTabAllowed(role,'NOTIFICACOES'),true);
+}

@@ -22,7 +22,7 @@ import {
   Cloud,
   Smartphone,
   Apple,
-  Menu, MoreHorizontal, ChevronDown, Crown, BriefcaseBusiness, UserRound, X, LogOut
+  Menu, MoreHorizontal, ChevronDown, Crown, BriefcaseBusiness, UserRound, X, LogOut, Bell
 } from 'lucide-react';
 import { appStore, AppState } from './services/store';
 import { Navbar } from './components/Navbar';
@@ -50,6 +50,7 @@ import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal'
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
 import { SessionSecurityPanel } from './components/SessionSecurityPanel';
+import { NotificationsView } from './components/NotificationsView';
 import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
 import { authService, AuthenticatedUser } from './services/authService';
 import { createForegroundSessionGuard } from './services/sessionResumeGuard';
@@ -225,6 +226,7 @@ export default function App() {
         { id: 'SUPORTE', label: 'Suporte', icon: LifeBuoy },
         { id: 'NUVEM', label: 'Infraestrutura', icon: Cloud },
         { id: 'AUDITORIA', label: 'Suíte AT-01 a AT-50', icon: ShieldCheck },
+        { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
       ];
     }
 
@@ -236,6 +238,7 @@ export default function App() {
         { id: 'EMPRESTIMOS', label: 'Empréstimos', icon: TrendingUp },
         { id: 'LEDGER', label: 'Livro-Razão', icon: FileSpreadsheet },
         { id: 'FECHAMENTO', label: 'Fechamento', icon: Coins },
+        { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
       ];
     }
 
@@ -245,6 +248,7 @@ export default function App() {
       { id: 'MINHAS_CONTRIBUICOES', label: 'Minhas Contribuições', icon: Wallet },
       { id: 'MEU_EMPRESTIMO', label: 'Meu Empréstimo', icon: TrendingUp },
       { id: 'MEU_RESULTADO', label: 'Meu Resultado', icon: Coins },
+        { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
     ];
   };
 
@@ -321,6 +325,9 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="fr-app-main flex-1 min-h-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5" tabIndex={0}>
+        {visibleTab === 'NOTIFICACOES' && (
+          <NotificationsView role={state.currentRole}/>
+        )}
         {/* Master Views */}
         {visibleTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
           <DashboardView
