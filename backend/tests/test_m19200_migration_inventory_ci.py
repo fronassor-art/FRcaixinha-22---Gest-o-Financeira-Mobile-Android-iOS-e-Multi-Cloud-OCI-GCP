@@ -36,14 +36,15 @@ def test_repo_gate_pass_and_local_gate_fails_closed():
     assert "SET TRANSACTION READ ONLY" in path.read_text()
 
 
-def test_inventory_local_runtime_verifies_all_44_structures():
+def test_inventory_local_runtime_verifies_core_structures_and_m21000_extension():
     src=(ROOT/"backend/scripts/aistudio_migration_inventory.py").read_text()
     for term in (
         'M20200_LOCAL_028_030=OBJECTS_RLS_VERIFIED',
         'M20200_LOCAL_031=OBJECTS_RLS_VERIFIED',
         'M20200_LOCAL_034_041=8_TABLES_RLS_VERIFIED',
         'M20200_MIGRATIONS=',
-        "if n not in (44,45):",
+        "if n not in (44,45,46):",
+        "M21000_LOCAL_044=OBJECTS_AND_ROLE_BOUNDARY_VERIFIED",
         "local_m041_notification_outbox",
         "local_m040_immutable_truncate",
         "has_table_privilege('frc_ai_auth'",
