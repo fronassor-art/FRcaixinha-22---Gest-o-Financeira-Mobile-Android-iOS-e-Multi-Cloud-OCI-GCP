@@ -275,6 +275,13 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m4500_orders_staging_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m4600_orders_workflow_ci.py
           python -m pytest -q backend/tests/test_m4700_orders_schema_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4900_approval_no_installments_ci.py
+          python -m pytest -q backend/tests/test_m5000_orders_staging_sql_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m5100_orders_reservation_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m5200_orders_three_source_ci.py
+          python -m pytest -q backend/tests/test_m5300_orders_recovery_ci.py
+          python -m pytest -q backend/tests/test_m5400_price_payout_date_ci.py
+          python -m pytest -q backend/tests/test_m5500_final_financial_gates_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

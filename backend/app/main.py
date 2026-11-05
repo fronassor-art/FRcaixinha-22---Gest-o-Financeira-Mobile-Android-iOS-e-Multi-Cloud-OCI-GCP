@@ -484,6 +484,40 @@ def backend_m3700_pix_persistence_staging_contract():
     }
 
 
+@app.get("/api/health/features/m5600", include_in_schema=False)
+def backend_m5600_orders_journal_preflight_contract():
+    from .mp_orders_reservation import CONTRACT as RESERVATION
+    from .mp_orders_settlement import CONTRACT as SETTLEMENT
+    from .mp_orders_recovery import CONTRACT as RECOVERY
+    from .loan_payout_price import CONTRACT as PRICE
+    return {
+        "workstream": "AI_STUDIO",
+        "contract": "AI_STUDIO_M5600_ORDERS_RESERVATION_CREDIT_CORRECTION_V1",
+        "reservation_contract": RESERVATION,
+        "settlement_contract": SETTLEMENT,
+        "recovery_contract": RECOVERY,
+        "payout_price_contract": PRICE,
+        "loan_approval_creates_installments": False,
+        "confirmed_payout_requires_tenant_timezone": True,
+        "orders_staging_reservation_code_present": True,
+        "three_source_settlement_preflight_present": True,
+        "uncertain_pix_repost_allowed": False,
+        "orders_m038_migration_applied": False,
+        "real_bank_statement_reader_connected": False,
+        "atomic_ledger_worker_connected": False,
+        "provider_connected": False,
+        "oci_staging_deployed": False,
+        "real_payments_enabled": False,
+        "real_pix_collection_active": False,
+        "real_pix_payout_active": False,
+        "bank_reconciled": False,
+        "ledger_written": False,
+        "financial_effect_applied": False,
+        "financial_closing_authorized": False,
+        "payout_authorized": False,
+    }
+
+
 @app.get("/api/health/features/m4800", include_in_schema=False)
 def backend_m4800_orders_automation_contract():
     from .mp_orders_api import CONTRACT as ORDERS

@@ -258,6 +258,7 @@ async def test_admin_one_loan_one_payout_and_no_late_repeat():
         order=order,sent=first,credentials=credentials(),
         loan_principal="500.00",rate="0.20",installments=5,
         cycle_start=date(2027,1,1),cycle_end=date(2027,12,31),
+        tenant_timezone="America/Belem",
     )
     assert pending is PayoutState.PENDING_RECONCILIATION
     assert not db.posts
@@ -266,6 +267,7 @@ async def test_admin_one_loan_one_payout_and_no_late_repeat():
         order=order,sent=first,credentials=credentials(),
         loan_principal="500.00",rate="0.20",installments=5,
         cycle_start=date(2027,1,1),cycle_end=date(2027,12,31),
+        tenant_timezone="America/Belem",
     )
     assert confirmed is PayoutState.CONFIRMED
     assert len(db.posts)==1

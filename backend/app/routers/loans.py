@@ -399,10 +399,10 @@ async def approve_loan(
     conn = Depends(get_rls_db_connection)
 ):
     """
-    Aprova empréstimo e gera cronograma de parcelas (Cláusula 5.4 e 8.8):
+    Aprova empréstimo SEM gerar parcelas ou movimentar dinheiro (Cláusulas 8.4, 8.7):
     - Apenas Administrador pode aprovar;
     - Se for autoempréstimo de Administrador, exige 100% de consentimento dos demais membros;
-    - Gera registros em 'loan_installments'.
+    - Cronograma nasce após desembolso bancário comprovado, nunca nesta rota.
     """
     require_tenant_access(tenant_id, session)
 
@@ -433,41 +433,36 @@ async def approve_loan(
         # unanimidade dos demais membros ou revalidação após revogação.
         raise HTTPException(status_code=503, detail="Autoempréstimo indisponível até validar a autorização anual dos demais membros.")
 
-    if loan["is_admin_loan"]:
-        other_members_count = await conn.fetchval("""
-            SELECT COUNT(*) FROM memberships
-            WHERE tenant_id = $1 AND status = 'ATIVA' AND id != $2;
-        """, uuid.UUID(tenant_id), loan["borrower_membership_id"])
-
-        consent_votes = await conn.fetchval("""
-            SELECT COUNT(*) FROM admin_self_loan_consents
-            WHERE tenant_id = $1 AND loan_id = $2 AND decision = 'FAVORAVEL';
-        """, uuid.UUID(tenant_id), uuid.UUID(loan_id))
-
-        if other_members_count > 0 and consent_votes < other_members_count:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Autoempréstimo de Administrador requer aprovação unânime de todos os demais membros ativos ({consent_votes}/{other_members_count} votos favoráveis)."
-            )
-
-    sim = compute_price_schedule(
-        principal=Decimal(str(loan["principal"])),
-        term_months=loan["term_months"],
-        monthly_rate=Decimal(str(loan["monthly_rate"]))
+    # M4900: APROVADO é decisão administrativa, não é desembolso.
+    # É proibido antecipar uma data bancária hipotética e gerar parcelas
+    # exigíveis antes de uma saída Pix efetivamente comprovada.
+    # O worker de conciliação de payout gera a tabela Price definitiva
+    # usando confirmed_effective_at e registra o ledger na mesma transação.
+    preexisting = await conn.fetchval(
+        "SELECT COUNT(*) FROM loan_installments "
+        "WHERE tenant_id=$1 AND loan_id=$2",
+        uuid.UUID(tenant_id), uuid.UUID(loan_id),
     )
+    if preexisting != 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Existem parcelas antecipadas; revisão contábil obrigatória antes da aprovação.",
+        )
 
-    for item in sim.schedule:
-        await conn.execute("""
-            INSERT INTO loan_installments (
-                id, tenant_id, loan_id, installment_number, due_date,
-                principal_due, interest_due, total_due, status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDENTE', NOW());
-        """, uuid.uuid4(), uuid.UUID(tenant_id), uuid.UUID(loan_id), item.installment_number,
-           date.fromisoformat(item.due_date), item.amortization_portion, item.interest_portion, item.monthly_payment)
-
-    await conn.execute("""
-        UPDATE loans SET status = 'APROVADO' WHERE id = $1;
-    """, uuid.UUID(loan_id))
+    await conn.execute(
+        "UPDATE loans SET status='APROVADO' "
+        "WHERE id=$1 AND tenant_id=$2 AND status='SOLICITADO'",
+        uuid.UUID(loan_id), uuid.UUID(tenant_id),
+    )
+    await conn.execute(
+        "INSERT INTO audit_events "
+        "(id,actor_id,actor_role,tenant_id,action,object_type,object_id,reason,evidence_ref) "
+        "VALUES ($1,$2,$3,$4,'APROVACAO_CREDITO_SEM_DESEMBOLSO','LOAN',$5,$6,$7)",
+        uuid.uuid4(), uuid.UUID(session.user_id), session.role,
+        uuid.UUID(tenant_id), str(loan_id),
+        "Aprovação administrativa; sem crédito, cronograma ou baixa financeira",
+        "M4900-APPROVAL-NO-MONEY",
+    )
 
     return await _read_loan_result(tenant_id, loan_id, session, conn)
 

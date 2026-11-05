@@ -111,9 +111,12 @@ class PixPaymentCommand:
     operation_id: str
     external_reference: str
     idempotency_key: str
+    attempt: int = 1
 
     def __post_init__(self):
         _cents(self.amount_cents)
+        if type(self.attempt) is not int or not 1 <= self.attempt <= 999:
+            raise FinancialOperationBlocked("Tentativa idempotente inválida")
         if self.amount_cents > self.obligation.open_cents:
             raise FinancialOperationBlocked("Pix excede saldo pendente")
         if (not _REF.fullmatch(self.external_reference)
@@ -153,6 +156,7 @@ def build_pix_command(
         operation_id="P_"+fingerprint[:32],
         external_reference="FRC_"+fingerprint[:40],
         idempotency_key="pix_"+fingerprint[:40],
+        attempt=attempt,
     )
 
 

@@ -220,6 +220,7 @@ class PayoutAutomation:
         credentials:ProviderCredentials,
         loan_principal: str,rate: str,installments: int,
         cycle_start: date,cycle_end: date,
+        tenant_timezone: str,
     )->PayoutState:
         """Creates definitive Price schedule ONLY after externally proven Pix.
 
@@ -246,13 +247,14 @@ class PayoutAutomation:
                 or type(proof.proof_reference) is not str
                 or len(proof.proof_reference)<8):
             raise FinancialOperationBlocked("Desembolso sem data/prova")
-        from decimal import Decimal
-        from .routers.loans import compute_price_schedule
-        sched=compute_price_schedule(
-            principal=Decimal(loan_principal),term_months=installments,
-            monthly_rate=Decimal(rate),
-            disbursement_date=proof.effective_at.date(),
-            cycle_start_date=cycle_start,cycle_end_date=cycle_end,
+        from .loan_payout_price import confirmed_price_schedule
+        sched=confirmed_price_schedule(
+            principal=loan_principal,monthly_rate=rate,
+            installments=installments,
+            effective_at=proof.effective_at,
+            tenant_timezone=tenant_timezone,
+            cycle_start=cycle_start,cycle_end=cycle_end,
+            expected_payout_cents=order.amount_cents,
         )
         await self.repository.post_confirmed_payout(
             order,proof.provider_payout_id,proof.effective_at,
