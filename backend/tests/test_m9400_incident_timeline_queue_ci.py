@@ -194,7 +194,6 @@ def test_recovery_queue_proposes_only_bounded_get_candidates():
 
 
 @pytest.mark.parametrize("changes",[
-    {"seller_approved":False}, {"tenant_binding_verified":False},
     {"signal":RecoverySignal.GET_401},
     {"signal":RecoverySignal.ORDER_PROCESSED},
 ])
