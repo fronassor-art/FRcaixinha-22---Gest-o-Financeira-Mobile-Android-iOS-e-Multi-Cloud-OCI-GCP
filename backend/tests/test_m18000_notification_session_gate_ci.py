@@ -23,6 +23,8 @@ def test_session_scope_types_and_no_authority():
         ("MASTER",None,True),
         ("TENANT_ADMIN",T,False),
         ("TENANT_MEMBER",T,False),
+        ("TENANT_ADMIN",T,True),
+        ("TENANT_MEMBER",T,True),
     ):
         g=validate_notification_session_shape(session(role,tenant,master))
         assert g.scope.user_id==UUID(U)
@@ -38,7 +40,6 @@ def test_session_scope_types_and_no_authority():
 @pytest.mark.parametrize("role,tenant,master,user",[
     ("MASTER",T,True,U),("MASTER",None,False,U),
     ("TENANT_ADMIN",None,False,U),
-    ("TENANT_MEMBER",T,True,U),
     ("TENANT_ADMIN",T,False,"00000000-0000-0000-0000-000000000000"),
     ("TENANT_ADMIN",T,False,"BAD"),
     ("TENANT_ADMIN",T,False,U.upper()),
@@ -100,8 +101,7 @@ def test_readiness_never_claims_live_inbox(role,tenant,master):
     ("MASTER",T,True),
     ("MASTER",None,False),
     ("TENANT_MEMBER",None,False),
-    ("TENANT_ADMIN",T,True),
-])
+ ])
 def test_wrong_context_http403(role,tenant,master):
     async def invalid():
         return session(role,tenant,master)
@@ -136,3 +136,15 @@ def test_health_m18000_truthful():
         "financial_closing_authorized","payout_authorized",
     ):
         assert d[k] is False,k
+
+
+@pytest.mark.parametrize("role",["TENANT_ADMIN","TENANT_MEMBER"])
+def test_master_identity_active_tenant_role_requires_upstream_membership(role):
+    """The platform Master attribute cannot disqualify a verified tenant role."""
+    gate=validate_notification_session_shape(session(role,T,True))
+    assert gate.scope.role==NoticeRole(role)
+    assert gate.scope.tenant_id==UUID(T)
+    assert gate.authenticated_by_dependency is False
+    # This shape validation does not grant a membership or DB privilege.
+    assert gate.notification_read_allowed is False
+    assert gate.financial_effect_allowed is False
