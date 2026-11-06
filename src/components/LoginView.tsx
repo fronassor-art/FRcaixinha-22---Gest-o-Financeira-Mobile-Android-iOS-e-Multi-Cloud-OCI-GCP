@@ -84,13 +84,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-8 sm:py-10 flex flex-col items-center justify-center">
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center pb-6">
-          <button type="button" onClick={openReservedAccess} aria-label="Logotipo FR Caixinha"
+          <button type="button" onClick={openReservedAccess} aria-label="Logotipo FR Finance"
             className="rounded-[26px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f3d483]">
-            <img src="/icon.svg" alt="FR Caixinha — monograma dourado e folhas"
+            <img src="/icon.svg" alt="FR Finance — monograma dourado e folhas"
               width="120" height="120" className="h-24 w-24 rounded-[26px] shadow-2xl shadow-amber-600/20" />
           </button>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
-            <span className="fr-gold-text">FR</span><span className="text-[#f7ecbf]">caixinha</span>
+            <span className="fr-gold-text">FR</span><span className="text-[#f7ecbf]"> Finance</span>
           </h1>
           <p className="mt-1 text-center text-sm text-emerald-100/80">
             Mais que um app, um futuro em construção.
@@ -98,7 +98,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
         </div>
 
         <section className="rounded-[26px] border border-[#b99950]/40 bg-[#043c2d]/90 p-5 shadow-2xl shadow-black/30 sm:p-7"
-          aria-label="Acesso à FR Caixinha">
+          aria-label="Acesso à FR Finance">
           <div className="grid grid-cols-2 gap-1 rounded-xl border border-[#376d4d] bg-[#032e24] p-1" role="group" aria-label="Opções de acesso">
             <button type="button" onClick={() => { setMode('login'); setNewAccess(null); setError(null); }}
               aria-pressed={mode === 'login'}

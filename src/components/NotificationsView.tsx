@@ -89,7 +89,7 @@ export const NotificationsView: React.FC<{role: UserRole}> = ({ role }) => {
         </div>
         <p className="mt-3 text-sm text-[#3d5748]">
           {ready?'Avisos internos salvos na sua conta e nesta caixinha.':
-            'Estamos preparando a central de avisos do FR Caixinha no banco local.'}
+            'Estamos preparando a central de avisos do FR Finance no banco local.'}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button type="button" disabled={busy || saving!==null} onClick={()=>void refresh()}

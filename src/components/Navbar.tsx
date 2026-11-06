@@ -35,11 +35,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="fr-app-header relative z-40 shrink-0 border-b border-[#9f7a38]/35 bg-[#032d21] text-[#fff2cd] shadow-lg">
       <div className="mx-auto flex h-[66px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <img src="/icon.svg" alt="FR Caixinha" width="44" height="44"
+          <img src="/icon.svg" alt="FR Finance" width="44" height="44"
             className="h-11 w-11 shrink-0 rounded-xl border border-[#b99444]/60" />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <strong className="truncate text-lg tracking-tight text-[#f6d689]">FR Caixinha</strong>
+              <strong className="truncate text-lg tracking-tight text-[#f6d689]">FR Finance</strong>
               <span className="text-[10px] text-[#d2be89]" title="Versão instalada">{build}</span>
             </div>
             <p className="truncate text-[11px] text-emerald-100/70">

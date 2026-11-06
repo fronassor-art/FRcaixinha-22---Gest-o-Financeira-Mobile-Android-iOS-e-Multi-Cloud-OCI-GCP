@@ -1,10 +1,10 @@
-# FR Caixinha — frente de desenvolvimento Google AI Studio
+# FR Finance — frente de desenvolvimento Google AI Studio
 
-> **Nome oficial do produto:** **FR Caixinha**, F de Fábio e R de Rossano.
+> **Nome comercial aprovado:** **FR Finance**. A sigla FR identifica a marca do produto. O nome técnico legado do projeto permanece apenas em identificadores para preservar compatibilidade.
 > **Mesmo produto, duas frentes técnicas.** O **Documento Mestre e o Contrato Técnico Mestre** orientam as regras funcionais comuns do aplicativo. A frente original está pausada; esta implementação foi iniciada do zero no Google AI Studio e possui repositório, branch, código, banco de dados, usuários técnicos, credenciais, backups e infraestrutura isolados.
 > Não importar automaticamente código ou dados da frente anterior. Divergências contratuais e decisões arquiteturais exigem rastreabilidade e aprovação; não mudar estados das 147 cláusulas por inferência.
 >
-> **Nota de implantação:** React + Capacitor é uma escolha aprovada para esta implementação; não muda o nome comercial do produto. OCI/GCP e operações financeiras reais não estão homologados.
+> **Nota de implantação:** React + Capacitor é a implementação aprovada e exibe FR Finance como marca. OCI/GCP e operações financeiras reais não estão homologados.
 
 ## Repositório e fluxo oficial
 
@@ -27,7 +27,7 @@ O checkpoint de 01/11/2026, publicado antes desta correção do README, registra
 | Classificação histórica | 58 parciais; 50 bloqueadas; 34 não verificadas; 5 divergentes |
 | Backlog identificado | 37 tarefas: 8 P0, 14 P1, 6 P2, 5 P3, 4 P4 |
 | Migrações versionadas | 001–025; 020–024 restringem sessão e 025 exige prova efêmera de verificação por papel técnico independente antes da emissão, apenas em CI |
-| Banco exclusivo AI Studio no Termux | PostgreSQL 18.6, `127.0.0.1:5433/frcaixinha_aistudio_dev`, **0 tabelas**, segundo o último relatório do operador |
+| Banco exclusivo AI Studio no Termux | PostgreSQL 18.6, `127.0.0.1:5433/frcaixinha_aistudio_dev`, **46 tabelas**, conforme checkpoint local da migração 044 verificado pelo operador em 05/11/2026 |
 | CI no checkpoint | 5 verificações aprovadas; isso não constitui aprovação para produção |
 
 **Importante:** as contagens de requisitos representam uma **fotografia documental histórica**, não um índice de conclusão recalculado após cada pacote. Confira evidências por cláusula antes de mudar os estados.

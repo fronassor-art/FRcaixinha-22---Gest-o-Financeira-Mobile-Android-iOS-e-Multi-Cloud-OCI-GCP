@@ -525,7 +525,7 @@ export default function App() {
         <div className="bg-slate-100 min-h-full p-3 space-y-4">
           <div className="bg-slate-900 text-white p-3 rounded-2xl flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-white">FR Caixinha</span>
+              <span className="font-extrabold text-white">FR Finance</span>
               <span className="text-[10px] font-bold bg-emerald-500 text-slate-950 px-1 py-0.2 rounded font-mono">HOMOLOGAÇÃO</span>
             </div>
             <span className="text-[10px] text-emerald-400 font-mono">OCI / GCP EM ESTUDO</span>
