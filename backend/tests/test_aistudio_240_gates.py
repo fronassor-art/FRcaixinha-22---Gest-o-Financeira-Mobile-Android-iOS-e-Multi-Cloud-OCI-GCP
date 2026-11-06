@@ -69,7 +69,8 @@ def test_bank_close_and_manual_audit_remain_blocked():
     closings=CLOSINGS.read_text(encoding="utf-8")
     audit=AUDIT.read_text(encoding="utf-8")
     assert 'Fechamento indisponível até validação' in closings
-    assert 'raise HTTPException(status_code=503' in closings
+    # Reject route reopening but tolerate whitespace/reformatting of the guard.
+    assert re.search(r"raise\\s+HTTPException\\s*\\(\\s*status_code\\s*=\\s*503\\b", closings)
     assert 'Registro manual de auditoria indisponível' in audit
     assert 'raise HTTPException(status_code=503' in audit
 
