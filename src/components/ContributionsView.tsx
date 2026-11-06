@@ -35,6 +35,10 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   const [cycleBusy,setCycleBusy]=useState(false);
   const cycleAttemptRef=useRef<CyclePriceAttempt|null>(null);
   const [cycleMessage,setCycleMessage]=useState('');
+  const [legacyReview,setLegacyReview]=useState<{
+    key:string;cycleId:string;busy:boolean;message:string;
+    data:import('../services/legacyContributionReviewBoundary').LegacyContributionReview|null;
+  }>({key:'',cycleId:'',busy:false,message:'',data:null});
   useEffect(() => {
     // Never keep another tenant's QR or financial feedback after role switch.
     setCheckout(null);
@@ -43,6 +47,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     setPixCapability({key:'',enabled:false});
     setCyclePrice({key:'',policy:null,error:''});
     setCycleMessage('');
+    setLegacyReview({key:'',cycleId:'',busy:false,message:'',data:null});
     setCycleInput('');
     setCycleReason('');
     setCycleBusy(false);
@@ -126,6 +131,24 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     }
   }
 
+  async function auditLegacyHistory(){
+    if(state.currentRole!=='TENANT_ADMIN'||!state.currentTenantId)return;
+    const policy=cyclePrice.key===key?cyclePrice.policy:null;
+    if(!policy)return;
+    const snapshot=authService.captureSession();
+    const cycleId=policy.cycle_id;
+    setLegacyReview({key,cycleId,busy:true,message:'',data:null});
+    try{
+      const data=await financialApi.fetchLegacyContributionReview(state.currentTenantId,cycleId);
+      if(!authService.isSessionSnapshotCurrent(snapshot))return;
+      setLegacyReview({key,cycleId,busy:false,message:'',data});
+    }catch{
+      if(authService.isSessionSnapshotCurrent(snapshot))
+        setLegacyReview({key,cycleId,busy:false,
+          message:'Auditoria histórica indisponível; verifique a sessão e o PostgreSQL.',data:null});
+    }
+  }
+
   async function generateMonthlyPix(contributionId: string) {
     const tenant = state.currentTenantId;
     if (!tenant || !(pixCapability.key===key && pixCapability.enabled)) {
@@ -187,6 +210,25 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
             {cyclePrice.policy.pending_requested_cents!==null && <p className="text-sm text-amber-800">
               Revisão solicitada: {formatBRL(cyclePrice.policy.pending_requested_cents/100)} (ainda não aplicada).
             </p>}
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <button type="button" onClick={()=>{void auditLegacyHistory();}}
+                disabled={legacyReview.busy || cycleBusy}
+                className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-900 disabled:opacity-50">
+                {legacyReview.busy?'Auditando histórico...':'Auditar competências antigas (somente leitura)'}
+              </button>
+              {legacyReview.key===key&&legacyReview.cycleId===cyclePrice.policy.cycle_id&&
+                legacyReview.message && <p role="alert" className="text-sm text-rose-800">{legacyReview.message}</p>}
+              {legacyReview.key===key&&legacyReview.cycleId===cyclePrice.policy.cycle_id&&
+                legacyReview.data && <div role="status" className="space-y-1 text-sm text-slate-800">
+                  <p><strong>Competências abaixo de R$ 150:</strong> {legacyReview.data.legacy_registered_contributions}</p>
+                  <p>Valor devido cadastrado: {formatBRL(legacyReview.data.legacy_due_cents/100)}</p>
+                  <p>Valor pago cadastrado: {formatBRL(legacyReview.data.legacy_paid_recorded_cents/100)}</p>
+                  <p>Saldo em aberto cadastrado: {formatBRL(legacyReview.data.legacy_open_recorded_cents/100)}</p>
+                  <p className="font-semibold text-amber-900">
+                    Histórico não conciliado com banco. Nenhum valor foi alterado ou quitado.
+                  </p>
+                </div>}
+            </div>
             <form className="grid gap-3 sm:grid-cols-2" onSubmit={event=>{void submitCyclePrice(event);}}>
               <label className="grid gap-1 text-sm text-slate-800">
                 Novo valor por cota (R$)

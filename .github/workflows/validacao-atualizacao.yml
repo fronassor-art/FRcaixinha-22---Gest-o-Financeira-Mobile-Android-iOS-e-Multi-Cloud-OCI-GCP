@@ -159,6 +159,8 @@ jobs:
         run: npx tsx src/tests/m21700_android_release_gate_ci.test.ts
       - name: M21900 validar pipeline de APK remoto OCI
         run: npx tsx src/tests/m21900_oci_remote_apk_ci.test.ts
+      - name: M22500 revisar histórico de contribuições no Android sem efeitos
+        run: npx tsx src/tests/m22500_legacy_contributions_ui_ci.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web

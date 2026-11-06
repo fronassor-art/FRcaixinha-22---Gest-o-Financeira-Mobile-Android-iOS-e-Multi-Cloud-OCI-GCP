@@ -30,6 +30,7 @@ import {DisplayLoan, parseTenantLoans} from './loanReadBoundary';
 import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './loanSimulationBoundary';
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {CycleContributionPolicy,parseCycleContributionPolicy,CyclePriceChangeResult,parseCyclePriceChange} from './cyclePriceBoundary';
+import {LegacyContributionReview,parseLegacyContributionReview} from './legacyContributionReviewBoundary';
 import {CycleOpeningPreview,parseCycleOpeningPreview} from './cycleOpeningBoundary';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
@@ -402,6 +403,21 @@ class FinancialApiService {
     const raw:unknown=await this.request(
       '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price');
     return parseCycleContributionPolicy(raw,tenantId);
+  }
+
+  // M22500: admin-only read-only legacy amounts; no write or repricing.
+  public async fetchLegacyContributionReview(
+    tenantId:string,cycleId:string,
+  ):Promise<LegacyContributionReview>{
+    const user=this.currentTenantReader();
+    if(user.role!=='TENANT_ADMIN'){
+      throw new SessionBoundaryError('Revisão restrita ao administrador da caixinha.','SESSION_REQUIRED');
+    }
+    assertTenantReadScope(user,tenantId,'DASHBOARD');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+
+      '/cycle-contribution-price/legacy-review/'+encodeURIComponent(cycleId));
+    return parseLegacyContributionReview(raw,tenantId,cycleId);
   }
 
   public async changeCycleContributionPrice(
