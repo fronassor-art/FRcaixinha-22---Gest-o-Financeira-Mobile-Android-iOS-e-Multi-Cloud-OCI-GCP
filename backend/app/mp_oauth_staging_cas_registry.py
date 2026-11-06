@@ -16,6 +16,8 @@ _SELLER = re.compile(r"[0-9]{1,40}\Z")
 _REVISION = re.compile(r"[A-Za-z0-9._:-]{16,128}\Z")
 _SHA256 = re.compile(r"[a-f0-9]{64}\Z")
 
+_CREDENTIAL_REF = re.compile(r"[A-Za-z0-9._:/-]{16,512}\\Z")
+
 
 class StagingSellerCASRegistry:
     """Implements SellerRegistry port for an injected asyncpg-style worker."""
@@ -57,6 +59,29 @@ class StagingSellerCASRegistry:
             result = await self._db.fetchval(
                 "SELECT public.mp_staging_oauth_eligible($1::uuid,$2::uuid,$3::varchar)",
                 tenant, actor, seller,
+            )
+            return result is True
+        except Exception:
+            return False
+
+    async def stage_pending(self, *, pending: PendingTokenRevision) -> bool:
+        """Register opaque PENDING revision using SQL's consent generation guard."""
+        if (type(pending) is not PendingTokenRevision
+                or not self._ids(pending.tenant_id, pending.actor_id, pending.seller_id)
+                or type(pending.revision) is not str
+                or _REVISION.fullmatch(pending.revision) is None
+                or type(pending.credential_ref) is not str
+                or _CREDENTIAL_REF.fullmatch(pending.credential_ref) is None
+                or type(pending.expected_generation) is not int
+                or not 0 <= pending.expected_generation <= 9_223_372_036_854_775_807
+                or not await self._identity_ok()):
+            return False
+        try:
+            result = await self._db.fetchval(
+                "SELECT public.mp_staging_oauth_stage("
+                "$1::uuid,$2::uuid,$3::varchar,$4::varchar,$5::varchar,$6::bigint)",
+                pending.tenant_id, pending.actor_id, pending.seller_id,
+                pending.revision, pending.credential_ref, pending.expected_generation,
             )
             return result is True
         except Exception:

@@ -27,6 +27,8 @@ class Registry:
         self.calls=0
         self.active="existing-active-revision"
         self.activate_allowed=True
+        self.stage_allowed=True
+        self.staged=[]
         self.raise_on_activate=False
         self.failures=[]
         self.received=[]
@@ -34,6 +36,10 @@ class Registry:
         self.calls+=1
         if self.revoke_after_first and self.calls==2:self.allowed=False
         return self.allowed and tenant==T and actor==U and seller=="2002"
+    async def stage_pending(self,*,pending):
+        if not self.stage_allowed:return False
+        self.staged.append(pending.revision)
+        return True
     async def activate_cas(self,*,pending,access_hash,refresh_hash):
         if self.raise_on_activate:raise RuntimeError(tokens().refresh_token)
         self.received.append((access_hash,refresh_hash))
@@ -57,7 +63,8 @@ class Store:
         p=PendingTokenRevision(
             tenant_id=OTHER if self.foreign else tenant,actor_id=actor,
             seller_id=tokens.seller_id,revision="synthetic-revision-23500",
-            credential_ref="x" if self.bad_ref else "synthetic-versioned-ref-23500")
+            credential_ref="x" if self.bad_ref else "synthetic-versioned-ref-23500",
+            expected_generation=0)
         self.staged.append(p)
         return p
     async def cancel(self,*,pending):
@@ -145,3 +152,12 @@ async def test_malformed_token_never_reaches_secret_store(bad):
     assert await sink.persist_sandbox_connection(
         draft=draft(),tokens=replace(tokens(),**bad)) is False
     assert vault.staged==[]
+
+@pytest.mark.asyncio
+async def test_sql_stage_failure_cancels_new_secret_preserves_old():
+    sink,db,vault=make()
+    db.stage_allowed=False
+    assert await sink.persist_sandbox_connection(draft=draft(),tokens=tokens()) is False
+    assert db.active=="existing-active-revision"
+    assert len(db.received)==0
+    assert len(db.failures)==len(vault.cancelled)==1

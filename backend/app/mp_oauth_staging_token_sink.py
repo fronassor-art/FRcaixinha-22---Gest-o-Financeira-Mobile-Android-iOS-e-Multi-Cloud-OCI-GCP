@@ -21,6 +21,7 @@ class PendingTokenRevision:
     seller_id: str
     revision: str
     credential_ref: str
+    expected_generation: int | None = None
 
     def __repr__(self) -> str:
         return "PendingTokenRevision(redacted=True, pending=True)"
@@ -28,6 +29,7 @@ class PendingTokenRevision:
 
 class SellerRegistry(Protocol):
     async def eligible(self, *, tenant: UUID, actor: UUID, seller: str) -> bool: ...
+    async def stage_pending(self, *, pending: PendingTokenRevision) -> bool: ...
     async def activate_cas(
         self, *, pending: PendingTokenRevision,
         access_hash: str, refresh_hash: str
@@ -88,7 +90,9 @@ class StagingOAuthTokenSink:
                     or type(pending.revision) is not str
                     or not 16 <= len(pending.revision) <= 512
                     or type(pending.credential_ref) is not str
-                    or not 16 <= len(pending.credential_ref) <= 512):
+                    or not 16 <= len(pending.credential_ref) <= 512
+                    or type(pending.expected_generation) is not int
+                    or not 0 <= pending.expected_generation <= 9_223_372_036_854_775_807):
                 return False
             # This is a preflight ONLY. A real DB activate_cas MUST
             # re-check the consent and seller binding atomically.
@@ -96,6 +100,9 @@ class StagingOAuthTokenSink:
                 tenant=draft.tenant_id, actor=draft.initiated_by,
                 seller=tokens.seller_id
             ) is not True:
+                return False
+            # SQL must register the PENDING row before any CAS activation.
+            if await self._registry.stage_pending(pending=pending) is not True:
                 return False
             if await self._registry.activate_cas(
                 pending=pending,
