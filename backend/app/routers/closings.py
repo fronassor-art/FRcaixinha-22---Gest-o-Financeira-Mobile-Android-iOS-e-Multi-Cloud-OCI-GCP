@@ -58,7 +58,7 @@ async def close_cycle(
     # Simulações contratuais ficam em módulos próprios e não liquidam ciclos.
     raise HTTPException(
         status_code=503,
-        detail="Fechamento indisponível até conciliação independente, perdas e rateio auditado.",
+        detail="Fechamento indisponível até validação da apuração e conciliação da liquidação.",
     )
 
 

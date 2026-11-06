@@ -245,5 +245,5 @@ async def pay_contribution(
     # O teste M21500 NÃO autoriza cobrança de clientes nem baixa cadastral.
     raise HTTPException(
         status_code=503,
-        detail="Cobrança Pix indisponível até vínculo OAuth, reserva idempotente e conciliação autenticada.",
+        detail="Cobrança Pix indisponível até integração com provedor e conciliação autenticada.",
     )
