@@ -19,7 +19,7 @@ if (localAndroidTest && process.env.VITE_API_URL !== 'http://127.0.0.1:8000') {
 
 const config: CapacitorConfig = {
   appId: 'com.frcaixinha.app',
-  appName: 'FR Caixinha',
+  appName: 'FR Finance',
   webDir: 'dist',
   server: {
     androidScheme: localAndroidTest ? 'http' : 'https',

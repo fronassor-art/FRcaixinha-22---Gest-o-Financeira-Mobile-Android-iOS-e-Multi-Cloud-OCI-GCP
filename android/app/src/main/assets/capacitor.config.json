@@ -1,6 +1,6 @@
 {
 	"appId": "com.frcaixinha.app",
-	"appName": "FRcaixinha 2.2",
+	"appName": "FR Finance",
 	"webDir": "dist",
 	"server": {
 		"androidScheme": "https",

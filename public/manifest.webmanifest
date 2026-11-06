@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "FR Caixinha — Gestão de Caixinhas",
-  "short_name": "FR Caixinha",
-  "description": "Gestão de caixinhas com identidade única e permissões por perfil.",
+  "name": "FR Finance — Gestão Financeira",
+  "short_name": "FR Finance",
+  "description": "Gestão, organização e controle financeiro com acesso seguro por perfil.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

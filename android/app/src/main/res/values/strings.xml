@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="app_name">FR Caixinha</string>
-  <string name="title_activity_main">FR Caixinha</string>
+  <string name="app_name">FR Finance</string>
+  <string name="title_activity_main">FR Finance</string>
   <string name="package_name">com.frcaixinha.app</string>
   <string name="custom_url_scheme">com.frcaixinha.app</string>
 </resources>

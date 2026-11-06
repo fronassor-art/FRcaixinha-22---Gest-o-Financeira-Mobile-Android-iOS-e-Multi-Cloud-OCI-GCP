@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title id="title">FRcaixinha — monograma dourado com folhas verdes</title>
+  <title id="title">FR Finance — monograma dourado com folhas verdes</title>
   <defs>
     <radialGradient id="forest" cx=".28" cy=".14" r=".95"><stop stop-color="#08754b"/><stop offset=".45" stop-color="#06432f"/><stop offset="1" stop-color="#00251d"/></radialGradient>
     <linearGradient id="gold" x1=".08" y1="0" x2=".92" y2="1"><stop stop-color="#ffe9a1"/><stop offset=".22" stop-color="#d9a036"/><stop offset=".47" stop-color="#fff3b7"/><stop offset=".66" stop-color="#b77915"/><stop offset=".85" stop-color="#f8d773"/><stop offset="1" stop-color="#9b650d"/></linearGradient>
@@ -24,6 +24,6 @@
     <path d="M279 200 L350 151" stroke="#deffa8" stroke-width="2" fill="none" opacity=".8"/>
   </g>
   <path d="M84 365 Q256 390 428 360" stroke="#f3ca76" stroke-width="2" fill="none" opacity=".5"/>
-  <text x="256" y="418" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="61" font-weight="bold" fill="url(#gold)" stroke="#fff0b9" stroke-width=".45">FRcaixinha</text>
+  <text x="256" y="418" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="61" font-weight="bold" fill="url(#gold)" stroke="#fff0b9" stroke-width=".45">FR Finance</text>
   <path d="M166 437 H346" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
 </svg>
