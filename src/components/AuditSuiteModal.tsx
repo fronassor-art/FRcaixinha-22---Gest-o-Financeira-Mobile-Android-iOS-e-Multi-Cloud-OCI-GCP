@@ -49,7 +49,7 @@ export const AuditSuiteModal: React.FC<AuditSuiteModalProps> = ({ isOpen, onClos
   const failCount = results.filter(r => r.status === 'FAIL').length;
 
   const handleCopyEvidence = (r: AuditScenarioResult) => {
-    const text = `[AUDITORIA FRCAIXINHA 2.2]\nCenário: ${r.id} - ${r.title}\nCláusulas: ${r.clauseRef}\nResultado Esperado: ${r.expectedOutcome}\nResultado Efetivo: ${r.actualOutcome}\nStatus: ${r.status}\nEvidência: ${r.evidence}`;
+    const text = `[AUDITORIA FR FINANCE]\nCenário: ${r.id} - ${r.title}\nCláusulas: ${r.clauseRef}\nResultado Esperado: ${r.expectedOutcome}\nResultado Efetivo: ${r.actualOutcome}\nStatus: ${r.status}\nEvidência: ${r.evidence}`;
     navigator.clipboard.writeText(text);
     setCopiedId(r.id);
     setTimeout(() => setCopiedId(null), 2000);

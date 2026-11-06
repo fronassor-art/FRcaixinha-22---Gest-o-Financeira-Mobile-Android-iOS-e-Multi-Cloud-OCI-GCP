@@ -380,7 +380,7 @@ app.get('/api/master/licenses', requireAuth, (req: AuthenticatedRequest, res) =>
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ONLINE',
-    app: 'FRcaixinha 2.2',
+    app: 'FR Finance',
     timestamp: new Date().toISOString(),
     backendContract: 'FastAPI / PostgreSQL (Contrato Técnico Mestre)',
     scaffoldStatus: 'Interim Node/Express API Boundary',
@@ -402,7 +402,7 @@ async function startServer() {
   app.use(vite.middlewares);
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[FRcaixinha 2.2] Servidor de Fronteira API ativo em http://0.0.0.0:${PORT}`);
+    console.log(`[FR Finance] Servidor de Fronteira API ativo em http://0.0.0.0:${PORT}`);
   });
 
   const cleanup = () => {

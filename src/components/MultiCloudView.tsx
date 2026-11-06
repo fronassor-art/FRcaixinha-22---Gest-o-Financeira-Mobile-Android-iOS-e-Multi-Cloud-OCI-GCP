@@ -81,7 +81,7 @@ export const MultiCloudView: React.FC = () => {
                 Oracle Cloud (OCI) & Google Cloud (GCP)
               </h1>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                FRcaixinha 2.2 opera em redundância ativa distribuída entre dois data centers independentes no Brasil. A computação primária reside no Google Cloud Platform, enquanto a custódia do Livro-Razão imutável e replicação de desastre residem na Oracle Cloud Infrastructure.
+                FR Finance opera em redundância ativa distribuída entre dois data centers independentes no Brasil. A computação primária reside no Google Cloud Platform, enquanto a custódia do Livro-Razão imutável e replicação de desastre residem na Oracle Cloud Infrastructure.
               </p>
             </div>
 
@@ -366,7 +366,7 @@ export const MultiCloudView: React.FC = () => {
               <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Multi-Cloud</span>
             </div>
             <p className="leading-relaxed">
-              <strong>Soberania Geográfica Nacional:</strong> O processamento e guarda dos dados financeiros do FRcaixinha 2.2 serão mantidos integralmente em território brasileiro através de cooperação técnica multi-cloud entre Google Cloud Platform (São Paulo) e Oracle Cloud Infrastructure (Vinhedo), garantindo conformidade com a LGPD e evitando lock-in tecnológico.
+              <strong>Soberania Geográfica Nacional:</strong> O processamento e guarda dos dados financeiros do FR Finance serão mantidos integralmente em território brasileiro através de cooperação técnica multi-cloud entre Google Cloud Platform (São Paulo) e Oracle Cloud Infrastructure (Vinhedo), garantindo conformidade com a LGPD e evitando lock-in tecnológico.
             </p>
           </div>
 

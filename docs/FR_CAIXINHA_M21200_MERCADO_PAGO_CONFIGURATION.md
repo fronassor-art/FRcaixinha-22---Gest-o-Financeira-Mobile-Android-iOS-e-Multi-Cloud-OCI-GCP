@@ -1,11 +1,11 @@
 # M21200 — Configuração Mercado Pago / Pix — ambiente seguro de testes
 
 ## Decisão técnica
-A integração FR Caixinha AI Studio é multi-tenant. Cada administrador vincula sua própria conta recebedora por OAuth Connect; credencial do aplicativo do Master NÃO serve como conta de recebimento de todos os tenants. Receitas de assinaturas da plataforma são processo separado do fluxo de contribuição das caixinhas. A taxa de 15% sobre lucro anual não significa comissão de checkout por pagamento.
+A integração FR Finance é multi-tenant. Cada administrador vincula sua própria conta recebedora por OAuth Connect; credencial do aplicativo do Master NÃO serve como conta de recebimento de todos os tenants. Receitas de assinaturas da plataforma são processo separado do fluxo de contribuição das caixinhas. A taxa de 15% sobre lucro anual não significa comissão de checkout por pagamento.
 
 ## Painel oficial Mercado Pago
 - https://www.mercadopago.com.br/developers/panel/app
-- Criar aplicação, nome FR Caixinha AI Studio, Pagamentos online, sem plataforma externa, Checkout Transparente / Checkout API (Orders), Marketplace quando aparecer.
+- Criar aplicação, nome FR Finance, Pagamentos online, sem plataforma externa, Checkout Transparente / Checkout API (Orders), Marketplace quando aparecer.
 - Após criar, obter Client ID/ID da aplicação, Client Secret e credenciais de Teste e Produção. NÃO copiar Client Secret ou tokens para ChatGPT/GitHub/prints.
 - Para Pix de entrada: a conta recebedora deve possuir chave Pix e habilitação de pagamento; Orders API recomendada. Nunca criar cobrança real só para testar conexão.
 - Para cada tenant, OAuth authorization-code + state + PKCE, callback HTTPS estático e scopes read/write/offline_access conforme capacidade aprovada. URL de callback será definida na etapa OCI; nunca usar localhost/Termux como callback público.

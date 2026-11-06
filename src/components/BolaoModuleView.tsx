@@ -194,7 +194,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
       title: `Pagamento Bolão - ${currentCampaign.campaign_name}`,
       amount: p.amount_pending,
       description: `Participação de ${p.member_name} (${p.quotas_count} cota(s)) no Bolão ${currentCampaign.campaign_name}`,
-      recipientName: 'FRcaixinha Gestão Coletiva',
+      recipientName: 'FR Finance Gestão Coletiva',
       referenceId: p.id,
       onConfirm: () => {
         appStore.payBolaoParticipation(p.id);
@@ -248,7 +248,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
               {currentCampaign.campaign_name}
             </h1>
             <p className="text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Criação integral dos jogos no FRcaixinha, impressão do roteiro de preenchimento,
+              Criação integral dos jogos no FR Finance, impressão do roteiro de preenchimento,
               registro oficial presencial na CAIXA, adicional de 20% à caixinha e rateio exclusivo de prêmio (96% membros / 4% caixinha).
             </p>
           </div>
@@ -1055,7 +1055,7 @@ export const BolaoModuleView: React.FC<BolaoModuleViewProps> = ({ state, onOpenP
             {/* Cabeçalho Obrigatório */}
             <div className="border-b-2 border-dashed border-slate-200 pb-5 text-center space-y-1">
               <span className="text-[11px] font-black tracking-widest uppercase bg-slate-900 text-white px-3 py-1 rounded-full">
-                FRCAIXINHA 2.2 — ROTEIRO DE APOSTAS PARA REGISTRO PRESENCIAL
+                FR FINANCE — ROTEIRO DE APOSTAS PARA REGISTRO PRESENCIAL
               </span>
               <h2 className="text-xl font-black text-slate-900 mt-2">
                 {currentCampaign.campaign_name}
