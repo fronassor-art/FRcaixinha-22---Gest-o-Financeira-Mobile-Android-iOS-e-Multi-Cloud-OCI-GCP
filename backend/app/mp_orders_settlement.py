@@ -67,6 +67,9 @@ def correlate_three_source(
             or type(statement) is not AuthenticatedSettlementRow
             or authenticated_order.provider_response_structure_verified is not True
             or authenticated_order.ready_for_independent_settlement_lookup is not True
+            or authenticated_order.bank_reconciled is not False
+            or authenticated_order.ledger_written is not False
+            or authenticated_order.financial_effect_applied is not False
             or authenticated_order.status!="processed"
             or authenticated_order.status_detail!="accredited"
             or authenticated_order.payment_status!="processed"
@@ -93,14 +96,13 @@ def correlate_three_source(
             or type(statement.fetched_at) is not datetime
             or statement.settled_at.tzinfo is None
             or statement.fetched_at.tzinfo is None
+            or statement.settled_at.utcoffset() is None
+            or statement.fetched_at.utcoffset() is None
             or statement.settled_at>statement.fetched_at
             or statement.authenticated_provider_identity is not True
             or statement.authenticated_statement_transport is not True
             or statement.independently_settled is not True):
         raise FinancialOperationBlocked("Conciliação Orders sem 3 fontes independentes")
-    if not (statement.settled_at.utcoffset() is not None
-            and statement.fetched_at.utcoffset() is not None):
-        raise FinancialOperationBlocked("Datas de conciliação inválidas")
     return OrdersSettlementEvidence(
         tenant_id=statement.tenant_id,
         account_id=statement.collector_id,
@@ -130,7 +132,10 @@ class IndependentOrdersSettlementService:
     )->OrdersSettlementEvidence|None:
         if (type(command) is not PixPaymentCommand
                 or type(authenticated_order) is not OrdersReadReport
-                or not authenticated_order.ready_for_independent_settlement_lookup):
+                or not authenticated_order.ready_for_independent_settlement_lookup
+                or authenticated_order.bank_reconciled is not False
+                or authenticated_order.ledger_written is not False
+                or authenticated_order.financial_effect_applied is not False):
             return None
         stmt=await self.reader.fetch(
             tenant_id=command.obligation.tenant_id,

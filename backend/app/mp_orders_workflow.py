@@ -90,6 +90,9 @@ def validate_orders_independent_settlement(
             or type(bank) is not OrdersSettlementEvidence
             or provider_read.provider_response_structure_verified is not True
             or provider_read.ready_for_independent_settlement_lookup is not True
+            or provider_read.bank_reconciled is not False
+            or provider_read.ledger_written is not False
+            or provider_read.financial_effect_applied is not False
             or provider_read.status!="processed"
             or provider_read.status_detail!="accredited"
             or provider_read.payment_status!="processed"
@@ -172,7 +175,10 @@ class OrdersCollectionAutomation:
         report=await self.provider.get(command=command,order_id=order_id)
         if (type(report) is not OrdersReadReport
                 or report.order_id!=order_id
-                or report.payment_id!=persisted.payment_id):
+                or report.payment_id!=persisted.payment_id
+                or report.bank_reconciled is not False
+                or report.ledger_written is not False
+                or report.financial_effect_applied is not False):
             raise FinancialOperationBlocked("Consulta Orders inválida")
         if not report.ready_for_independent_settlement_lookup:
             return None
