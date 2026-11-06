@@ -27,7 +27,7 @@ BEGIN
  END IF;
  SELECT * INTO existing FROM public.mp_staging_resolve_seller(seller);
  IF existing.tenant_id<>t OR existing.seller_id<>seller
-    OR existing.webhook_secret_ocid NOT LIKE 'ocid1.secret.%' THEN
+    OR existing.webhook_secret_ocid NOT LIKE 'ocid1.vaultsecret.%' THEN
     RAISE EXCEPTION 'seller resolution not scoped';
  END IF;
  SELECT public.mp_staging_append_signed_order(

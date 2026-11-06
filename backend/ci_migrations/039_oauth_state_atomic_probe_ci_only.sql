@@ -24,7 +24,7 @@ BEGIN
  END IF;
  SELECT public.mp_staging_oauth_begin(
    a,ua,state,redirect,repeat('X',43),
-   'ocid1.secret.oc1.ci-oauth-pkce-ref-12345678',
+   'ocid1.vaultsecret.oc1.ci-oauth-pkce-ref-12345678',
    '123456','https://app.example.invalid/connect/callback',600
  ) INTO attempt;
  IF attempt IS NULL THEN
@@ -48,7 +48,7 @@ BEGIN
  IF NOT FOUND OR got.client_id<>'123456'
    OR got.pkce_challenge<>repeat('X',43)
    OR got.pkce_verifier_secret_ocid<>
-      'ocid1.secret.oc1.ci-oauth-pkce-ref-12345678' THEN
+      'ocid1.vaultsecret.oc1.ci-oauth-pkce-ref-12345678' THEN
    RAISE EXCEPTION 'M23200 DENIED: consumption mismatch';
  END IF;
  SELECT * INTO got
@@ -58,7 +58,7 @@ BEGIN
  BEGIN
    PERFORM public.mp_staging_oauth_begin(
      a,ua,state,redirect,repeat('X',43),
-     'ocid1.secret.oc1.ci-oauth-pkce-ref-12345678',
+     'ocid1.vaultsecret.oc1.ci-oauth-pkce-ref-12345678',
      '123456','https://app.example.invalid/connect/callback',600
    );
    RAISE EXCEPTION 'M23200 DENIED: duplicate state accepted';
@@ -68,7 +68,7 @@ BEGIN
  BEGIN
    PERFORM public.mp_staging_oauth_begin(
      a,ub,repeat('d',64),redirect,repeat('X',43),
-     'ocid1.secret.oc1.ci-oauth-pkce-ref-12345678',
+     'ocid1.vaultsecret.oc1.ci-oauth-pkce-ref-12345678',
      '123456','https://app.example.invalid/connect/callback',600
    );
    RAISE EXCEPTION 'M23200 DENIED: foreign admin accepted';

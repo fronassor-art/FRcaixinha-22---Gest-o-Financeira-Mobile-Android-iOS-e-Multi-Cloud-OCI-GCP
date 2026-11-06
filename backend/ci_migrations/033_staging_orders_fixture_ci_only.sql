@@ -67,7 +67,7 @@ INSERT INTO public.mp_seller_connections_staging(
  tenant_id,seller_id,webhook_secret_ocid,verified_at
 ) VALUES
 ('ffffffff-0000-4000-8000-000000000011',
- '2002','ocid1.secret.oc1.ci-fake-only-aaaaaa',now()),
+ '2002','ocid1.vaultsecret.oc1.ci-fake-only-aaaaaa',now()),
 ('ffffffff-0000-4000-8000-000000000012',
- '3003','ocid1.secret.oc1.ci-fake-only-bbbbbb',now());
+ '3003','ocid1.vaultsecret.oc1.ci-fake-only-bbbbbb',now());
 COMMIT;

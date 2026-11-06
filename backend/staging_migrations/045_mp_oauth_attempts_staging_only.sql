@@ -28,7 +28,7 @@ CREATE TABLE public.mp_oauth_attempts_staging (
  pkce_challenge varchar(128) NOT NULL
     CHECK (pkce_challenge ~ '^[A-Za-z0-9_-]{43,128}$'),
  pkce_verifier_secret_ocid text NOT NULL
-    CHECK (pkce_verifier_secret_ocid ~ '^ocid1[.]secret[.][A-Za-z0-9._-]+$'
+    CHECK (pkce_verifier_secret_ocid ~ '^ocid1[.]vaultsecret[.][A-Za-z0-9._-]+$'
       AND char_length(pkce_verifier_secret_ocid) BETWEEN 21 AND 525),
  client_id varchar(40) NOT NULL CHECK (client_id ~ '^[0-9]{1,40}$'),
  redirect_uri text NOT NULL CHECK (
@@ -69,7 +69,7 @@ BEGIN
     OR p_redirect_sha IS NULL OR p_redirect_sha !~ '^[a-f0-9]{64}$'
     OR p_challenge IS NULL OR p_challenge !~ '^[A-Za-z0-9_-]{43,128}$'
     OR p_verifier_secret_ocid IS NULL
-    OR p_verifier_secret_ocid !~ '^ocid1[.]secret[.][A-Za-z0-9._-]+$'
+    OR p_verifier_secret_ocid !~ '^ocid1[.]vaultsecret[.][A-Za-z0-9._-]+$'
     OR char_length(p_verifier_secret_ocid) NOT BETWEEN 21 AND 525
     OR p_client IS NULL OR p_client !~ '^[0-9]{1,40}$'
     OR p_redirect_uri IS NULL OR p_redirect_uri !~
