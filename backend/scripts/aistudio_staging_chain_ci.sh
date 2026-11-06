@@ -23,6 +23,8 @@ echo "=== STAGING CI: CREATE DEDICATED UNPRIVILEGED ROLES ==="
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE frcaixinha_mp_webhook_ingest LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_mp_oauth_worker LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_mp_financial_worker LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_notify_producer_ci LOGIN PASSWORD 'ci-test-only'
@@ -46,7 +48,7 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
 GRANT USAGE ON SCHEMA public
   TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
 SQL
@@ -60,15 +62,22 @@ for file in \
   backend/staging_migrations/038_orders_reservation_staging_only.sql \
   backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql \
   backend/staging_migrations/040_orders_incident_audit_staging_only.sql \
-  backend/staging_migrations/041_notifications_inbox_outbox_staging_ci_only.sql
+  backend/staging_migrations/041_notifications_inbox_outbox_staging_ci_only.sql \
+  backend/staging_migrations/045_mp_oauth_attempts_staging_only.sql
 do
-  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1" \
+  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
   echo "STAGING_CI_APPLIED_$(basename "$file" | cut -c1-3)=PASS"
 done
 
 echo "=== STAGING CI: SYNTHETIC TENANTS/OBLIGATIONS ==="
 psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/033_staging_orders_fixture_ci_only.sql >/dev/null
+echo "=== M23200: synthetic OAuth admins + atomic consume ==="
+psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/038_oauth_admins_fixture_ci_only.sql >/dev/null
+PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/039_oauth_state_atomic_probe_ci_only.sql
+echo "M23200_DISPOSABLE_PG=PASS"
+
 
 echo "=== STAGING CI: ROLE AND RLS NEGATIVE CHECKS ==="
 PGUSER=frcaixinha_mp_financial_worker \
