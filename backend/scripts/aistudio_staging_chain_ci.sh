@@ -64,7 +64,8 @@ for file in \
   backend/staging_migrations/040_orders_incident_audit_staging_only.sql \
   backend/staging_migrations/041_notifications_inbox_outbox_staging_ci_only.sql \
   backend/staging_migrations/045_mp_oauth_attempts_staging_only.sql \
-  backend/staging_migrations/046_mp_oauth_seller_consent_cas_staging_only.sql
+  backend/staging_migrations/046_mp_oauth_seller_consent_cas_staging_only.sql \
+  backend/staging_migrations/047_mp_oauth_generation_staging_only.sql
 do
   PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
@@ -83,6 +84,9 @@ psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/040_oauth_consents_fixture_ci_only.sql >/dev/null
 PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/041_oauth_seller_cas_probe_ci_only.sql
+PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/043_oauth_generation_worker_probe_ci_only.sql
+echo "M23900_CONSENT_GENERATION_SCOPE=PASS"
 psql -X -v ON_ERROR_STOP=1 -c \
   "UPDATE public.mp_oauth_seller_consents_staging SET revoked_at=clock_timestamp() WHERE tenant_id='ffffffff-0000-4000-8000-000000000091' AND seller_id='2002'" >/dev/null
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \

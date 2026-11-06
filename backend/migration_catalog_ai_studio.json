@@ -134,6 +134,16 @@
       "source_blob_sha": "825515d323a96cf667c5d429d0744b94300d0700"
     },
     {
+      "id": "ci_migrations:043",
+      "source_path": "backend/ci_migrations/043_oauth_generation_worker_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "dc451de7c35d1b2af76fb1f69c27cf4e7303a3a8"
+    },
+    {
       "id": "local_migrations:028",
       "source_path": "backend/local_migrations/028_member_lifecycle_sandbox_requests.sql",
       "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
@@ -682,6 +692,16 @@
       "inspect_object": "public.mp_oauth_seller_consents_staging",
       "local_evidence": null,
       "source_blob_sha": "026e30a5b797468a905b8c44de4f00867ed10048"
+    },
+    {
+      "id": "staging_migrations:047",
+      "source_path": "backend/staging_migrations/047_mp_oauth_generation_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_oauth_seller_consents_staging",
+      "local_evidence": null,
+      "source_blob_sha": "93a6ddd4e06646e1ab205094f72010b547ec79fc"
     }
   ]
 }

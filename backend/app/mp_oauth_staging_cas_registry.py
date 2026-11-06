@@ -64,6 +64,31 @@ class StagingSellerCASRegistry:
         except Exception:
             return False
 
+    async def consent_generation(
+        self, *, tenant: UUID, actor: UUID, seller: str
+    ) -> int | None:
+        """Read consent generation through the worker-only SQL function.
+
+        This is a preflight; stage_pending and activate_cas remain the
+        authoritative transactional CAS boundaries.
+        """
+        if not self._ids(tenant, actor, seller) or not await self._identity_ok():
+            return None
+        try:
+            generation = await self._db.fetchval(
+                "SELECT public.mp_staging_oauth_generation("
+                "$1::uuid,$2::uuid,$3::varchar)",
+                tenant, actor, seller,
+            )
+        except Exception:
+            return None
+        # Reject boolean (a Python int subtype), missing, negative, and
+        # PostgreSQL bigint overflow; never guess a generation.
+        if (type(generation) is not int
+                or generation < 0 or generation > 9_223_372_036_854_775_807):
+            return None
+        return generation
+
     async def stage_pending(self, *, pending: PendingTokenRevision) -> bool:
         """Register opaque PENDING revision using SQL's consent generation guard."""
         if (type(pending) is not PendingTokenRevision
