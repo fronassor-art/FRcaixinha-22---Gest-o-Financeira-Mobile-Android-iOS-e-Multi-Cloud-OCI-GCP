@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 /**
- * FR Caixinha — configuracao Capacitor da frente AI Studio
+ * FR Finance — configuracao Capacitor da frente AI Studio
  * Contrato Técnico Mestre (Cláusulas 11.1 e 16.2)
  *
  * NOTAS DE SEGURANÇA E AMBIENTE:
