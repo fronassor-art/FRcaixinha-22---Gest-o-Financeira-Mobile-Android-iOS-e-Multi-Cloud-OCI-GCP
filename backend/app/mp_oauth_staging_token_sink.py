@@ -75,6 +75,7 @@ class StagingOAuthTokenSink:
             return False
         pending = None
         committed = False
+        registration_attempted = False
         try:
             if await self._registry.eligible(
                 tenant=draft.tenant_id, actor=draft.initiated_by,
@@ -102,6 +103,7 @@ class StagingOAuthTokenSink:
             ) is not True:
                 return False
             # SQL must register the PENDING row before any CAS activation.
+            registration_attempted = True
             if await self._registry.stage_pending(pending=pending) is not True:
                 return False
             if await self._registry.activate_cas(
@@ -120,11 +122,20 @@ class StagingOAuthTokenSink:
                     and pending.tenant_id == draft.tenant_id
                     and pending.actor_id == draft.initiated_by
                     and pending.seller_id == tokens.seller_id):
-                try:
-                    await self._registry.mark_failed(pending=pending)
-                except Exception:
-                    pass
-                try:
-                    await self._store.cancel(pending=pending)
-                except Exception:
-                    pass
+                # Do not delete an opaque secret if a DB commit/response is
+                # ambiguous. Once registration was attempted, only a positive
+                # atomic SQL PENDING->FAILED transition proves safe disposal.
+                # A failed check leaves the ref for controlled reconciliation.
+                can_discard = not registration_attempted
+                if registration_attempted:
+                    try:
+                        can_discard = (
+                            await self._registry.mark_failed(pending=pending)
+                        ) is True
+                    except Exception:
+                        can_discard = False
+                if can_discard:
+                    try:
+                        await self._store.cancel(pending=pending)
+                    except Exception:
+                        pass

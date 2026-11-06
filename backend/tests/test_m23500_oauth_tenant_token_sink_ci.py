@@ -30,6 +30,7 @@ class Registry:
         self.stage_allowed=True
         self.staged=[]
         self.raise_on_activate=False
+        self.ack_lost_after_activate=False
         self.failures=[]
         self.received=[]
     async def eligible(self,*,tenant,actor,seller):
@@ -46,8 +47,15 @@ class Registry:
         assert len(access_hash)==len(refresh_hash)==64
         if not self.allowed or not self.activate_allowed:return False
         self.active=pending.revision
+        if pending.revision in self.staged:
+            self.staged.remove(pending.revision)
+        if self.ack_lost_after_activate:
+            raise TimeoutError('synthetic lost response after commit')
         return True
     async def mark_failed(self,*,pending):
+        if pending.revision not in self.staged:
+            return False
+        self.staged.remove(pending.revision)
         self.failures.append(pending.revision)
         return True
 
@@ -102,7 +110,7 @@ async def test_revocation_after_staging_cancels_only_new_revision():
     db.revoke_after_first=True
     assert await sink.persist_sandbox_connection(draft=draft(),tokens=tokens()) is False
     assert db.active=="existing-active-revision"
-    assert len(vault.cancelled)==len(db.failures)==1
+    assert len(vault.cancelled)==1 and db.failures==[]
 
 @pytest.mark.asyncio
 async def test_failed_cas_preserves_previous_active_revision():
@@ -160,4 +168,4 @@ async def test_sql_stage_failure_cancels_new_secret_preserves_old():
     assert await sink.persist_sandbox_connection(draft=draft(),tokens=tokens()) is False
     assert db.active=="existing-active-revision"
     assert len(db.received)==0
-    assert len(db.failures)==len(vault.cancelled)==1
+    assert db.failures==[] and len(vault.cancelled)==0

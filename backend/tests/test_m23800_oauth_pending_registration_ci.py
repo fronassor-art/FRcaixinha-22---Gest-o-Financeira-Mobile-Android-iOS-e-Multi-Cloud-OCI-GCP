@@ -127,7 +127,9 @@ async def test_sql_stage_exception_fails_closed():
     sink,registry,db,store=setup()
     db.stage_error=True
     assert await sink.persist_sandbox_connection(draft=draft(),tokens=tokens()) is False
-    assert db.active=="old-active-revision" and len(store.cancelled)==1
+    # SQL stage attempted; False or exception cannot prove rollback.
+    # Retain the opaque ref until reconciliation if no FAILED ack.
+    assert db.active=="old-active-revision" and not store.cancelled
 
 @pytest.mark.asyncio
 async def test_disabled_never_touches_db_or_store():
