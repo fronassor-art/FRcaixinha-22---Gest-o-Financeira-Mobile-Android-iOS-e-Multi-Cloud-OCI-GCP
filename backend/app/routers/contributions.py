@@ -241,64 +241,9 @@ async def pay_contribution(
     """
     require_tenant_access(tenant_id, session)
 
-    # Não apresentar como pagável o código fictício sem provedor configurado.
-    raise HTTPException(status_code=503, detail="Cobrança Pix indisponível até integração com provedor e conciliação autenticada.")
-
-    if session.role == "MASTER":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso Proibido: Master não realiza operações financeiras de caixinhas."
-        )
-
-    row = await conn.fetchrow("""
-        SELECT c.id, c.tenant_id, c.cycle_id, c.membership_id, c.competence, c.due_date,
-               c.amount_due, c.amount_paid, c.payment_status, c.due_status, m.user_id, u.full_name as member_name
-        FROM contributions c
-        JOIN memberships m ON c.membership_id = m.id
-        JOIN users u ON m.user_id = u.id
-        WHERE c.id = $1 AND c.tenant_id = $2
-        FOR UPDATE;
-    """, uuid.UUID(contribution_id), uuid.UUID(tenant_id))
-
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contribuição não encontrada.")
-
-    if session.role == "TENANT_MEMBER" and str(row["user_id"]) != str(session.user_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso Proibido: Você só pode pagar contribuições vinculadas à sua própria cota."
-        )
-
-    amount_requested = to_cents(payload.amount)
-    amount_cents = int((amount_requested * Decimal("100")).quantize(Decimal("1")))
-
-    # Registro de Intenção Pix Pendente (Gera chave de idempotência e dados para QR Code)
-    intent_id = uuid.uuid4()
-    idempotency_key = f"contrib-{contribution_id}-{amount_cents}-{datetime.utcnow().strftime('%Y%m%d%H%M')}"
-    pix_payload = f"00020126580014br.gov.bcb.pix0136{intent_id}5204000053039865406{amount_requested:.2f}5802BR5920FRcaixinha6009Belem62070503***6304"
-    expires_at = datetime.utcnow() + timedelta(minutes=30)
-
-    await conn.execute("""
-        INSERT INTO pix_payment_intents (
-            id, tenant_id, contribution_id, payer_user_id, amount_cents,
-            status, idempotency_key, pix_copy_paste, expires_at, created_at
-        ) VALUES ($1, $2, $3, $4, $5, 'PENDENTE', $6, $7, $8, NOW())
-        ON CONFLICT (tenant_id, idempotency_key) DO NOTHING;
-    """, intent_id, uuid.UUID(tenant_id), uuid.UUID(contribution_id), uuid.UUID(session.user_id),
-       amount_cents, idempotency_key, pix_payload, expires_at)
-
-    await conn.execute("""
-        INSERT INTO audit_events (id, actor_id, actor_role, tenant_id, action, object_type, object_id, reason, evidence_ref)
-        VALUES ($1, $2, $3, $4, 'INTENCAO_PAGAMENTO_PIX', 'CONTRIBUTION', $5, $6, $7);
-    """, uuid.uuid4(), uuid.UUID(session.user_id), session.role, uuid.UUID(tenant_id),
-       contribution_id, f"Intenção de pagamento Pix de R$ {amount_requested} gerada. Aguardando conciliação.", f"INTENT-{intent_id}")
-
-    return ContributionPayResponse(
-        status="AGUARDANDO_CONCILIACAO",
-        contribution_id=contribution_id,
-        amount_requested=amount_requested,
-        intent_id=str(intent_id),
-        pix_copy_paste=pix_payload,
-        message="Intenção de pagamento Pix registrada com sucesso. A baixa contábil e a confirmação de capital ocorrerão exclusivamente após a liquidação bancária via webhook autenticado.",
-        is_reconciled=False
+    # M22800: legado de PIX fictício removido de rota pública.
+    # O teste M21500 NÃO autoriza cobrança de clientes nem baixa cadastral.
+    raise HTTPException(
+        status_code=503,
+        detail="Cobrança Pix indisponível até vínculo OAuth, reserva idempotente e conciliação autenticada.",
     )
