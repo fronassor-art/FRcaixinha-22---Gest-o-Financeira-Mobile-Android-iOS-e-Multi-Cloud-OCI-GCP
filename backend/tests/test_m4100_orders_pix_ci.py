@@ -228,3 +228,24 @@ def test_orders_read_must_match_exact_identity():
 
 def test_does_not_claim_bank_connected():
     assert CONTRACT=="AI_STUDIO_M4100_MLB_ORDERS_PIX_V1"
+
+
+def test_official_pix_test_response_allows_empty_qr_base64():
+    # MP official Orders Pix APRO fixture has a QR string but "" for image.
+    data=order_data()
+    data["transactions"]["payments"][0]["payment_method"]["qr_code_base64"]=""
+    checkout=parse_created_order_pix(
+        data=data,command=command(),credentials=credentials())
+    assert checkout.qr_code_base64 is None
+    assert checkout.qr_code.startswith("000201")
+    assert checkout.bank_reconciled is False
+    assert checkout.ledger_written is False
+
+
+@pytest.mark.parametrize("value",[None,42,{},[]])
+def test_orders_reject_nontext_payment_status_without_type_error(value):
+    data=order_data()
+    data["transactions"]["payments"][0]["status"]=value
+    with pytest.raises(ProviderRequestBlocked):
+        parse_created_order_pix(
+            data=data,command=command(),credentials=credentials())

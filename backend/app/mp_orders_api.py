@@ -148,6 +148,7 @@ def _extract(
         ("failed","expired"),
     }
     if (type(status) is not str or type(detail) is not str
+            or type(pay_status) is not str or type(pay_detail) is not str
             or (status,detail) not in valid
             or (pay_status,pay_detail) not in valid):
         raise ProviderRequestBlocked("Status Orders não reconhecido")
@@ -164,6 +165,10 @@ def parse_created_order_pix(
         data=data,command=command,credentials=credentials,creation=True)
     qr=method.get("qr_code")
     image=method.get("qr_code_base64")
+    # MP's official Pix TEST example returns an empty base64 field while
+    # the Pix copy/paste QR string is populated. Empty image means absent.
+    if image == "":
+        image = None
     url=method.get("ticket_url")
     if (type(qr) is not str or not 0<len(qr)<=_MAX_QR
             or image is not None and
