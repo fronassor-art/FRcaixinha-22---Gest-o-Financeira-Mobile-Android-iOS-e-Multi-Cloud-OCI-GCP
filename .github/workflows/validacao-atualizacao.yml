@@ -374,6 +374,7 @@ jobs:
           python -m pytest -q backend/tests/test_m22800_no_legacy_financial_routes_ci.py
           python -m pytest -q backend/tests/test_m22900_orders_get_no_bank_effect_ci.py
           python -m pytest -q backend/tests/test_m23000_oauth_callback_uri_ci.py
+          python -m pytest -q backend/tests/test_m23100_oauth_sandbox_coordinator_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
