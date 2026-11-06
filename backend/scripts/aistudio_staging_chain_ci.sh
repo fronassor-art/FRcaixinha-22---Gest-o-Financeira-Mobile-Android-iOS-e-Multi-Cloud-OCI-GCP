@@ -50,7 +50,7 @@ psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
   TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -63,7 +63,8 @@ for file in \
   backend/staging_migrations/039_orders_reconciliation_holds_staging_only.sql \
   backend/staging_migrations/040_orders_incident_audit_staging_only.sql \
   backend/staging_migrations/041_notifications_inbox_outbox_staging_ci_only.sql \
-  backend/staging_migrations/045_mp_oauth_attempts_staging_only.sql
+  backend/staging_migrations/045_mp_oauth_attempts_staging_only.sql \
+  backend/staging_migrations/046_mp_oauth_seller_consent_cas_staging_only.sql
 do
   PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
@@ -77,6 +78,18 @@ psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/038_oauth_admins_fixture_ci_
 PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/039_oauth_state_atomic_probe_ci_only.sql
 echo "M23200_DISPOSABLE_PG=PASS"
+echo "=== M23600: tenant consent metadata, CAS and revocation in disposable CI ==="
+psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/040_oauth_consents_fixture_ci_only.sql >/dev/null
+PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/041_oauth_seller_cas_probe_ci_only.sql
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.mp_oauth_seller_consents_staging SET revoked_at=clock_timestamp() WHERE tenant_id='ffffffff-0000-4000-8000-000000000091' AND seller_id='2002'" >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT revoked_at IS NOT NULL FROM public.mp_oauth_seller_consents_staging WHERE seller_id='2002'")" = "t"
+PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/042_oauth_revocation_probe_ci_only.sql
+echo "M23600_DISPOSABLE_CAS_REVOKE=PASS"
 
 
 echo "=== STAGING CI: ROLE AND RLS NEGATIVE CHECKS ==="

@@ -104,6 +104,36 @@
       "source_blob_sha": "a3592d4709316b908ed7e2f1b5280d9a4dc7a4a7"
     },
     {
+      "id": "ci_migrations:040",
+      "source_path": "backend/ci_migrations/040_oauth_consents_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "d31ddbee4b63e8b52c5af8a88d277792d5d53f4e"
+    },
+    {
+      "id": "ci_migrations:041",
+      "source_path": "backend/ci_migrations/041_oauth_seller_cas_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "d3b0d70007455cd116dda0068d7f351a53ffb84c"
+    },
+    {
+      "id": "ci_migrations:042",
+      "source_path": "backend/ci_migrations/042_oauth_revocation_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "825515d323a96cf667c5d429d0744b94300d0700"
+    },
+    {
       "id": "local_migrations:028",
       "source_path": "backend/local_migrations/028_member_lifecycle_sandbox_requests.sql",
       "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
@@ -642,6 +672,16 @@
       "inspect_object": "public.mp_oauth_attempts_staging",
       "local_evidence": null,
       "source_blob_sha": "ce3c096a5d1aad26b81cadaa39a635c7c299b733"
+    },
+    {
+      "id": "staging_migrations:046",
+      "source_path": "backend/staging_migrations/046_mp_oauth_seller_consent_cas_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_oauth_seller_consents_staging",
+      "local_evidence": null,
+      "source_blob_sha": "026e30a5b797468a905b8c44de4f00867ed10048"
     }
   ]
 }
