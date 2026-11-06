@@ -369,6 +369,7 @@ jobs:
           python -m pytest -q backend/tests/test_m21800_mp_pix_test_attestation_ci.py
           python -m pytest -q backend/tests/test_m22000_production_auth_gate_ci.py
           python -m pytest -q backend/tests/test_m22100_oci_production_db_preflight_ci.py
+          python -m pytest -q backend/tests/test_m22600_local_auth_baseline_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
