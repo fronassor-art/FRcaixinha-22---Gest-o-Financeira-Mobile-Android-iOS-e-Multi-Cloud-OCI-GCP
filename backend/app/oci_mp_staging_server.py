@@ -60,12 +60,15 @@ class StagingServerConfig:
         )
 
     def require_safe_receive_only(self):
+    # Dedicated staging refuses live notifications even if a deployment
+    # operator accidentally enables the old flag. Only signed TEST inbox.
         if self.enabled is not True:
             raise StagingServerBlocked("Staging server disabled")
         if (self.environment != "homologation"
                 or self.server_mode != "RECEIVE_ONLY"
                 or not _REGION.fullmatch(self.region)
-                or not _SECRET_OCID.fullmatch(self.db_dsn_secret_ocid)):
+                or not _SECRET_OCID.fullmatch(self.db_dsn_secret_ocid)
+                or self.accept_live_notifications is not False):
             raise StagingServerBlocked("Staging configuration unsafe")
 
 

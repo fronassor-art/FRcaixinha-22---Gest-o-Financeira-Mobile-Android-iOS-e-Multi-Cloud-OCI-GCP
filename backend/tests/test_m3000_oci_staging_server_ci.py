@@ -186,3 +186,25 @@ def test_main_app_still_has_no_payment_webhook_or_oci_staging_connection():
         "ledger_written","real_payments_enabled",
     ):
         assert d[key] is False
+
+
+@pytest.mark.parametrize("override",[
+    {"accept_live_notifications":True},
+    {"environment":"production","accept_live_notifications":True},
+    {"server_mode":"LIVE_MONEY"},
+])
+def test_m22200_staging_rejects_live_even_if_requested(override):
+    with pytest.raises(StagingServerBlocked):
+        config(**override).require_safe_receive_only()
+
+
+def test_m22200_disabled_staging_does_not_register_real_webhook():
+    import os
+    from app.oci_mp_staging_server import StagingServerConfig,create_staging_app
+    with TestClient(create_staging_app(StagingServerConfig())) as client:
+        assert client.post("/integrations/mercadopago/webhook",json={
+            "live_mode":True,"type":"payment",
+        }).status_code==404
+        state=client.get("/api/health/oci-staging").json()
+        assert state["real_payments_enabled"] is False
+        assert state["bank_reconciled"] is False
