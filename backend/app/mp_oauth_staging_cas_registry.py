@@ -16,7 +16,7 @@ _SELLER = re.compile(r"[0-9]{1,40}\Z")
 _REVISION = re.compile(r"[A-Za-z0-9._:-]{16,128}\Z")
 _SHA256 = re.compile(r"[a-f0-9]{64}\Z")
 
-_CREDENTIAL_REF = re.compile(r"[A-Za-z0-9._:/-]{16,512}\\Z")
+_CREDENTIAL_REF = re.compile(r"[A-Za-z0-9._:/-]{16,512}\Z")
 
 
 class StagingSellerCASRegistry:
