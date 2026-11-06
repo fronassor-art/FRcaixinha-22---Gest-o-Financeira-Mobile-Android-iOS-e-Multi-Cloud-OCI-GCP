@@ -102,7 +102,9 @@ async def test_stale_generation_fails_and_preserves_active():
     assert await sink.persist_sandbox_connection(draft=draft(),tokens=tokens()) is False
     assert db.active=="old-active-revision" and db.pending is None
     assert not any("mp_staging_oauth_activate" in q for q,_ in db.calls)
-    assert len(store.cancelled)==1
+    # SQL rejected a PENDING attempt but the API cannot prove rollback;
+    # retain the reference until a definitive reconciliation.
+    assert store.cancelled==[]
 
 @pytest.mark.asyncio
 async def test_revocation_between_checks_denies_stage():
