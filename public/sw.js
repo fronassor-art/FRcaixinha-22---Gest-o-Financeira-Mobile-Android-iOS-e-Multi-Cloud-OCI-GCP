@@ -1,5 +1,5 @@
-// Service Worker for FRcaixinha 2.2 Mobile (Android & iOS)
-const CACHE_NAME = 'frcaixinha-v2.2-cache';
+// Service Worker for FR Finance Mobile (Android & iOS)
+const CACHE_NAME = 'fr-finance-m21400-static';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -37,6 +37,25 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
   
+  // Commercial logo must be network-first: older installed versions cached
+  // the obsolete FRcaixinha artwork at exactly the same asset path.
+  // Never prefer the stale-while-revalidate response for the brand image.
+  const url = new URL(event.request.url);
+  if (url.origin === self.location.origin && url.pathname === '/icon.svg') {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse.ok) {
+          const copy = networkResponse.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
+        }
+        return networkResponse;
+      }).catch(async () => {
+        return await caches.match(event.request) || Response.error();
+      })
+    );
+    return;
+  }
+
   // Navigation strategy: Network first with cache fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(

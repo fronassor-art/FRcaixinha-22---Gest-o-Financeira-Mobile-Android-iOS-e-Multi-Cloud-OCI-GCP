@@ -16,7 +16,7 @@
   ],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/icon.svg?v=fr-finance-m21400",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

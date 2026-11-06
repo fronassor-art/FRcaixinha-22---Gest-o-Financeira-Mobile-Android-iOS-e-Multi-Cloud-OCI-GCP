@@ -14,7 +14,7 @@ assert.match(icon,/leaf|folhas/i);
 const login=renderToStaticMarkup(
   React.createElement(LoginView,{onLoginSuccess:()=>undefined})
 );
-assert.match(login,/src="\/icon.svg"/);
+assert.match(login,/src="\/icon.svg\?v=fr-finance-m21400"/);
 assert.match(login,/Entrar na sua conta/);
 assert.match(login,/Primeiro acesso/);
 assert.match(login,/FR Finance/);
