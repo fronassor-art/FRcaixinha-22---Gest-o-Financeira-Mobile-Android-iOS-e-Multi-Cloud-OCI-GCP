@@ -1,5 +1,6 @@
 """M19200 regression: no untracked DB migration or accidental OCI/CI apply."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -30,9 +31,18 @@ def test_repo_gate_pass_and_local_gate_fails_closed():
     assert "M19200_NEEDS_LOCAL_EQUIVALENT=0" in p.stdout
     assert "M20100_SOURCE_LOCAL_034_041=VERSIONED_DB_VERIFICATION_REQUIRED" in p.stdout
     assert "M19300_SOURCE_LOCAL_028_030=VERSIONED_DB_VERIFICATION_REQUIRED" in p.stdout
-    q=subprocess.run([sys.executable,str(path),"local-readonly"],capture_output=True,text=True,timeout=20)
+    # Deterministic negative gate: deliberately wrong approved SHA must block
+    # BEFORE getpass/DB access, even when Termux has a real local database.
+    # Never allow automated pytest to prompt for frc_ai_owner credentials.
+    env={**os.environ, "AI_STUDIO_APPROVED_SHA":"0"*40}
+    q=subprocess.run(
+        [sys.executable,str(path),"local-readonly"],
+        stdin=subprocess.DEVNULL,capture_output=True,text=True,
+        timeout=10,env=env,
+    )
     assert q.returncode!=0
     assert "M19200_BLOQUEADO" in q.stderr
+    assert "Senha frc_ai_owner" not in q.stderr+q.stdout
     assert "SET TRANSACTION READ ONLY" in path.read_text()
 
 
