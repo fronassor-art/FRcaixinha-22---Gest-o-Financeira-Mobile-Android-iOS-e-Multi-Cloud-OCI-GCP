@@ -25,10 +25,11 @@ class Attempts:
         if key in self.states:return False
         self.states[key]=draft
         return True
-    async def consume_once(self,*,tenant_id,actor_id,state_sha256,redirect_sha256,now_epoch):
+    async def consume_once(self,*,tenant_id,actor_id,state_sha256,redirect_sha256,provided_state,now_epoch):
         self.consumes+=1
         draft=self.states.get(state_sha256)
-        if (draft is None or draft.tenant_id!=tenant_id
+        if (sha256(provided_state.encode()).hexdigest()!=state_sha256
+            or draft is None or draft.tenant_id!=tenant_id
             or draft.initiated_by!=actor_id
             or sha256(draft.redirect_uri.encode()).hexdigest()!=redirect_sha256
             or now_epoch>draft.created_at_epoch+600):
