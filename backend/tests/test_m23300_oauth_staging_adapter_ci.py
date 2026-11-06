@@ -17,7 +17,7 @@ U=UUID("00000000-0000-4000-8000-0000000000a9")
 OTHER=UUID("00000000-0000-4000-8000-0000000000a2")
 NOW=1800000000
 REDIRECT="https://app.example.invalid/connect/callback"
-OCID="ocid1.secret.oc1.m23300-synthetic-only-ref-1234567"
+OCID="ocid1.vaultsecret.oc1.m23300-synthetic-only-ref-1234567"
 
 class FakeDB:
     def __init__(self):

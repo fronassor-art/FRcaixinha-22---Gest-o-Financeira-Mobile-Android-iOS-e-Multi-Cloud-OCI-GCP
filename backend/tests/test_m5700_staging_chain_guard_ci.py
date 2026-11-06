@@ -52,4 +52,4 @@ def test_no_staging_files_in_local_migration_directory():
               "035_staging_webhook_probe_ci_only.sql"):
         f=ROOT/"ci_migrations"/p
         assert f.is_file()
-        assert "ocid1.secret.oc1.ci-fake-only" in f.read_text() or "CI" in f.read_text()
+        assert "ocid1.vaultsecret.oc1.ci-fake-only" in f.read_text() or "CI" in f.read_text()

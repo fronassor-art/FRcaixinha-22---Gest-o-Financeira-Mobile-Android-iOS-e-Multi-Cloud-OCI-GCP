@@ -17,7 +17,7 @@ from uuid import UUID
 from .mp_oauth_connect_preflight import OAuthDraft
 from .mp_oauth_sandbox_coordinator import SandboxConnectBlocked
 
-_OCID=re.compile(r"ocid1[.]secret[.][A-Za-z0-9._-]{8,512}\Z")
+_OCID=re.compile(r"ocid1[.]vaultsecret[.][A-Za-z0-9._-]{8,512}\Z")
 _VERIFIER=re.compile(r"[A-Za-z0-9_-]{43,128}\Z")
 _SELLER=re.compile(r"[0-9]{1,40}\Z")
 _TTL=600

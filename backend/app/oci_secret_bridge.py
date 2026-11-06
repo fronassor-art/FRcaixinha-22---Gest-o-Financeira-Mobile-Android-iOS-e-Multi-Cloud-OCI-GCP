@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 CONTRACT = "AI_STUDIO_M2800_OCI_VAULT_MP_OAUTH_CONNECTORS_V1"
-_OCID = re.compile(r"ocid1\.secret\.[A-Za-z0-9._-]{8,512}\Z")
+_OCID = re.compile(r"ocid1\.vaultsecret\.[A-Za-z0-9._-]{8,512}\Z")
 _REGION = re.compile(r"[a-z][a-z0-9-]{3,50}\Z")
 _MAX_SECRET_BYTES = 8192
 

@@ -18,8 +18,8 @@ from app.oci_mp_staging_server import (
 
 DSN="postgresql://frcaixinha_mp_webhook_ingest:strong-ci-mock-password-123@" \
     "db-internal.example.invalid/frcaixinha_staging?sslmode=verify-full"
-SECRET_ID="ocid1.secret.oc1.sa-saopaulo-1.dbsecretabcdefghijklmnop"
-WEBHOOK_ID="ocid1.secret.oc1.sa-saopaulo-1.hmacsecretabcdefghijklm"
+SECRET_ID="ocid1.vaultsecret.oc1.sa-saopaulo-1.dbsecretabcdefghijklmnop"
+WEBHOOK_ID="ocid1.vaultsecret.oc1.sa-saopaulo-1.hmacsecretabcdefghijklm"
 HMAC_SECRET="ci-webhook-secret-very-long-sandbox"
 NOW=1800000000000
 TENANT=UUID("00000000-0000-4000-8000-0000000000a1")

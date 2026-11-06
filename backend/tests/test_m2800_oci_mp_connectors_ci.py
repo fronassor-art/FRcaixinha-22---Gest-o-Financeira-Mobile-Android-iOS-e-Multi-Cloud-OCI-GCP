@@ -21,7 +21,7 @@ from app.mp_connect_http_runtime import (
 
 TENANT=UUID("00000000-0000-4000-8000-0000000000a1")
 ACTOR=UUID("00000000-0000-4000-8000-0000000000a9")
-SECRET_ID="ocid1.secret.oc1.sa-saopaulo-1.abcdefghijklmnopqrstuvwxyz"
+SECRET_ID="ocid1.vaultsecret.oc1.sa-saopaulo-1.abcdefghijklmnopqrstuvwxyz"
 APP_SECRET="TEST-SERVER-SECRET-NOT-REAL-2026"
 PAYLOAD={
     "access_token":"TEST_SANDBOX_ACCESS_TOKEN_123456",
@@ -69,7 +69,7 @@ def test_oci_get_current_secret_strips_no_secrets_into_repr():
 
 @pytest.mark.parametrize("id",[
     "", "ocid1.user.oc1.test", "../../tmp/private",
-    "ocid1.secret.short", " ocid1.secret.oc1.sa-saopaulo-1.abcde ",
+    "ocid1.vaultsecret.short", " ocid1.vaultsecret.oc1.sa-saopaulo-1.abcde ",
 ])
 def test_bad_oci_ocids_rejected_before_call(id):
     f=FakeOCI()

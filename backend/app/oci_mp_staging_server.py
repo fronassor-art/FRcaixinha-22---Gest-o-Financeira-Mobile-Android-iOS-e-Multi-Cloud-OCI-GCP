@@ -25,7 +25,7 @@ from .mp_staging_postgres import StagingPostgresInbox
 from .mp_webhook_staging_runtime import create_webhook_staging_router
 
 CONTRACT = "AI_STUDIO_M3000_OCI_STANDALONE_STAGING_SERVER_V1"
-_SECRET_OCID = re.compile(r"ocid1\.secret\.[A-Za-z0-9._-]{8,512}\Z")
+_SECRET_OCID = re.compile(r"ocid1\.vaultsecret\.[A-Za-z0-9._-]{8,512}\Z")
 _REGION = re.compile(r"[a-z][a-z0-9-]{3,50}\Z")
 
 
