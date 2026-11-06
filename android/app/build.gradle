@@ -9,6 +9,32 @@ android {
     def stableKeyAlias = System.getenv("FRCAIXINHA_ANDROID_KEY_ALIAS")
     def stableKeyPassword = System.getenv("FRCAIXINHA_ANDROID_KEY_PASSWORD")
     def androidCiBuildNumber = System.getenv("FRCAIXINHA_ANDROID_VERSION_CODE")
+    // Separate production signing. Debug key is never reused.
+    def releaseRequested = gradle.startParameter.taskNames.any {
+        it.toLowerCase(java.util.Locale.ROOT).contains("release")
+    }
+    def releaseKeyFile = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEYSTORE_FILE")
+    def releaseStorePassword = System.getenv("FR_FINANCE_ANDROID_RELEASE_STORE_PASSWORD")
+    def releaseAlias = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEY_ALIAS")
+    def releaseKeyPassword = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEY_PASSWORD")
+    if (releaseRequested) {
+        if (!releaseKeyFile || !releaseStorePassword || !releaseAlias ||
+                !releaseKeyPassword || !(new File(releaseKeyFile).isFile())) {
+            throw new GradleException("M21700: assinatura release separada obrigatoria.")
+        }
+        def nativeConfig = file("src/main/assets/capacitor.config.json")
+        if (!nativeConfig.isFile()) {
+            throw new GradleException("M21700: sincronize Capacitor com release HTTPS.")
+        }
+        def parsed = new groovy.json.JsonSlurper().parse(nativeConfig)
+        if (parsed.server?.androidScheme != "https" || parsed.server?.cleartext != false) {
+            throw new GradleException("M21700: Release requer HTTPS sem cleartext.")
+        }
+        def bundled = fileTree(dir: "src/main/assets/public/assets", includes: ["**/*.js"])
+        if (bundled.files.any { it.getText("UTF-8").contains("http://127.0.0.1:8000") }) {
+            throw new GradleException("M21700: API local bloqueada no APK release.")
+        }
+    }
     if (stableSigningRequired && (!stableKeyFile || !stableStorePassword ||
             !stableKeyAlias || !stableKeyPassword || !(new File(stableKeyFile).isFile()))) {
         throw new GradleException("Assinatura Android permanente nao configurada. Configure os segredos de assinatura no GitHub.")
@@ -40,6 +66,17 @@ android {
             }
         }
     }
+    if (releaseRequested) {
+        signingConfigs {
+            productionRelease {
+                storeFile file(releaseKeyFile)
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+                storeType "PKCS12"
+            }
+        }
+    }
     buildTypes {
         // MESMO applicationId em todas as atualizacoes Android AI Studio.
         debug {
@@ -51,6 +88,9 @@ android {
         }
         release {
             minifyEnabled false
+            if (releaseRequested) {
+                signingConfig signingConfigs.productionRelease
+            }
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }

@@ -150,6 +150,8 @@ jobs:
         run: npx tsx src/tests/master_permission_matrix_ui.test.ts
       - name: Validar barras de sistema e safe area Android
         run: npx tsx src/tests/android_safe_area_ci.test.ts
+      - name: M21700 — release Android HTTPS e assinatura segregada
+        run: npx tsx src/tests/m21700_android_release_gate_ci.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web
