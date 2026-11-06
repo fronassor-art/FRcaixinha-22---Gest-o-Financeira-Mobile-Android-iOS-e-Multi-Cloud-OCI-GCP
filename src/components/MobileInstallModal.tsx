@@ -210,7 +210,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                     <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-black">Nativo Android</span>
                   </div>
                   <p className="text-[11px] text-emerald-200 leading-relaxed">
-                    O Termux é um ambiente Linux completo no Android. Com o Node.js instalado nele, você roda o FRcaixinha 2.2 localmente em <code>http://localhost:3000</code> sem precisar de computador!
+                    O Termux é um ambiente Linux completo no Android. Com o Node.js instalado nele, você roda o FR Finance localmente em <code>http://localhost:3000</code> sem precisar de computador!
                   </p>
                 </div>
               </div>
@@ -445,7 +445,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-600">
-                    O FRcaixinha 2.2 já vem pré-compilado na pasta <code className="font-bold text-slate-800">dist/</code>! O Python não tem problemas de compilação C++ no Android e roda com 1 comando:
+                    O FR Finance já vem pré-compilado na pasta <code className="font-bold text-slate-800">dist/</code>! O Python não tem problemas de compilação C++ no Android e roda com 1 comando:
                   </p>
                   <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-emerald-400 space-y-1 relative">
                     <div>pkg install -y python</div>
@@ -539,7 +539,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                 {qrCodeDataUrl ? (
                   <img
                     src={qrCodeDataUrl}
-                    alt="QR Code FRcaixinha 2.2 Mobile"
+                    alt="QR Code FR Finance Mobile"
                     className="w-48 h-48 rounded-2xl mx-auto shadow-sm"
                   />
                 ) : (
@@ -595,7 +595,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                 <div className="space-y-1">
                   <div className="font-bold text-blue-950 text-xs">Quais ferramentas você precisa instalar?</div>
                   <p className="text-[11px] text-blue-800 leading-relaxed">
-                    Depende de como você quer testar o FRcaixinha 2.2. Veja as 3 opções abaixo:
+                    Depende de como você quer testar o FR Finance. Veja as 3 opções abaixo:
                   </p>
                 </div>
               </div>
@@ -679,14 +679,14 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                 <div className="bg-slate-900 p-2.5 rounded-xl font-mono text-[10px] text-slate-200 space-y-1 relative">
                   <div className="text-slate-400"># Comandos para gerar o projeto Android com Capacitor:</div>
                   <div>npm install @capacitor/core @capacitor/cli @capacitor/android</div>
-                  <div>npx cap init "FRcaixinha" "com.frcaixinha.app" --web-dir dist</div>
+                  <div>npx cap init "FR Finance" "com.frcaixinha.app" --web-dir dist</div>
                   <div>npm run build</div>
                   <div>npx cap add android</div>
                   <div>npx cap open android</div>
                   <button
                     onClick={() =>
                       handleCopy(
-                        'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "FRcaixinha" "com.frcaixinha.app" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap open android',
+                        'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "FR Finance" "com.frcaixinha.app" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap open android',
                         'cmd-cap'
                       )
                     }
@@ -726,7 +726,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                 <div className="space-y-1">
                   <div className="font-bold text-slate-900">Instalação Direta no Android (Sem Loja)</div>
                   <p className="text-[11px] text-slate-600 leading-relaxed">
-                    O FRcaixinha 2.2 é um Progressive Web App completo. Ele se integra ao Android com ícone próprio na gaveta de aplicativos, execução em tela cheia e armazenamento local.
+                    O FR Finance é um Progressive Web App completo. Ele se integra ao Android com ícone próprio na gaveta de aplicativos, execução em tela cheia e armazenamento local.
                   </p>
                 </div>
               </div>
@@ -751,7 +751,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   <div>
                     <span className="font-bold text-slate-900">Instalar Aplicativo:</span>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      O Chrome exibirá um pop-up inferior ou banner <strong>"Adicionar FRcaixinha à tela inicial"</strong>. Caso não apareça, toque nos 3 pontinhos (<span className="font-mono">⋮</span>) no canto superior direito e selecione <strong>"Instalar aplicativo"</strong>.
+                      O Chrome exibirá um pop-up inferior ou banner <strong>"Adicionar FR Finance à tela inicial"</strong>. Caso não apareça, toque nos 3 pontinhos (<span className="font-mono">⋮</span>) no canto superior direito e selecione <strong>"Instalar aplicativo"</strong>.
                     </p>
                   </div>
                 </div>

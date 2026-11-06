@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - ZIP Export Service
+ * FR Finance - ZIP Export Service
  * Gera pacote completo para download e upload no GitHub / execução local
  */
 import JSZip from 'jszip';
@@ -74,7 +74,7 @@ export async function generateProjectZip(onProgress?: (percent: number, file: st
   }
 
   // Adiciona README.md profissional para o GitHub
-  const readmeContent = `# FRcaixinha 2.2 - Gestão Financeira Mobile & Multi-Cloud (OCI + GCP)
+  const readmeContent = `# FR Finance - Gestão Financeira Mobile & Multi-Cloud (OCI + GCP)
 
 Sistema completo de automação e contabilidade financeira privada para caixinhas de empréstimo e consórcio, em conformidade com o **Caderno Mestre (147 Cláusulas)** e **Contrato Técnico Mestre**.
 

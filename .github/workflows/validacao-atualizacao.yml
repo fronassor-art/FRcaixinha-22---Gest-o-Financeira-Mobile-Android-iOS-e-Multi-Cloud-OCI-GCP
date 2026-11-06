@@ -132,6 +132,8 @@ jobs:
         run: npx tsx src/tests/m20600_floor_ui_ci.test.ts
       - name: M20900 prévia de ciclo no aplicativo, sem criar cobranças
         run: npx tsx src/tests/m20900_cycle_opening_ui_ci.test.ts
+      - name: M21300 consistência da marca FR Finance em Android e web
+        run: npx tsx src/tests/m21300_fr_finance_brand_ci.test.ts
       - name: Validar leituras de emprestimos e contribuições por perfil
         run: npx tsx src/tests/financial_read_boundary_ci.test.ts
       - name: Validar reautenticacao ao retornar do segundo plano
