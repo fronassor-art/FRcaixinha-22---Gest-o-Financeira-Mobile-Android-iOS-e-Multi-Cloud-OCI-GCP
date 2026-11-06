@@ -169,3 +169,81 @@ async def opening_preview(
         "financial_effect":False,
         "reason_recorded":False,
     }
+
+
+
+# M22400: legacy contribution review; read-only, admin-specific and no PII.
+# Historical R$100 registered obligations are not silently changed.
+def _money_cents(value) -> int:
+    from decimal import Decimal
+    if type(value) is not Decimal or not value.is_finite():
+        raise HTTPException(503,"Histórico com valor não confiável.")
+    x=value*Decimal(100)
+    if x!=x.to_integral_value() or x<0 or x>Decimal(999999999999):
+        raise HTTPException(503,"Histórico com centavos inconsistentes.")
+    return int(x)
+
+
+@router.get("/legacy-review/{cycle_id}")
+async def legacy_contributions_review(
+    tenant_id: UUID, cycle_id: UUID,
+    session: AuthenticatedSession=Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Read-only grouping: NEVER changes obligations or implies bank proof."""
+    _admin(tenant_id,session)
+    cycle=await conn.fetchrow(
+        "SELECT id,year FROM public.cycles "
+        "WHERE id=$1 AND tenant_id=$2",cycle_id,tenant_id)
+    if cycle is None:
+        raise HTTPException(404,"Ciclo da caixinha não encontrado.")
+    records=await conn.fetch(
+        "SELECT c.amount_due,c.amount_paid,c.payment_status,"
+        "COUNT(*)::integer AS registered_count "
+        "FROM public.contributions c "
+        "WHERE c.tenant_id=$1 AND c.cycle_id=$2 AND c.amount_due<150.00 "
+        "GROUP BY c.amount_due,c.amount_paid,c.payment_status "
+        "ORDER BY c.amount_due,c.amount_paid,c.payment_status LIMIT 201",
+        tenant_id,cycle_id,
+    )
+    if len(records)>200:
+        raise HTTPException(503,"Histórico extenso requer auditoria paginada.")
+    count=due=registered_paid=0
+    groups=[]
+    for row in records:
+        amount=_money_cents(row["amount_due"])
+        paid=_money_cents(row["amount_paid"])
+        n=row["registered_count"]
+        state=row["payment_status"]
+        if (type(n) is not int or not 1<=n<=1000000
+                or not 0<amount<15000 or paid>amount
+                or state not in ("QUITADA","PARCIAL","PENDENTE")):
+            raise HTTPException(503,"Dados legados inconsistentes.")
+        count+=n
+        due+=amount*n
+        registered_paid+=paid*n
+        if due>999999999999 or registered_paid>due:
+            raise HTTPException(503,"Totais legados inconsistentes.")
+        groups.append({
+            "registered_amount_cents":amount,
+            "registered_paid_cents":paid,
+            "recorded_status":state,
+            "registered_contributions":n,
+            "bank_settlement_verified":False,
+        })
+    return {
+        "contract":"AI_STUDIO_M22400_LEGACY_CONTRIBUTION_REVIEW_V1",
+        "source":"POSTGRESQL_RLS_REGISTERED_HISTORY_ONLY",
+        "tenant_id":str(tenant_id),"cycle_id":str(cycle_id),
+        "cycle_year":cycle["year"],"minimum_new_quota_cents":15000,
+        "legacy_registered_contributions":count,
+        "legacy_due_cents":due,
+        "legacy_paid_recorded_cents":registered_paid,
+        "legacy_open_recorded_cents":due-registered_paid,
+        "groups":groups,
+        "historical_obligations_changed":False,
+        "price_adjustment_authorized":False,
+        "bank_reconciled":False,
+        "real_payment_enabled":False,
+        "requires_administrator_review":bool(count),
+    }
