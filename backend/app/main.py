@@ -5,6 +5,8 @@ Mesmo produto e Contrato Tecnico Mestre, com codigo/banco isolados da frente ant
 
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from .cookie_origin_guard import allow_cookie_request
 from .config import settings
 from .dependencies import auth_database_url, auth_verifier_database_url
 from .security import auth_rate_limit_key
@@ -32,7 +34,21 @@ app = FastAPI(
 # Middleware de Segurança e Headers HTTP
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
-    response: Response = await call_next(request)
+    # Cookie sessions can be sent automatically by browsers; unlike bearer
+    # tokens they require an explicit same-origin check for writes.
+    allowed = allow_cookie_request(
+        method=request.method,
+        session_cookie_present=settings.SESSION_COOKIE_NAME in request.cookies,
+        origins=request.headers.getlist("origin"),
+        allowed_origins=settings.BACKEND_CORS_ORIGINS,
+    )
+    if not allowed:
+        response = JSONResponse(
+            status_code=403,
+            content={"detail":"Origem não autorizada para sessão com cookie."},
+        )
+    else:
+        response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
