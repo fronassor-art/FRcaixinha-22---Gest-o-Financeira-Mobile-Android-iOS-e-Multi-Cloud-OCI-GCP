@@ -84,6 +84,26 @@
       "source_blob_sha": "059f038de685a52808b12ede917900809cf6ae96"
     },
     {
+      "id": "ci_migrations:038",
+      "source_path": "backend/ci_migrations/038_oauth_admins_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "0075c845cadb38370ef6cdabd50070eae6dba223"
+    },
+    {
+      "id": "ci_migrations:039",
+      "source_path": "backend/ci_migrations/039_oauth_state_atomic_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "ef4cec70f19c1ae0b7653dc79776f39fb99ba5f5"
+    },
+    {
       "id": "local_migrations:028",
       "source_path": "backend/local_migrations/028_member_lifecycle_sandbox_requests.sql",
       "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
@@ -612,6 +632,16 @@
       "inspect_object": "public.notification_outbox_staging",
       "local_evidence": null,
       "source_blob_sha": "96038a8398d78e1ac147ac2c15cd02a79a8df77b"
+    },
+    {
+      "id": "staging_migrations:045",
+      "source_path": "backend/staging_migrations/045_mp_oauth_attempts_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_oauth_attempts_staging",
+      "local_evidence": null,
+      "source_blob_sha": "a1cd87b7ab3cc640b94d23f46b55f5ff377675a0"
     }
   ]
 }
