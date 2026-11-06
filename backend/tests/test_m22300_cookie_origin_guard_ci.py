@@ -43,7 +43,7 @@ def test_integration_fails_before_post_route_for_cookie_cross_origin():
     with TestClient(app) as c:
         response=c.post(
             "/api/v1/auth/forgot-password",
-            json={"email":"synthetic@example.invalid"},
+            json={"email":"synthetic@example.com"},
             cookies={"frcaixinha_session":"synthetic"},
         )
         assert response.status_code==403
@@ -55,7 +55,7 @@ def test_integration_fails_before_post_route_for_cookie_cross_origin():
 def test_integration_cookie_allowed_origin_uses_ordinary_route_policy():
     with TestClient(app) as c:
         r=c.post("/api/v1/auth/forgot-password",
-                 json={"email":"synthetic@example.invalid"},
+                 json={"email":"synthetic@example.com"},
                  cookies={"frcaixinha_session":"synthetic"},
                  headers={"Origin":"http://localhost:3000"})
         # The missing email provider/backend is correctly still unavailable.
@@ -67,5 +67,5 @@ def test_integration_cookie_allowed_origin_uses_ordinary_route_policy():
 def test_no_cookie_post_still_hits_normal_endpoint():
     with TestClient(app) as c:
         r=c.post("/api/v1/auth/forgot-password",
-                 json={"email":"synthetic@example.invalid"})
+                 json={"email":"synthetic@example.com"})
         assert r.status_code==503
