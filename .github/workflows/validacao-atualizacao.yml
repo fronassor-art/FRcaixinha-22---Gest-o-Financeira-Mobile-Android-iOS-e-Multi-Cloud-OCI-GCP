@@ -342,6 +342,7 @@ jobs:
           python -m pytest -q backend/tests/test_m21200_mp_test_credential_guard_ci.py
           python -m pytest -q backend/tests/test_m21500_mp_pix_sandbox_lab_ci.py
           python -m pytest -q backend/tests/test_m21600_production_cors_ci.py
+          python -m pytest -q backend/tests/test_m21800_mp_pix_test_attestation_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
           python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py

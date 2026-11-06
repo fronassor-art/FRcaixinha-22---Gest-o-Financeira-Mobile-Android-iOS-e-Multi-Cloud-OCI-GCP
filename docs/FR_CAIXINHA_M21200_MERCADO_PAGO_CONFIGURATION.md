@@ -19,6 +19,6 @@ Após criar aplicação, com Client ID e Access Token de TESTE disponíveis:
 O token é recebido por entrada oculta e cifrado com AGE em
 `~/.config/frcaixinha-aistudio-mobile/mp-sandbox-credentials.json.age`
 com permissão 0600. Nenhum arquivo claro, repositório, API, APK ou log recebe o token. A senha AGE deve ser guardada pelo operador. O script não conecta Mercado Pago e não habilita pagamentos. Auditoria: `python3 backend/scripts/aistudio_mp_credentials_local.py audit`.
-**Apenas presença e cifragem do arquivo, sem prova de token válido**. A prova de autenticação e uso do token em OCI só acontece após integração controlada com Vault e conta recebedora.
+**Apenas presença e cifragem do arquivo, sem prova de token válido**. A autenticação TESTE no endpoint Orders foi verificada pelo operador no Termux em 06/11/2026 (M21500). Vínculo OAuth de cada caixinha, Vault e homologação OCI permanecem pendentes.
 
 Não colocar Client Secret nem credenciais de produção no Termux; futuramente usar OCI Vault com políticas restritas e Instance Principal. Não executar a migração 044 novamente; ela já foi comprovada pelo operador com 46 tabelas.
