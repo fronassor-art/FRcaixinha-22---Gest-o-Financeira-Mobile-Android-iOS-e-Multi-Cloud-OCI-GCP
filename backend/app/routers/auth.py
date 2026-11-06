@@ -25,6 +25,23 @@ def get_auth_status():
     Declara explicitamente a necessidade do backend contratual FastAPI + PostgreSQL.
     """
     database_url_configured = settings.is_database_configured
+    if os.getenv("ENVIRONMENT") == "production":
+        from ..production_auth_gate import require_production_auth, ProductionAuthBlocked
+        try:
+            require_production_auth(os.environ)
+            configured=True
+        except ProductionAuthBlocked:
+            configured=False
+        return AuthStatusResponse(
+            status="PRODUCTION_CONFIGURED_UNVERIFIED" if configured else "BLOCKED_PRODUCTION_AUTH",
+            configured=configured,
+            provider="POSTGRESQL_OCI_CONFIG" if configured else "NONE",
+            architecture_contract="FastAPI/PostgreSQL RLS",
+            scaffold_note="Configuração não comprova banco, RLS, TLS ou sessões operacionais.",
+            requires_authentication=True,
+            message="Teste E2E OCI pendente." if configured else "Login production bloqueado.",
+            server_time=datetime.datetime.now(datetime.timezone.utc),
+        )
     test_enabled = (os.getenv('FRCAIXINHA_TEST_AUTH') == '1'
                     and os.getenv('ENVIRONMENT', 'development') != 'production'
                     and bool(os.getenv('AUTH_DATABASE_URL', '').startswith('postgres'))

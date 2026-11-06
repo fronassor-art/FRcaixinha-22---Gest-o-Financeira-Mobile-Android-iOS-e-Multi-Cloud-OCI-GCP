@@ -22,6 +22,12 @@ class AuthenticatedSession:
         self.is_master = is_master
 
 def auth_database_url() -> str:
+    if os.getenv("ENVIRONMENT") == "production":
+        from .production_auth_gate import require_production_auth, ProductionAuthBlocked
+        try:
+            return require_production_auth(os.environ).auth_dsn
+        except ProductionAuthBlocked:
+            raise HTTPException(status_code=503,detail="Autenticação de produção OCI indisponível.") from None
     """Papel dedicado de autenticação em homologação; nunca o papel financeiro."""
     url = os.getenv('AUTH_DATABASE_URL', '')
     if (os.getenv('FRCAIXINHA_TEST_AUTH') != '1'
@@ -35,6 +41,12 @@ def auth_database_url() -> str:
 
 
 def auth_verifier_database_url() -> str:
+    if os.getenv("ENVIRONMENT") == "production":
+        from .production_auth_gate import require_production_auth, ProductionAuthBlocked
+        try:
+            return require_production_auth(os.environ).verifier_dsn
+        except ProductionAuthBlocked:
+            raise HTTPException(status_code=503,detail="Verificador de produção OCI indisponível.") from None
     """Credencial independente: so comprova senha; nao emite sessao."""
     session_url = auth_database_url()
     url = os.getenv('AUTH_VERIFIER_DATABASE_URL', '')
