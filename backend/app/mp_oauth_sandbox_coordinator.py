@@ -21,7 +21,7 @@ class DurableOAuthAttempts(Protocol):
     async def reserve_once(self,*,draft:OAuthDraft)->bool: ...
     async def consume_once(self,*,tenant_id:UUID,actor_id:UUID,
                            state_sha256:str,redirect_sha256:str,
-                           now_epoch:int)->OAuthDraft|None: ...
+                           provided_state:str,now_epoch:int)->OAuthDraft|None: ...
     async def expected_seller(self,*,tenant_id:UUID,actor_id:UUID)->str|None: ...
 
 class VaultBoundTokenSink(Protocol):
@@ -89,7 +89,8 @@ class OAuthSandboxCoordinator:
         try:
             draft=await self._attempts.consume_once(
                 tenant_id=tenant_id,actor_id=actor,state_sha256=_digest(state),
-                redirect_sha256=_digest(redirect_uri),now_epoch=now_epoch)
+                redirect_sha256=_digest(redirect_uri),provided_state=state,
+                now_epoch=now_epoch)
         except Exception:
             raise SandboxConnectBlocked("OAuth state unavailable") from None
         if (type(draft) is not OAuthDraft or
