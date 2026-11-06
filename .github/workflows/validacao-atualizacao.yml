@@ -152,6 +152,8 @@ jobs:
         run: npx tsx src/tests/android_safe_area_ci.test.ts
       - name: M21700 — release Android HTTPS e assinatura segregada
         run: npx tsx src/tests/m21700_android_release_gate_ci.test.ts
+      - name: M21900 validar pipeline de APK remoto OCI
+        run: npx tsx src/tests/m21900_oci_remote_apk_ci.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
       - name: Build web

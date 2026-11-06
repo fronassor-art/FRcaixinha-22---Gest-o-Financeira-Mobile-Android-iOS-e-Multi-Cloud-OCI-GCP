@@ -1,0 +1,78 @@
+# M21900 manual OCI staging APK; no deployment or financial operations
+name: FR Finance APK staging HTTPS
+on:
+  workflow_dispatch:
+    inputs:
+      api_https_url:
+        description: 'Public OCI staging HTTPS API origin'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  staging-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build remote HTTPS Android assets
+        env:
+          FR_FINANCE_ANDROID_RELEASE_PROFILE: '1'
+          VITE_API_URL: ${{ inputs.api_https_url }
+          VITE_APP_BUILD_REF: ${{ github.sha }
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run cap:build
+          node -e "const c=require('./android/app/src/main/assets/capacitor.config.json');if(c.server.androidScheme!=='https'||c.server.cleartext!==false)process.exit(2)"
+          grep -RlF -- "$VITE_API_URL" dist/assets >/dev/null
+          if grep -RlF 'http://127.0.0.1:8000' dist/assets >/dev/null; then exit 2; fi
+      - name: Load persistent debug signing key
+        env:
+          SIGNING_B64: ${{ secrets.FRCAIXINHA_ANDROID_KEYSTORE_BASE64 }
+          STORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }
+          KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }
+          KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_B64"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          umask 077
+          KEYSTORE="$RUNNER_TEMP/fr-finance-staging-debug.p12"
+          printf '%s' "$SIGNING_B64" | base64 --decode > "$KEYSTORE"
+          keytool -list -keystore "$KEYSTORE" -storetype PKCS12 -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" >/dev/null 2>&1
+          echo "FRCAIXINHA_ANDROID_KEYSTORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
+      - name: Build signed staging debug APK
+        working-directory: android
+        env:
+          FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING: '1'
+          FRCAIXINHA_ANDROID_VERSION_CODE: ${{ github.run_number }
+          FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }
+          FRCAIXINHA_ANDROID_KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }
+          FRCAIXINHA_ANDROID_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Verify Android APK identity and signature
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.frcaixinha.app.aistudio'"
+          "$SIGNER" verify --verbose "$APK" | grep -F "Verified using v2 scheme (APK Signature Scheme v2): true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fr-finance-oci-staging-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

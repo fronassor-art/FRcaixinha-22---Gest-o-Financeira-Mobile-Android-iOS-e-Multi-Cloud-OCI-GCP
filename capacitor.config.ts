@@ -28,7 +28,9 @@ if (releaseProfile) {
       (url.port !== '' && url.port !== '443') || !host.includes('.') ||
       host === 'localhost' || host === '127.0.0.1' || host === '[::1]' ||
       host.endsWith('.local') || host.endsWith('.invalid') ||
-      host.endsWith('.internal') || !/^[a-z0-9.-]+$/.test(host)) {
+      host.endsWith('.internal') || host.endsWith('.example') ||
+      /^\d{1,3}(\.\d{1,3}){3}$/.test(host) ||
+      !/^[a-z0-9.-]+$/.test(host)) {
     throw new Error('M21700: release exige origem HTTPS pública sem credenciais.');
   }
 }
