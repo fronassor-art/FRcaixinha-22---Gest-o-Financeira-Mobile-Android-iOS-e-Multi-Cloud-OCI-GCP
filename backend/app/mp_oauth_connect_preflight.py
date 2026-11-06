@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import re
 import secrets
 from dataclasses import dataclass
@@ -26,13 +27,38 @@ TEN_MINUTES = 600
 def _validate_redirect(uri: str) -> str:
     if type(uri) is not str or len(uri) > 512:
         raise ValueError("Redirect_uri inválida")
-    parsed = urlsplit(uri)
-    if (parsed.scheme != "https" or not parsed.hostname or parsed.username
+    try:
+        parsed = urlsplit(uri)
+        hostname = parsed.hostname
+        port = parsed.port
+        if hostname is not None:
+            ipaddress.ip_address(hostname)
+            raise ValueError("Callback OAuth não aceita endereço IP")
+    except ValueError as exc:
+        # A valid hostname raises ValueError inside ip_address. Reject
+        # only if URI parsing failed or the host is an actual IP.
+        if str(exc) == "Callback OAuth não aceita endereço IP":
+            raise ValueError("Redirect URI HTTPS pública obrigatória") from None
+        try:
+            parsed = urlsplit(uri)
+            hostname = parsed.hostname
+            port = parsed.port
+        except ValueError:
+            raise ValueError("Redirect URI HTTPS pública obrigatória") from None
+    labels = hostname.split(".") if hostname else []
+    valid_domain = (
+        2 <= len(labels) <= 20
+        and len(hostname) <= 253
+        and all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                for label in labels)
+        and not hostname.endswith((".internal",".local",".localhost"))
+        and len(labels[-1]) >= 2
+    )
+    if (parsed.scheme != "https" or not valid_domain or parsed.username
             or parsed.password or parsed.fragment or parsed.query
-            or parsed.port is not None or parsed.hostname in (
-                "localhost", "127.0.0.1", "::1")
-            or any(c.isspace() for c in uri)):
-        raise ValueError("Redirect URI HTTPS estática obrigatória")
+            or port is not None or any(c.isspace() for c in uri)
+            or not parsed.path.startswith("/")):
+        raise ValueError("Redirect URI HTTPS pública obrigatória")
     return uri
 
 
