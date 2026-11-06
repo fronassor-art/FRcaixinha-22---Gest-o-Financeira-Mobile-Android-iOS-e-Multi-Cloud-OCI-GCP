@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Evita execuções simultâneas do mesmo PR sobrecarregarem Maven Central.
+concurrency:
+  group: fr-finance-ai-studio-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     name: Frontend e regras locais
@@ -176,6 +181,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Cache e isolamento de dependências Gradle
+        uses: gradle/actions/setup-gradle@v4
       - name: Instalar dependências
         run: npm ci
       - name: Build e sincronização Capacitor (FastAPI no loopback do APK debug)
@@ -221,7 +228,20 @@ jobs:
           FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
           FRCAIXINHA_ANDROID_KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
           FRCAIXINHA_ANDROID_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon assembleDebug
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            LOG="$RUNNER_TEMP/fr-finance-gradle-$attempt.log"
+            if ./gradlew --no-daemon assembleDebug 2>&1 | tee "$LOG"; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq 'Received status code 429|Too Many Requests' "$LOG"; then
+              exit 1
+            fi
+            echo "::warning::Maven Central limitou requisições (HTTP 429); nova tentativa controlada."
+            sleep $((attempt * 30))
+          done
       - name: Verificar pacote Android independente antes do upload
         run: |
           APK=android/app/build/outputs/apk/debug/app-debug.apk
