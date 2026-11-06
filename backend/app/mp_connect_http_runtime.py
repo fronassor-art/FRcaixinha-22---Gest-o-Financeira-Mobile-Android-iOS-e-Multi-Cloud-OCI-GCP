@@ -84,6 +84,13 @@ def _parse_token_response(response: httpx.Response, *, seller_id: str) -> OAuthT
                 or type(data.get("scope")) is not str
                 or not 0 < len(data["scope"]) <= 512):
             raise ValueError("Identity/mode/scope mismatch")
+        # A conta de cada administrador precisa de leitura e acesso offline
+        # para conciliação e rotação; resposta incompleta NÃO vincula o seller.
+        scopes = data["scope"].split(" ")
+        if (len(scopes) != len(set(scopes)) or
+                not {"read", "offline_access"}.issubset(scopes) or
+                any(s not in {"read", "write", "offline_access"} for s in scopes)):
+            raise ValueError("Seller OAuth scope insufficient")
         return OAuthTokens(
             seller_id=user, scope=data["scope"],
             expires_in=data["expires_in"],
@@ -111,7 +118,11 @@ def _validate_oauth_inputs(
             raise OAuthConnectionBlocked("OAuth authorization code invalid")
         uri = urlsplit(redirect_uri)
         if (uri.scheme != "https" or not uri.netloc or uri.username
-                or uri.password or uri.query or uri.fragment):
+                or uri.password or uri.query or uri.fragment
+                or uri.port not in (None, 443)
+                or uri.hostname is None or "." not in uri.hostname
+                or uri.hostname in ("localhost", "127.0.0.1", "::1")
+                or uri.hostname.endswith((".local", ".internal"))):
             raise OAuthConnectionBlocked("OAuth redirect invalid")
     if refresh_token is not None and not _sensitive(refresh_token):
         raise OAuthConnectionBlocked("OAuth refresh token invalid")
