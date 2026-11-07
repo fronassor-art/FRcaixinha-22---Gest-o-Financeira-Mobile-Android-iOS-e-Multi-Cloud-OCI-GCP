@@ -74,9 +74,7 @@ async def test_published_file_is_delivered_identically_but_no_acceptance(tmp_pat
     tenant, document = uuid4(), uuid4()
     root = store(tmp_path, document)
     conn = SelectOnly(document)
-    response = await fetch_canonical_contract_content(
-        request(tenant, document), actor(tenant=tenant), conn,
-    ) if False else await load_published_contract_body(
+    response = await load_published_contract_body(
         session=actor(tenant=tenant), payload=request(tenant, document),
         conn=conn, content_root=root,
     )
