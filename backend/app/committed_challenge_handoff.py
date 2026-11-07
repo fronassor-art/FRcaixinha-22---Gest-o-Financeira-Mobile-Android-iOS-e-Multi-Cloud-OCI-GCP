@@ -10,6 +10,7 @@ a committed transaction and an independently attested service identity.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 import hmac
 import re
 from uuid import UUID
@@ -103,5 +104,11 @@ def check_committed_challenge(
             or prepared.account_activated is not False):
         raise fail
     if not hmac.compare_digest(readback.challenge_digest,prepared.challenge_digest):
+        raise fail
+    token = prepared.raw_token_for_trusted_worker
+    if type(token) is not str or not re.fullmatch(r"[A-Za-z0-9_-]{64}",token):
+        raise fail
+    computed = sha256(token.encode("ascii")).hexdigest()
+    if not hmac.compare_digest(computed,prepared.challenge_digest):
         raise fail
     return PostCommitChallengeDecision()
