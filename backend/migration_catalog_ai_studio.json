@@ -852,6 +852,26 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "ac670a5454359ca9882feec940dcad7fcefac396"
+    },
+    {
+      "id": "staging_migrations:054",
+      "source_path": "backend/staging_migrations/054_invite_delivery_terminal_gate_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_delivery_terminal_gate_staging",
+      "local_evidence": null,
+      "source_blob_sha": "e683386bbb49faf0decc4422c4508a36534a0ec7"
+    },
+    {
+      "id": "ci_migrations:053",
+      "source_path": "backend/ci_migrations/053_delivery_terminal_gate_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "848a0520b288c8ca1b0d4f3c3b18c90a6bc921dd"
     }
   ]
 }
