@@ -5,6 +5,7 @@ import { authService, contextLabel, parseServerContexts } from '../services/auth
 
 const id='f6c38125-483d-4acc-bfe9-21dc400ef7a2';
 const tenant='f2df18c9-0345-46e8-9da1-c5d07c6d5a4c';
+const otherTenant='eb816c04-929a-4465-a8a5-405e5fc1c1d6';
 const owner='master-owner-ci@example.com';
 const name='Proprietario CI';
 const contexts=[
@@ -35,7 +36,9 @@ globalThis.fetch=(async(path:RequestInfo|URL,options?:RequestInit)=>{
     if(request.usernameOrEmail!==owner||request.password!=='test-only-private-ci'||!choice)
       return result({detail:'Credenciais invalidas ou acesso indisponivel'},401);
     if(tokenActive)return result({detail:'Saia da conta'},409);
-    active=choice.role;activeTenant=choice.tenant_id;tokenActive=true;
+    if(request.requestedTenantId && request.requestedTenantId!==otherTenant)
+      return result({detail:'Caixinha invalida'},401);
+    active=choice.role;activeTenant=request.requestedTenantId??choice.tenant_id;tokenActive=true;
     return result({token:'ci-temporary-token-no-real-user',
       expires_at:new Date(Date.now()+900000).toISOString(),user:user()});
   }
@@ -75,6 +78,9 @@ try {
   }
   assert.equal(paths.filter(p=>p.endsWith('/login')).length,3,
     'Cada novo papel exige login novo com senha.');
+  const chosen=await authService.login(owner,'test-only-private-ci','TENANT_MEMBER',otherTenant);
+  assert.equal(chosen.tenantId,otherTenant);
+  await authService.logout();
   assert.equal(paths.filter(p=>p.endsWith('/switch-context')).length,0,
     'Cliente nao pode chamar endpoint de troca dentro da sessao.');
   console.log('PASS: mesma identidade, 3 perfis isolados, novo login apos logout');
