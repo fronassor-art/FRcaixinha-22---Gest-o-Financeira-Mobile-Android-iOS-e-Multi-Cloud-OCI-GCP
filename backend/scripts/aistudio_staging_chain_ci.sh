@@ -29,6 +29,8 @@ CREATE ROLE frcaixinha_mp_financial_worker LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_notify_producer_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_invite_queue_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -48,9 +50,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -67,15 +69,34 @@ for file in \
   backend/staging_migrations/046_mp_oauth_seller_consent_cas_staging_only.sql \
   backend/staging_migrations/047_mp_oauth_generation_staging_only.sql \
   backend/staging_migrations/048_mp_oauth_failed_reference_staging_only.sql \
-  backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql
+  backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql \
+  backend/staging_migrations/050_invitation_outbox_staging_only.sql
 do
-  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1" \
+  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
   echo "STAGING_CI_APPLIED_$(basename "$file" | cut -c1-3)=PASS"
 done
 
 echo "=== STAGING CI: SYNTHETIC TENANTS/OBLIGATIONS ==="
 psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/033_staging_orders_fixture_ci_only.sql >/dev/null
+echo "=== M25900: durable invitation outbox, disposable CI only ==="
+PGOPTIONS='-c frcaixinha.invite_queue_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/046_invitation_outbox_fixture_ci_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.invite_queue_staging_ci=1' \
+  PGUSER=frcaixinha_invite_queue_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/047_invitation_outbox_worker_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_delivery_outbox_staging")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_delivery_audit_staging")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT (status='HELD_CI_NOT_SENT') AND NOT provider_delivery_confirmed AND NOT recipient_verified FROM public.invite_delivery_outbox_staging")" = "t"
+if PGUSER=frcaixinha_invite_queue_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.invite_delivery_outbox_staging" >/dev/null 2>&1; then
+  echo "BLOCKED: invitation worker has raw outbox SELECT"
+  exit 1
+fi
+echo "M25900_STAGING_OUTBOX_IDEMPOTENT_AUDIT=PASS"
 echo "=== M23200: synthetic OAuth admins + atomic consume ==="
 psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/038_oauth_admins_fixture_ci_only.sql >/dev/null
 PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
