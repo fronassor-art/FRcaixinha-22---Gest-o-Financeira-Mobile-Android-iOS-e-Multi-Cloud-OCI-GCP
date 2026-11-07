@@ -82,7 +82,8 @@ def _validate_scope(scope: DeliveryScope, now: int, *, opening: bool) -> None:
         not isinstance(scope.document_id, UUID) or scope.document_id.int == 0
     ):
         raise _deny()
-    if scope.purpose not in _PURPOSES or scope.target_role not in _ROLES:
+    if (type(scope.purpose) is not str or type(scope.target_role) is not str
+            or scope.purpose not in _PURPOSES or scope.target_role not in _ROLES):
         raise _deny()
     if scope.purpose == "INVITATION" and scope.document_id is None:
         raise _deny()
