@@ -40,9 +40,12 @@ def _email(value: str) -> str:
 
 
 def prepare_invitation_ci(conn, *, tenant_id: UUID, inviter_id: UUID,
-                          recipient_email: str, target_role: str) -> tuple[UUID, str]:
+                          recipient_email: str, target_role: str,
+                          required_document_id: UUID) -> tuple[UUID, str]:
     """Token opaco de uso único; hash apenas no PostgreSQL; nenhuma entrega."""
     _ci_only(conn)
+    if not isinstance(required_document_id, UUID):
+        raise LifecycleDenied("Versão contratual obrigatória para o convite.")
     if target_role not in ("TENANT_ADMIN", "TENANT_MEMBER"):
         raise LifecycleDenied("Papel de convite não autorizado.")
     email = _email(recipient_email)
@@ -68,11 +71,21 @@ def prepare_invitation_ci(conn, *, tenant_id: UUID, inviter_id: UUID,
             ).fetchone()
             if not active_admin:
                 raise LifecycleDenied("Somente administrador ativo pode convidar membro.")
+        document = conn.execute(
+            "SELECT 1 FROM public.contract_documents "
+            "WHERE id=%s AND document_kind='TENANT_MEMBERSHIP' "
+            "AND published_at IS NOT NULL FOR SHARE",
+            (required_document_id,),
+        ).fetchone()
+        if not document:
+            raise LifecycleDenied("Versão contratual de adesão não publicada.")
         conn.execute(
             "INSERT INTO public.invitations(id,tenant_id,inviter_user_id,target_email,"
-            "target_role,token_hash,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+            "target_role,token_hash,expires_at,required_document_id) "
+            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
             (invitation_id, tenant_id, inviter_id, email, target_role,
-             hash_token(raw), datetime.now(timezone.utc) + timedelta(hours=24)),
+             hash_token(raw), datetime.now(timezone.utc) + timedelta(hours=24),
+             required_document_id),
         )
         conn.execute(
             "INSERT INTO public.audit_events(actor_id,actor_role,tenant_id,"

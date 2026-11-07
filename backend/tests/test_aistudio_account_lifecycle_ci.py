@@ -70,10 +70,8 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
     doc_digest=db.execute("SELECT sha256 FROM public.contract_documents WHERE id=%s",(doc,)).fetchone()[0]
     invitation_id, token = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
-        recipient_email=f"{users['member']}@example.com", target_role="TENANT_MEMBER",
+        recipient_email=f"{users['member']}@example.com", target_role="TENANT_MEMBER", required_document_id=doc,
     )
-    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
-               (doc,invitation_id))
     stored = db.execute(
         "SELECT token_hash,delivery_status FROM public.invitations WHERE id=%s",
         (invitation_id,),
@@ -134,11 +132,7 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
     second_id, second_token = prepare_invitation_ci(
         db,tenant_id=tenant,inviter_id=users["admin"],
         recipient_email=f"{users['member']}@example.com",
-        target_role="TENANT_MEMBER",
-    )
-    db.execute(
-        "UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
-        (doc,second_id),
+        target_role="TENANT_MEMBER", required_document_id=doc,
     )
     assert simulate_invitation_delivery_ci(db,second_id)
     assert accept_existing_identity_ci(
@@ -165,22 +159,20 @@ def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
         prepare_invitation_ci(
             db, tenant_id=tenant, inviter_id=users["member"],
             recipient_email=f"{users['outsider']}@example.com",
-            target_role="TENANT_MEMBER",
+            target_role="TENANT_MEMBER", required_document_id=doc,
         )
     with pytest.raises(LifecycleDenied):
         prepare_invitation_ci(
             db, tenant_id=tenant, inviter_id=users["admin"],
             recipient_email=f"{users['outsider']}@example.com",
-            target_role="TENANT_ADMIN",
+            target_role="TENANT_ADMIN", required_document_id=doc,
         )
 
     invite, token = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["master"],
         recipient_email=f"{users['outsider']}@example.com",
-        target_role="TENANT_ADMIN",
+        target_role="TENANT_ADMIN", required_document_id=doc,
     )
-    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
-               (doc,invite))
     assert simulate_invitation_delivery_ci(db, invite)
     assert revoke_invitation_ci(db, invite)
     assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
@@ -188,10 +180,8 @@ def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
     pending, expiring = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
         recipient_email=f"{users['outsider']}@example.com",
-        target_role="TENANT_MEMBER",
+        target_role="TENANT_MEMBER", required_document_id=doc,
     )
-    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
-               (doc,pending))
     assert simulate_invitation_delivery_ci(db, pending)
     db.execute(
         "UPDATE public.invitations SET expires_at=now()-interval '1 minute' WHERE id=%s",
@@ -203,6 +193,54 @@ def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
         (users["outsider"],),
     ).fetchone()[0] == 0
 
+
+
+def test_invitation_requires_published_membership_document_at_creation(synthetic_accounts):
+    """M24600: no missing, unpublished, or wrong-kind contract can stage an invite."""
+    db, users, tenant = synthetic_accounts
+    recipient = f"versioned-{uuid4()}@example.invalid"
+    label = f"ci-platform-{uuid4()}"
+    platform_doc = publish_document_ci(
+        db, kind="PLATFORM_LICENSE", version=label,
+        sha256_hex=sha256(label.encode()).hexdigest(),
+        reference="Documento sintético de licença, não de membro"
+    )
+    unpublished_doc = uuid4()
+    db.execute(
+        "INSERT INTO public.contract_documents"
+        "(id,document_kind,version_label,sha256,source_reference) "
+        "VALUES(%s,'TENANT_MEMBERSHIP',%s,%s,%s)",
+        (unpublished_doc, f"unpublished-{uuid4()}",
+         sha256(b"unpublished CI contract").hexdigest(),
+         "Documento de adesão propositalmente não publicado"),
+    )
+    before = db.execute(
+        "SELECT count(*) FROM public.invitations WHERE target_email=%s", (recipient,)
+    ).fetchone()[0]
+    for forbidden in (uuid4(), platform_doc, unpublished_doc):
+        with pytest.raises(LifecycleDenied):
+            prepare_invitation_ci(
+                db, tenant_id=tenant, inviter_id=users["admin"],
+                recipient_email=recipient, target_role="TENANT_MEMBER",
+                required_document_id=forbidden,
+            )
+    assert db.execute(
+        "SELECT count(*) FROM public.invitations WHERE target_email=%s", (recipient,)
+    ).fetchone()[0] == before
+
+    doc = create_contract_ci(db)
+    invite, token = prepare_invitation_ci(
+        db, tenant_id=tenant, inviter_id=users["admin"],
+        recipient_email=recipient, target_role="TENANT_MEMBER",
+        required_document_id=doc,
+    )
+    assert token and len(token) >= 32
+    assert db.execute(
+        "SELECT required_document_id FROM public.invitations WHERE id=%s", (invite,)
+    ).fetchone() == (doc,)
+    assert db.execute(
+        "SELECT count(*) FROM public.invitations WHERE target_email=%s", (recipient,)
+    ).fetchone()[0] == before + 1
 
 def test_reset_is_hashed_expires_once_and_revokes_every_session(synthetic_accounts):
     db, users, tenant = synthetic_accounts
@@ -292,6 +330,7 @@ def test_app_and_auth_have_no_direct_lifecycle_token_access(synthetic_accounts):
 
 def test_lifecycle_refuses_non_ci_environment(monkeypatch, synthetic_accounts):
     db, users, tenant = synthetic_accounts
+    doc = uuid4()  # CI guard rejects before checking the document
     monkeypatch.delenv("FRCAIXINHA_CI_ISOLATED")
     with pytest.raises(LifecycleDenied):
         prepare_password_reset_ci(db, users["member"])
@@ -299,7 +338,7 @@ def test_lifecycle_refuses_non_ci_environment(monkeypatch, synthetic_accounts):
         prepare_invitation_ci(
             db, tenant_id=tenant, inviter_id=users["admin"],
             recipient_email=f"{users['member']}@example.com",
-            target_role="TENANT_MEMBER",
+            target_role="TENANT_MEMBER", required_document_id=doc,
         )
 
 
@@ -317,7 +356,7 @@ def test_new_invited_identity_requires_affirmative_versioned_acceptance(syntheti
     recipient = f"new-{uuid4()}@example.invalid"
     inv, _ = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
-        recipient_email=recipient, target_role="TENANT_MEMBER",
+        recipient_email=recipient, target_role="TENANT_MEMBER", required_document_id=doc,
     )
     assert simulate_invitation_delivery_ci(db, inv)
     proof = prepare_invite_email_verification_ci(db, invitation_id=inv)
@@ -335,7 +374,6 @@ def test_new_invited_identity_requires_affirmative_versioned_acceptance(syntheti
         {"consent":"true","accepted_document_sha256":digest},
         {"consent":True,"accepted_document_sha256":None},
         {"consent":True,"accepted_document_sha256":"f"*64},
-        {"consent":True,"accepted_document_sha256":digest}, # no bound doc yet
     ):
         with pytest.raises(LifecycleDenied):
             attempt(**opts)
@@ -346,10 +384,6 @@ def test_new_invited_identity_requires_affirmative_versioned_acceptance(syntheti
             "SELECT accepted_at FROM public.invitations WHERE id=%s",(inv,)
         ).fetchone()[0] is None
 
-    db.execute(
-        "UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
-        (doc,inv),
-    )
     person = attempt(consent=True, accepted_document_sha256=digest)
     row=db.execute(
         "SELECT email,status,is_master,email_verified_at FROM public.users WHERE id=%s",
