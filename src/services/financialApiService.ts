@@ -51,6 +51,7 @@ import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccoun
 import {LedgerKeysetPage,parseLedgerKeysetPage} from './ledgerKeysetBoundary';
 import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
+import {LaunchReadiness, parseLaunchReadiness} from './launchReadiness';
 import {
   ContractCatalog, ContractDigestPreview, CanonicalContractBody, InvitationPreparerRole,
   targetForPreparer, validateReviewInput,
@@ -261,6 +262,11 @@ class FinancialApiService {
       }),
     });
     return parseContractDigestPreview(raw, target);
+  }
+
+  public async fetchMasterLaunchReadiness(): Promise<LaunchReadiness> {
+    const raw: unknown = await this.request('/api/v1/master/launch-readiness');
+    return parseLaunchReadiness(raw);
   }
 
   public async fetchMasterOnboardingCapabilities(): Promise<MasterOnboardingCapabilities> {
