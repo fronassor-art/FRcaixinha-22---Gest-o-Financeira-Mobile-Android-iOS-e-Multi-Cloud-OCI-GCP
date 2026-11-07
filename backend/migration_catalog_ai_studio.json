@@ -154,6 +154,16 @@
       "source_blob_sha": "b2e342d37bec877412351ed2ec0e62447102c9bf"
     },
     {
+      "id": "ci_migrations:045",
+      "source_path": "backend/ci_migrations/045_oauth_revision_state_worker_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "4727088a3f6ba03610dc6b868de7fc7c8c09588d"
+    },
+    {
       "id": "local_migrations:028",
       "source_path": "backend/local_migrations/028_member_lifecycle_sandbox_requests.sql",
       "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
@@ -722,6 +732,16 @@
       "inspect_object": "public.mp_oauth_token_revisions_staging",
       "local_evidence": null,
       "source_blob_sha": "54c52a936872801911c45ea713d3b3b61b20c04d"
+    },
+    {
+      "id": "staging_migrations:049",
+      "source_path": "backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.mp_oauth_token_revisions_staging",
+      "local_evidence": null,
+      "source_blob_sha": "849fbcf61434351f995fd9d7fd8db5578261716e"
     }
   ]
 }

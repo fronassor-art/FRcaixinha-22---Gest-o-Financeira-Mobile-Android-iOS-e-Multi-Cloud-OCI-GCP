@@ -153,6 +153,35 @@ class StagingSellerCASRegistry:
         except Exception:
             return False
 
+    async def revision_status(
+        self, *, pending: PendingTokenRevision
+    ) -> str | None:
+        """Worker-only state inspection for ambiguous OAuth outcomes.
+
+        Returns no credential reference, token, or user-facing authentication.
+        Historical ACTIVE status does NOT prove current consent eligibility.
+        """
+        if (type(pending) is not PendingTokenRevision
+                or not self._ids(pending.tenant_id,pending.actor_id,pending.seller_id)
+                or type(pending.revision) is not str
+                or _REVISION.fullmatch(pending.revision) is None
+                or type(pending.credential_ref) is not str
+                or _CREDENTIAL_REF.fullmatch(pending.credential_ref) is None
+                or not await self._identity_ok()):
+            return None
+        try:
+            state = await self._db.fetchval(
+                "SELECT public.mp_staging_oauth_revision_state("
+                "$1::uuid,$2::uuid,$3::varchar,$4::varchar,$5::varchar)",
+                pending.tenant_id,pending.actor_id,pending.seller_id,
+                pending.revision,pending.credential_ref,
+            )
+        except Exception:
+            return None
+        return state if type(state) is str and state in (
+            "PENDING","ACTIVE","FAILED","RETIRED"
+        ) else None
+
     async def failed_credential_ref(
         self, *, pending: PendingTokenRevision
     ) -> str | None:

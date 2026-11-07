@@ -66,7 +66,8 @@ for file in \
   backend/staging_migrations/045_mp_oauth_attempts_staging_only.sql \
   backend/staging_migrations/046_mp_oauth_seller_consent_cas_staging_only.sql \
   backend/staging_migrations/047_mp_oauth_generation_staging_only.sql \
-  backend/staging_migrations/048_mp_oauth_failed_reference_staging_only.sql
+  backend/staging_migrations/048_mp_oauth_failed_reference_staging_only.sql \
+  backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql
 do
   PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
@@ -89,6 +90,9 @@ PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/043_oauth_generation_worker_probe_ci_only.sql
 PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/044_oauth_failed_reference_worker_probe_ci_only.sql
+PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/045_oauth_revision_state_worker_probe_ci_only.sql
+echo "M24300_OAUTH_REVISION_RECOVERY_SCOPE=PASS"
 echo "M24200_FAILED_REFERENCE_SCOPE=PASS"
 echo "M23900_CONSENT_GENERATION_SCOPE=PASS"
 psql -X -v ON_ERROR_STOP=1 -c \
