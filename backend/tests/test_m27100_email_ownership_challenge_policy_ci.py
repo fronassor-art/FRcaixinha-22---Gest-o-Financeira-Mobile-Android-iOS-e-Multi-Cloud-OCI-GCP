@@ -100,7 +100,8 @@ def test_disposable_ci_proves_issue_wrong_digest_one_use_and_denied_read():
     consume=CONSUME.read_text()
     assert "ISSUED_CI_NOT_DELIVERED" in issue
     assert "REPLAY_CI_NOT_DELIVERED" in issue
-    assert "repeat('U',48)" in consume
+    assert "repeat('U',64)" in consume
+    assert "repeat('T',64)" in ISSUE.read_text()
     assert "CI_TOKEN_CONSUMED_NOT_PROOF" in consume
     assert "consumed token replay accepted" in consume
     lockout=LOCKOUT.read_text()
