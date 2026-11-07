@@ -35,6 +35,8 @@ CREATE ROLE frcaixinha_account_recovery_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_invite_dispatch_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_mail_receipt_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -78,15 +80,25 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.invite_dispatch_leases_staging') IS NULL")" = "t"
 echo "M26100_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.mail_receipt_staging_ci=1" \
+    psql -X -v ON_ERROR_STOP=1 \
+    -f backend/staging_migrations/053_mail_receipt_audit_staging_only.sql \
+    >/dev/null 2>&1; then
+  echo "BLOCKED: mail receipt migration accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.invite_provider_receipts_staging') IS NULL")" = "t"
+echo "M26300_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -106,9 +118,10 @@ for file in \
   backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql \
   backend/staging_migrations/050_invitation_outbox_staging_only.sql \
   backend/staging_migrations/051_password_reset_staging_only.sql \
-  backend/staging_migrations/052_invite_dispatch_lease_staging_only.sql
+  backend/staging_migrations/052_invite_dispatch_lease_staging_only.sql \
+  backend/staging_migrations/053_mail_receipt_audit_staging_only.sql
 do
-  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1 -c frcaixinha.recovery_staging_ci=1 -c frcaixinha.invite_dispatch_staging_ci=1" \
+  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1 -c frcaixinha.recovery_staging_ci=1 -c frcaixinha.invite_dispatch_staging_ci=1 -c frcaixinha.mail_receipt_staging_ci=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
   echo "STAGING_CI_APPLIED_$(basename "$file" | cut -c1-3)=PASS"
 done
@@ -170,6 +183,24 @@ if PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M26100_CI_DISPATCH_LEASE_BOUNDED_RETRIES=PASS"
+echo "=== M26300: signed CI mail receipt never confirms delivery ==="
+PGOPTIONS='-c frcaixinha.mail_receipt_staging_ci=1' \
+  PGUSER=frcaixinha_mail_receipt_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/052_mail_receipt_idempotency_probe_ci_only.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+CI_MAIL_RECEIPT_WORKER_URL='postgresql://frcaixinha_mail_receipt_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+  backend/tests/test_m26300_signed_receipt_pg_ci.py
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_provider_receipts_staging")" = "2"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT bool_and(NOT provider_delivery_confirmed AND NOT recipient_verified AND NOT acceptance_recorded AND NOT account_activated AND state='CI_RECEIPT_ONLY_NO_DELIVERY') FROM public.invite_provider_receipts_staging")" = "t"
+if PGUSER=frcaixinha_mail_receipt_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.invite_provider_receipts_staging" >/dev/null 2>&1; then
+  echo "BLOCKED: receipt worker can read audit table directly"
+  exit 1
+fi
+echo "M26300_CI_SIGNED_RECEIPT_POSTGRES_NO_DELIVERY=PASS"
 echo "=== M26000: single-use recovery rotation in disposable staging ==="
 PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
   psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/048_password_reset_fixture_ci_only.sql >/dev/null
