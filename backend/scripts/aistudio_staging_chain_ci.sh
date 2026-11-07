@@ -114,6 +114,16 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.invite_encrypted_envelopes_staging') IS NULL")" = "t"
 echo "M26700_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.email_proof_staging_ci=1" \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/056_email_ownership_challenge_staging_only.sql \
+  >/dev/null 2>&1; then
+  echo "BLOCKED: email challenge staging SQL accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.invite_email_challenges_staging') IS NULL")" = "t"
+echo "M27100_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
