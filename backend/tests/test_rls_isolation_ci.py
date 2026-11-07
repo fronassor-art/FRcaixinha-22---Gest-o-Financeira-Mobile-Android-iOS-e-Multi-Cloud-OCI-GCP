@@ -1213,3 +1213,91 @@ async def test_m25200_contract_body_exact_digest_under_real_rls(isolated_rows):
     finally:
         await tx.rollback()
         await owner.close()
+
+
+async def test_m25800_canonical_document_delivery_real_rls(isolated_rows, tmp_path):
+    """Only disposable CI PG16: real role/RLS, canonical byte proof, rollback."""
+    from datetime import datetime, timezone
+    from hashlib import sha256
+    from pathlib import Path
+    from app.canonical_contract_store import load_published_contract_body
+    from app.dependencies import AuthenticatedSession
+    from app.models import InvitationContractReadinessRequest
+    from fastapi import HTTPException
+
+    _app, ids = isolated_rows
+    db = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    tx = db.transaction()
+    await tx.start()
+    try:
+        tenant_id = ids["tenant_a"]
+        doc_id, draft_id = uuid.uuid4(), uuid.uuid4()
+        body = "Contrato canônico sintético de testes M25800.\\n"
+        digest = sha256(body.encode("utf-8")).hexdigest()
+        for document, published in ((doc_id, True), (draft_id, False)):
+            await db.execute(
+                "INSERT INTO public.contract_documents "
+                "(id,document_kind,version_label,sha256,source_reference,published_at) "
+                "VALUES($1,'TENANT_MEMBERSHIP',$2,$3,$4,"
+                "CASE WHEN $5::boolean THEN now() ELSE NULL END)",
+                document, str(document), digest, "ci://canonical-test-m25800", published,
+            )
+        root = tmp_path / "immutable-contracts"
+        root.mkdir()
+        root.chmod(0o700)
+        contract = root / (str(doc_id) + ".txt")
+        contract.write_bytes(body.encode("utf-8"))
+        contract.chmod(0o400)
+
+        await db.execute("SET LOCAL ROLE frcaixinha_app_role")
+        assert not await db.fetchval(
+            "SELECT has_table_privilege(current_user,"
+            "'public.contract_documents','UPDATE')"
+        )
+        await db.execute("SELECT set_config('app.current_user_id',$1,true)",
+                         str(ids["admin_a"]))
+        await db.execute("SELECT set_config('app.current_role','TENANT_ADMIN',true)")
+        await db.execute("SELECT set_config('app.current_tenant_id',$1,true)",
+                         str(tenant_id))
+        session = AuthenticatedSession(
+            str(ids["admin_a"]), "TENANT_ADMIN", str(tenant_id),
+            "ci-test@example.com", "Admin CI", False,
+        )
+        request = InvitationContractReadinessRequest(
+            target_role="TENANT_MEMBER", tenant_id=tenant_id,
+            required_document_id=doc_id,
+        )
+        valid = await load_published_contract_body(
+            session=session, payload=request, conn=db, content_root=str(root),
+        )
+        assert valid["contract_text"] == body
+        assert valid["integrity_verified"] is True
+        assert valid["acceptance_recorded"] is False
+        assert valid["writes_performed"] is False
+
+        unpublished = request.model_copy(update={"required_document_id": draft_id})
+        with pytest.raises(HTTPException) as exc:
+            await load_published_contract_body(
+                session=session, payload=unpublished, conn=db,
+                content_root=str(root),
+            )
+        assert exc.value.status_code == 404
+
+        contract.chmod(0o600)
+        contract.write_bytes((body + " ").encode("utf-8"))
+        contract.chmod(0o400)
+        with pytest.raises(HTTPException) as exc:
+            await load_published_contract_body(
+                session=session, payload=request, conn=db, content_root=str(root),
+            )
+        assert exc.value.status_code == 503
+
+        await db.execute("SELECT set_config('app.current_user_id','',true)")
+        with pytest.raises(HTTPException) as exc:
+            await load_published_contract_body(
+                session=session, payload=request, conn=db, content_root=str(root),
+            )
+        assert exc.value.status_code == 404
+    finally:
+        await tx.rollback()
+        await db.close()
