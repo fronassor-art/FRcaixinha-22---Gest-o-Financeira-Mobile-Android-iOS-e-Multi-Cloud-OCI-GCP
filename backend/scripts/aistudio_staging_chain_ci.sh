@@ -260,6 +260,29 @@ test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT bool_and(status='SEALED_CI_NOT_SENT' AND event_id='eeeeeeee-0000-4000-8000-000000000015'::uuid) FROM public.invite_encrypted_envelopes_staging")" = "t"
 echo "M26700_POSTGRES_AES_GCM_PERSISTENCE=PASS"
+echo "=== M27100: one-use synthetic email challenge, NO actual delivery ==="
+PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/056_email_ownership_challenge_staging_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
+  PGUSER=frcaixinha_invite_queue_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/054_email_challenge_issue_probe_ci_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
+  PGUSER=frcaixinha_email_proof_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/055_email_challenge_consume_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_email_challenges_staging WHERE consumed_at IS NOT NULL AND failed_attempts=1 AND state='CI_TOKEN_CONSUMED_NOT_PROOF' AND NOT recipient_verified AND NOT user_activated AND NOT contract_accepted")" = "1"
+if PGUSER=frcaixinha_email_proof_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.invite_email_challenges_staging" >/dev/null 2>&1; then
+  echo "BLOCKED: proof worker can SELECT challenge table"
+  exit 1
+fi
+if PGUSER=frcaixinha_invite_queue_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.invite_email_challenges_staging" >/dev/null 2>&1; then
+  echo "BLOCKED: challenge producer can SELECT token digests"
+  exit 1
+fi
+echo "M27100_CI_EMAIL_TOKEN_CONSUMED_NO_IDENTITY_GRANT=PASS"
 echo "=== M26600: quarantine unknown SMTP ACK durably, disable old claim ==="
 PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
   PGUSER=frcaixinha_invite_dispatch_ci psql -X -v ON_ERROR_STOP=1 \
