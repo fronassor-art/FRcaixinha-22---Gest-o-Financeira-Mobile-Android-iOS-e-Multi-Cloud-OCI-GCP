@@ -80,7 +80,7 @@ def test_challenge_readback_rejects_all_untrusted_or_inconsistent_states(field,v
     ("event_id",uuid4()),
     ("tenant_id",uuid4()),
     ("document_id",uuid4()),
-    ("ttl_seconds",900),
+    ("ttl_seconds",59),
     ("expires_at",NOW+100),
     ("challenge_digest","c"*64),
     ("can_send_network",True),
