@@ -52,6 +52,13 @@ def test_private_home_manifest_and_redacted_operator_checklist(tmp_path):
     assert "SMTP_PASSWORD" not in audit.stdout
     data=json.loads(config.read_text())
     assert data["public_inputs"]=={"APP_URL":"https://app.frfinance.com.br"}
+    plan=command(local,"plan")
+    assert plan.returncode==0,plan.stderr
+    assert "FR_FINANCE_PROVIDER_PLAN=BLOCKED_EXTERNAL_EVIDENCE" in plan.stdout
+    assert "OCI_HOSTING" in plan.stdout
+    assert "PIX_OUTBOUND" in plan.stdout
+    assert "https://app.frfinance.com.br" not in plan.stdout
+    assert "REALLY_SENSITIVE_SIMULATED_VALUE" not in plan.stdout
     removed=command(local,"unset","APP_URL")
     assert removed.returncode==0
     assert json.loads(config.read_text())["public_inputs"]=={}
