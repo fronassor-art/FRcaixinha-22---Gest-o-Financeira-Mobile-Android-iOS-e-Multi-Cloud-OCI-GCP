@@ -95,10 +95,12 @@ def test_registration_validates_cpf_and_requires_delivery(base_ci):
     assert not _valid_cpf("11111111111")
     assert not _valid_cpf("52998224720")
     doc=_document(db,"TENANT_MEMBERSHIP","ci-registration-"+str(uuid4()))
+    doc_digest=db.execute("SELECT sha256 FROM public.contract_documents WHERE id=%s",(doc,)).fetchone()[0]
     invitation,original=prepare_invitation_ci(
         db,tenant_id=u['tenant'],inviter_id=u['admin'],
         recipient_email="new.member@example.com",target_role="TENANT_MEMBER",
     )
+    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",(doc,invitation))
     with pytest.raises(LifecycleDenied):
         prepare_invite_email_verification_ci(db,invitation_id=invitation)
     assert simulate_invitation_delivery_ci(db,invitation)
@@ -107,10 +109,12 @@ def test_registration_validates_cpf_and_requires_delivery(base_ci):
         register_new_invited_identity_ci(
             db,verification_token=verification,name="Pessoa CI",cpf="11111111111",
             phone="11999999999",password="strong-synthetic-password",document_id=doc,
+            consent=True,accepted_document_sha256=doc_digest,
         )
     person=register_new_invited_identity_ci(
         db,verification_token=verification,name="Pessoa CI",cpf="52998224725",
         phone="11999999999",password="strong-synthetic-password",document_id=doc,
+        consent=True,accepted_document_sha256=doc_digest,
     )
     row=db.execute(
         "SELECT email,is_master,email_verified_at FROM public.users WHERE id=%s",
@@ -125,6 +129,7 @@ def test_registration_validates_cpf_and_requires_delivery(base_ci):
         register_new_invited_identity_ci(
             db,verification_token=verification,name="Pessoa CI",cpf="52998224725",
             phone="11999999999",password="strong-synthetic-password",document_id=doc,
+            consent=True,accepted_document_sha256=doc_digest,
         )
     assert db.execute(
         "SELECT count(*) FROM public.contract_acceptances WHERE user_id=%s",(person,),
@@ -135,6 +140,8 @@ def test_registration_disallows_contract_mismatch_and_revoked_sender(base_ci):
     db,u=base_ci
     required=_document(db,"TENANT_MEMBERSHIP","ci-required-"+str(uuid4()))
     different=_document(db,"TENANT_MEMBERSHIP","ci-other-"+str(uuid4()))
+    required_digest=db.execute("SELECT sha256 FROM public.contract_documents WHERE id=%s",(required,)).fetchone()[0]
+    different_digest=db.execute("SELECT sha256 FROM public.contract_documents WHERE id=%s",(different,)).fetchone()[0]
     inv,_=prepare_invitation_ci(
         db,tenant_id=u['tenant'],inviter_id=u['admin'],
         recipient_email="another.member@example.com",target_role="TENANT_MEMBER",
@@ -149,6 +156,7 @@ def test_registration_disallows_contract_mismatch_and_revoked_sender(base_ci):
         register_new_invited_identity_ci(
             db,verification_token=token,name="Pessoa Dois",cpf="52998224725",
             phone="11999999999",password="strong-synthetic-password",document_id=different,
+            consent=True,accepted_document_sha256=different_digest,
         )
     db.execute(
         "UPDATE public.memberships SET status='SUSPENSA' WHERE tenant_id=%s "
@@ -158,6 +166,7 @@ def test_registration_disallows_contract_mismatch_and_revoked_sender(base_ci):
         register_new_invited_identity_ci(
             db,verification_token=token,name="Pessoa Dois",cpf="52998224725",
             phone="11999999999",password="strong-synthetic-password",document_id=required,
+            consent=True,accepted_document_sha256=required_digest,
         )
     assert db.execute(
         "SELECT count(*) FROM public.users WHERE cpf='52998224725'"
