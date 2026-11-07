@@ -60,6 +60,11 @@ class InvitationCreateRequest(BaseModel):
     target_email: EmailStr
     target_role: str = Field(..., pattern="^(TENANT_ADMIN|TENANT_MEMBER)$")
     tenant_id: Optional[str] = None
+    required_document_id: Optional[UUID] = Field(
+        default=None,
+        validation_alias=AliasChoices("required_document_id", "requiredDocumentId"),
+        description="Referência de adesão versionada; não autoriza emissão de convites.",
+    )
 
 class ContextSwitchRequest(BaseModel):
     target_role: str = Field(..., pattern="^(MASTER|TENANT_ADMIN|TENANT_MEMBER)$")
