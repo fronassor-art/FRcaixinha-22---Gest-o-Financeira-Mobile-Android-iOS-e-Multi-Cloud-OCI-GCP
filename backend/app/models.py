@@ -8,7 +8,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, AliasChoices
+from pydantic import BaseModel, EmailStr, Field, AliasChoices, ConfigDict
 
 # --- Schemas de Entrada / Saída para Autenticação ---
 
@@ -81,6 +81,7 @@ class InvitationContractReadinessRequest(BaseModel):
 
 class InvitationContractTextIntegrityRequest(BaseModel):
     """M25200: confere texto UTF-8 recebido, sem registrá-lo ou assinar aceite."""
+    model_config = ConfigDict(extra="forbid")
     target_role: str = Field(..., pattern="^(TENANT_ADMIN|TENANT_MEMBER)$")
     tenant_id: UUID
     required_document_id: UUID
