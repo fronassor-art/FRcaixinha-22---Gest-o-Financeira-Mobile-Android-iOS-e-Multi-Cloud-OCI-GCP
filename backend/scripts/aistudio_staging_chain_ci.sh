@@ -90,6 +90,16 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.invite_provider_receipts_staging') IS NULL")" = "t"
 echo "M26300_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
+    psql -X -v ON_ERROR_STOP=1 \
+    -f backend/staging_migrations/054_invite_delivery_terminal_gate_staging_only.sql \
+    >/dev/null 2>&1; then
+  echo "BLOCKED: terminal gate migration accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.invite_delivery_terminal_gate_staging') IS NULL")" = "t"
+echo "M26600_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
@@ -201,6 +211,25 @@ if PGUSER=frcaixinha_mail_receipt_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M26300_CI_SIGNED_RECEIPT_POSTGRES_NO_DELIVERY=PASS"
+echo "=== M26600: quarantine unknown SMTP ACK durably, disable old claim ==="
+PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/054_invite_delivery_terminal_gate_staging_only.sql >/dev/null
+PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
+  PGUSER=frcaixinha_invite_dispatch_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/053_delivery_terminal_gate_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_delivery_terminal_gate_staging")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT state='CI_UNKNOWN_TIMEOUT_QUARANTINE' AND NOT provider_delivery_confirmed AND NOT recipient_verified AND NOT consent_recorded AND NOT user_activated FROM public.invite_delivery_terminal_gate_staging")" = "t"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_dispatch_attempt_audit_staging")" = "3"
+if PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.invite_delivery_terminal_gate_staging" >/dev/null 2>&1; then
+  echo "BLOCKED: dispatch worker can read terminal gate table"
+  exit 1
+fi
+echo "M26600_CI_TERMINAL_DELIVERY_QUARANTINE=PASS"
 echo "=== M26000: single-use recovery rotation in disposable staging ==="
 PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
   psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/048_password_reset_fixture_ci_only.sql >/dev/null
