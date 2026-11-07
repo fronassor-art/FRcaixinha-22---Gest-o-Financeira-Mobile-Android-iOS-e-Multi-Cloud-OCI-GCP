@@ -31,6 +31,8 @@ CREATE ROLE frcaixinha_notify_producer_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_invite_queue_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_account_recovery_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -54,15 +56,25 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.invite_delivery_outbox_staging') IS NULL")" = "t"
 echo "M25900_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.recovery_staging_ci=1" \
+    psql -X -v ON_ERROR_STOP=1 \
+    -f backend/staging_migrations/051_password_reset_staging_only.sql \
+    >/dev/null 2>&1; then
+  echo "BLOCKED: password recovery migration accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.password_recovery_audit_staging') IS NULL")" = "t"
+echo "M26000_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -80,9 +92,10 @@ for file in \
   backend/staging_migrations/047_mp_oauth_generation_staging_only.sql \
   backend/staging_migrations/048_mp_oauth_failed_reference_staging_only.sql \
   backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql \
-  backend/staging_migrations/050_invitation_outbox_staging_only.sql
+  backend/staging_migrations/050_invitation_outbox_staging_only.sql \
+  backend/staging_migrations/051_password_reset_staging_only.sql
 do
-  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1" \
+  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1 -c frcaixinha.recovery_staging_ci=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
   echo "STAGING_CI_APPLIED_$(basename "$file" | cut -c1-3)=PASS"
 done
@@ -107,6 +120,28 @@ if PGUSER=frcaixinha_invite_queue_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M25900_STAGING_OUTBOX_IDEMPOTENT_AUDIT=PASS"
+echo "=== M26000: single-use recovery rotation in disposable staging ==="
+PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/048_password_reset_fixture_ci_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
+  PGUSER=frcaixinha_account_recovery_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/049_password_reset_worker_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.password_recovery_audit_staging")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT consumed_at IS NOT NULL FROM public.password_reset_tokens WHERE id='eeeeeeee-0000-4000-8000-000000000024'")" = "t"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT revoked_at IS NOT NULL FROM public.password_reset_tokens WHERE id='eeeeeeee-0000-4000-8000-000000000025'")" = "t"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT revoked_at IS NOT NULL FROM public.sessions WHERE id='eeeeeeee-0000-4000-8000-000000000023'")" = "t"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT position(repeat('Z',72) in password_hash)>0 FROM public.credentials WHERE user_id='eeeeeeee-0000-4000-8000-000000000021'")" = "t"
+if PGUSER=frcaixinha_account_recovery_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.password_reset_tokens" >/dev/null 2>&1; then
+  echo "BLOCKED: reset worker has raw reset-token SELECT"
+  exit 1
+fi
+echo "M26000_STAGING_PASSWORD_ROTATION_SESSIONS_REVOKED=PASS"
 echo "=== M23200: synthetic OAuth admins + atomic consume ==="
 psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/038_oauth_admins_fixture_ci_only.sql >/dev/null
 PGUSER=frcaixinha_mp_oauth_worker psql -X -v ON_ERROR_STOP=1 \
