@@ -263,11 +263,15 @@ if PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M26600_CI_TERMINAL_DELIVERY_QUARANTINE=PASS"
-# Even the correctly leased worker must not read a ciphertext once the
-# existing outbox is quarantined, independently of expired lease timing.
+# Prove terminal quarantine rather than just lease expiry: synthetic DBA
+# temporarily restores the CI lease and the worker STILL cannot read.
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()+interval '2 minutes' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
 test "$(PGOPTIONS='-c frcaixinha.envelope_staging_ci=1' \
   PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT public.invite_read_encrypted_envelope_staging_ci('eeeeeeee-0000-4000-8000-000000000015','eeeeeeee-0000-4000-8000-000000000033')")" = ""
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
 echo "M26700_QUARANTINED_ENVELOPE_NOT_RETRIEVABLE=PASS"
 echo "=== M26000: single-use recovery rotation in disposable staging ==="
 PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
