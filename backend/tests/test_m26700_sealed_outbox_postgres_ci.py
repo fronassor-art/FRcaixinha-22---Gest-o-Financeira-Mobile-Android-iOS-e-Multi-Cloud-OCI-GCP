@@ -4,6 +4,7 @@ The PostgreSQL test is restricted to the disposable GitHub Actions database.
 Only synthetic addresses, tokens and a non-production in-process key are used.
 """
 import os
+import json
 import time
 from uuid import UUID
 
@@ -89,6 +90,8 @@ async def test_encrypted_outbox_is_idempotent_restricted_and_bound_to_lease():
             EVENT,LEASE,
         )
         assert result is not None
+        if isinstance(result, str):
+            result = json.loads(result)
         assert result["purpose"] == "INVITATION"
         assert result["tenant_id"] == str(TENANT)
         assert result["event_id"] == str(EVENT)
