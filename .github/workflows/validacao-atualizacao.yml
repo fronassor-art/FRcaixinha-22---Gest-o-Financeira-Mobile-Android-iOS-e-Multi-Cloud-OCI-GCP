@@ -412,6 +412,9 @@ jobs:
           python -m pytest -q backend/tests/test_m26100_dispatch_lease_policy_ci.py
           python -m pytest -q backend/tests/test_m26200_signed_receipt_ci.py
           python -m pytest -q backend/tests/test_m26300_mail_receipt_audit_policy_ci.py
+          python -m pytest -q backend/tests/test_m26400_delivery_envelope_ci.py
+          python -m pytest -q backend/tests/test_m26500_delivery_decision_ci.py
+          python -m pytest -q backend/tests/test_m26600_delivery_terminal_gate_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
