@@ -891,7 +891,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.invite_email_challenges_staging",
       "local_evidence": null,
-      "source_blob_sha": "25d2dbbb3a26f7353de7788a5879ab8d9a78f6bd"
+      "source_blob_sha": "874c4bbf8153d57cb7080b1e11139fa20785cce5"
     },
     {
       "id": "ci_migrations:054",
