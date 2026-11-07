@@ -121,6 +121,8 @@ jobs:
         run: npx tsx src/tests/macropacote_2200_ledger_navigation_ci.test.ts
       - name: M300 — identidade FR Caixinha e contrato comum
         run: npx tsx src/tests/macropacote_300_product_identity_ci.test.ts
+      - name: M25700 — shell de atestação local não aplica migrations
+        run: bash -n backend/scripts/aistudio_macro_25700_checkpoint.sh
       - name: Macropacote 220 — validar comando somente leitura Termux
         run: bash -n backend/scripts/aistudio_220_termux_readonly_checkpoint.sh
       - name: Macropacote 240 e 280 — scripts somente leitura
@@ -404,6 +406,7 @@ jobs:
           python -m pytest -q backend/tests/test_m25400_canonical_contract_delivery_ci.py
           python -m pytest -q backend/tests/test_m25500_onboarding_smtp_transport_ci.py
           python -m pytest -q backend/tests/test_m25600_launch_readiness_ci.py
+          python -m pytest -q backend/tests/test_m25700_local_attestation_guard_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
