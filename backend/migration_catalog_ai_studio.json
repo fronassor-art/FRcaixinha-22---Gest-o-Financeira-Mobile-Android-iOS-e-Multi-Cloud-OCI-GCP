@@ -912,6 +912,16 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "2a0d034d5993a279495ccc2ecb8091621c11b940"
+    },
+    {
+      "id": "ci_migrations:056",
+      "source_path": "backend/ci_migrations/056_email_challenge_lockout_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "fa5a09348025c3aa4458c1fdd2761e361fe1ca63"
     }
   ]
 }
