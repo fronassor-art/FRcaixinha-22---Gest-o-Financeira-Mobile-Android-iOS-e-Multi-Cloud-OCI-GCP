@@ -58,6 +58,10 @@ BEGIN
  SELECT o.id, i.expires_at AS invitation_expiry INTO outbox
  FROM public.invite_delivery_outbox_staging o
  JOIN public.invitations i ON i.id=o.invitation_id
+ JOIN public.invite_encrypted_envelopes_staging e ON e.outbox_id=o.id
+    AND e.event_id=o.event_id AND e.tenant_id=o.tenant_id
+    AND e.document_id=o.document_id AND e.target_role=o.target_role
+    AND e.purpose='INVITATION' AND e.status='SEALED_CI_NOT_SENT'
  JOIN public.tenants t ON t.id=i.tenant_id AND t.status='ATIVO'
  JOIN public.contract_documents d ON d.id=i.required_document_id
     AND d.published_at IS NOT NULL AND d.document_kind='TENANT_MEMBERSHIP'
@@ -70,6 +74,7 @@ BEGIN
    AND i.revoked_at IS NULL AND i.accepted_at IS NULL
    AND i.delivery_status='PENDING_DELIVERY'
    AND i.expires_at>clock_timestamp()+make_interval(secs=>p_expiry_seconds)
+   AND e.expires_at>extract(epoch from clock_timestamp())::bigint+p_expiry_seconds+1
    AND NOT EXISTS(SELECT 1 FROM public.invite_delivery_terminal_gate_staging g
                   WHERE g.outbox_id=o.id)
  FOR UPDATE OF o;
@@ -112,6 +117,11 @@ BEGIN
  FROM public.invite_email_challenges_staging c
  JOIN public.invite_delivery_outbox_staging o ON o.id=c.outbox_id
  JOIN public.invitations i ON i.id=o.invitation_id
+ JOIN public.invite_encrypted_envelopes_staging e ON e.outbox_id=o.id
+   AND e.event_id=o.event_id AND e.tenant_id=o.tenant_id
+   AND e.document_id=o.document_id AND e.target_role=o.target_role
+   AND e.purpose='INVITATION' AND e.status='SEALED_CI_NOT_SENT'
+   AND e.expires_at>extract(epoch from clock_timestamp())::bigint
  JOIN public.tenants t ON t.id=i.tenant_id AND t.status='ATIVO'
  WHERE o.event_id=p_event
    AND o.status='HELD_CI_NOT_SENT'
