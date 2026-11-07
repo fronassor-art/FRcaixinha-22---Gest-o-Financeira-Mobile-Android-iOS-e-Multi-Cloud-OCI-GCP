@@ -182,6 +182,7 @@ async def published_membership_contract_catalog(*, session, payload, conn) -> di
     return {
         "source": "POSTGRESQL_RLS",
         "scope": "AI_STUDIO_PUBLISHED_MEMBERSHIP_CONTRACT_CATALOG",
+        "target_role": payload.target_role,
         "status": "BLOCKED",
         "tenant_active_verified": active,
         "document_kind": "TENANT_MEMBERSHIP",
