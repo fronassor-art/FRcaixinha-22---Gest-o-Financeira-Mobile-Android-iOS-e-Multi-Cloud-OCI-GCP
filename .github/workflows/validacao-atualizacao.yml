@@ -65,6 +65,8 @@ jobs:
         run: npx tsx src/tests/master_onboarding_preflight_ui.test.ts
       - name: M25300 — conferência do texto contratual sem aceite ou cadastro
         run: npx tsx src/tests/m25300_contract_review_ui_ci.test.ts
+      - name: M25400 — hash de texto canônico conferido no cliente
+        run: npx tsx src/tests/m25400_canonical_contract_ui_ci.test.ts
       - name: Validar simulador de fluxo, idempotencia e auditoria Master
         run: npx tsx src/tests/master_workflow_audit_ui.test.ts
       - name: Validar isolamento de paineis e membros por tenant no cliente
