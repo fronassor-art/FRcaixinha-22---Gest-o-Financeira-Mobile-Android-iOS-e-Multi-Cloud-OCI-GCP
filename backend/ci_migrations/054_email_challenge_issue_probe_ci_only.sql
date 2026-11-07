@@ -2,7 +2,7 @@
 DO $probe$
 DECLARE
  ev uuid:='eeeeeeee-0000-4000-8000-000000000015';
- good varchar:=encode(public.digest(repeat('T',48),'sha256'),'hex');
+ good varchar:=encode(public.digest(repeat('T',64),'sha256'),'hex');
  result text;
 BEGIN
  IF current_database()<>'frcaixinha_staging'
