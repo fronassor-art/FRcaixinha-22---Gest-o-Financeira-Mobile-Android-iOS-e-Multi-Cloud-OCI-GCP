@@ -742,6 +742,16 @@
       "inspect_object": "public.mp_oauth_token_revisions_staging",
       "local_evidence": null,
       "source_blob_sha": "849fbcf61434351f995fd9d7fd8db5578261716e"
+    },
+    {
+      "id": "staging_migrations:050",
+      "source_path": "backend/staging_migrations/050_invitation_outbox_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_delivery_outbox_staging",
+      "local_evidence": null,
+      "source_blob_sha": "9228aae45a99011b083133a9f78c59215993e36b"
     }
   ]
 }
