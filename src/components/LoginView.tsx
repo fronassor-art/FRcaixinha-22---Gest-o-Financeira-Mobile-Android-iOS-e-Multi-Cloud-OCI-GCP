@@ -16,6 +16,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   const [newAccess, setNewAccess] = useState<NewAccess>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [tenantChoice, setTenantChoice] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [resetHelp, setResetHelp] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -29,6 +30,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
       if (window.location.hash !== ownerRoute) return;
       setMode('login');
       setSelectedRole('MASTER');
+      setTenantChoice('');
       setNewAccess(null);
       setPassword('');
       setError(null);
@@ -45,11 +47,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     if (count !== 7) return;
     logoTaps.current = { count: 0, last: 0 };
     setSelectedRole('MASTER');
+    setTenantChoice('');
     setPassword('');
     setError(null);
   };
   const returnToPublicAccess = () => {
     setSelectedRole(null);
+    setTenantChoice('');
     setError(null);
     setPassword('');
     if (typeof window !== 'undefined' && window.location.hash === ownerRoute) {
@@ -68,9 +72,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
       setError('Informe o e-mail e a senha.');
       return;
     }
+    const chosenTenant = selectedRole === 'MASTER' ? '' : tenantChoice.trim();
+    if (chosenTenant && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chosenTenant)) {
+      setError('O ID da caixinha precisa ter o formato UUID informado pelo administrador.');
+      return;
+    }
     setLoading(true);
     try {
-      const user = await authService.login(email.trim(), password, selectedRole);
+      const user = await authService.login(email.trim(), password, selectedRole, chosenTenant || undefined);
       setPassword('');
       onLoginSuccess(user);
     } catch (cause) {
@@ -127,7 +136,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                     const Icon = option.icon;
                     return (
                       <button key={option.role} type="button"
-                        onClick={() => { setSelectedRole(option.role); setError(null); }}
+                        onClick={() => { setSelectedRole(option.role); setTenantChoice(''); setError(null); }}
                         className="fr-outline flex min-h-16 items-center gap-3 rounded-xl p-3 text-left">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#d4b56a]">
                           <Icon className="h-5 w-5 text-[#f1d286]" aria-hidden="true" />
@@ -200,6 +209,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                     Recuperação automática ainda indisponível. Consulte quem autorizou seu acesso.
                   </p>}
                 </div>
+                {selectedRole !== 'MASTER' && (
+                  <div>
+                    <label htmlFor="login-tenant" className="mb-1.5 block text-sm font-semibold text-[#f5e7c2]">
+                      ID da caixinha <span className="font-normal text-emerald-100/75">(se participa de várias)</span>
+                    </label>
+                    <input id="login-tenant" type="text" autoComplete="off" autoCapitalize="off" spellCheck={false}
+                      value={tenantChoice} onChange={event => setTenantChoice(event.target.value)}
+                      placeholder="ID fornecido pelo administrador"
+                      aria-describedby="login-tenant-help"
+                      className="fr-input min-h-12 w-full rounded-xl px-3 text-base" />
+                    <p id="login-tenant-help" className="mt-1 text-xs text-emerald-100/70">
+                      Se há mais de uma caixinha no mesmo perfil, informe o ID da desejada.
+                      O servidor confirma o vínculo antes de permitir acesso.
+                    </p>
+                  </div>
+                )}
                 <button type="submit" disabled={loading}
                   className="fr-gold-button flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-base disabled:opacity-60">
                   {loading ? 'Verificando...' : 'Entrar'}
