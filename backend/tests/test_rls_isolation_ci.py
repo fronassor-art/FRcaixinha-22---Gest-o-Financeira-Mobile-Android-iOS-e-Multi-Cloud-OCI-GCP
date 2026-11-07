@@ -1077,3 +1077,76 @@ async def test_admin_annual_preview_aggregates_real_postgres_and_denies_other_ro
         await admin.execute(
             "DELETE FROM public.cycles WHERE id=ANY($1::uuid[])",[ca,cb])
         await admin.close()
+
+
+async def test_m25100_published_contract_catalog_real_rls(isolated_rows):
+    """Somente CI descartavel: documento publicado visivel, rascunho oculto.
+
+    Insere e consulta na mesma transacao sob role distinta; faz rollback
+    sempre, sem registros de contratos persistentes no final do ensaio.
+    """
+    from app.dependencies import AuthenticatedSession
+    from app.models import InvitationContractCatalogRequest
+    from app.invitation_preflight import published_membership_contract_catalog
+
+    _app, ids = isolated_rows
+    admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    tx = admin.transaction()
+    await tx.start()
+    try:
+        published_id, draft_id = uuid.uuid4(), uuid.uuid4()
+        for doc_id, published in ((published_id, True), (draft_id, False)):
+            await admin.execute(
+                "INSERT INTO public.contract_documents "
+                "(id,document_kind,version_label,sha256,source_reference,published_at) "
+                "VALUES($1,'TENANT_MEMBERSHIP',$2,$3,$4,"
+                "CASE WHEN $5::boolean THEN now() ELSE NULL END)",
+                doc_id, str(doc_id), "a" * 64, "ci://synthetic-contract-m25100",
+                published,
+            )
+        # O INSERT acima ocorreu como operador CI. A consulta acontece
+        # com as permissões estritas do papel app, nunca como superuser.
+        await admin.execute("SET LOCAL ROLE frcaixinha_app_role")
+        assert not await admin.fetchval(
+            "SELECT has_table_privilege(current_user,"
+            "'public.contract_documents','INSERT')"
+        )
+        await admin.execute(
+            "SELECT set_config('app.current_user_id',$1,true)",
+            str(ids["admin_a"]),
+        )
+        await admin.execute(
+            "SELECT set_config('app.current_role','TENANT_ADMIN',true)"
+        )
+        await admin.execute(
+            "SELECT set_config('app.current_tenant_id',$1,true)",
+            str(ids["tenant_a"]),
+        )
+        candidate = InvitationContractCatalogRequest(
+            target_role="TENANT_MEMBER", tenant_id=ids["tenant_a"]
+        )
+        actor = AuthenticatedSession(
+            str(ids["admin_a"]), "TENANT_ADMIN", str(ids["tenant_a"]),
+            "synthetic@example.com", "Test CI", False
+        )
+        report = await published_membership_contract_catalog(
+            session=actor, payload=candidate, conn=admin,
+        )
+        assert report["status"] == "BLOCKED"
+        assert report["tenant_active_verified"] is True
+        selected = {item["document_id"] for item in report["documents"]}
+        assert str(published_id) in selected
+        assert str(draft_id) not in selected
+        assert report["acceptance_recorded"] is False
+        assert report["writes_performed"] is False
+
+        # Mesmo papel app, mas sem usuário RLS: nenhuma caixinha nem documento.
+        await admin.execute("SELECT set_config('app.current_user_id','',true)")
+        denied = await published_membership_contract_catalog(
+            session=actor, payload=candidate, conn=admin,
+        )
+        assert denied["tenant_active_verified"] is False
+        assert denied["documents"] == []
+    finally:
+        await tx.rollback()
+        await admin.close()
