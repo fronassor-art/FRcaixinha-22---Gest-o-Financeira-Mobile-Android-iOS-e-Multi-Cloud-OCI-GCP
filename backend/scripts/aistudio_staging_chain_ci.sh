@@ -276,12 +276,36 @@ echo "=== M27100: one-use synthetic email challenge, NO actual delivery ==="
 PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
   psql -X -v ON_ERROR_STOP=1 \
   -f backend/staging_migrations/056_email_ownership_challenge_staging_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.email_attestation_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/057_email_challenge_readback_staging_only.sql >/dev/null
 PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
   PGUSER=frcaixinha_invite_queue_ci psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/054_email_challenge_issue_probe_ci_only.sql >/dev/null
+# Re-activate only the synthetic disposable lease for the postcommit
+# readback; its prior expiration is intentionally restored afterwards.
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()+interval '5 minutes' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+CI_EMAIL_ATTESTOR_URL='postgresql://frcaixinha_email_attestor_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+  backend/tests/test_m27600_committed_challenge_postgres_ci.py
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
+echo "M27600_POSTCOMMIT_NO_DELIVERY=PASS"
 PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
   PGUSER=frcaixinha_email_proof_ci psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/055_email_challenge_consume_probe_ci_only.sql >/dev/null
+# Even if the lease is restored, an already-consumed token cannot be
+# retrieved by the independent readback role.
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()+interval '2 minutes' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
+test "$(PGOPTIONS='-c frcaixinha.email_attestation_staging_ci=1' \
+  PGUSER=frcaixinha_email_attestor_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT public.invite_challenge_readback_staging_ci('eeeeeeee-0000-4000-8000-000000000015','eeeeeeee-0000-4000-8000-000000000033')")" = ""
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
+echo "M27600_POSTCONSUME_READBACK_DENIED=PASS"
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT count(*) FROM public.invite_email_challenges_staging WHERE consumed_at IS NOT NULL AND failed_attempts=1 AND state='CI_TOKEN_CONSUMED_NOT_PROOF' AND NOT recipient_verified AND NOT user_activated AND NOT contract_accepted")" = "1"
 if PGUSER=frcaixinha_email_proof_ci psql -XAt -v ON_ERROR_STOP=1 \
