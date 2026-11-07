@@ -178,6 +178,10 @@ def test_request_does_not_allow_absent_body_and_invalid_ids():
         InvitationContractTextIntegrityRequest.model_validate(
             {**correct, "target_role": "MASTER"}
         )
+    with pytest.raises(ValidationError):
+        InvitationContractTextIntegrityRequest.model_validate(
+            {**correct, "target_email": "recipient@example.com"}
+        )
 
 
 def test_route_uses_session_and_rls_not_ci_executor_or_db_writes():
