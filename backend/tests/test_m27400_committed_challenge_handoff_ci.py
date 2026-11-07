@@ -1,5 +1,6 @@
 """M27400 — no delivery authorization from fake/mismatched postcommit proof."""
 from dataclasses import replace
+from hashlib import sha256
 from uuid import uuid4, UUID
 
 import pytest
@@ -16,7 +17,7 @@ NOW=1794000000
 def fixture():
     prepared=PreparedCiEmailChallenge(
         event_id=uuid4(),tenant_id=uuid4(),document_id=uuid4(),
-        challenge_digest="a"*64,ttl_seconds=600,
+        challenge_digest=sha256(("S"*64).encode()).hexdigest(),ttl_seconds=600,
         expires_at=NOW+600,raw_token_for_trusted_worker="S"*64,
     )
     readback=SyntheticChallengeReadback(
@@ -83,6 +84,8 @@ def test_challenge_readback_rejects_all_untrusted_or_inconsistent_states(field,v
     ("ttl_seconds",59),
     ("expires_at",NOW+100),
     ("challenge_digest","c"*64),
+    ("raw_token_for_trusted_worker","X"*64),
+    ("raw_token_for_trusted_worker","bad token"),
     ("can_send_network",True),
     ("recipient_verified",True),
     ("contract_accepted",True),
