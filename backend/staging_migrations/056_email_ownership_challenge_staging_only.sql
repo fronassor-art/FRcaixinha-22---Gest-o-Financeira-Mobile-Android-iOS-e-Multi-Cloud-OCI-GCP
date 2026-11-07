@@ -109,7 +109,8 @@ BEGIN
    OR current_setting('frcaixinha.email_proof_staging_ci',true) IS DISTINCT FROM '1'
    OR p_event IS NULL OR p_raw_token IS NULL
    OR length(p_raw_token) NOT BETWEEN 32 AND 256
-   OR p_raw_token !~ '^[A-Za-z0-9_-]+ THEN RAISE EXCEPTION 'M27100_DENIED: malformed CI challenge'; END IF;
+   OR p_raw_token !~ '^[A-Za-z0-9_-]+$'
+ THEN RAISE EXCEPTION 'M27100_DENIED: malformed CI challenge'; END IF;
 
  PERFORM pg_advisory_xact_lock(hashtextextended('M27100|'||p_event::text,0));
  SELECT c.outbox_id,c.challenge_digest,c.expires_at,c.consumed_at,
