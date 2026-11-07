@@ -79,6 +79,17 @@ class InvitationContractReadinessRequest(BaseModel):
     required_document_id: UUID
 
 
+class InvitationContractTextIntegrityRequest(BaseModel):
+    """M25200: confere texto UTF-8 recebido, sem registrá-lo ou assinar aceite."""
+    target_role: str = Field(..., pattern="^(TENANT_ADMIN|TENANT_MEMBER)$")
+    tenant_id: UUID
+    required_document_id: UUID
+    contract_text: str = Field(
+        ..., min_length=1, max_length=65536,
+        description="Texto integral exato, UTF-8, limitado a 64 KiB na validação.",
+    )
+
+
 class ContextSwitchRequest(BaseModel):
     target_role: str = Field(..., pattern="^(MASTER|TENANT_ADMIN|TENANT_MEMBER)$")
     target_tenant_id: Optional[str] = None
