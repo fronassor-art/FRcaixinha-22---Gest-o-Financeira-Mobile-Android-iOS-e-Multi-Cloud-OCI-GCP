@@ -6,11 +6,12 @@ verificação de titularidade, aceite contratual, RLS e auditoria aprovados.
 from fastapi import APIRouter, HTTPException, status, Depends
 from ..models import (
     InvitationCreateRequest, InvitationContractReadinessRequest,
-    InvitationContractCatalogRequest,
+    InvitationContractCatalogRequest, InvitationContractTextIntegrityRequest,
 )
 from ..dependencies import get_current_session, AuthenticatedSession
 from ..config import settings
 from ..database import get_rls_db_connection
+from ..contract_text_integrity import verify_contract_body_digest
 from ..invitation_preflight import (
     authorize_invitation_intent, invitation_readiness, invitation_contract_readiness,
     published_membership_contract_catalog,
@@ -56,6 +57,22 @@ async def preview_published_contract_catalog(
 ):
     """Lista versões de adesão publicadas (metadados) sem permitir aceite."""
     return await published_membership_contract_catalog(
+        session=session, payload=payload, conn=conn,
+    )
+
+
+@router.post("/preflight/contract-text")
+async def preview_contract_text_integrity(
+    payload: InvitationContractTextIntegrityRequest,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Compara SHA-256 do texto exato à versão publicada sob PostgreSQL RLS.
+
+    Não devolve texto ou hash do cliente; nenhuma concessão de aceite ou
+    ativação é possível por esta rota.
+    """
+    return await verify_contract_body_digest(
         session=session, payload=payload, conn=conn,
     )
 
