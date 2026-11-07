@@ -882,6 +882,36 @@
       "inspect_object": "public.invite_encrypted_envelopes_staging",
       "local_evidence": null,
       "source_blob_sha": "5f6e89f29c1e89574ada0df55dca02fe6e8c1a67"
+    },
+    {
+      "id": "staging_migrations:056",
+      "source_path": "backend/staging_migrations/056_email_ownership_challenge_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_email_challenges_staging",
+      "local_evidence": null,
+      "source_blob_sha": "9620b727555eb311ef826abd05e8f6c23374f053"
+    },
+    {
+      "id": "ci_migrations:054",
+      "source_path": "backend/ci_migrations/054_email_challenge_issue_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "ca27c20e1728495265d7c7f21e9d6e92736a0046"
+    },
+    {
+      "id": "ci_migrations:055",
+      "source_path": "backend/ci_migrations/055_email_challenge_consume_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "2a0d034d5993a279495ccc2ecb8091621c11b940"
     }
   ]
 }
