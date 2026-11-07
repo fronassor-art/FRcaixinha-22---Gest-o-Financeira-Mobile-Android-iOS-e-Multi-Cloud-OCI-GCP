@@ -31,7 +31,9 @@ def authorize_invitation_intent(*, session, payload) -> None:
             status_code=403,
             detail="O administrador somente pode convidar membros de sua caixinha.",
         )
-    if payload.tenant_id is not None:
+    if payload.tenant_id is not None and payload.tenant_id != session.tenant_id:
+        # Identificadores idênticos preservam clientes/fixtures legados;
+        # para UUID reais, comparar também formas textuais equivalentes.
         try:
             incoming = UUID(payload.tenant_id)
             active = UUID(session.tenant_id)
