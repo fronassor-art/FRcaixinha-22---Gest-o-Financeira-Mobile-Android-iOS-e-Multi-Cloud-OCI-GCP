@@ -415,6 +415,8 @@ jobs:
           python -m pytest -q backend/tests/test_m26400_delivery_envelope_ci.py
           python -m pytest -q backend/tests/test_m26500_delivery_decision_ci.py
           python -m pytest -q backend/tests/test_m26600_delivery_terminal_gate_ci.py
+          python -m pytest -q backend/tests/test_m26700_encrypted_outbox_policy_ci.py
+          python -m pytest -q backend/tests/test_m26800_key_lifecycle_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
