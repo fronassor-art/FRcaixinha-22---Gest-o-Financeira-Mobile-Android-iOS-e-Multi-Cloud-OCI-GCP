@@ -394,6 +394,7 @@ jobs:
           python -m pytest -q backend/tests/test_m24900_invitation_preflight_ci.py
           python -m pytest -q backend/tests/test_m25000_invitation_contract_readiness_ci.py
           python -m pytest -q backend/tests/test_m25100_published_contract_catalog_ci.py
+          python -m pytest -q backend/tests/test_m25200_contract_text_integrity_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
