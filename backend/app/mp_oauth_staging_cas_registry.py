@@ -153,6 +153,32 @@ class StagingSellerCASRegistry:
         except Exception:
             return False
 
+    async def failed_credential_ref(
+        self, *, pending: PendingTokenRevision
+    ) -> str | None:
+        """Worker-only SQL proof that THIS revision is FAILED, never ACTIVE."""
+        if (type(pending) is not PendingTokenRevision
+                or not self._ids(pending.tenant_id,pending.actor_id,pending.seller_id)
+                or type(pending.revision) is not str
+                or _REVISION.fullmatch(pending.revision) is None
+                or type(pending.credential_ref) is not str
+                or _CREDENTIAL_REF.fullmatch(pending.credential_ref) is None
+                or not await self._identity_ok()):
+            return None
+        try:
+            ref = await self._db.fetchval(
+                "SELECT public.mp_staging_oauth_failed_ref("
+                "$1::uuid,$2::uuid,$3::varchar,$4::varchar)",
+                pending.tenant_id,pending.actor_id,
+                pending.seller_id,pending.revision,
+            )
+        except Exception:
+            return None
+        if (type(ref) is not str or
+                _CREDENTIAL_REF.fullmatch(ref) is None):
+            return None
+        return ref
+
     async def active_credential_ref(
         self, *, tenant: UUID, actor: UUID, seller: str
     ) -> str | None:

@@ -40,6 +40,8 @@ class Registry:
         self.activation_blocked=False
         self.lost_ack=False
         self.unconfirmed_pending=False
+        self.failed_ref=None
+        self.failed_lookup_unavailable=False
     async def eligible(self,*,tenant,actor,seller):
         self.calls.append("eligible")
         return (tenant,actor,seller)==(T,A,"2002") and not self.revoked
@@ -68,8 +70,14 @@ class Registry:
         if self.unconfirmed_pending:return False
         if self.pending==pending:
             self.pending=None
+            self.failed_ref=pending.credential_ref
             return True
         return False
+    async def failed_credential_ref(self,*,pending):
+        self.calls.append("failed_credential_ref")
+        if self.failed_lookup_unavailable:
+            raise TimeoutError("synthetic unavailable DB")
+        return self.failed_ref
 
 class Writer:
     def __init__(self):
@@ -191,7 +199,46 @@ async def test_cancel_foreign_or_forged_revision_is_rejected():
 async def test_delete_failure_keeps_record_for_reconciliation():
     r,w,store,sink=create()
     item=await store.stage(tenant=T,actor=A,tokens=tokens())
+    assert await r.stage_pending(pending=item) is True
+    assert await r.mark_failed(pending=item) is True
     w.fail_delete=True
+    assert await store.cancel(pending=item) is False
+    assert item.revision in w.revisions
+
+
+@pytest.mark.asyncio
+async def test_direct_store_cancel_without_db_failed_proof_preserves_pending():
+    r,w,store,sink=create()
+    item=await store.stage(tenant=T,actor=A,tokens=tokens())
+    assert await store.cancel(pending=item) is False
+    assert item.revision in w.revisions
+    assert not w.deleted
+
+@pytest.mark.asyncio
+async def test_forged_failed_proof_different_ref_denies_deletion():
+    r,w,store,sink=create()
+    item=await store.stage(tenant=T,actor=A,tokens=tokens())
+    assert await r.stage_pending(pending=item)
+    assert await r.mark_failed(pending=item)
+    r.failed_ref="vault://staging/foreign-reference"
+    assert await store.cancel(pending=item) is False
+    assert w.deleted==[] and item.revision in w.revisions
+
+@pytest.mark.asyncio
+async def test_worker_failed_proof_timeout_denies_deletion():
+    r,w,store,sink=create()
+    item=await store.stage(tenant=T,actor=A,tokens=tokens())
+    assert await r.stage_pending(pending=item)
+    assert await r.mark_failed(pending=item)
+    r.failed_lookup_unavailable=True
+    assert await store.cancel(pending=item) is False
+    assert w.deleted==[] and item.revision in w.revisions
+
+@pytest.mark.asyncio
+async def test_db_failed_status_is_required_even_if_writer_exists():
+    r,w,store,sink=create()
+    item=await store.stage(tenant=T,actor=A,tokens=tokens())
+    assert await r.stage_pending(pending=item)
     assert await store.cancel(pending=item) is False
     assert item.revision in w.revisions
 

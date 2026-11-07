@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID, uuid4
 import re
+from hmac import compare_digest
 
 from .mp_connect_http_runtime import OAuthTokens
 from .mp_oauth_staging_token_sink import PendingTokenRevision
@@ -45,6 +46,10 @@ class ConsentGenerationReader(Protocol):
     async def consent_generation(
         self, *, tenant: UUID, actor: UUID, seller: str
     ) -> int | None: ...
+
+    async def failed_credential_ref(
+        self, *, pending: PendingTokenRevision
+    ) -> str | None: ...
 
 
 class StagingProtectedCredentialStore:
@@ -109,9 +114,18 @@ class StagingProtectedCredentialStore:
         existing=self._pending.get(pending.revision)
         if existing is None or existing!=pending:
             return False
-        # Caller contract: mark_failed() returned True on DB PENDING->FAILED.
-        # The concrete encrypted writer MUST independently enforce revocation
-        # safety, idempotency and durable orphan reconciliation.
+        # Do not trust caller-owned state. Confirm FAILED for the exact
+        # revision and opaque ref through a worker-only PostgreSQL function.
+        # A pending or ACTIVE row, revoked identity, stale response or
+        # unknown network outcome MUST NOT authorize deletion.
+        try:
+            verified_ref=await self._registry.failed_credential_ref(
+                pending=pending)
+        except Exception:
+            return False
+        if (type(verified_ref) is not str
+                or not compare_digest(verified_ref,pending.credential_ref)):
+            return False
         try:
             deleted=await self._writer.discard_confirmed_failed(
                 tenant=pending.tenant_id,actor=pending.actor_id,
