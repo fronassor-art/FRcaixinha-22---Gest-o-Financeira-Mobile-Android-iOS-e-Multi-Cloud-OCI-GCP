@@ -20,6 +20,7 @@ import secrets
 import stat
 import sys
 
+from app.operator_release_worklist import release_worklist
 from app.provider_intake_schema import (
     FIELDS, FIELD_BY_KEY, IntakeBlocked, intake_audit,
     new_manifest, validate_field, validate_manifest,
@@ -150,7 +151,7 @@ def main(argv=None) -> int:
     parser=argparse.ArgumentParser(
         description="FR Finance AI Studio — somente identificadores públicos; NUNCA insira senhas, tokens, secrets ou DSNs."
     )
-    parser.add_argument("action",choices=("init","fields","set","unset","audit"))
+    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan"))
     parser.add_argument("key",nargs="?")
     parser.add_argument("value",nargs="?")
     args=parser.parse_args(argv)
@@ -180,6 +181,16 @@ def main(argv=None) -> int:
             if args.key is not None or args.value is not None:
                 raise _deny()
             _print_audit(path)
+        elif args.action=="plan":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            report=release_worklist(read_file(path))
+            print("FR_FINANCE_PROVIDER_PLAN=READ_ONLY")
+            for stage in report["stages"]:
+                print("=== "+stage["id"]+" ===")
+                for item in stage["actions"]:
+                    print(item["responsible"]+": "+item["action"])
+            print("FR_FINANCE_PROVIDER_PLAN=BLOCKED_EXTERNAL_EVIDENCE")
         return 0
     except (IntakeBlocked,OSError):
         print("FR_FINANCE_PUBLIC_INTAKE=BLOCKED_INVALID_OR_MISSING_INPUT",file=sys.stderr)
