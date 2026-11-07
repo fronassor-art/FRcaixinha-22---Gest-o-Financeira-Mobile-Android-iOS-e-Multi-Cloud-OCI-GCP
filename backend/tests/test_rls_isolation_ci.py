@@ -286,16 +286,25 @@ async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows,
         assert not await app_role.fetchval(
             "SELECT has_table_privilege(current_user,'public.sessions','SELECT')")
         async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
-            member = await client.post('/api/v1/auth/login', json={
+            # Uma identidade com dois vinculos no mesmo papel exige tenant.
+            ambiguous = await client.post('/api/v1/auth/login', json={
                 'usernameOrEmail': f"{ids['member_a']}@example.com",
                 'password': password,
                 'requestedRole': 'TENANT_MEMBER'})
+            assert ambiguous.status_code == 409, ambiguous.text
+            assert 'token' not in ambiguous.json()
+
+            selected = str(ids['tenant_b'])
+            other = str(ids['tenant_a'])
+            member = await client.post('/api/v1/auth/login', json={
+                'usernameOrEmail': f"{ids['member_a']}@example.com",
+                'password': password,
+                'requestedRole': 'TENANT_MEMBER',
+                'requestedTenantId': selected})
             assert member.status_code == 200, member.text
             token = member.json()['token']
             headers = {'Authorization': f'Bearer {token}'}
-            selected = member.json()['user']['tenant_id']
-            assert selected in (str(ids['tenant_a']),str(ids['tenant_b']))
-            other = str(ids['tenant_b']) if selected==str(ids['tenant_a']) else str(ids['tenant_a'])
+            assert member.json()['user']['tenant_id'] == selected
             stored = await auth.fetchrow(
                 'SELECT user_id,revoked_at,expires_at FROM public.sessions WHERE token_hash=$1',
                 hash_token(token))
