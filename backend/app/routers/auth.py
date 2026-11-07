@@ -131,6 +131,7 @@ async def login(payload: LoginRequest, response: Response):
                     requested_role=payload.requested_role,
                     is_master=is_master,
                     links=links,
+                    requested_tenant_id=payload.requested_tenant_id,
                 )
                 # Role Auth não pode UPDATE direto em perfil/tenant.
                 # A função PostgreSQL valida token, identidade e vínculo
