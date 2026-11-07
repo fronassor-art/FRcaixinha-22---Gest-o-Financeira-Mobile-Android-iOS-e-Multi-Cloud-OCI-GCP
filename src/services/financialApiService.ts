@@ -51,6 +51,11 @@ import {LedgerAccountDirectory,parseLedgerAccountDirectory} from './ledgerAccoun
 import {LedgerKeysetPage,parseLedgerKeysetPage} from './ledgerKeysetBoundary';
 import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
+import {
+  ContractCatalog, ContractDigestPreview, InvitationPreparerRole,
+  targetForPreparer, validateReviewInput,
+  parseContractCatalog, parseContractDigestPreview,
+} from './invitationContractReview';
 
 export class FinancialBackendUnavailableError extends Error {
   public code: string;
@@ -208,6 +213,35 @@ class FinancialApiService {
   }): Promise<MasterAdminRegistryPage> {
     const raw: unknown = await this.request('/api/v1/master/admin-registry?' + adminRegistryQuery(params));
     return parseMasterAdminRegistry(raw);
+  }
+
+  // M25300: preparação documental somente leitura, nunca assina ou envia convite.
+  public async fetchInvitationContractCatalog(
+    role: InvitationPreparerRole, tenantId: string,
+  ): Promise<ContractCatalog> {
+    validateReviewInput(role, tenantId);
+    const target = targetForPreparer(role);
+    const raw: unknown = await this.request('/api/v1/invitations/preflight/contract-catalog', {
+      method: 'POST',
+      body: JSON.stringify({target_role: target, tenant_id: tenantId}),
+    });
+    return parseContractCatalog(raw, target);
+  }
+
+  public async verifyInvitationContractText(
+    role: InvitationPreparerRole, tenantId: string,
+    documentId: string, contractText: string,
+  ): Promise<ContractDigestPreview> {
+    validateReviewInput(role, tenantId, documentId, contractText);
+    const target = targetForPreparer(role);
+    const raw: unknown = await this.request('/api/v1/invitations/preflight/contract-text', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_role: target, tenant_id: tenantId,
+        required_document_id: documentId, contract_text: contractText,
+      }),
+    });
+    return parseContractDigestPreview(raw, target);
   }
 
   public async fetchMasterOnboardingCapabilities(): Promise<MasterOnboardingCapabilities> {
