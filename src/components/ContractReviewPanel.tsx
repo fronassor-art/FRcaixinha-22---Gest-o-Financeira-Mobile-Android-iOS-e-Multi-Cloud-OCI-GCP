@@ -27,6 +27,7 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
 
   const resetResult = () => {
     sequence.current += 1;
+    setLoading(false);
     setResult(null);
     setError('');
   };
