@@ -55,6 +55,9 @@ def test_explicit_tenant_choice_requires_matching_active_link():
         {"role": "TENANT_MEMBER", "tenant_id": other_tenant},
     ]
     for role in ("TENANT_ADMIN", "TENANT_MEMBER"):
+        with pytest.raises(HTTPException) as ambiguous:
+            select_login_role(requested_role=role, is_master=False, links=multi)
+        assert ambiguous.value.status_code == 409
         assert select_login_role(
             requested_role=role, is_master=False, links=multi,
             requested_tenant_id=other_tenant,
