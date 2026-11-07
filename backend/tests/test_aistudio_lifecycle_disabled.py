@@ -25,7 +25,8 @@ def test_lifecycle_helpers_refuse_execution_outside_disposable_ci(monkeypatch):
     with pytest.raises(LifecycleDenied):
         prepare_invitation_ci(db, tenant_id=uuid4(), inviter_id=uuid4(),
                               recipient_email="ci@example.com",
-                              target_role="TENANT_MEMBER")
+                              target_role="TENANT_MEMBER",
+                              required_document_id=uuid4())
 
 
 def test_password_recovery_public_endpoint_stays_blocked():

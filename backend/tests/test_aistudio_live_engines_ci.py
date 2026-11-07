@@ -99,8 +99,12 @@ def test_registration_validates_cpf_and_requires_delivery(base_ci):
     invitation,original=prepare_invitation_ci(
         db,tenant_id=u['tenant'],inviter_id=u['admin'],
         recipient_email="new.member@example.com",target_role="TENANT_MEMBER",
+        required_document_id=doc,
     )
-    db.execute("UPDATE public.invitations SET required_document_id=%s WHERE id=%s",(doc,invitation))
+    assert db.execute(
+        "SELECT required_document_id FROM public.invitations WHERE id=%s",
+        (invitation,),
+    ).fetchone() == (doc,)
     with pytest.raises(LifecycleDenied):
         prepare_invite_email_verification_ci(db,invitation_id=invitation)
     assert simulate_invitation_delivery_ci(db,invitation)
@@ -145,11 +149,12 @@ def test_registration_disallows_contract_mismatch_and_revoked_sender(base_ci):
     inv,_=prepare_invitation_ci(
         db,tenant_id=u['tenant'],inviter_id=u['admin'],
         recipient_email="another.member@example.com",target_role="TENANT_MEMBER",
+        required_document_id=required,
     )
-    db.execute(
-        "UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
-        (required,inv),
-    )
+    assert db.execute(
+        "SELECT required_document_id FROM public.invitations WHERE id=%s",
+        (inv,),
+    ).fetchone() == (required,)
     assert simulate_invitation_delivery_ci(db,inv)
     token=prepare_invite_email_verification_ci(db,invitation_id=inv)
     with pytest.raises(LifecycleDenied):

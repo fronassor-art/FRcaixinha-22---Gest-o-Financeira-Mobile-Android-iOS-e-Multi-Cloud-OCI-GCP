@@ -38,3 +38,28 @@ def test_public_invitation_remains_unavailable():
     assert "prepare_invitation_ci" not in router
     assert "Convites ainda não implementados" in router
     assert "status.HTTP_503_SERVICE_UNAVAILABLE" in router
+
+
+def test_legacy_ci_invitation_callers_are_versioned_at_creation():
+    """M24601: guard the previously overlooked CI call sites."""
+    import ast
+
+    for relative in (
+        "backend/tests/test_aistudio_account_lifecycle_ci.py",
+        "backend/tests/test_aistudio_live_engines_ci.py",
+        "backend/tests/test_aistudio_lifecycle_disabled.py",
+    ):
+        source = (ROOT / relative).read_text()
+        assert "UPDATE public.invitations SET required_document_id=%s" not in source
+        tree = ast.parse(source, filename=relative)
+        calls = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "prepare_invitation_ci"
+        ]
+        assert calls, f"No invitation invocations found in {relative}"
+        for call in calls:
+            assert any(key.arg == "required_document_id" for key in call.keywords), (
+                f"Missing required_document_id in {relative} at line {call.lineno}"
+            )
