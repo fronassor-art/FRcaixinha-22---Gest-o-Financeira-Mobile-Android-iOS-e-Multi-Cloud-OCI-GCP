@@ -75,6 +75,7 @@ BEGIN
    OR p_sealed_ref !~ '^ci://[A-Za-z0-9._/-]{10,150}$'
  THEN RAISE EXCEPTION 'M25900_DENIED: caller or payload invalid'; END IF;
 
+ PERFORM pg_advisory_xact_lock(hashtextextended('M25900|'||p_invitation::text,0));
  SELECT i.id,i.tenant_id,i.inviter_user_id,i.target_role,
         i.required_document_id,i.target_email
  INTO inv
@@ -104,11 +105,12 @@ BEGIN
  ) THEN RAISE EXCEPTION 'M25900_DENIED: recipient binding invalid'; END IF;
 
  -- UNIQUE invitation_id and event_id plus row lock protect concurrency.
- SELECT id,event_id,recipient_digest,sealed_payload_ref
+ SELECT id,invitation_id,event_id,recipient_digest,sealed_payload_ref
  INTO existing FROM public.invite_delivery_outbox_staging
  WHERE invitation_id=p_invitation OR event_id=p_event FOR UPDATE;
  IF FOUND THEN
-   IF existing.event_id<>p_event OR existing.recipient_digest<>p_digest
+   IF existing.invitation_id<>p_invitation
+      OR existing.event_id<>p_event OR existing.recipient_digest<>p_digest
       OR existing.sealed_payload_ref<>p_sealed_ref
    THEN RAISE EXCEPTION 'M25900_DENIED: conflicting replay'; END IF;
    RETURN 'REPLAY:'||existing.id::text;
