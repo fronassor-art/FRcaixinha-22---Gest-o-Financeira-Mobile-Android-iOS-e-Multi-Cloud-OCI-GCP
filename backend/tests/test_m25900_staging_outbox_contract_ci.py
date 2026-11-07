@@ -17,7 +17,7 @@ CHAIN = ROOT / "backend/scripts/aistudio_staging_chain_ci.sh"
 def test_migration_and_ci_probe_are_registered_not_termux_eligible():
     catalog=json.loads((ROOT / "backend/migration_catalog_ai_studio.json").read_text())
     entries={e["source_path"]:e for e in catalog["entries"]}
-    assert len(entries) == len(catalog["entries"]) == 76
+    assert len(entries) == len(catalog["entries"]) == 79
     for path in (SQL,FIXTURE,PROBE):
         rel=str(path.relative_to(ROOT))
         assert rel in entries
