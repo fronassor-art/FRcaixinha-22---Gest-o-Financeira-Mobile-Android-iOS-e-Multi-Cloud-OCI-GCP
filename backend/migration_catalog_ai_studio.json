@@ -872,6 +872,16 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "173f3d2520b8eaa984cec5096756d6c7e632aa75"
+    },
+    {
+      "id": "staging_migrations:055",
+      "source_path": "backend/staging_migrations/055_invite_encrypted_envelope_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_encrypted_envelopes_staging",
+      "local_evidence": null,
+      "source_blob_sha": "5f6e89f29c1e89574ada0df55dca02fe6e8c1a67"
     }
   ]
 }
