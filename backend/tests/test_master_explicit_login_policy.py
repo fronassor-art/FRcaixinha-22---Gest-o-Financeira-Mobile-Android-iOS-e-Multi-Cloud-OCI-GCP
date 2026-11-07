@@ -46,3 +46,29 @@ def test_nonmaster_legacy_fallback_never_grants_platform_access():
             select_login_role(
                 requested_role=role, is_master=False, links=links
             )
+
+
+def test_explicit_tenant_choice_requires_matching_active_link():
+    other_tenant = uuid.UUID("00000000-0000-4000-8000-000000000003")
+    multi = LINKS + [
+        {"role": "TENANT_ADMIN", "tenant_id": other_tenant},
+        {"role": "TENANT_MEMBER", "tenant_id": other_tenant},
+    ]
+    for role in ("TENANT_ADMIN", "TENANT_MEMBER"):
+        assert select_login_role(
+            requested_role=role, is_master=False, links=multi,
+            requested_tenant_id=other_tenant,
+        ) == (role, other_tenant)
+        with pytest.raises(HTTPException) as exc:
+            select_login_role(
+                requested_role=role, is_master=False, links=LINKS,
+                requested_tenant_id=other_tenant,
+            )
+        assert exc.value.status_code == 401
+    for role, master in ((None, False), ("MASTER", True)):
+        with pytest.raises(HTTPException) as exc:
+            select_login_role(
+                requested_role=role, is_master=master, links=multi,
+                requested_tenant_id=other_tenant,
+            )
+        assert exc.value.status_code == 401
