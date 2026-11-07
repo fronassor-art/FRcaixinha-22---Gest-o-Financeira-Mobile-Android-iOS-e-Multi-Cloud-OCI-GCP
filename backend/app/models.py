@@ -21,6 +21,11 @@ class LoginRequest(BaseModel):
         pattern="^(MASTER|TENANT_ADMIN|TENANT_MEMBER)$",
         description="Papel escolhido na tela de login. O servidor valida o vinculo.",
     )
+    requested_tenant_id: Optional[UUID] = Field(
+        default=None,
+        validation_alias=AliasChoices('requested_tenant_id', 'requestedTenantId'),
+        description="Caixinha escolhida, confirmada por vinculo ativo no PostgreSQL.",
+    )
 
 class UserResponse(BaseModel):
     id: str
