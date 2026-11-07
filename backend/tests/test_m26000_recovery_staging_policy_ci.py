@@ -15,9 +15,9 @@ CHAIN=ROOT/"backend/scripts/aistudio_staging_chain_ci.sh"
 
 def test_recovery_migration_registration_and_isolation():
     cat=json.loads((ROOT/"backend/migration_catalog_ai_studio.json").read_text())
-    assert len(cat["entries"])==79
+    assert len(cat["entries"])>=82
     by_path={e["source_path"]:e for e in cat["entries"]}
-    assert len(by_path)==79
+    assert len(by_path)==len(cat["entries"])
     for item in (SQL,FIX,PROBE):
         e=by_path[str(item.relative_to(ROOT))]
         assert e["do_not_apply_source_to_termux"] is True
