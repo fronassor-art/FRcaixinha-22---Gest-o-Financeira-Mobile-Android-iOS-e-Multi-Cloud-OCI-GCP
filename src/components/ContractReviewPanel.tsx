@@ -17,6 +17,7 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
   const [catalog, setCatalog] = useState<ContractCatalog | null>(null);
   const [documentId, setDocumentId] = useState('');
   const [body, setBody] = useState('');
+  const [canonicalVerified, setCanonicalVerified] = useState(false);
   const [result, setResult] = useState<ContractDigestPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +30,7 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
     sequence.current += 1;
     setLoading(false);
     setResult(null);
+    setCanonicalVerified(false);
     setError('');
   };
 
@@ -38,6 +40,7 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
     setCatalog(null);
     setDocumentId('');
     setBody('');
+    setCanonicalVerified(false);
     setResult(null);
     setError('');
     try {
@@ -50,6 +53,32 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
     } catch {
       if (sequence.current === request) {
         setError('Não foi possível consultar versões publicadas. Verifique o UUID da caixinha e sua sessão.');
+      }
+    } finally {
+      if (sequence.current === request) setLoading(false);
+    }
+  };
+
+  const loadCanonical = async () => {
+    if (loading || !catalog?.tenant_active_verified || !documentId) return;
+    const selected = catalog.documents.find(doc => doc.document_id === documentId);
+    if (!selected) return;
+    const request = ++sequence.current;
+    setBody('');
+    setCanonicalVerified(false);
+    setResult(null);
+    setError('');
+    try {
+      setLoading(true);
+      const canonical = await financialApi.fetchCanonicalInvitationContract(
+        role, tenantId, selected.document_id, selected.sha256,
+      );
+      if (sequence.current !== request) return;
+      setBody(canonical.contract_text);
+      setCanonicalVerified(true);
+    } catch {
+      if (sequence.current === request) {
+        setError('Texto canônico indisponível ou divergente. O servidor precisa ter a versão íntegra publicada.');
       }
     } finally {
       if (sequence.current === request) setLoading(false);
@@ -127,6 +156,16 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
               <p className="mt-1">Publicado em: {doc.published_at}</p>
             </div>
           ))}
+          <button type="button" disabled={loading || !documentId}
+            onClick={() => void loadCanonical()}
+            className="min-h-11 w-full rounded-lg border border-[#8eae99] bg-white px-3 py-2 text-sm font-semibold text-[#12462e] disabled:opacity-50">
+            Carregar texto canônico verificado do servidor
+          </button>
+          {canonicalVerified && (
+            <p role="status" className="text-xs font-semibold text-[#246143]">
+              Texto canônico carregado e SHA-256 conferido nesta sessão.
+            </p>
+          )}
           <label htmlFor="contract-review-body" className="block text-sm font-semibold text-[#143d29]">
             Texto integral da versão escolhida (UTF-8)
           </label>
