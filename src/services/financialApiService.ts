@@ -52,9 +52,9 @@ import {LedgerKeysetPage,parseLedgerKeysetPage} from './ledgerKeysetBoundary';
 import {DisplayLedgerAccount,DisplayLedgerTransaction,parseLedgerAccounts,parseLedgerTransactions} from './ledgerDetailBoundary';
 import {ApiResponseIntegrityError, parseApiErrorEnvelope} from './apiResponsePolicy';
 import {
-  ContractCatalog, ContractDigestPreview, InvitationPreparerRole,
+  ContractCatalog, ContractDigestPreview, CanonicalContractBody, InvitationPreparerRole,
   targetForPreparer, validateReviewInput,
-  parseContractCatalog, parseContractDigestPreview,
+  parseContractCatalog, parseContractDigestPreview, parseCanonicalContractBody,
 } from './invitationContractReview';
 
 export class FinancialBackendUnavailableError extends Error {
@@ -226,6 +226,25 @@ class FinancialApiService {
       body: JSON.stringify({target_role: target, tenant_id: tenantId}),
     });
     return parseContractCatalog(raw, target);
+  }
+
+  public async fetchCanonicalInvitationContract(
+    role: InvitationPreparerRole, tenantId: string,
+    documentId: string, expectedSha256: string,
+  ): Promise<CanonicalContractBody> {
+    validateReviewInput(role, tenantId, documentId);
+    if (!/^[0-9a-f]{64}$/.test(expectedSha256)) {
+      throw new Error('Hash documental inválido');
+    }
+    const target = targetForPreparer(role);
+    const raw: unknown = await this.request('/api/v1/invitations/preflight/contract-content', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_role: target, tenant_id: tenantId,
+        required_document_id: documentId,
+      }),
+    });
+    return parseCanonicalContractBody(raw, documentId, expectedSha256);
   }
 
   public async verifyInvitationContractText(
