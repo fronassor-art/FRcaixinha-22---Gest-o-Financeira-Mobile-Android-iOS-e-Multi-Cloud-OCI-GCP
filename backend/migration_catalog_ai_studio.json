@@ -802,6 +802,36 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "a1e0a3abfb7cd791ac1874ad36311ec80a95b7ae"
+    },
+    {
+      "id": "staging_migrations:052",
+      "source_path": "backend/staging_migrations/052_invite_dispatch_lease_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_dispatch_leases_staging",
+      "local_evidence": null,
+      "source_blob_sha": "8dacc02feeaf85ba6a519d70171c99d6ded6ec3a"
+    },
+    {
+      "id": "ci_migrations:050",
+      "source_path": "backend/ci_migrations/050_invite_dispatch_first_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "8e8ff242de45221b644e984da109498b83748bd0"
+    },
+    {
+      "id": "ci_migrations:051",
+      "source_path": "backend/ci_migrations/051_invite_dispatch_retry_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "f7f53108b08488f5b67e79bc56e1437a65be3a08"
     }
   ]
 }
