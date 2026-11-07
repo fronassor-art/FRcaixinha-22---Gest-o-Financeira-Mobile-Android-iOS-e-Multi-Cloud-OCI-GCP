@@ -12,6 +12,7 @@ from ..dependencies import get_current_session, AuthenticatedSession
 from ..config import settings
 from ..database import get_rls_db_connection
 from ..contract_text_integrity import verify_contract_body_digest
+from ..canonical_contract_store import load_published_contract_body
 from ..invitation_preflight import (
     authorize_invitation_intent, invitation_readiness, invitation_contract_readiness,
     published_membership_contract_catalog,
@@ -73,6 +74,18 @@ async def preview_contract_text_integrity(
     ativação é possível por esta rota.
     """
     return await verify_contract_body_digest(
+        session=session, payload=payload, conn=conn,
+    )
+
+
+@router.post("/preflight/contract-content")
+async def fetch_canonical_contract_content(
+    payload: InvitationContractReadinessRequest,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Entregar texto canônico somente após publicação e hash autenticados."""
+    return await load_published_contract_body(
         session=session, payload=payload, conn=conn,
     )
 
