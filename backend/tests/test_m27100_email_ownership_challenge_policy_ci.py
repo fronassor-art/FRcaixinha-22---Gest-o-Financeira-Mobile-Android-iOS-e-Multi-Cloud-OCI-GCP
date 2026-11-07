@@ -26,6 +26,10 @@ def test_every_challenge_sql_is_hash_registered_and_banned_from_termux():
 
 def test_challenge_requires_disposable_db_and_restricted_workers():
     sql=STAGING.read_text()
+    assert sql.strip().endswith("COMMIT;")
+    assert sql.count("COMMIT;")==1
+    assert sql.count("CREATE FUNCTION public.invite_")==2
+    assert "p_raw_token !~ '^[A-Za-z0-9_-]+$'" in sql
     for token in (
         "current_database()<>'frcaixinha_staging'",
         "session_user<>'postgres'",
