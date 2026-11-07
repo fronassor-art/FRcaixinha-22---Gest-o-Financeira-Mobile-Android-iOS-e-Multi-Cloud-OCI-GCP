@@ -427,6 +427,9 @@ jobs:
           python -m pytest -q backend/tests/test_m27700_public_provider_intake_ci.py
           python -m pytest -q backend/tests/test_m27800_operator_intake_cli_ci.py
           python -m pytest -q backend/tests/test_m27900_operator_release_worklist_ci.py
+          python -m pytest -q backend/tests/test_m28100_provider_setup_sequence_ci.py
+          python -m pytest -q backend/tests/test_m28200_public_tls_probe_ci.py
+          python -m pytest -q backend/tests/test_m28300_provider_secret_inventory_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
