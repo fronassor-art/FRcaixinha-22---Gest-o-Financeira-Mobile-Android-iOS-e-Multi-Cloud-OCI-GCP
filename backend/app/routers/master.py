@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from decimal import Decimal
 from typing import Literal
 import uuid
+import os
 from ..dependencies import require_master, AuthenticatedSession
 from ..database import get_rls_db_connection
 from ..admin_onboarding_policy import readiness_manifest, preflight_assessment
@@ -15,6 +16,7 @@ from ..admin_onboarding_workflow import (
     STATES, workflow_contract, preview_transition,
 )
 from ..onboarding_permission_matrix import permission_matrix_contract
+from ..launch_readiness import readiness_manifest as platform_release_manifest
 
 router = APIRouter(prefix="/master", tags=["Governança Master da Plataforma"])
 
@@ -57,6 +59,14 @@ class LicensePriceChange(BaseModel):
     tier: Literal['ESSENCIAL', 'INTERMEDIARIO']
     monthly_price: Decimal = Field(..., gt=Decimal('0'), le=Decimal('999999.99'), decimal_places=2)
     reason: str = Field(..., min_length=15, max_length=500)
+
+
+@router.get("/launch-readiness")
+def master_launch_readiness(
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Inventário sem segredos ou mudanças no banco, restrito ao Master."""
+    return platform_release_manifest(os.environ)
 
 
 @router.get("/admin-onboarding/permission-matrix")
