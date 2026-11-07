@@ -112,3 +112,48 @@ export function parseContractDigestPreview(
       (!raw.document_published_verified || !raw.tenant_active_verified)) fail();
   return raw as ContractDigestPreview;
 }
+
+
+export type CanonicalContractBody = {
+  source: 'PUBLISHED_CONTRACT_VERIFIED';
+  scope: 'AI_STUDIO_CANONICAL_CONTRACT_BODY';
+  document_id: string;
+  version: string;
+  sha256: string;
+  published_at: string;
+  contract_text: string;
+  integrity_verified: true;
+  body_available: true;
+  acceptance_recorded: false;
+  invitation_created: false;
+  activation_authorized: false;
+  writes_performed: false;
+};
+
+/** Independently recalculate digest in the browser; no extension or third-party SDK. */
+export async function parseCanonicalContractBody(
+  raw: unknown,
+  expectedDocumentId: string,
+  expectedSha256: string,
+): Promise<CanonicalContractBody> {
+  if (!isObject(raw) || raw.source !== 'PUBLISHED_CONTRACT_VERIFIED' ||
+      raw.scope !== 'AI_STUDIO_CANONICAL_CONTRACT_BODY' ||
+      raw.document_id !== expectedDocumentId ||
+      typeof raw.version !== 'string' || raw.version.length === 0 ||
+      raw.version.length > 60 || typeof raw.sha256 !== 'string' ||
+      !SHA256.test(raw.sha256) || raw.sha256 !== expectedSha256 ||
+      typeof raw.published_at !== 'string' ||
+      !Number.isFinite(Date.parse(raw.published_at)) ||
+      typeof raw.contract_text !== 'string' ||
+      !raw.contract_text || raw.integrity_verified !== true ||
+      raw.body_available !== true || raw.acceptance_recorded !== false ||
+      raw.invitation_created !== false || raw.activation_authorized !== false ||
+      raw.writes_performed !== false) fail();
+  const bytes = new TextEncoder().encode(raw.contract_text);
+  if (bytes.byteLength > 65536 || typeof crypto === 'undefined' ||
+      !crypto.subtle?.digest) fail();
+  const buffer = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  if (hex !== raw.sha256) fail();
+  return raw as CanonicalContractBody;
+}
