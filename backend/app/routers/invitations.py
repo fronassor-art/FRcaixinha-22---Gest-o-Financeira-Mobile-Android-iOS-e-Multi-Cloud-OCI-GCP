@@ -4,12 +4,16 @@ As rotas de criação real permanecem bloqueadas até existirem entrega,
 verificação de titularidade, aceite contratual, RLS e auditoria aprovados.
 """
 from fastapi import APIRouter, HTTPException, status, Depends
-from ..models import InvitationCreateRequest, InvitationContractReadinessRequest
+from ..models import (
+    InvitationCreateRequest, InvitationContractReadinessRequest,
+    InvitationContractCatalogRequest,
+)
 from ..dependencies import get_current_session, AuthenticatedSession
 from ..config import settings
 from ..database import get_rls_db_connection
 from ..invitation_preflight import (
     authorize_invitation_intent, invitation_readiness, invitation_contract_readiness,
+    published_membership_contract_catalog,
 )
 
 router = APIRouter(prefix="/invitations", tags=["Convites e Onboarding Administrativo"])
@@ -40,6 +44,18 @@ async def preview_published_contract_readiness(
     continuam ativos mesmo quando as duas referências são válidas.
     """
     return await invitation_contract_readiness(
+        session=session, payload=payload, conn=conn,
+    )
+
+
+@router.post("/preflight/contract-catalog")
+async def preview_published_contract_catalog(
+    payload: InvitationContractCatalogRequest,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Lista versões de adesão publicadas (metadados) sem permitir aceite."""
+    return await published_membership_contract_catalog(
         session=session, payload=payload, conn=conn,
     )
 
