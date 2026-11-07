@@ -66,6 +66,13 @@ class InvitationCreateRequest(BaseModel):
         description="Referência de adesão versionada; não autoriza emissão de convites.",
     )
 
+class InvitationContractReadinessRequest(BaseModel):
+    """Consulta somente leitura: não recebe nem armazena e-mail de destinatário."""
+    target_role: str = Field(..., pattern="^(TENANT_ADMIN|TENANT_MEMBER)$")
+    tenant_id: UUID
+    required_document_id: UUID
+
+
 class ContextSwitchRequest(BaseModel):
     target_role: str = Field(..., pattern="^(MASTER|TENANT_ADMIN|TENANT_MEMBER)$")
     target_tenant_id: Optional[str] = None
