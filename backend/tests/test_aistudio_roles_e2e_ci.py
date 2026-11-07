@@ -207,6 +207,39 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
                     assert (await client.get(
                         "/api/v1/auth/me",headers=headers)).status_code==401
 
+                # M24800: escolha explicita do segundo tenant sem vazamento do primeiro.
+                for role, index in (("TENANT_ADMIN", 1), ("TENANT_MEMBER", 2)):
+                    chosen = await client.post("/api/v1/auth/login", json={
+                        "usernameOrEmail": emails[index],
+                        "password": passwords[index],
+                        "requestedRole": role,
+                        "requestedTenantId": str(second["tenant_id"]),
+                    })
+                    assert chosen.status_code == 200, (role, chosen.text)
+                    token = chosen.json()["token"]
+                    assert chosen.json()["user"]["tenant_id"] == str(second["tenant_id"])
+                    headers = {"Authorization": "Bearer " + token}
+                    own = await client.get(
+                        f'/api/v1/tenants/{second["tenant_id"]}/dashboard',
+                        headers=headers,
+                    )
+                    assert own.status_code == 200
+                    wrong = await client.get(
+                        f'/api/v1/tenants/{first["tenant_id"]}/dashboard',
+                        headers=headers,
+                    )
+                    assert wrong.status_code == 403
+                    assert (await client.post(
+                        "/api/v1/auth/logout", headers=headers)).status_code == 200
+
+                denied_tenant = await client.post("/api/v1/auth/login", json={
+                    "usernameOrEmail": emails[1],
+                    "password": passwords[1],
+                    "requestedRole": "TENANT_ADMIN",
+                    "requestedTenantId": str(uuid4()),
+                })
+                assert denied_tenant.status_code == 401
+
                 # A mesma identidade Master possui os 3 vinculos ja existentes.
                 # Cada papel requer NOVO login com senha, nunca troca de sessao.
                 for role in ("MASTER","TENANT_ADMIN","TENANT_MEMBER"):
