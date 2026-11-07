@@ -149,3 +149,65 @@ async def invitation_contract_readiness(*, session, payload, conn) -> dict:
         "writes_performed": False,
         "blocking_gates": gates,
     }
+
+
+async def published_membership_contract_catalog(*, session, payload, conn) -> dict:
+    """M25100: metadados versionados de adesao via role de aplicacao e RLS.
+
+    Nunca fornece um texto contratual sintético ou atesta aceite.
+    Não consulta usuários, destinatários ou credenciais de terceiros.
+    """
+    authorize_invitation_intent(session=session, payload=payload)
+    if not isinstance(payload.tenant_id, UUID):
+        raise HTTPException(status_code=422, detail="Caixinha inválida.")
+
+    active = bool(await conn.fetchval(
+        "SELECT EXISTS(SELECT 1 FROM public.tenants "
+        "WHERE id=$1::uuid AND status='ATIVO')",
+        payload.tenant_id,
+    ))
+
+    rows = []
+    if active:
+        # SELECT limitado e filtrado por RLS. Não retornar source_reference:
+        # a referência pode ser interna e não prova o conteúdo apresentado.
+        rows = await conn.fetch(
+            "SELECT id,version_label,sha256,published_at "
+            "FROM public.contract_documents "
+            "WHERE document_kind='TENANT_MEMBERSHIP' "
+            "AND published_at IS NOT NULL "
+            "ORDER BY published_at DESC,id DESC LIMIT 20"
+        )
+
+    return {
+        "source": "POSTGRESQL_RLS",
+        "scope": "AI_STUDIO_PUBLISHED_MEMBERSHIP_CONTRACT_CATALOG",
+        "status": "BLOCKED",
+        "tenant_active_verified": active,
+        "document_kind": "TENANT_MEMBERSHIP",
+        "documents": [
+            {
+                "document_id": str(row["id"]),
+                "version": row["version_label"],
+                "sha256": row["sha256"].strip(),
+                "published_at": row["published_at"].isoformat(),
+            }
+            for row in rows
+        ],
+        "contract_body_available": False,
+        "invitation_created": False,
+        "acceptance_recorded": False,
+        "delivery_verified": False,
+        "activation_authorized": False,
+        "writes_performed": False,
+        "blocking_gates": [
+            "RUNTIME_INVITATION_ISSUANCE_DISABLED",
+            "CONTRACT_BODY_DISPLAY_AND_DIGEST_VERIFICATION_REQUIRED",
+            "RECIPIENT_EMAIL_OWNERSHIP_NOT_VERIFIED",
+            "EMAIL_DELIVERY_PROVIDER_NOT_VERIFIED",
+            "TRANSACTIONAL_ACCEPTANCE_NOT_IMPLEMENTED",
+        ] + (
+            ["MASTER_MFA_NOT_ATTESTED", "INDEPENDENT_APPROVAL_NOT_ATTESTED"]
+            if session.role == "MASTER" else []
+        ),
+    }
