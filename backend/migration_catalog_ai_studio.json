@@ -751,7 +751,27 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.invite_delivery_outbox_staging",
       "local_evidence": null,
-      "source_blob_sha": "9228aae45a99011b083133a9f78c59215993e36b"
+      "source_blob_sha": "0cfce9d1ce55256fb9b6959c5c399fea028fc2d4"
+    },
+    {
+      "id": "ci_migrations:046",
+      "source_path": "backend/ci_migrations/046_invitation_outbox_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "623b41410b274f784ba6eeb3f4fbe6385004f602"
+    },
+    {
+      "id": "ci_migrations:047",
+      "source_path": "backend/ci_migrations/047_invitation_outbox_worker_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "a72ebeae6475e71c8205e74c5b34d065f3b2f50e"
     }
   ]
 }
