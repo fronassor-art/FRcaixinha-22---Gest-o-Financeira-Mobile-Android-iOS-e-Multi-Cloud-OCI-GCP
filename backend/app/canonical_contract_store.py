@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import os
+import stat
 from hashlib import sha256
 from pathlib import Path
 from uuid import UUID
@@ -35,26 +36,33 @@ def _read_immutable_document(document_id: UUID, expected_digest: str, root_setti
             root_setting != root_setting.strip() or
             not os.path.isabs(root_setting)):
         raise ContractBodyUnavailable()
-    root = Path(root_setting)
-    # Strict permissions: the app must not be able to replace published source
-    # via world/group-writable directories or symlinked files.
-    if root.is_symlink() or not root.is_dir():
-        raise ContractBodyUnavailable()
+    # Open the directory once, then resolve a single UUID file relative to
+    # its descriptor. O_NOFOLLOW forbids replacing the last path component
+    # with a symlink. os.fstat validates the actual opened inode, not path
+    # metadata that could have changed before read().
+    root_fd = None
+    doc_fd = None
     try:
-        info = root.stat()
-        if info.st_mode & 0o022:
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        root_fd = os.open(root_setting, flags | os.O_DIRECTORY)
+        root_stat = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_stat.st_mode) or root_stat.st_mode & 0o022:
             raise ContractBodyUnavailable()
-        location = root / (str(document_id) + ".txt")
-        if location.is_symlink() or not location.is_file():
+        filename = str(document_id) + ".txt"
+        doc_fd = os.open(filename, flags, dir_fd=root_fd)
+        doc_stat = os.fstat(doc_fd)
+        if (not stat.S_ISREG(doc_stat.st_mode)
+                or doc_stat.st_mode & 0o222
+                or doc_stat.st_size < 1
+                or doc_stat.st_size > MAX_BYTES):
             raise ContractBodyUnavailable()
-        if location.stat().st_size > MAX_BYTES or location.stat().st_size < 1:
-            raise ContractBodyUnavailable()
-        # The stored document must be owned by a different OS user from the
-        # FastAPI process in production, or root-managed in a secure deployment.
-        # We independently require no write bits for anyone on the file.
-        if location.stat().st_mode & 0o222:
-            raise ContractBodyUnavailable()
-        raw = location.read_bytes()
+        if os.getenv("ENVIRONMENT") == "production":
+            # In production the API must NOT own these inodes: ownership
+            # would allow chmod/replacement even after chmod 0444.
+            if (root_stat.st_uid == os.geteuid()
+                    or doc_stat.st_uid == os.geteuid()):
+                raise ContractBodyUnavailable()
+        raw = os.read(doc_fd, MAX_BYTES + 1)
         if not (0 < len(raw) <= MAX_BYTES):
             raise ContractBodyUnavailable()
         if not hmac.compare_digest(sha256(raw).hexdigest(), expected_digest):
@@ -62,6 +70,11 @@ def _read_immutable_document(document_id: UUID, expected_digest: str, root_setti
         return raw.decode("utf-8", errors="strict")
     except (OSError, UnicodeError) as exc:
         raise ContractBodyUnavailable() from exc
+    finally:
+        if doc_fd is not None:
+            os.close(doc_fd)
+        if root_fd is not None:
+            os.close(root_fd)
 
 
 async def load_published_contract_body(*, session, payload, conn,
