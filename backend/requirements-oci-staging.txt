@@ -1,0 +1,3 @@
+# OCI staging only; DO NOT install in Android APK or Termux development.
+-r requirements.txt
+oci==2.190.0

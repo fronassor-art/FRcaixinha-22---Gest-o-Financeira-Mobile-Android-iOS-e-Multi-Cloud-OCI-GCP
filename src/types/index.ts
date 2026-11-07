@@ -238,7 +238,7 @@ export interface LedgerTransaction {
   id: string;
   tenant_id: string;
   cycle_id: string;
-  business_type: 'CONTRIBUTION_PAYMENT' | 'LOAN_DISBURSEMENT' | 'LOAN_INSTALLMENT_PAYMENT' | 'YEAR_END_DISTRIBUTION' | 'EXPENSE' | 'ADJUSTMENT';
+  business_type: 'CONTRIBUTION_PAYMENT' | 'LOAN_DISBURSEMENT' | 'LOAN_INSTALLMENT_PAYMENT' | 'LOAN_EARLY_SETTLEMENT' | 'YEAR_END_DISTRIBUTION' | 'EXPENSE' | 'ADJUSTMENT';
   business_id: string;
   posted_at: string;
   reversal_of_id?: string;

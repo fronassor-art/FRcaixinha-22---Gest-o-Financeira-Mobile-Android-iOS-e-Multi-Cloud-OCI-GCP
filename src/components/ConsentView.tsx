@@ -28,12 +28,35 @@ export const ConsentView: React.FC<ConsentViewProps> = ({ state }) => {
     consent?.signatures.some(s => s.signer_membership_id === om.id && !s.revoked_at)
   );
 
-  const handleToggleMySignature = (memberId: string) => {
-    appStore.toggleAdminConsentSignature(memberId);
+  const [errorModal, setErrorModal] = React.useState<{ title: string; message: string; detail?: string } | null>(null);
+
+  const handleToggleMySignature = async (memberId: string) => {
+    try {
+      await appStore.toggleAdminConsentSignature(memberId);
+    } catch (err: any) {
+      setErrorModal({
+        title: 'Consentimento Coletivo Bloqueado',
+        message: err?.message || 'Falha ao registrar voto de autorização.',
+        detail: err?.detail || 'O registro de consentimento unânime para autoempréstimo de administrador exige validação no banco PostgreSQL.'
+      });
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Banner de Estado do Backend Contratual */}
+      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow-xs flex items-start gap-3">
+        <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-950">
+          <span className="font-bold block text-sm text-amber-900 mb-0.5">
+            Autorização Coletiva e Votação Segura (FastAPI + PostgreSQL)
+          </span>
+          <p>
+            Em conformidade com a Cláusula 5.4 e 8.8, a autorização coletiva unânime é registrada com trilha criptográfica imutável no backend. Votos locais não homologados no servidor são invalidados.
+          </p>
+        </div>
+      </div>
+
       {/* Header com Regra Contratual */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -154,6 +177,33 @@ export const ConsentView: React.FC<ConsentViewProps> = ({ state }) => {
           })}
         </div>
       </div>
+
+      {/* Modal de Bloqueio por Backend Não Conectado */}
+      {errorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 text-rose-700">
+              <ShieldCheck className="w-6 h-6 shrink-0" />
+              <h3 className="font-bold text-base text-slate-900">{errorModal.title}</h3>
+            </div>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-950 space-y-1.5">
+              <span className="font-bold block text-rose-900">{errorModal.message}</span>
+              {errorModal.detail && <p className="text-[11px] text-rose-800">{errorModal.detail}</p>}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              A manifestação de voto não foi persistida localmente para assegurar a inviolabilidade jurídica da autorização coletiva.
+            </p>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setErrorModal(null)}
+                className="px-5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl cursor-pointer"
+              >
+                Compreendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

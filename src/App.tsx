@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import {ChevronLeft,ChevronRight} from 'lucide-react';
+import {startTabHistory,visitTab,stepTab,canStepTab} from './services/tabHistory';
 import {
   LayoutDashboard,
   Users,
@@ -22,7 +24,7 @@ import {
   Cloud,
   Smartphone,
   Apple,
-  Menu
+  Menu, MoreHorizontal, ChevronDown, Crown, BriefcaseBusiness, UserRound, X, LogOut, Bell
 } from 'lucide-react';
 import { appStore, AppState } from './services/store';
 import { Navbar } from './components/Navbar';
@@ -30,12 +32,15 @@ import { PixModal } from './components/PixModal';
 import { AdminManualModal } from './components/AdminManualModal';
 import { AuditSuiteModal } from './components/AuditSuiteModal';
 import { DashboardView } from './components/DashboardView';
+import { MasterTenantRegistryView } from './components/MasterTenantRegistryView';
+import { MasterAdminRegistryView } from './components/MasterAdminRegistryView';
+import { MasterOnboardingView } from './components/MasterOnboardingView';
 import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
-import { LoansView } from './components/LoansView';
+import { MemberAnnualPreviewView } from './components/MemberAnnualPreviewView';
+import { ServerLoansView } from './components/ServerLoansView';
 import { ConsentView } from './components/ConsentView';
 import { LedgerView } from './components/LedgerView';
-import { CycleClosingView } from './components/CycleClosingView';
 import { MasterLicensingView } from './components/MasterLicensingView';
 import { SupportSessionView } from './components/SupportSessionView';
 import { LotteryDemoView } from './components/LotteryDemoView';
@@ -45,10 +50,26 @@ import { MultiCloudView } from './components/MultiCloudView';
 import { MobileInstallModal } from './components/MobileInstallModal';
 import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { LoginView } from './components/LoginView';
+import { SessionSecurityPanel } from './components/SessionSecurityPanel';
+import { NotificationsView } from './components/NotificationsView';
+import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
+import { authService, AuthenticatedUser } from './services/authService';
+import { createForegroundSessionGuard } from './services/sessionResumeGuard';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
-  const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
+  const [tabHistory,setTabHistory] = useState(()=>startTabHistory('DASHBOARD'));
+  const activeTab=tabHistory.entries[tabHistory.index]??'DASHBOARD';
+  const setActiveTab=(tab:string)=>{
+    const role=appStore.getState().currentRole;
+    setTabHistory(old=>visitTab(old,tab,dest=>isRoleTabAllowed(role,dest)));
+  };
+  const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(() => authService.getUser());
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
+  const [resumeValidationPending, setResumeValidationPending] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Modais globais
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -82,22 +103,85 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Ajustar aba ativa caso o papel mude
+  // Monitorar ciclo de vida de autenticação e expiração de sessão
   useEffect(() => {
-    if (state.currentRole === 'MASTER') {
-      if (!['DASHBOARD', 'LICENCAS', 'NUVEM', 'SUPORTE', 'BOLOES', 'RIFAS', 'AUDITORIA'].includes(activeTab)) {
-        setActiveTab('DASHBOARD');
+    // Resposta da inicialização nunca pode apagar um novo login que chegou
+    // enquanto /me ainda estava pendente.
+    let mounted = true;
+    const bootstrap = authService.captureSession();
+    void authService.checkCurrentUser().then(user => {
+      if (!mounted) return;
+      if (user && authService.isSessionSnapshotCurrent(bootstrap)) {
+        setAuthenticatedUser(user);
+        appStore.setAuthenticatedContext(user);
+      } else if (!authService.getUser()) {
+        setAuthenticatedUser(null);
+        appStore.clearAuthenticatedContext();
       }
-    } else if (state.currentRole === 'TENANT_ADMIN') {
-      if (!['DASHBOARD', 'MEMBROS', 'CONTRIBUICOES', 'EMPRESTIMOS', 'NUVEM', 'CONSENTIMENTO', 'LEDGER', 'FECHAMENTO', 'LICENCA', 'RIFAS', 'BOLOES'].includes(activeTab)) {
-        setActiveTab('DASHBOARD');
+    });
+
+    const unsubscribeAuth = authService.subscribe(() => {
+      const user = authService.getUser();
+      setAuthenticatedUser(user);
+      if (!user) {
+        setSecurityOpen(false);
+        appStore.clearAuthenticatedContext();
       }
-    } else {
-      if (!['MEU_PAINEL', 'MINHAS_CONTRIBUICOES', 'MEU_EMPRESTIMO', 'NUVEM', 'AUTORIZACAO_ADMIN', 'MEU_RESULTADO', 'MINHAS_RIFAS', 'MEUS_BOLOES'].includes(activeTab)) {
-        setActiveTab('MEU_PAINEL');
+    });
+
+    const handleExpired = () => {
+      setSessionExpiredNotice(true);
+    };
+    window.addEventListener('frcaixinha:session-expired', handleExpired);
+
+    // Android e navegador: depois de retornar do segundo plano, nenhuma
+    // tela protegida aparece até que /auth/me confirme a sessão atual.
+    const resumeGuard = createForegroundSessionGuard(authService, setResumeValidationPending);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void resumeGuard.revalidate();
       }
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) void resumeGuard.revalidate();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
+
+    return () => {
+      mounted = false;
+      resumeGuard.dispose();
+      unsubscribeAuth();
+      window.removeEventListener('frcaixinha:session-expired', handleExpired);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
+
+  const handleLoginSuccess = (user: AuthenticatedUser) => {
+    setAuthenticatedUser(user);
+    setSessionExpiredNotice(false);
+    appStore.setAuthenticatedContext(user);
+    setSecurityOpen(false);
+    setMoreOpen(false);
+    setTabHistory(startTabHistory(initialRoleTab(user.role)));
+  };
+
+  const handleLogout = async () => {
+    await authService.logout();
+    setAuthenticatedUser(null);
+    appStore.clearAuthenticatedContext();
+    setTabHistory(startTabHistory('DASHBOARD'));
+    setSecurityOpen(false);
+    setMoreOpen(false);
+  };
+
+  // Papel ativo validado no servidor; bloqueia renderizacoes de outras funcoes.
+  useEffect(() => {
+    if (!isRoleTabAllowed(state.currentRole, activeTab)) {
+      setTabHistory(startTabHistory(initialRoleTab(state.currentRole)));
     }
-  }, [state.currentRole]);
+  }, [state.currentRole, activeTab]);
 
   const openPixModal = (params: {
     title: string;
@@ -113,17 +197,43 @@ export default function App() {
     });
   };
 
-  // Itens de navegação conforme papel (Cláusula 11.1)
+  // Se não estiver autenticado, exibe EXCLUSIVAMENTE a tela de login com segurança server-side
+  if (!authenticatedUser) {
+    return (
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+        sessionExpiredNotice={sessionExpiredNotice}
+      />
+    );
+  }
+
+  // Enquanto volta do segundo plano, nunca expor dados de um perfil cuja
+  // autorização ainda não foi revalidada pelo servidor.
+  if (resumeValidationPending) {
+    return (
+      <main role="status" aria-live="polite"
+        className="min-h-screen flex items-center justify-center bg-[#edf5ed] p-6">
+        <div className="max-w-md rounded-2xl border border-[#b7cbb8] bg-white p-6 text-center text-[#17452f]">
+          <strong className="block text-lg">Verificando sua sessão</strong>
+          <p className="mt-2 text-sm">Confirmando o acesso seguro com o servidor.</p>
+        </div>
+      </main>
+    );
+  }
+
+  // Itens de navegação conforme papel autenticado (Cláusula 11.1)
   const renderNavTabs = () => {
     if (state.currentRole === 'MASTER') {
       return [
-        { id: 'DASHBOARD', label: 'Painel Master', icon: LayoutDashboard },
+        { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
+        { id: 'CAIXINHAS', label: 'Caixinhas', icon: BriefcaseBusiness },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
-        { id: 'NUVEM', label: 'Multi-Cloud OCI + GCP', icon: Cloud },
-        { id: 'SUPORTE', label: 'Suporte e Break-Glass', icon: LifeBuoy },
-        { id: 'RIFAS', label: 'Módulo de Rifas', icon: Ticket },
-        { id: 'BOLOES', label: 'Bolões Oficiais', icon: Ticket },
+        { id: 'ADMINISTRADORES', label: 'Administradores', icon: Users },
+        { id: 'ONBOARDING', label: 'Preparação de acesso', icon: ShieldCheck },
+        { id: 'SUPORTE', label: 'Suporte', icon: LifeBuoy },
+        { id: 'NUVEM', label: 'Infraestrutura', icon: Cloud },
         { id: 'AUDITORIA', label: 'Suíte AT-01 a AT-50', icon: ShieldCheck },
+        { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
       ];
     }
 
@@ -131,15 +241,11 @@ export default function App() {
       return [
         { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
         { id: 'MEMBROS', label: 'Membros e Cotas', icon: Users },
-        { id: 'CONTRIBUICOES', label: 'Contribuições (Dia 10)', icon: Wallet },
-        { id: 'EMPRESTIMOS', label: 'Crédito Price', icon: TrendingUp },
-        { id: 'RIFAS', label: 'Rifas da Caixinha', icon: Ticket },
-        { id: 'BOLOES', label: 'Bolões Oficiais', icon: Ticket },
-        { id: 'NUVEM', label: 'Multi-Cloud OCI + GCP', icon: Cloud },
-        { id: 'CONSENTIMENTO', label: 'Autorização Anual Admin', icon: ShieldCheck },
-        { id: 'LEDGER', label: 'Livro-Razão (Partidas Dobradas)', icon: FileSpreadsheet },
-        { id: 'FECHAMENTO', label: 'Fechamento e Capital-Dias', icon: Coins },
-        { id: 'LICENCA', label: 'Políticas & Licença', icon: Sliders },
+        { id: 'CONTRIBUICOES', label: 'Contribuições', icon: Wallet },
+        { id: 'EMPRESTIMOS', label: 'Empréstimos', icon: TrendingUp },
+        { id: 'LEDGER', label: 'Livro-Razão', icon: FileSpreadsheet },
+        { id: 'FECHAMENTO', label: 'Fechamento', icon: Coins },
+        { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
       ];
     }
 
@@ -148,18 +254,17 @@ export default function App() {
       { id: 'MEU_PAINEL', label: 'Meu Painel', icon: LayoutDashboard },
       { id: 'MINHAS_CONTRIBUICOES', label: 'Minhas Contribuições', icon: Wallet },
       { id: 'MEU_EMPRESTIMO', label: 'Meu Empréstimo', icon: TrendingUp },
-      { id: 'MINHAS_RIFAS', label: 'Minhas Rifas & Cartelas', icon: Ticket },
-      { id: 'MEUS_BOLOES', label: 'Meus Bolões', icon: Ticket },
-      { id: 'NUVEM', label: 'Nuvem & Segurança (OCI + GCP)', icon: Cloud },
-      { id: 'AUTORIZACAO_ADMIN', label: 'Termo Coletivo Admin', icon: ShieldCheck },
-      { id: 'MEU_RESULTADO', label: 'Meu Fechamento Anual', icon: Coins },
+      { id: 'MEU_RESULTADO', label: 'Meu Resultado', icon: Coins },
+        { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
     ];
   };
 
   const navItems = renderNavTabs();
+  const visibleTab = isRoleTabAllowed(state.currentRole, activeTab) &&
+    navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16 md:pb-0">
+    <div className="fr-app-shell min-w-0 max-w-full bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e]">
       {/* Top Navbar */}
       <Navbar
         state={state}
@@ -167,12 +272,52 @@ export default function App() {
         onOpenAudit={() => setIsAuditOpen(true)}
         onOpenMobileInstall={() => setIsMobileInstallOpen(true)}
         onOpenMobilePreview={() => setIsMobilePreviewOpen(true)}
-        onNavigateCloud={() => setActiveTab('NUVEM')}
+        onNavigateCloud={() => { if (state.currentRole === 'MASTER') setActiveTab('NUVEM'); }}
         onOpenGitHub={() => setIsGitHubSyncOpen(true)}
+        onLogout={handleLogout}
       />
 
+      {/* Sessao de papel imutavel: para outra area, sair e autenticar de novo. */}
+      <div className="fr-app-profile shrink-0 border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <div aria-label="Perfil autenticado" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 py-2 text-xs sm:text-sm text-[#fff2cf]">
+            {state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
+              state.currentRole === 'TENANT_ADMIN' ? <BriefcaseBusiness className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
+                <UserRound className="h-4 w-4 shrink-0 text-[#f0ce78]"/>}
+            <span className="min-w-0 whitespace-normal break-words leading-4">
+              {state.currentRole === 'MASTER' ? 'Administrador Master — Plataforma' :
+                state.currentRole === 'TENANT_ADMIN' ? 'Administrador — Minha caixinha' : 'Membro — Minha caixinha'}
+            </span>
+          </div>
+          <button type="button" onClick={() => setSecurityOpen(value => !value)}
+            aria-expanded={securityOpen}
+            className="min-h-10 shrink-0 px-2 text-xs text-[#f1d58d] underline underline-offset-4">
+            Sessões
+          </button>
+        </div>
+      </div>
+      {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
+      <div role="note" className="shrink-0 bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
+        Ambiente de homologação · operações financeiras reais indisponíveis
+      </div>
+      {/* Role-local tab history. The arrows do not move between identities. */}
+      <nav aria-label="Histórico de telas" className="flex shrink-0 items-center justify-between border-b border-emerald-100 bg-white/95 px-3 py-1.5 text-sm text-emerald-900">
+        <button type="button" aria-label="Voltar à tela anterior"
+          disabled={!canStepTab(tabHistory,-1)}
+          onClick={()=>{setTabHistory(old=>stepTab(old,-1));setMoreOpen(false);}}
+          className="inline-flex min-h-10 items-center gap-1 rounded-lg px-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40">
+          <ChevronLeft className="h-5 w-5" aria-hidden="true"/> Voltar
+        </button>
+        <span className="text-xs text-emerald-800" aria-live="polite">{tabHistory.index+1} de {tabHistory.entries.length}</span>
+        <button type="button" aria-label="Avançar para a próxima tela"
+          disabled={!canStepTab(tabHistory,1)}
+          onClick={()=>{setTabHistory(old=>stepTab(old,1));setMoreOpen(false);}}
+          className="inline-flex min-h-10 items-center gap-1 rounded-lg px-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40">
+          Avançar <ChevronRight className="h-5 w-5" aria-hidden="true"/>
+        </button>
+      </nav>
       {/* Secondary Subnav Bar */}
-      <nav className="bg-white border-b border-slate-200 sticky top-16 z-30 shadow-2xs">
+      <nav className="hidden shrink-0 md:block border-b border-[#b4cfb5] bg-[#e7f1e7]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto py-2">
           {navItems.map(item => {
             const Icon = item.icon;
@@ -189,11 +334,11 @@ export default function App() {
                 }}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'bg-[#085137] text-[#f7d986] shadow-xs'
+                    : 'text-[#275c40] hover:text-[#073d2b] hover:bg-[#d3e6d4]'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-[#f5cf79]' : 'text-[#35654c]'}`} />
                 <span>{item.label}</span>
               </button>
             );
@@ -202,167 +347,143 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="fr-app-main flex-1 min-h-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5" tabIndex={0}>
+        {visibleTab === 'NOTIFICACOES' && (
+          <NotificationsView role={state.currentRole}/>
+        )}
         {/* Master Views */}
-        {activeTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
+        {visibleTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
           <DashboardView
             state={state}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
         )}
-        {activeTab === 'LICENCAS' && (
+        {visibleTab === 'CAIXINHAS' && state.currentRole === 'MASTER' && (
+          <MasterTenantRegistryView state={state} />
+        )}
+        {visibleTab === 'ADMINISTRADORES' && state.currentRole === 'MASTER' && (
+          <MasterAdminRegistryView state={state}
+            onOpenOnboarding={()=>setActiveTab('ONBOARDING')}
+          />
+        )}
+        {visibleTab === 'ONBOARDING' && state.currentRole === 'MASTER' && (
+          <MasterOnboardingView state={state} />
+        )}
+        {visibleTab === 'LICENCAS' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
         )}
-        {activeTab === 'SUPORTE' && <SupportSessionView state={state} />}
-        {(activeTab === 'BOLOES' || activeTab === 'MEUS_BOLOES') && (
+        {visibleTab === 'SUPORTE' && <SupportSessionView state={state} />}
+        {(visibleTab === 'BOLOES' || visibleTab === 'MEUS_BOLOES') && (
           <BolaoModuleView state={state} onOpenPixModal={openPixModal} />
         )}
 
         {/* Admin Views */}
-        {activeTab === 'DASHBOARD' && state.currentRole === 'TENANT_ADMIN' && (
+        {visibleTab === 'DASHBOARD' && state.currentRole === 'TENANT_ADMIN' && (
           <DashboardView
             state={state}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
         )}
-        {activeTab === 'MEMBROS' && <MembersView state={state} />}
-        {activeTab === 'CONTRIBUICOES' && (
+        {visibleTab === 'MEMBROS' && <MembersView state={state} />}
+        {visibleTab === 'CONTRIBUICOES' && (
           <ContributionsView state={state} onOpenPixModal={openPixModal} />
         )}
-        {activeTab === 'EMPRESTIMOS' && (
-          <LoansView state={state} onOpenPixModal={openPixModal} />
+        {visibleTab === 'EMPRESTIMOS' && (
+          <ServerLoansView state={state} />
         )}
-        {activeTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
-        {activeTab === 'LEDGER' && <LedgerView state={state} />}
-        {activeTab === 'FECHAMENTO' && (
-          <CycleClosingView state={state} onOpenPixModal={openPixModal} />
+        {visibleTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
+        {visibleTab === 'LEDGER' && <LedgerView state={state} />}
+        {visibleTab === 'FECHAMENTO' && state.currentRole === 'TENANT_ADMIN' && (
+          <MemberAnnualPreviewView state={state}/>
         )}
-        {activeTab === 'LICENCA' && (
+        {visibleTab === 'LICENCA' && (
           <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
         )}
-        {(activeTab === 'RIFAS' || activeTab === 'MINHAS_RIFAS') && (
+        {(visibleTab === 'RIFAS' || visibleTab === 'MINHAS_RIFAS') && (
           <RaffleModuleView state={state} onOpenPixModal={openPixModal} />
         )}
 
         {/* Multi-Cloud View (GCP + OCI) - Accessible across all roles */}
-        {activeTab === 'NUVEM' && <MultiCloudView />}
+        {visibleTab === 'NUVEM' && <MultiCloudView />}
 
         {/* Member Views */}
-        {activeTab === 'MEU_PAINEL' && (
+        {visibleTab === 'MEU_PAINEL' && (
           <DashboardView
             state={state}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
         )}
-        {activeTab === 'MINHAS_CONTRIBUICOES' && (
+        {visibleTab === 'MINHAS_CONTRIBUICOES' && (
           <ContributionsView state={state} onOpenPixModal={openPixModal} />
         )}
-        {activeTab === 'MEU_EMPRESTIMO' && (
-          <LoansView state={state} onOpenPixModal={openPixModal} />
+        {visibleTab === 'MEU_EMPRESTIMO' && (
+          <ServerLoansView state={state} />
         )}
-        {activeTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
-        {activeTab === 'MEU_RESULTADO' && (
-          <CycleClosingView state={state} onOpenPixModal={openPixModal} />
+        {visibleTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
+        {visibleTab === 'MEU_RESULTADO' && state.currentRole === 'TENANT_MEMBER' && (
+          <MemberAnnualPreviewView state={state}/>
         )}
       </main>
 
-      {/* Footer com Aviso Legal Homologado */}
-      <footer className="bg-white border-t border-slate-200 mt-auto py-6 mb-14 md:mb-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="font-bold text-slate-700">FRcaixinha 2.2</span> • Solução Mobile & Multi-Cloud para automação de caixinhas privadas.
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Não atua como instituição bancária nem detém custódia de depósitos de terceiros (Cláusula 1.1 e 1.7).
+      {/* Menu com quatro destinos; funcoes menos comuns ficam em Mais. */}
+      <nav aria-label="Navegação principal" className="fr-mobile-nav relative z-40 flex shrink-0 justify-around gap-1 px-2 pt-2 md:hidden">
+        {navItems.slice(0,3).map(item => {
+          const Icon = item.icon;
+          const shortLabel = item.id === 'DASHBOARD' || item.id === 'MEU_PAINEL' ? 'Início'
+            : item.id === 'MINHAS_CONTRIBUICOES' || item.id === 'CONTRIBUICOES' ? 'Contrib.'
+            : item.id === 'MEU_EMPRESTIMO' || item.id === 'EMPRESTIMOS' ? 'Crédito'
+            : item.id === 'CAIXINHAS' ? 'Caixinhas'
+            : item.id === 'LICENCAS' ? 'Licenças'
+            : item.id === 'SUPORTE' ? 'Suporte' : item.label;
+          return (
+            <button key={item.id} type="button" onClick={() => { setActiveTab(item.id); setMoreOpen(false); }}
+              aria-current={activeTab === item.id ? 'page' : undefined}
+              className={'flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] ' +
+                (activeTab === item.id ? 'bg-[#195c3c] font-bold text-[#f6d488]' : 'text-emerald-100/80')}>
+              <Icon className="h-5 w-5"/>
+              <span className="max-w-full truncate">{shortLabel}</span>
+            </button>
+          );
+        })}
+        <button type="button" onClick={() => setMoreOpen(value => !value)}
+          aria-expanded={moreOpen} aria-label="Mais opções"
+          className={'flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] ' +
+            (moreOpen ? 'bg-[#195c3c] font-bold text-[#f6d488]' : 'text-emerald-100/80')}>
+          <MoreHorizontal className="h-5 w-5"/><span>Mais</span>
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <div role="dialog" aria-label="Mais opções" className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 pb-20 md:hidden">
+          <section className="w-full max-w-md rounded-2xl border border-[#bfa260] bg-[#073b2b] p-4 text-[#fff1ce] shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Mais</h2>
+              <button type="button" onClick={() => setMoreOpen(false)} aria-label="Fechar menu" className="p-2">
+                <X className="h-5 w-5"/>
+              </button>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsManualOpen(true)}
-              className="text-emerald-700 hover:underline cursor-pointer"
-            >
-              Manual em 16 Passos (Cláusula 11.4)
+            {navItems.slice(3).map(item => {
+              const Icon = item.icon;
+              return <button key={item.id} type="button"
+                onClick={() => { setMoreOpen(false); if(item.id === 'AUDITORIA') setIsAuditOpen(true); else setActiveTab(item.id); }}
+                className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
+                <Icon className="h-5 w-5 text-[#f0ca72]"/>{item.label}
+              </button>;
+            })}
+            <button type="button" onClick={() => { setMoreOpen(false); setSecurityOpen(true); }}
+              className="flex min-h-11 w-full items-center gap-3 border-b border-emerald-700/60 py-2 text-left text-sm">
+              <ShieldCheck className="h-5 w-5 text-[#f0ca72]"/>Segurança e sessões
             </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsAuditOpen(true)}
-              className="text-indigo-700 hover:underline cursor-pointer"
-            >
-              Matriz AT-01 a AT-50
+            <button type="button" onClick={() => { setMoreOpen(false); void handleLogout(); }}
+              className="flex min-h-11 w-full items-center gap-3 py-2 text-left text-sm">
+              <LogOut className="h-5 w-5 text-[#f0ca72]"/>Sair da conta
             </button>
-            <span>•</span>
-            <button
-              onClick={() => setActiveTab('NUVEM')}
-              className="text-cyan-700 hover:underline cursor-pointer font-medium"
-            >
-              OCI + GCP Soberano
-            </button>
-          </div>
+          </section>
         </div>
-      </footer>
-
-      {/* Mobile Sticky Bottom Navigation Dock (md:hidden) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around py-1.5 px-2 text-[10px] text-slate-400 select-none shadow-2xl">
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEU_PAINEL' : 'DASHBOARD')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['DASHBOARD', 'MEU_PAINEL'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <LayoutDashboard className="w-4 h-4" />
-          <span>Início</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MINHAS_CONTRIBUICOES' : 'CONTRIBUICOES')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['CONTRIBUICOES', 'MINHAS_CONTRIBUICOES'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <Wallet className="w-4 h-4" />
-          <span>Cotas</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEU_EMPRESTIMO' : 'EMPRESTIMOS')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['EMPRESTIMOS', 'MEU_EMPRESTIMO'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          <span>Price</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab(state.currentRole === 'TENANT_MEMBER' ? 'MEUS_BOLOES' : 'BOLOES')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            ['BOLOES', 'MEUS_BOLOES', 'RIFAS', 'MINHAS_RIFAS'].includes(activeTab) ? 'text-emerald-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <Ticket className="w-4 h-4" />
-          <span>Bolões</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('NUVEM')}
-          className={`flex flex-col items-center gap-0.5 p-1 rounded-xl transition-colors cursor-pointer ${
-            activeTab === 'NUVEM' ? 'text-cyan-400 font-bold' : 'hover:text-white'
-          }`}
-        >
-          <Cloud className="w-4 h-4" />
-          <span>Nuvem</span>
-        </button>
-
-        <button
-          onClick={() => setIsMobileInstallOpen(true)}
-          className="flex flex-col items-center gap-0.5 p-1 rounded-xl text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
-        >
-          <Smartphone className="w-4 h-4" />
-          <span>App</span>
-        </button>
-      </div>
+      )}
 
       {/* Modais Globais */}
       <PixModal
@@ -404,10 +525,10 @@ export default function App() {
         <div className="bg-slate-100 min-h-full p-3 space-y-4">
           <div className="bg-slate-900 text-white p-3 rounded-2xl flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-white">FRcaixinha</span>
-              <span className="text-[10px] font-bold bg-emerald-500 text-slate-950 px-1 py-0.2 rounded font-mono">2.2</span>
+              <span className="font-extrabold text-white">FR Finance</span>
+              <span className="text-[10px] font-bold bg-emerald-500 text-slate-950 px-1 py-0.2 rounded font-mono">HOMOLOGAÇÃO</span>
             </div>
-            <span className="text-[10px] text-emerald-400 font-mono">OCI + GCP Ativos</span>
+            <span className="text-[10px] text-emerald-400 font-mono">OCI / GCP EM ESTUDO</span>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">

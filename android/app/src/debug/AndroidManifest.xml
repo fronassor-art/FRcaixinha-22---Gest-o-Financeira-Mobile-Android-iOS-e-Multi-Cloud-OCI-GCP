@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- AI Studio debug APK only: allow HTTP to the phone's own loopback.
+         All external cleartext remains denied; release manifest unchanged. -->
+    <application android:networkSecurityConfig="@xml/local_api_network_security" />
+</manifest>
