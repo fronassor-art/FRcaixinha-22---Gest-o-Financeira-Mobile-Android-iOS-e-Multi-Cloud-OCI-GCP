@@ -772,6 +772,36 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "a72ebeae6475e71c8205e74c5b34d065f3b2f50e"
+    },
+    {
+      "id": "staging_migrations:051",
+      "source_path": "backend/staging_migrations/051_password_reset_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.password_recovery_audit_staging",
+      "local_evidence": null,
+      "source_blob_sha": "47013e4339856b2f8b705581e92121a6db1f4621"
+    },
+    {
+      "id": "ci_migrations:048",
+      "source_path": "backend/ci_migrations/048_password_reset_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "5770d4c217e489d5cb8b5ef521acea4d089dea97"
+    },
+    {
+      "id": "ci_migrations:049",
+      "source_path": "backend/ci_migrations/049_password_reset_worker_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "a1e0a3abfb7cd791ac1874ad36311ec80a95b7ae"
     }
   ]
 }
