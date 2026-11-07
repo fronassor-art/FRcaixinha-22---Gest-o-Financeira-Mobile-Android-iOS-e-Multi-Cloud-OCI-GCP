@@ -22,7 +22,8 @@ assert.match(login,/build/);
 const loginSource=file('src/components/LoginView.tsx');
 assert.match(loginSource,/Sou novo membro/);
 assert.match(loginSource,/Quero administrar uma caixinha/);
-assert.match(loginSource,/authService.login\(email.trim\(\), password, selectedRole\)/);
+assert.match(loginSource,/authService.login\(email.trim\(\), password, selectedRole, chosenTenant \|\| undefined\)/);
+assert.match(loginSource,/ID da caixinha/);
 assert.doesNotMatch(loginSource,/authService\.register\(/);
 
 const dashboard=file('src/components/DashboardView.tsx');
