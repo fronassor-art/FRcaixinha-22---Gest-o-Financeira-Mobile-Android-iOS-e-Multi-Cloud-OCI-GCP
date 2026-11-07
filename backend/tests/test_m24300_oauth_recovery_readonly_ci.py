@@ -181,12 +181,12 @@ def test_sql_049_disposable_identity_and_read_only_contract():
     assert ".cancel(" not in recovery and "delete" not in recovery.split("class StagingOAuthRecoveryInspector",1)[1].lower()
 
 
-def test_migration_inventory_count_73_never_authorizes_termux_apply():
+def test_migration_inventory_count_79_never_authorizes_termux_apply():
     import json
     from pathlib import Path
     root=Path(__file__).resolve().parents[2]
     data=json.loads((root/"backend/migration_catalog_ai_studio.json").read_text())
-    assert len(data["entries"])==73
+    assert len(data["entries"])==79
     for filename in ("049_mp_oauth_revision_state_staging_only.sql",
                      "045_oauth_revision_state_worker_probe_ci_only.sql"):
         rows=[x for x in data["entries"] if x["source_path"].endswith(filename)]
