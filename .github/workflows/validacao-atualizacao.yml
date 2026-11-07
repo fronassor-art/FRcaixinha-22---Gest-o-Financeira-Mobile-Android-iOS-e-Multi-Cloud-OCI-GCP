@@ -420,6 +420,7 @@ jobs:
           python -m pytest -q backend/tests/test_m26900_oci_vault_keys_ci.py
           python -m pytest -q backend/tests/test_m27000_outbound_worker_preflight_ci.py
           python -m pytest -q backend/tests/test_m27100_email_ownership_challenge_policy_ci.py
+          python -m pytest -q backend/tests/test_m27200_email_bridge_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
