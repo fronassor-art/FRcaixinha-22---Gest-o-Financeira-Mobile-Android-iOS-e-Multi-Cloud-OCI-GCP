@@ -8,6 +8,7 @@ import {
 import {AppState} from '../services/store';
 import {MasterWorkflowAuditView} from './MasterWorkflowAuditView';
 import {MasterPermissionMatrixView} from './MasterPermissionMatrixView';
+import {ContractReviewPanel} from './ContractReviewPanel';
 
 const LABELS:Record<string,string>={
   MASTER_MFA:'Segundo fator do proprietário',
@@ -157,6 +158,17 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
       </form>
     </>}
 
+    {/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId.trim()) && (
+      <details className="fr-light-card rounded-2xl p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-[#143d29]">
+          Conferir integridade do termo de adesão (sem aceite)
+        </summary>
+        <div className="mt-4">
+          <ContractReviewPanel key={scope + '|' + tenantId.trim()}
+            role="MASTER" tenantId={tenantId.trim()}/>
+        </div>
+      </details>
+    )}
     <MasterPermissionMatrixView state={state}/>
     <MasterWorkflowAuditView state={state}/>
 
