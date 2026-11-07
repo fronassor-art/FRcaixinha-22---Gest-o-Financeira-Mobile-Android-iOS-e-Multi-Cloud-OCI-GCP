@@ -45,7 +45,7 @@ DELIVERED, nem aceite ou concessão de conta.
 A migração é registrada no catálogo com o SHA Git e marcada
 `STAGING_ONLY_NEEDS_PORT`; as fixtures são `CI_ONLY_TEST_OR_FIXTURE`.
 **Jamais aplicar qualquer uma das três no Termux/OCI/prod.**
-Catálogo passa de **73 a 76 SQL** e a regressão de inventário deve
+Catálogo passou inicialmente de **73 a 76 SQL**; com o pacote M26000, contém **79 arquivos SQL** e a regressão de inventário deve
 confirmar os 76 hashes.
 
 ## Ensaios obrigatórios
