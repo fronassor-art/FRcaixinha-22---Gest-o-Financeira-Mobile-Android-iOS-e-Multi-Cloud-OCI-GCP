@@ -891,7 +891,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.invite_email_challenges_staging",
       "local_evidence": null,
-      "source_blob_sha": "9620b727555eb311ef826abd05e8f6c23374f053"
+      "source_blob_sha": "2795c7167ae1bfdb6552075d3c4c94aec064e52f"
     },
     {
       "id": "ci_migrations:054",
@@ -901,7 +901,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
       "local_evidence": null,
-      "source_blob_sha": "ca27c20e1728495265d7c7f21e9d6e92736a0046"
+      "source_blob_sha": "4e6423b6ccd46e99e832be03fdd30c097e6b462e"
     },
     {
       "id": "ci_migrations:055",
