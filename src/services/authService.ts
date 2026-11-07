@@ -299,11 +299,11 @@ class AuthService {
     }
   }
 
-  public async login(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role']): Promise<AuthenticatedUser> {
+  public async login(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role'], requestedTenantId?: string): Promise<AuthenticatedUser> {
     if (this.loginInProgress) throw new Error('Outra tentativa de login está em andamento.');
     this.loginInProgress = true;
     try {
-      return await this.performLogin(usernameOrEmail, password, requestedRole);
+      return await this.performLogin(usernameOrEmail, password, requestedRole, requestedTenantId);
     } finally {
       this.loginInProgress = false;
     }
@@ -328,9 +328,13 @@ class AuthService {
     }
   }
 
-  private async performLogin(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role']): Promise<AuthenticatedUser> {
+  private async performLogin(usernameOrEmail: string, password: string, requestedRole?: AuthenticatedUser['role'], requestedTenantId?: string): Promise<AuthenticatedUser> {
     if (this.isAuthenticated()) {
       throw new Error('Saia da conta antes de entrar em outro perfil.');
+    }
+    if (requestedTenantId && (!requestedRole || requestedRole === 'MASTER' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedTenantId))) {
+      throw new Error('Perfil e identificador da caixinha precisam ser validos.');
     }
     if (isNativeMobilePlatform() && !getApiBaseUrl()) {
       throw new Error('Servidor backend móvel não configurado. Defina VITE_API_URL apontando para a API FastAPI antes de gerar o APK.');
@@ -344,7 +348,7 @@ class AuthService {
         'X-Requested-With': 'XMLHttpRequest',
       },
       credentials: 'include',
-      body: JSON.stringify({ usernameOrEmail, password, requestedRole }),
+      body: JSON.stringify({ usernameOrEmail, password, requestedRole, requestedTenantId }),
     });
 
     const data = await res.json();
@@ -367,6 +371,7 @@ class AuthService {
       throw new Error('Resposta de identidade inválida.');
     }
     if ((requestedRole && authenticated.role !== requestedRole) ||
+        (requestedTenantId && (authenticated.tenantId ?? '').toLowerCase() !== requestedTenantId.toLowerCase()) ||
         (authenticated.role === 'MASTER' &&
          (requestedRole !== 'MASTER' || (authenticated.tenantId ?? null) !== null))) {
       await this.revokeUnusedLoginToken(data.token);
