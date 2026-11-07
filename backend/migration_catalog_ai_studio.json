@@ -832,6 +832,26 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "f7f53108b08488f5b67e79bc56e1437a65be3a08"
+    },
+    {
+      "id": "staging_migrations:053",
+      "source_path": "backend/staging_migrations/053_mail_receipt_audit_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_provider_receipts_staging",
+      "local_evidence": null,
+      "source_blob_sha": "4ea6eab637ea5dea95093af106f1a9e504b07fdf"
+    },
+    {
+      "id": "ci_migrations:052",
+      "source_path": "backend/ci_migrations/052_mail_receipt_idempotency_probe_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "ac670a5454359ca9882feec940dcad7fcefac396"
     }
   ]
 }
