@@ -28,7 +28,7 @@ convites. Somente esta frente AI Studio, sem reutilizar o outro projeto.
 
 ```json
 {
-  "target_email": "pessoa@example.invalid",
+  "target_email": "pessoa@example.com",
   "target_role": "TENANT_MEMBER",
   "tenant_id": "00000000-0000-4000-8000-000000000001",
   "requiredDocumentId": "00000000-0000-4000-8000-000000000002"
