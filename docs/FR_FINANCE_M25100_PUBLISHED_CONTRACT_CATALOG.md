@@ -48,6 +48,14 @@ Body (exemplo sintético; não contém destinatário, CPF, senha ou token):
 5. Ensaios integrados em PostgreSQL descartável e staging HTTPS; acesso
    independente às regras RLS e desenho dos papéis de escrita.
 
+## Prova adicional PostgreSQL descartável (M25101)
+
+O teste `test_m25100_published_contract_catalog_real_rls` foi incluído em
+`backend/tests/test_rls_isolation_ci.py`: insere documento publicado e
+não publicado em transação CI, alterna para o papel `frcaixinha_app_role`,
+verifica filtros de publicação e indisponibilidade sem contexto RLS,
+revertendo a transação no final. Não executá-lo no Termux.
+
 ## Checkpoint no Termux
 
 Somente após sincronizar:
