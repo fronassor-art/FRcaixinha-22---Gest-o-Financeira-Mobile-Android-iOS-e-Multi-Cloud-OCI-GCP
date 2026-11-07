@@ -78,7 +78,7 @@ def test_signed_aes_payload_cannot_become_delivery_or_activation_proof():
     ("event_id",uuid4()),
     ("document_id",uuid4()),
     ("target_role","TENANT_MEMBER"),
-    ("lease_id",uuid4()),
+    ("lease_id",__import__("uuid").UUID(int=0)),
     ("outbox_status","DELIVERED"),
     ("terminal_quarantine",True),
     ("attempts",0),
@@ -89,11 +89,6 @@ def test_signed_aes_payload_cannot_become_delivery_or_activation_proof():
 ])
 def test_bad_lease_metadata_blocks_dispatch(field,value):
     lease,scope,encrypted,catalog=fixture()
-    if field=="lease_id":
-        # Any valid lease UUID requires a trusted database lookup; merely
-        # changing the lease in an untrusted snapshot cannot prove anything.
-        assert value != lease.lease_id
-        return
     with pytest.raises(DispatchPreflightBlocked):
         check(replace(lease,**{field:value}),scope,encrypted,catalog)
 
