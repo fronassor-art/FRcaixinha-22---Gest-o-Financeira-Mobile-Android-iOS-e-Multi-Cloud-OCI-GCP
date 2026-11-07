@@ -58,6 +58,7 @@ def prepare_invite_email_verification_ci(conn, *, invitation_id: UUID) -> str:
 def register_new_invited_identity_ci(
     conn, *, verification_token: str, name: str, cpf: str, phone: str,
     password: str, document_id: UUID,
+    consent: bool = False, accepted_document_sha256: str | None = None,
 ) -> UUID:
     """Cria SOMENTE membro/admin convidado, com aceite documental atômico.
 
@@ -65,6 +66,12 @@ def register_new_invited_identity_ci(
     versão do documento e autorização atual do convidante.
     """
     _ci_only(conn)
+    # A verification link is not affirmative agreement to contract terms.
+    # No password hashing or database mutation occurs without a fresh,
+    # explicit yes and a hash identifying the exact document displayed.
+    if (consent is not True or type(accepted_document_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", accepted_document_sha256) is None):
+        raise LifecycleDenied("Aceite expresso da versão contratual obrigatório.")
     if (not 3<=len(name.strip())<=255 or not _valid_cpf(cpf)
             or not re.fullmatch(r"[0-9+() -]{8,20}",phone)
             or len(password)<12):
@@ -111,21 +118,22 @@ def register_new_invited_identity_ci(
         ).fetchone():
             raise LifecycleDenied("Identidade já cadastrada. Use o fluxo de vínculo existente.")
         doc=conn.execute(
-            "SELECT 1 FROM public.contract_documents "
+            "SELECT sha256 FROM public.contract_documents "
             "WHERE id=%s AND document_kind='TENANT_MEMBERSHIP' AND published_at IS NOT NULL",
             (document_id,),
         ).fetchone()
-        if not doc:
+        if not doc or doc[0] != accepted_document_sha256:
             raise LifecycleDenied("Versão de contrato não publicada ou incompatível.")
         expected=conn.execute(
             "SELECT required_document_id FROM public.invitations WHERE id=%s",
             (rec[1],),
         ).fetchone()
-        if expected and expected[0] and expected[0]!=document_id:
-            raise LifecycleDenied("Versão contratual divergente do convite.")
+        if not expected or expected[0] != document_id:
+            raise LifecycleDenied("Versão contratual não vinculada ao convite.")
         person=uuid4()
         membership=uuid4()
-        evidence=sha256((str(person)+str(document_id)+secrets.token_hex(32)).encode()).hexdigest()
+        evidence=sha256((str(person)+str(document_id)+accepted_document_sha256+
+                         secrets.token_hex(32)).encode()).hexdigest()
         conn.execute(
             "INSERT INTO public.users"
             "(id,email,full_name,cpf,phone,status,is_master,email_verified_at)"
@@ -161,6 +169,6 @@ def register_new_invited_identity_ci(
             "(actor_id,actor_role,tenant_id,action,object_type,object_id,reason,evidence_ref)"
             "VALUES(%s,%s,%s,'CI_INVITED_IDENTITY_REGISTERED','USER',%s,%s,%s)",
             (person,rec[8],rec[6],str(person),
-             "Cadastro CI após posse de link e aceite sintético de contrato",str(acceptance)),
+             "Cadastro CI após confirmação afirmativa da versão e posse sintética do link",str(acceptance)),
         )
         return person

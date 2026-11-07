@@ -274,3 +274,105 @@ def test_lifecycle_refuses_non_ci_environment(monkeypatch, synthetic_accounts):
             recipient_email=f"{users['member']}@example.com",
             target_role="TENANT_MEMBER",
         )
+
+
+def test_new_invited_identity_requires_affirmative_versioned_acceptance(synthetic_accounts):
+    """M24400: no user/membership/acceptance without explicit version proof."""
+    from app.invite_registration_ci import (
+        prepare_invite_email_verification_ci,
+        register_new_invited_identity_ci,
+    )
+    db, users, tenant = synthetic_accounts
+    doc = create_contract_ci(db)
+    digest = db.execute(
+        "SELECT sha256 FROM public.contract_documents WHERE id=%s", (doc,)
+    ).fetchone()[0]
+    recipient = f"new-{uuid4()}@example.invalid"
+    inv, _ = prepare_invitation_ci(
+        db, tenant_id=tenant, inviter_id=users["admin"],
+        recipient_email=recipient, target_role="TENANT_MEMBER",
+    )
+    assert simulate_invitation_delivery_ci(db, inv)
+    proof = prepare_invite_email_verification_ci(db, invitation_id=inv)
+
+    def attempt(**changes):
+        kw=dict(verification_token=proof,name="Membro sintético",
+                cpf="12345678909",phone="11999990000",
+                password="Somente-Teste-Seguro-2026!",document_id=doc)
+        kw.update(changes)
+        return register_new_invited_identity_ci(db,**kw)
+
+    for opts in (
+        {},   # no consent or hash
+        {"consent":False,"accepted_document_sha256":digest},
+        {"consent":"true","accepted_document_sha256":digest},
+        {"consent":True,"accepted_document_sha256":None},
+        {"consent":True,"accepted_document_sha256":"f"*64},
+        {"consent":True,"accepted_document_sha256":digest}, # no bound doc yet
+    ):
+        with pytest.raises(LifecycleDenied):
+            attempt(**opts)
+        assert db.execute(
+            "SELECT count(*) FROM public.users WHERE email=%s",(recipient,)
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT accepted_at FROM public.invitations WHERE id=%s",(inv,)
+        ).fetchone()[0] is None
+
+    db.execute(
+        "UPDATE public.invitations SET required_document_id=%s WHERE id=%s",
+        (doc,inv),
+    )
+    person = attempt(consent=True, accepted_document_sha256=digest)
+    row=db.execute(
+        "SELECT email,status,is_master,email_verified_at FROM public.users WHERE id=%s",
+        (person,),
+    ).fetchone()
+    assert row[0]==recipient and row[1]=="ACTIVE" and row[2] is False
+    assert row[3] is not None
+    membership=db.execute(
+        "SELECT tenant_id,role,status FROM public.memberships WHERE user_id=%s",
+        (person,),
+    ).fetchone()
+    assert membership==(tenant,"TENANT_MEMBER","ATIVA")
+    acceptance=db.execute(
+        "SELECT document_id,document_kind,tenant_id,evidence_hash "
+        "FROM public.contract_acceptances WHERE user_id=%s", (person,)
+    ).fetchone()
+    assert acceptance[:3]==(doc,"TENANT_MEMBERSHIP",tenant)
+    assert len(acceptance[3])==64
+    assert db.execute(
+        "SELECT count(*) FROM public.invite_email_verification "
+        "WHERE invitation_id=%s AND consumed_at IS NOT NULL", (inv,)
+    ).fetchone()[0]==1
+    with pytest.raises(LifecycleDenied):
+        attempt(consent=True, accepted_document_sha256=digest)
+    assert db.execute(
+        "SELECT count(*) FROM public.contract_acceptances WHERE user_id=%s",
+        (person,),
+    ).fetchone()[0]==1
+
+
+def test_new_invited_identity_never_runs_outside_ci(monkeypatch, synthetic_accounts):
+    from app.invite_registration_ci import register_new_invited_identity_ci
+    db, users, tenant=synthetic_accounts
+    monkeypatch.delenv("FRCAIXINHA_CI_ISOLATED")
+    with pytest.raises(LifecycleDenied):
+        register_new_invited_identity_ci(
+            db,verification_token="synthetic",name="Membro sintético",
+            cpf="12345678909",phone="11999990000",password="SomenteTeste-2026!",
+            document_id=uuid4(),consent=True,
+            accepted_document_sha256="a"*64,
+        )
+
+
+def test_public_invitation_endpoint_keeps_production_disabled():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    router=(root/"app/routers/invitations.py").read_text()
+    registration=(root/"app/invite_registration_ci.py").read_text()
+    assert 'status.HTTP_503_SERVICE_UNAVAILABLE' in router
+    assert "Convites ainda não implementados" in router
+    assert "register_new_invited_identity_ci" not in router
+    assert "consent is not True" in registration
+    assert "expected[0] != document_id" in registration

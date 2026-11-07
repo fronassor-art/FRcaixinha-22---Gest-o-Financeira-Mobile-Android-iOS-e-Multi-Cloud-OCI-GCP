@@ -388,6 +388,7 @@ jobs:
           python -m pytest -q backend/tests/test_m24100_oauth_protected_store_port_ci.py
           python -m pytest -q backend/tests/test_m24200_oauth_failed_ref_guard_ci.py
           python -m pytest -q backend/tests/test_m24300_oauth_recovery_readonly_ci.py
+          python -m pytest -q backend/tests/test_m24400_explicit_invite_acceptance_ci.py
           python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
