@@ -178,7 +178,7 @@ def test_sql_049_disposable_identity_and_read_only_contract():
     assert "public.mp_staging_oauth_revision_state" in adapter
     assert "await self._registry.revision_status" in recovery
     assert "await self._registry.mark_failed" not in recovery
-    assert ".cancel(" not in recovery and "delete" not in recovery.lower().split("class StagingOAuthRecoveryInspector")[1]
+    assert ".cancel(" not in recovery and "delete" not in recovery.split("class StagingOAuthRecoveryInspector",1)[1].lower()
 
 
 def test_migration_inventory_count_73_never_authorizes_termux_apply():
