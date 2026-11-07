@@ -81,6 +81,30 @@ projeto. Alterações versionadas, sem migrar o banco local nem ativar PIX real.
 - `src/tests/m25600_launch_readiness_ui_ci.test.ts`.
 - Regressões M24900–M25300, RLS e build APK mantidos no workflow.
 
+## M25700 — Atestação local read-only (sem migração)
+
+Executar após sincronização e confirmação do SHA da branch:
+
+```bash
+# O valor aprovado abaixo deve ser substituído pelo SHA COMPLETO (40 caracteres)
+# exibido na homologação deste macropacote — não use SHA abreviado.
+export AI_STUDIO_APPROVED_SHA='<sha40-aprovado>'
+bash backend/scripts/aistudio_macro_25700_checkpoint.sh local-proof
+unset AI_STUDIO_APPROVED_SHA
+```
+
+A ferramenta exige clone correto no Termux, branch exata, Git limpo,
+aprovação manual de SHA, pede a senha do owner via `getpass` (sem eco)
+e usa a rotina existente `aistudio_migration_inventory.py local-readonly`.
+Confere identidade e versão PostgreSQL 18, porta 5433, objetos,
+RLS, concessões, triggers e migrações locais 028–044, **sem reexecutar
+migrations**. Não usar `apply` em banco com tabelas existentes.
+
+Se o relatório mostrar `M20700_LOCAL_043=NOT_APPLIED` ou
+`M21000_LOCAL_044=NOT_APPLIED`, interromper alterações e preparar
+migração incremental específica com backup e revisão; não repetir a
+migração inicial.
+
 ## Estados que não podem ser falsamente liberados
 
 `real_invites_active=false`;
