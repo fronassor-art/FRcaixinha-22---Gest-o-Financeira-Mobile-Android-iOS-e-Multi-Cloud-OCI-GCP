@@ -9,6 +9,7 @@ import {AppState} from '../services/store';
 import {MasterWorkflowAuditView} from './MasterWorkflowAuditView';
 import {MasterPermissionMatrixView} from './MasterPermissionMatrixView';
 import {ContractReviewPanel} from './ContractReviewPanel';
+import {LaunchReadinessPanel} from './LaunchReadinessPanel';
 
 const LABELS:Record<string,string>={
   MASTER_MFA:'Segundo fator do proprietário',
@@ -169,6 +170,7 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
         </div>
       </details>
     )}
+    <LaunchReadinessPanel state={state}/>
     <MasterPermissionMatrixView state={state}/>
     <MasterWorkflowAuditView state={state}/>
 
