@@ -83,7 +83,7 @@ def _dns_host(host: str) -> bool:
             and all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", x)
                     for x in labels)
             and not host.endswith((".local",".internal",".test",".invalid",".example",".localhost"))
-            and not re.fullmatch(r"\\d+\\.\\d+\\.\\d+\\.\\d+",host))
+            and not re.fullmatch(r"\d+\.\d+\.\d+\.\d+",host))
 
 
 def _public_endpoint(value: str) -> bool:
@@ -109,15 +109,15 @@ def validate_field(key: str, value: str) -> str:
         raise _deny()
     if type(value) is not str or not value or len(value) > 512 or value != value.strip():
         raise _deny()
-    if any(c in value for c in ("\\n","\\r","\\x00")):
+    if any(c in value for c in ("\n","\r","\x00")):
         raise _deny()
     try:
         valid = {
             "APP_URL": lambda: safe_public_https_origin(value) == value.rstrip("/"),
             "OCI_REGION": lambda: bool(re.fullmatch(r"[a-z]{2}-[a-z0-9-]{3,48}-[0-9]",value)),
-            "OCI_COMPARTMENT_OCID": lambda: bool(re.fullmatch(r"ocid1\\.compartment\\.oc1\\.[a-z0-9._-]{10,256}",value)),
-            "OCI_INSTANCE_OCID": lambda: bool(re.fullmatch(r"ocid1\\.instance\\.oc1\\.[a-z0-9._-]{10,256}",value)),
-            "OCI_VAULT_OCID": lambda: bool(re.fullmatch(r"ocid1\\.vault\\.oc1\\.[a-z0-9._-]{10,256}",value)),
+            "OCI_COMPARTMENT_OCID": lambda: bool(re.fullmatch(r"ocid1\.compartment\.oc1\.[a-z0-9._-]{10,256}",value)),
+            "OCI_INSTANCE_OCID": lambda: bool(re.fullmatch(r"ocid1\.instance\.oc1\.[a-z0-9._-]{10,256}",value)),
+            "OCI_VAULT_OCID": lambda: bool(re.fullmatch(r"ocid1\.vault\.oc1\.[a-z0-9._-]{10,256}",value)),
             "OCI_DATABASE_HOST": lambda: _dns_host(value),
             "SMTP_HOST": lambda: _smtp_host(value)==value,
             "SMTP_PORT": lambda: value=="587",
