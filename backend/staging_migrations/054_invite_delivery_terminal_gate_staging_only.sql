@@ -63,6 +63,9 @@ BEGIN
  IF EXISTS(SELECT 1 FROM public.invite_delivery_terminal_gate_staging g
            WHERE g.outbox_id=q.id)
  THEN RETURN 'QUARANTINED'; END IF;
+ -- The guarded entrypoint supersedes the old staging flag; only it may
+ -- re-open the inner CI-only dispatcher after the terminal check.
+ PERFORM set_config('frcaixinha.invite_dispatch_staging_ci','1',true);
  RETURN public.invite_dispatch_lease_staging_ci(p_event,p_lease);
 END $fn$;
 
