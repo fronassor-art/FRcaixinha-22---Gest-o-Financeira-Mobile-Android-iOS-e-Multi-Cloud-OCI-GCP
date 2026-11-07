@@ -861,7 +861,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.invite_delivery_terminal_gate_staging",
       "local_evidence": null,
-      "source_blob_sha": "e683386bbb49faf0decc4422c4508a36534a0ec7"
+      "source_blob_sha": "40ddcfcbbd47c5217a34fa9161ad673be8c4abc0"
     },
     {
       "id": "ci_migrations:053",
@@ -871,7 +871,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
       "local_evidence": null,
-      "source_blob_sha": "848a0520b288c8ca1b0d4f3c3b18c90a6bc921dd"
+      "source_blob_sha": "173f3d2520b8eaa984cec5096756d6c7e632aa75"
     }
   ]
 }
