@@ -283,6 +283,21 @@ if PGUSER=frcaixinha_invite_queue_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M27100_CI_EMAIL_TOKEN_CONSUMED_NO_IDENTITY_GRANT=PASS"
+echo "=== M27101: 3 invalid token guesses permanently exhaust CI challenge ==="
+# All rows in this DB are synthetic; no production data or external link exists.
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_email_challenges_staging SET consumed_at=NULL,failed_attempts=0,state='CI_CHALLENGE_NOT_DELIVERED' WHERE outbox_id=(SELECT id FROM public.invite_delivery_outbox_staging WHERE event_id='eeeeeeee-0000-4000-8000-000000000015')" >/dev/null
+PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
+  PGUSER=frcaixinha_email_proof_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/056_email_challenge_lockout_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_email_challenges_staging WHERE consumed_at IS NULL AND failed_attempts=3 AND NOT recipient_verified AND NOT user_activated AND NOT contract_accepted")" = "1"
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_email_challenges_staging SET failed_attempts=0,expires_at=clock_timestamp()-interval '1 second'" >/dev/null
+test "$(PGOPTIONS='-c frcaixinha.email_proof_staging_ci=1' \
+  PGUSER=frcaixinha_email_proof_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT public.invite_consume_ci_email_challenge('eeeeeeee-0000-4000-8000-000000000015',repeat('T',48))")" = "DENIED"
+echo "M27101_CI_LOCKOUT_EXPIRY_NO_ACTIVATION=PASS"
 echo "=== M26600: quarantine unknown SMTP ACK durably, disable old claim ==="
 PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
   PGUSER=frcaixinha_invite_dispatch_ci psql -X -v ON_ERROR_STOP=1 \
