@@ -141,7 +141,7 @@ def test_catalog_metadata_is_rejected_when_invalid(change):
     scope,meta,secret=fixture()
     config=replace(meta,**change)
     with pytest.raises(KeyAccessBlocked):
-        TenantKeyCatalog({KEY:config}) if "key_id" in change or "encrypt_until" in change or "decrypt_until" in change else seal_with_key_policy(
+        seal_with_key_policy(
             scope=scope,secret=secret,key_id=KEY,
             catalog=TenantKeyCatalog({KEY:config}),
             provider=FakeProvider(),now=NOW,
