@@ -20,7 +20,7 @@ def session(role, tenant=None, is_master=False):
 
 def invitation(role, tenant=None, doc=None):
     return InvitationCreateRequest(
-        target_email="synthetic-recipient@example.invalid",
+        target_email="synthetic-recipient@example.com",
         target_role=role,
         tenant_id=str(tenant) if tenant else None,
         required_document_id=doc,
@@ -70,7 +70,7 @@ def test_admin_cannot_preflight_master_or_other_tenant():
         invitation("TENANT_ADMIN", current, uuid4()),
         invitation("TENANT_MEMBER", uuid4(), uuid4()),
         InvitationCreateRequest(
-            target_email="synthetic-recipient@example.invalid",
+            target_email="synthetic-recipient@example.com",
             target_role="TENANT_MEMBER", tenant_id="invalid-tenant-id",
         ),
     ):
@@ -113,14 +113,14 @@ def test_master_scoped_admin_intent_is_still_blocked():
 def test_versioned_document_alias_is_uuid_checked():
     doc = uuid4()
     request = InvitationCreateRequest.model_validate({
-        "target_email": "synthetic-recipient@example.invalid",
+        "target_email": "synthetic-recipient@example.com",
         "target_role": "TENANT_MEMBER",
         "requiredDocumentId": str(doc),
     })
     assert request.required_document_id == doc
     with pytest.raises(ValidationError):
         InvitationCreateRequest.model_validate({
-            "target_email": "synthetic-recipient@example.invalid",
+            "target_email": "synthetic-recipient@example.com",
             "target_role": "TENANT_MEMBER",
             "requiredDocumentId": "not-a-uuid",
         })
