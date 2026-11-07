@@ -37,6 +37,8 @@ CREATE ROLE frcaixinha_invite_dispatch_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_mail_receipt_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_envelope_producer_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -100,15 +102,25 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.invite_delivery_terminal_gate_staging') IS NULL")" = "t"
 echo "M26600_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.envelope_staging_ci=1" \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/055_invite_encrypted_envelope_staging_only.sql \
+  >/dev/null 2>&1; then
+  echo "BLOCKED: sealed envelope migration accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.invite_encrypted_envelopes_staging') IS NULL")" = "t"
+echo "M26700_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -211,6 +223,27 @@ if PGUSER=frcaixinha_mail_receipt_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M26300_CI_SIGNED_RECEIPT_POSTGRES_NO_DELIVERY=PASS"
+echo "=== M26700: encrypted payload only, restricted storage and reading ==="
+# Migration 055 is built on the new terminal gate (054), not the legacy claim.
+PGOPTIONS="-c frcaixinha.envelope_staging_ci=1" \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/055_invite_encrypted_envelope_staging_only.sql >/dev/null
+# Earlier M26100 test exhausted 3 synthetic leases; restore only synthetic
+# lease #3 momentarily so the read function can prove its permission boundary.
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()+interval '5 minutes' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+CI_SEALED_ENVELOPE_PRODUCER_URL='postgresql://frcaixinha_envelope_producer_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+CI_SEALED_ENVELOPE_DISPATCH_URL='postgresql://frcaixinha_invite_dispatch_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
+  backend/tests/test_m26700_sealed_outbox_postgres_ci.py
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE lease_id='eeeeeeee-0000-4000-8000-000000000033'" >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_encrypted_envelopes_staging")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT bool_and(status='SEALED_CI_NOT_SENT' AND event_id='eeeeeeee-0000-4000-8000-000000000015'::uuid) FROM public.invite_encrypted_envelopes_staging")" = "t"
+echo "M26700_POSTGRES_AES_GCM_PERSISTENCE=PASS"
 echo "=== M26600: quarantine unknown SMTP ACK durably, disable old claim ==="
 PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
   psql -X -v ON_ERROR_STOP=1 \
@@ -230,6 +263,12 @@ if PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M26600_CI_TERMINAL_DELIVERY_QUARANTINE=PASS"
+# Even the correctly leased worker must not read a ciphertext once the
+# existing outbox is quarantined, independently of expired lease timing.
+test "$(PGOPTIONS='-c frcaixinha.envelope_staging_ci=1' \
+  PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT public.invite_read_encrypted_envelope_staging_ci('eeeeeeee-0000-4000-8000-000000000015','eeeeeeee-0000-4000-8000-000000000033')")" = ""
+echo "M26700_QUARANTINED_ENVELOPE_NOT_RETRIEVABLE=PASS"
 echo "=== M26000: single-use recovery rotation in disposable staging ==="
 PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
   psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/048_password_reset_fixture_ci_only.sql >/dev/null
