@@ -114,7 +114,7 @@ def verify_synthetic_mail_receipt(
         raise invalid
     kind = data["kind"]
     occurred = data["occurred_at"]
-    if kind not in _RECOGNIZED or type(occurred) is not int:
+    if type(kind) is not str or kind not in _RECOGNIZED or type(occurred) is not int:
         raise invalid
     if abs(stamp - occurred) > _REPLAY_WINDOW_SECONDS:
         raise invalid
