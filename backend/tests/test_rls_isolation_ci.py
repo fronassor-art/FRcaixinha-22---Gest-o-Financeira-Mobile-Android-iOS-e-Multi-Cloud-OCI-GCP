@@ -1150,3 +1150,66 @@ async def test_m25100_published_contract_catalog_real_rls(isolated_rows):
     finally:
         await tx.rollback()
         await admin.close()
+
+
+async def test_m25200_contract_body_exact_digest_under_real_rls(isolated_rows):
+    """Sem persistência: hash correto/alterado consultado como app em PG18 CI."""
+    from hashlib import sha256
+    from app.contract_text_integrity import verify_contract_body_digest
+    from app.dependencies import AuthenticatedSession
+    from app.models import InvitationContractTextIntegrityRequest
+
+    _conn, ids = isolated_rows
+    owner = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
+    tx = owner.transaction()
+    await tx.start()
+    try:
+        doc_id = uuid.uuid4()
+        body = "Termo de adesao M25200 CI - versao sintética exata\\n"
+        digest = sha256(body.encode("utf-8")).hexdigest()
+        await owner.execute(
+            "INSERT INTO public.contract_documents "
+            "(id,document_kind,version_label,sha256,source_reference,published_at)"
+            " VALUES($1,'TENANT_MEMBERSHIP',$2,$3,$4,now())",
+            doc_id, str(doc_id), digest, "ci://verified-text-m25200",
+        )
+        await owner.execute("SET LOCAL ROLE frcaixinha_app_role")
+        assert not await owner.fetchval(
+            "SELECT has_table_privilege(current_user,"
+            "'public.contract_acceptances','INSERT')"
+        )
+        await owner.execute("SELECT set_config('app.current_user_id',$1,true)",
+                            str(ids["admin_a"]))
+        await owner.execute("SELECT set_config('app.current_role','TENANT_ADMIN',true)")
+        await owner.execute("SELECT set_config('app.current_tenant_id',$1,true)",
+                            str(ids["tenant_a"]))
+        actor = AuthenticatedSession(
+            str(ids["admin_a"]), "TENANT_ADMIN", str(ids["tenant_a"]),
+            "ci-synthetic@example.com", "Admin CI", False,
+        )
+        model = InvitationContractTextIntegrityRequest(
+            target_role="TENANT_MEMBER", tenant_id=ids["tenant_a"],
+            required_document_id=doc_id, contract_text=body,
+        )
+        valid = await verify_contract_body_digest(
+            session=actor, payload=model, conn=owner,
+        )
+        assert valid["document_published_verified"] is True
+        assert valid["exact_utf8_document_digest_matched"] is True
+        assert valid["acceptance_recorded"] is False
+        assert valid["activation_authorized"] is False
+
+        mismatch = await verify_contract_body_digest(
+            session=actor, payload=model.model_copy(
+                update={"contract_text": body + " "}), conn=owner,
+        )
+        assert mismatch["exact_utf8_document_digest_matched"] is False
+        await owner.execute("SELECT set_config('app.current_user_id','',true)")
+        invisible = await verify_contract_body_digest(
+            session=actor, payload=model, conn=owner,
+        )
+        assert invisible["document_published_verified"] is False
+        assert invisible["exact_utf8_document_digest_matched"] is False
+    finally:
+        await tx.rollback()
+        await owner.close()
