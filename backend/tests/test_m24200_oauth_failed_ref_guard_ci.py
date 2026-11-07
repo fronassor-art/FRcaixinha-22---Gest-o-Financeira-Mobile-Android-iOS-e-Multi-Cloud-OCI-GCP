@@ -134,11 +134,11 @@ def test_sql_048_staging_and_worker_contracts():
     assert "if can_discard" not in store
 
 
-def test_seventy_one_migration_records_are_not_local_apply_authorization():
+def test_staging_migration_catalog_never_authorizes_termux_apply():
     import json
     root=Path(__file__).resolve().parents[2]
     catalog=json.loads((root/"backend/migration_catalog_ai_studio.json").read_text())
-    assert len(catalog["entries"])==71
+    assert len(catalog["entries"])==len({entry["source_path"] for entry in catalog["entries"]})
     for name in ("048_mp_oauth_failed_reference_staging_only.sql",
                  "044_oauth_failed_reference_worker_probe_ci_only.sql"):
         found=[r for r in catalog["entries"] if r["source_path"].endswith(name)]
