@@ -22,6 +22,13 @@ def select_login_role(*, requested_role, is_master: bool, links, requested_tenan
                         if str(row["tenant_id"]) == str(requested_tenant_id)]
         if not eligible:
             deny()
+        # Nunca escolher silenciosamente o primeiro tenant deste papel.
+        # A resposta 409 ocorre somente apos a verificacao da senha.
+        if requested_tenant_id is None and len({str(row['tenant_id']) for row in eligible}) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail='Mais de uma caixinha vinculada. Informe o ID da caixinha para entrar.',
+            )
         return requested_role, eligible[0]["tenant_id"]
 
     # Um tenant indicado sem papel nao autoriza fallback implicito.
