@@ -901,7 +901,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
       "local_evidence": null,
-      "source_blob_sha": "4e6423b6ccd46e99e832be03fdd30c097e6b462e"
+      "source_blob_sha": "40a8f2c9f2d217059ddcec527d0b89d6b22a2c50"
     },
     {
       "id": "ci_migrations:055",
@@ -911,7 +911,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
       "local_evidence": null,
-      "source_blob_sha": "2a0d034d5993a279495ccc2ecb8091621c11b940"
+      "source_blob_sha": "3ac2fe9a1bf1d85764b12bf6cdc249f7d3fc3183"
     },
     {
       "id": "ci_migrations:056",
@@ -921,7 +921,17 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": null,
       "local_evidence": null,
-      "source_blob_sha": "fa5a09348025c3aa4458c1fdd2761e361fe1ca63"
+      "source_blob_sha": "dde75eee6999f12386a96c4cf60729a2b703ffb5"
+    },
+    {
+      "id": "staging_migrations:057",
+      "source_path": "backend/staging_migrations/057_email_challenge_readback_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.invite_challenge_readback_staging_ci(uuid,uuid)",
+      "local_evidence": null,
+      "source_blob_sha": "c26aa44ede61889243c7534955e22346943fb9f4"
     }
   ]
 }
