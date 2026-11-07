@@ -66,6 +66,12 @@ class InvitationCreateRequest(BaseModel):
         description="Referência de adesão versionada; não autoriza emissão de convites.",
     )
 
+class InvitationContractCatalogRequest(BaseModel):
+    """Selector de versões publicadas; sem endereço pessoal ou dados de convidado."""
+    target_role: str = Field(..., pattern="^(TENANT_ADMIN|TENANT_MEMBER)$")
+    tenant_id: UUID
+
+
 class InvitationContractReadinessRequest(BaseModel):
     """Consulta somente leitura: não recebe nem armazena e-mail de destinatário."""
     target_role: str = Field(..., pattern="^(TENANT_ADMIN|TENANT_MEMBER)$")
