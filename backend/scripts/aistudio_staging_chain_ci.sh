@@ -33,6 +33,8 @@ CREATE ROLE frcaixinha_invite_queue_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_account_recovery_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_invite_dispatch_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -66,15 +68,25 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.password_recovery_audit_staging') IS NULL")" = "t"
 echo "M26000_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.invite_dispatch_staging_ci=1" \
+    psql -X -v ON_ERROR_STOP=1 \
+    -f backend/staging_migrations/052_invite_dispatch_lease_staging_only.sql \
+    >/dev/null 2>&1; then
+  echo "BLOCKED: dispatch lease migration accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.invite_dispatch_leases_staging') IS NULL")" = "t"
+echo "M26100_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -93,9 +105,10 @@ for file in \
   backend/staging_migrations/048_mp_oauth_failed_reference_staging_only.sql \
   backend/staging_migrations/049_mp_oauth_revision_state_staging_only.sql \
   backend/staging_migrations/050_invitation_outbox_staging_only.sql \
-  backend/staging_migrations/051_password_reset_staging_only.sql
+  backend/staging_migrations/051_password_reset_staging_only.sql \
+  backend/staging_migrations/052_invite_dispatch_lease_staging_only.sql
 do
-  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1 -c frcaixinha.recovery_staging_ci=1" \
+  PGOPTIONS="-c frcaixinha.mp_staging_authorized=1 -c frcaixinha.mp_pix_automation_staging_authorized=1 -c frcaixinha.orders_staging_authorized=1 -c frcaixinha.notifications_staging_ci=1 -c frcaixinha.mp_oauth_staging_authorized=1 -c frcaixinha.invite_queue_staging_ci=1 -c frcaixinha.recovery_staging_ci=1 -c frcaixinha.invite_dispatch_staging_ci=1" \
     psql -X -v ON_ERROR_STOP=1 -f "$file" >/dev/null
   echo "STAGING_CI_APPLIED_$(basename "$file" | cut -c1-3)=PASS"
 done
@@ -120,6 +133,43 @@ if PGUSER=frcaixinha_invite_queue_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M25900_STAGING_OUTBOX_IDEMPOTENT_AUDIT=PASS"
+echo "=== M26100: dispatch lease and retry without network ==="
+PGOPTIONS='-c frcaixinha.invite_dispatch_staging_ci=1' \
+  PGUSER=frcaixinha_invite_dispatch_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/050_invite_dispatch_first_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_dispatch_attempt_audit_staging")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT attempts=1 AND status='HELD_CI_NO_NETWORK' FROM public.invite_dispatch_leases_staging")" = "t"
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second'" >/dev/null
+PGOPTIONS='-c frcaixinha.invite_dispatch_staging_ci=1' \
+  PGUSER=frcaixinha_invite_dispatch_ci psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/051_invite_dispatch_retry_probe_ci_only.sql >/dev/null
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_dispatch_attempt_audit_staging")" = "2"
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second'" >/dev/null
+test "$(PGOPTIONS='-c frcaixinha.invite_dispatch_staging_ci=1' \
+ PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT public.invite_dispatch_lease_staging_ci('eeeeeeee-0000-4000-8000-000000000015','eeeeeeee-0000-4000-8000-000000000033')")" = "HELD:3"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_dispatch_attempt_audit_staging")" = "3"
+psql -X -v ON_ERROR_STOP=1 -c \
+  "UPDATE public.invite_dispatch_leases_staging SET lease_expires_at=clock_timestamp()-interval '1 second'" >/dev/null
+test "$(PGOPTIONS='-c frcaixinha.invite_dispatch_staging_ci=1' \
+ PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT public.invite_dispatch_lease_staging_ci('eeeeeeee-0000-4000-8000-000000000015','eeeeeeee-0000-4000-8000-000000000034')")" = "EXHAUSTED"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_dispatch_attempt_audit_staging")" = "3"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT count(*) FROM public.invite_delivery_outbox_staging WHERE status='HELD_CI_NOT_SENT' AND NOT provider_delivery_confirmed AND NOT recipient_verified")" = "1"
+if PGUSER=frcaixinha_invite_dispatch_ci psql -XAt -v ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.invite_dispatch_leases_staging" >/dev/null 2>&1; then
+  echo "BLOCKED: dispatch worker has raw lease SELECT"
+  exit 1
+fi
+echo "M26100_CI_DISPATCH_LEASE_BOUNDED_RETRIES=PASS"
 echo "=== M26000: single-use recovery rotation in disposable staging ==="
 PGOPTIONS='-c frcaixinha.recovery_staging_ci=1' \
   psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/048_password_reset_fixture_ci_only.sql >/dev/null
