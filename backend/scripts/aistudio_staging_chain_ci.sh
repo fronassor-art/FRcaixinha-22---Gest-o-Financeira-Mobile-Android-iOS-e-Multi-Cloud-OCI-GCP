@@ -223,6 +223,10 @@ if PGUSER=frcaixinha_mail_receipt_ci psql -XAt -v ON_ERROR_STOP=1 \
   exit 1
 fi
 echo "M26300_CI_SIGNED_RECEIPT_POSTGRES_NO_DELIVERY=PASS"
+echo "=== M26600: install terminal gate before encrypted outbox ==="
+PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/054_invite_delivery_terminal_gate_staging_only.sql >/dev/null
 echo "=== M26700: encrypted payload only, restricted storage and reading ==="
 # Migration 055 is built on the new terminal gate (054), not the legacy claim.
 PGOPTIONS="-c frcaixinha.envelope_staging_ci=1" \
@@ -245,9 +249,6 @@ test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT bool_and(status='SEALED_CI_NOT_SENT' AND event_id='eeeeeeee-0000-4000-8000-000000000015'::uuid) FROM public.invite_encrypted_envelopes_staging")" = "t"
 echo "M26700_POSTGRES_AES_GCM_PERSISTENCE=PASS"
 echo "=== M26600: quarantine unknown SMTP ACK durably, disable old claim ==="
-PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
-  psql -X -v ON_ERROR_STOP=1 \
-  -f backend/staging_migrations/054_invite_delivery_terminal_gate_staging_only.sql >/dev/null
 PGOPTIONS="-c frcaixinha.delivery_gate_staging_ci=1" \
   PGUSER=frcaixinha_invite_dispatch_ci psql -X -v ON_ERROR_STOP=1 \
   -f backend/ci_migrations/053_delivery_terminal_gate_probe_ci_only.sql >/dev/null
