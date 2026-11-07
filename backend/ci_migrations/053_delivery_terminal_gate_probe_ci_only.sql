@@ -16,6 +16,10 @@ BEGIN
    current_user,'public.invite_dispatch_lease_staging_ci(uuid,uuid)','EXECUTE')
  THEN RAISE EXCEPTION 'M26600 legacy claim bypass still granted'; END IF;
 
+ -- Without a terminal record the guarded wrapper must still delegate
+ -- to the bounded lease logic; three previous attempts are exhausted.
+ IF public.invite_dispatch_guarded_staging_ci(ev,next_lease)<>'EXHAUSTED'
+ THEN RAISE EXCEPTION 'M26600 guarded delegate could not reach original bounded worker'; END IF;
  result:=public.invite_dispatch_mark_terminal_staging_ci(
  ev,accepted_lease,'CI_SMTP_ACCEPTED');
  IF result<>'QUARANTINED' THEN
