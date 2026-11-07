@@ -23,6 +23,7 @@ import sys
 from app.operator_release_worklist import release_worklist
 from app.provider_setup_sequence import prioritized_public_steps
 from app.public_https_attestation import probe_public_https_origin, PublicTlsProbeBlocked
+from app.provider_secret_inventory import secret_names_and_access_plan
 from app.provider_intake_schema import (
     FIELDS, FIELD_BY_KEY, IntakeBlocked, intake_audit,
     new_manifest, validate_field, validate_manifest,
@@ -153,7 +154,7 @@ def main(argv=None) -> int:
     parser=argparse.ArgumentParser(
         description="FR Finance AI Studio — somente identificadores públicos; NUNCA insira senhas, tokens, secrets ou DSNs."
     )
-    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next","probe-https"))
+    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next","probe-https","secrets-plan"))
     parser.add_argument("key",nargs="?")
     parser.add_argument("value",nargs="?")
     args=parser.parse_args(argv)
@@ -227,6 +228,17 @@ def main(argv=None) -> int:
             print("M28200_HTTP_REQUESTS=0")
             print("M28200_SMTP_MESSAGES=0")
             print("M28200_REAL_PROVIDERS=NOT_ATTESTED")
+        elif args.action=="secrets-plan":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            # May run without any public provider fields: no secrets are read.
+            plan=secret_names_and_access_plan()
+            print("FR_FINANCE_SECRETS_PLAN=ALIAS_ONLY_NO_VALUES")
+            for item in plan["secret_requirements"]:
+                print(item["alias"]+" | "+item["storage"]+" | "+
+                      item["owner_role"]+" | "+item["isolation"])
+            print("FR_FINANCE_SECRETS_STATUS=NOT_ATTESTED")
+            print("FR_FINANCE_LIVE_SERVICES=OFF")
         return 0
     except (IntakeBlocked,PublicTlsProbeBlocked,OSError):
         print("FR_FINANCE_PUBLIC_INTAKE=BLOCKED_INVALID_OR_MISSING_INPUT",file=sys.stderr)
