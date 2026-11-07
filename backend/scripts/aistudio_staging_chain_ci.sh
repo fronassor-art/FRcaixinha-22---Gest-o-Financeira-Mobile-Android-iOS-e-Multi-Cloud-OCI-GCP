@@ -44,6 +44,16 @@ fi
 test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
   "SELECT to_regclass('public.mp_seller_connections_staging') IS NULL")" = "t"
 echo "M034_WRONG_DATABASE_ROLLBACK=PASS"
+if PGOPTIONS="-c frcaixinha.invite_queue_staging_ci=1" \
+    psql -X -v ON_ERROR_STOP=1 \
+    -f backend/staging_migrations/050_invitation_outbox_staging_only.sql \
+    >/dev/null 2>&1; then
+  echo "BLOCKED: invitation outbox migration accepted wrong database"
+  exit 1
+fi
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT to_regclass('public.invite_delivery_outbox_staging') IS NULL")" = "t"
+echo "M25900_WRONG_DATABASE_ROLLBACK=PASS"
 
 echo "=== STAGING CI: CLONE SYNTHETIC DISPOSABLE DATABASE ==="
 createdb -T frcaixinha_ci frcaixinha_staging
