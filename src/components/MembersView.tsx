@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
+import { ContractReviewPanel } from './ContractReviewPanel';
 
 interface MembersViewProps { state: AppState }
 type Member = Awaited<ReturnType<typeof financialApi.fetchTenantMembers>>['members'][number];
@@ -48,6 +49,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ state }) => {
         Convites e aceite de novas contas ainda estão bloqueados até a integração de cadastro,
         verificação de identidade e autorização contratual. Nenhum membro fictício é exibido como real.
       </p>
+      {state.currentRole === 'TENANT_ADMIN' && state.currentTenantId && state.currentUserId && (
+        <details className="rounded-xl border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[#143d29]">
+            Conferir versão do contrato antes de futuros convites
+          </summary>
+          <div className="mt-4">
+            <ContractReviewPanel key={key} role="TENANT_ADMIN"
+              tenantId={state.currentTenantId}/>
+          </div>
+        </details>
+      )}
       {current.status === 'loading' && <p role="status">Carregando membros autorizados...</p>}
       {current.status === 'error' && <p role="alert" className="text-rose-900">
         Consulta de membros indisponível ou perfil não autorizado. Nenhuma lista fictícia será carregada.
