@@ -127,7 +127,7 @@ async def test_master_role_safely_previews_admin_document_metadata_only():
     report = await preview_published_contract_catalog(
         payload("TENANT_ADMIN"), session("MASTER", is_master=True), conn,
     )
-    assert report["target_role"] if "target_role" in report else True
+    assert report["target_role"] == "TENANT_ADMIN"
     assert report["status"] == "BLOCKED"
     assert "MASTER_MFA_NOT_ATTESTED" in report["blocking_gates"]
     assert "INDEPENDENT_APPROVAL_NOT_ATTESTED" in report["blocking_gates"]
