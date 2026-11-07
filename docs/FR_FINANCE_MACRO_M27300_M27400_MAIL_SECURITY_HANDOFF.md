@@ -36,6 +36,7 @@ ainda NÃO ocorreram.
 `backend/app/committed_challenge_handoff.py` compara o desafio
 preparado M27200 com uma fotografia de leitura do SQL M27100,
 exigindo identidade do tenant, evento, documento, digest do desafio,
+recalculo SHA-256 do token em memoria antes do handoff,
 controle de uso, tentativas, estado, prazo, ausência de quarentena
 e proveniência CI. O retorno é sempre
 `CI_CHALLENGE_READBACK_MATCHED_NO_SEND`.
