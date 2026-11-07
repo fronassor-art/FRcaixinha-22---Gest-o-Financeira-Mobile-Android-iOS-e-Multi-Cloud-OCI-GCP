@@ -6,20 +6,22 @@ ROOT=Path(__file__).resolve().parents[2]
 STAGING=ROOT/"backend/staging_migrations/056_email_ownership_challenge_staging_only.sql"
 ISSUE=ROOT/"backend/ci_migrations/054_email_challenge_issue_probe_ci_only.sql"
 CONSUME=ROOT/"backend/ci_migrations/055_email_challenge_consume_probe_ci_only.sql"
+LOCKOUT=ROOT/"backend/ci_migrations/056_email_challenge_lockout_probe_ci_only.sql"
 CHAIN=ROOT/"backend/scripts/aistudio_staging_chain_ci.sh"
 
 
 def test_every_challenge_sql_is_hash_registered_and_banned_from_termux():
     entries=json.loads((ROOT/"backend/migration_catalog_ai_studio.json").read_text())["entries"]
     bypath={x["source_path"]:x for x in entries}
-    assert len(entries)==len(bypath)>=90
-    for f in (STAGING,ISSUE,CONSUME):
+    assert len(entries)==len(bypath)>=91
+    for f in (STAGING,ISSUE,CONSUME,LOCKOUT):
         row=bypath[str(f.relative_to(ROOT))]
         assert row["do_not_apply_source_to_termux"] is True
         assert len(row["source_blob_sha"])==40
     assert bypath[str(STAGING.relative_to(ROOT))]["classification"]=="STAGING_ONLY_NEEDS_PORT"
     assert bypath[str(ISSUE.relative_to(ROOT))]["classification"]=="CI_ONLY_TEST_OR_FIXTURE"
     assert bypath[str(CONSUME.relative_to(ROOT))]["classification"]=="CI_ONLY_TEST_OR_FIXTURE"
+    assert bypath[str(LOCKOUT.relative_to(ROOT))]["classification"]=="CI_ONLY_TEST_OR_FIXTURE"
 
 
 def test_challenge_requires_disposable_db_and_restricted_workers():
@@ -82,6 +84,8 @@ def test_disposable_ci_proves_issue_wrong_digest_one_use_and_denied_read():
         "055_email_challenge_consume_probe_ci_only.sql",
         "M27100_WRONG_DATABASE_ROLLBACK=PASS",
         "M27100_CI_EMAIL_TOKEN_CONSUMED_NO_IDENTITY_GRANT=PASS",
+        "056_email_challenge_lockout_probe_ci_only.sql",
+        "M27101_CI_LOCKOUT_EXPIRY_NO_ACTIVATION=PASS",
         "frcaixinha_email_proof_ci",
         "FRCAIXINHA_CI_ISOLATED",
         "LOCAL_MIGRATIONS=NOT_TOUCHED",
@@ -95,6 +99,9 @@ def test_disposable_ci_proves_issue_wrong_digest_one_use_and_denied_read():
     assert "repeat('U',48)" in consume
     assert "CI_TOKEN_CONSUMED_NOT_PROOF" in consume
     assert "consumed token replay accepted" in consume
+    lockout=LOCKOUT.read_text()
+    assert "FOR attempt IN 1..3 LOOP" in lockout
+    assert "valid token bypassed exhausted attempts" in lockout
 
 
 def test_proof_functions_are_never_published_in_http_routes():
