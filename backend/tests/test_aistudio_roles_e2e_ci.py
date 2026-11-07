@@ -160,6 +160,8 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
                         "usernameOrEmail":email,
                         "password":password,
                         "requestedRole":role,
+                        "requestedTenantId": (str(first["tenant_id"])
+                                              if role != "MASTER" else None),
                     })
                     assert login.status_code == 200,(role,login.text)
                     body = login.json()
