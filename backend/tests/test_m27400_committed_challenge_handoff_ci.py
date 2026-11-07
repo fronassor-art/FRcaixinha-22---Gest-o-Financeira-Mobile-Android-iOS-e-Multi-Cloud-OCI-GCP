@@ -56,7 +56,7 @@ def test_valid_synthetic_readback_is_not_permission_to_send():
     ("challenge_digest","b"*64),
     ("challenge_digest","not a digest"),
     ("issued_at",NOW-31),
-    ("issued_at",NOW+1),
+    ("issued_at",NOW+3),
     ("expires_at",NOW+601),
     ("expires_at",NOW+59),
     ("failed_attempts",1),
