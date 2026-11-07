@@ -109,7 +109,7 @@ def revoke_invitation_ci(conn, invitation_id: UUID) -> bool:
 
 def accept_existing_identity_ci(
     conn, *, token: str, user_id: UUID, document_id: UUID,
-    consent: bool = False,
+    consent: bool = False, accepted_document_sha256: str | None = None,
 ) -> UUID | None:
     """Aceite de CONTA EXISTENTE só com documento publicado e consentimento.
 
@@ -118,7 +118,11 @@ def accept_existing_identity_ci(
     Nenhuma rota pública usa este executor de laboratório.
     """
     _ci_only(conn)
-    if consent is not True:
+    # Existing identities must affirm the exact published document version.
+    # A boolean alone does not prove what was displayed to the invitee.
+    if (consent is not True or type(accepted_document_sha256) is not str
+            or len(accepted_document_sha256) != 64
+            or any(ch not in '0123456789abcdef' for ch in accepted_document_sha256)):
         return None
     with conn.transaction():
         invitation = conn.execute(
@@ -135,18 +139,19 @@ def accept_existing_identity_ci(
                 or invitation[9] != document_id):
             return None
         document = conn.execute(
-            "SELECT 1 FROM public.contract_documents "
+            "SELECT sha256 FROM public.contract_documents "
             "WHERE id=%s AND document_kind='TENANT_MEMBERSHIP' "
             "AND published_at IS NOT NULL",
             (document_id,),
         ).fetchone()
-        if not document:
+        if not document or document[0] != accepted_document_sha256:
             return None
         user = conn.execute(
-            "SELECT email,status FROM public.users WHERE id=%s FOR UPDATE",
+            "SELECT email,status,email_verified_at FROM public.users WHERE id=%s FOR UPDATE",
             (user_id,),
         ).fetchone()
-        if not user or user[1] != "ACTIVE" or user[0].casefold() != invitation[2]:
+        if (not user or user[1] != "ACTIVE" or user[2] is None
+                or user[0].casefold() != invitation[2]):
             return None
         tenant = conn.execute(
             "SELECT status FROM public.tenants WHERE id=%s", (invitation[1],)
@@ -197,7 +202,7 @@ def accept_existing_identity_ci(
             acceptance_id = uuid4()
             proof = sha256(
                 (str(user_id)+str(invitation[0])+str(document_id)
-                 +secrets.token_hex(32)).encode()
+                 +accepted_document_sha256+secrets.token_hex(32)).encode()
             ).hexdigest()
             conn.execute(
                 "INSERT INTO public.contract_acceptances "
@@ -217,7 +222,7 @@ def accept_existing_identity_ci(
             "action,object_type,object_id,reason,evidence_ref)"
             "VALUES(%s,%s,%s,'CI_INVITATION_ACCEPTED','MEMBERSHIP',%s,%s,%s)",
             (user_id, invitation[3], invitation[1], str(membership_id),
-             "Aceite sintético com documento validado, sem prova externa",
+             "Aceite afirmativo da versão com e-mail sintético verificado",
              str(acceptance_id)),
         )
         return membership_id

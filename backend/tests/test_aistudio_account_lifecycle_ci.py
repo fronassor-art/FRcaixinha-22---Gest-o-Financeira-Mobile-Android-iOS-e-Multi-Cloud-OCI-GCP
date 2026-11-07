@@ -47,6 +47,8 @@ def synthetic_accounts():
             "INSERT INTO public.credentials(user_id,password_hash) VALUES(%s,%s)",
             (users["member"], hash_password_secure("senha-sintetica-inicial")),
         )
+        # CI-only synthetic verified-email state; never implies provider proof.
+        db.execute("UPDATE public.users SET email_verified_at=now() WHERE id=ANY(%s::uuid[])",([users["member"],users["outsider"]],))
         try:
             yield db, users, tenant
         finally:
@@ -65,6 +67,7 @@ def create_contract_ci(db):
 def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_accounts):
     db, users, tenant = synthetic_accounts
     doc=create_contract_ci(db)
+    doc_digest=db.execute("SELECT sha256 FROM public.contract_documents WHERE id=%s",(doc,)).fetchone()[0]
     invitation_id, token = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
         recipient_email=f"{users['member']}@example.com", target_role="TENANT_MEMBER",
@@ -77,21 +80,44 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
     ).fetchone()
     assert stored == (hash_token(token), "PENDING_DELIVERY")
     assert token not in str(stored)
-    assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
     assert simulate_invitation_delivery_ci(db, invitation_id)
     assert not simulate_invitation_delivery_ci(db, invitation_id)
     assert accept_existing_identity_ci(
         db,token=token,user_id=users["member"],document_id=doc,
-        consent=False
+        consent=False,accepted_document_sha256=doc_digest
     ) is None
     assert accept_existing_identity_ci(
         db,token=token,user_id=users["member"],document_id=uuid4(),
-        consent=True
+        consent=True,accepted_document_sha256=doc_digest
     ) is None
-    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True) is None
-    membership_id = accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True)
+    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
+
+    # A verified, active existing account still cannot accept without an
+    # affirmative matching document hash. No membership may be created.
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,consent=True
+    ) is None
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,consent=True,
+        accepted_document_sha256="f"*64
+    ) is None
+    assert db.execute(
+        "SELECT count(*) FROM public.memberships WHERE user_id=%s AND tenant_id=%s",
+        (users["member"],tenant),
+    ).fetchone()[0]==0
+    # The existing identity's registered email must already be verified.
+    db.execute("UPDATE public.users SET email_verified_at=NULL WHERE id=%s",
+               (users["member"],))
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,consent=True,
+        accepted_document_sha256=doc_digest
+    ) is None
+    db.execute("UPDATE public.users SET email_verified_at=now() WHERE id=%s",
+               (users["member"],))
+    membership_id = accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True,accepted_document_sha256=doc_digest)
     assert membership_id is not None
-    assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
     assert not revoke_invitation_ci(db, invitation_id)
     membership = db.execute(
         "SELECT user_id,tenant_id,role,status FROM public.memberships WHERE id=%s",
@@ -117,7 +143,7 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
     assert simulate_invitation_delivery_ci(db,second_id)
     assert accept_existing_identity_ci(
         db,token=second_token,user_id=users["member"],
-        document_id=doc,consent=True,
+        document_id=doc,consent=True,accepted_document_sha256=doc_digest,
     ) is None
     assert db.execute(
         "SELECT count(*) FROM public.contract_acceptances "
@@ -134,6 +160,7 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
 def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
     db, users, tenant = synthetic_accounts
     doc=create_contract_ci(db)
+    doc_digest=db.execute("SELECT sha256 FROM public.contract_documents WHERE id=%s",(doc,)).fetchone()[0]
     with pytest.raises(LifecycleDenied):
         prepare_invitation_ci(
             db, tenant_id=tenant, inviter_id=users["member"],
@@ -156,7 +183,7 @@ def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
                (doc,invite))
     assert simulate_invitation_delivery_ci(db, invite)
     assert revoke_invitation_ci(db, invite)
-    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True) is None
+    assert accept_existing_identity_ci(db, token=token, user_id=users["outsider"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
 
     pending, expiring = prepare_invitation_ci(
         db, tenant_id=tenant, inviter_id=users["admin"],
@@ -170,7 +197,7 @@ def test_invitation_hierarchy_expiration_and_revoke(synthetic_accounts):
         "UPDATE public.invitations SET expires_at=now()-interval '1 minute' WHERE id=%s",
         (pending,),
     )
-    assert accept_existing_identity_ci(db, token=expiring, user_id=users["outsider"], document_id=doc, consent=True) is None
+    assert accept_existing_identity_ci(db, token=expiring, user_id=users["outsider"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
     assert db.execute(
         "SELECT count(*) FROM public.memberships WHERE user_id=%s",
         (users["outsider"],),
