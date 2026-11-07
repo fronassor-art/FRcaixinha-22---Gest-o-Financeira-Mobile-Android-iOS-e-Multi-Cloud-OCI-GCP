@@ -22,6 +22,7 @@ import sys
 
 from app.operator_release_worklist import release_worklist
 from app.provider_setup_sequence import prioritized_public_steps
+from app.public_https_attestation import probe_public_https_origin, PublicTlsProbeBlocked
 from app.provider_intake_schema import (
     FIELDS, FIELD_BY_KEY, IntakeBlocked, intake_audit,
     new_manifest, validate_field, validate_manifest,
@@ -152,7 +153,7 @@ def main(argv=None) -> int:
     parser=argparse.ArgumentParser(
         description="FR Finance AI Studio — somente identificadores públicos; NUNCA insira senhas, tokens, secrets ou DSNs."
     )
-    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next"))
+    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next","probe-https"))
     parser.add_argument("key",nargs="?")
     parser.add_argument("value",nargs="?")
     args=parser.parse_args(argv)
@@ -207,8 +208,27 @@ def main(argv=None) -> int:
             else:
                 print("NEXT_PUBLIC_FIELD="+report["next_public_field"])
             print("FR_FINANCE_LIVE_SERVICES=OFF")
+        elif args.action=="probe-https":
+            # Explicit opt-in: "probe-https APP_URL AUTHORIZE_PUBLIC_TLS_ONLY"
+            # No cookies, URL contents, credentials, HTTP method, API calls or SMTP.
+            if args.key not in {"APP_URL","MP_OAUTH_REDIRECT_URI","MP_WEBHOOK_URL"} or args.value!="AUTHORIZE_PUBLIC_TLS_ONLY":
+                raise _deny()
+            public=read_file(path)["public_inputs"]
+            if args.key not in public:
+                raise _deny()
+            from urllib.parse import urlsplit
+            value=public[args.key]
+            origin="https://"+urlsplit(value).hostname
+            report=probe_public_https_origin(origin)
+            if not (report.dns_public and report.hostname_certificate_valid and
+                    not report.production_ready and not report.pix_enabled):
+                raise _deny()
+            print("M28200_PUBLIC_DNS_AND_TLS=PASS")
+            print("M28200_HTTP_REQUESTS=0")
+            print("M28200_SMTP_MESSAGES=0")
+            print("M28200_REAL_PROVIDERS=NOT_ATTESTED")
         return 0
-    except (IntakeBlocked,OSError):
+    except (IntakeBlocked,PublicTlsProbeBlocked,OSError):
         print("FR_FINANCE_PUBLIC_INTAKE=BLOCKED_INVALID_OR_MISSING_INPUT",file=sys.stderr)
         return 2
 
