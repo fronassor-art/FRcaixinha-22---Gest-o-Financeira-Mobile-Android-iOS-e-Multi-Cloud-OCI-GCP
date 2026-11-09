@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M37361–M37370 — atestacao read-only das estruturas PG18 locais
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37361_m37370_local_pg18_evidence_ci.py
       - name: M37351–M37360 — OCI IAM rede e inventario leitura unificada
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37351_m37360_oci_unified_readonly_ci.py
       - name: M37341–M37350 — IAM privilegios minimos plano inerte e classificacao sem mutacoes
