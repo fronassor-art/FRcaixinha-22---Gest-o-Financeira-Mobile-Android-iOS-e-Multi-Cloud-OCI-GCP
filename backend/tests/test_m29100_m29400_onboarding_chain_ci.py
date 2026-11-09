@@ -174,7 +174,7 @@ def test_preexisting_public_invite_and_recovery_remain_blocked(monkeypatch):
     tenant=uuid4()
     admin=AuthenticatedSession(str(uuid4()), "TENANT_ADMIN", str(tenant),
                               "synthetic@invalid.example", "CI only", False)
-    payload=InvitationCreateRequest(target_email="ci@example.invalid",
+    payload=InvitationCreateRequest(target_email="ci@example.com",
                                     target_role="TENANT_MEMBER",
                                     tenant_id=str(tenant),
                                     required_document_id=uuid4())
@@ -184,7 +184,7 @@ def test_preexisting_public_invite_and_recovery_remain_blocked(monkeypatch):
     assert "Nenhum convite" in str(error.value.detail)
 
     with pytest.raises(HTTPException) as recovery:
-        forgot_password(ForgotPasswordRequest(email="ci@example.invalid"))
+        forgot_password(ForgotPasswordRequest(email="ci@example.com"))
     assert recovery.value.status_code == 503
 
 
