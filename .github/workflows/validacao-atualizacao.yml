@@ -249,7 +249,7 @@ jobs:
             # Retry ONLY transient download/network failures. Do not retry
             # compiler, signing, lint, dependency-integrity or Gradle task errors.
             if [[ "$attempt" == 3 ]] || ! grep -Eqi \
-              'Received status code 429|Too Many Requests|SocketTimeoutException|Read timed out|Downloading .* failed: timeout|Connect timed out|Connection reset' "$LOG"; then
+              'Received status code 429|Too Many Requests|SocketTimeoutException|Read timed out|Downloading .* failed: timeout|Connect timed out|Connection reset|Server returned HTTP response code: 50[234]|HTTP (502|503|504)|Bad Gateway|Gateway Timeout' "$LOG"; then
               exit 1
             fi
             echo "::warning::Download Gradle/Maven transitório; repetição limitada sem ignorar erro de compilação."
