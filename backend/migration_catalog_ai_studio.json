@@ -1042,6 +1042,16 @@
       "inspect_object": "public.platform_license_plans (RLS admin licensed read)",
       "local_evidence": null,
       "source_blob_sha": "65c9a1d1a3ddb8a6142d8500d1fd5904245e8399"
+    },
+    {
+      "id": "local_migrations:046",
+      "source_path": "backend/local_migrations/046_saas_membership_quota_write_lock.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.memberships and public.quotas: DML revoked; write lock triggers",
+      "local_evidence": null,
+      "source_blob_sha": "76218c731be6ec4cab9178e7d69e55d94d598bd5"
     }
   ]
 }

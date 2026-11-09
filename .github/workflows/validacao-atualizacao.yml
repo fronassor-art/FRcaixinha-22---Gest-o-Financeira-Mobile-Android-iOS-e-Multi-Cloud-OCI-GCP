@@ -567,6 +567,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m21000_cycle_opening_functional_ci.sql
           # M33400-M33800: admission read policy tested in disposable PostgreSQL.
           PGOPTIONS='-c frcaixinha.saas_admission_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/045_saas_member_plan_visibility.sql
+          # M33900-M34300: tested ONLY in disposable PostgreSQL CI.
+          PGOPTIONS='-c frcaixinha.saas_write_lock_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/046_saas_membership_quota_write_lock.sql
           # CI-only, fora do diretorio de migracoes do Termux.
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
@@ -741,6 +743,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m21000_cycle_opening_functional_ci.sql
           # M33800: include plan visibility in PG18 base before staging clone.
           PGOPTIONS='-c frcaixinha.saas_admission_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/045_saas_member_plan_visibility.sql
+          # M33900-M34300: tested ONLY in disposable PostgreSQL CI.
+          PGOPTIONS='-c frcaixinha.saas_write_lock_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/046_saas_membership_quota_write_lock.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
@@ -790,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M33900–M34300 — travar DML direto de membros e cotas
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m33900_m34300_saas_write_lock_static_ci.py
       - name: M33400–M33800 — integracao de preflight SaaS e isolamento
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m33400_m33800_saas_admission_ci.py
       - name: M32900–M33300 — recuperar reservas expiradas somente em CI

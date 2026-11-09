@@ -692,6 +692,13 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
  PYTHONPATH=backend python -m pytest -q backend/tests/test_m33800_saas_admission_pg_ci.py
 echo "M33800_SAAS_ADMISSION_RLS_PG=PASS"
 echo "M33800_REAL_MEMBER_ADMISSION=OFF"
+echo "=== M33900-M34300: DB-enforced membership/quota write lock ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+ CI_SAAS_WRITE_GATE_APP_URL='postgresql://frcaixinha_saas_admission_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_WRITE_GATE_ADMIN_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ PYTHONPATH=backend python -m pytest -q backend/tests/test_m34300_saas_write_lock_pg_ci.py
+echo "M34300_MEMBER_QUOTA_WRITES_CLOSED=PASS"
+echo "M34300_REAL_MEMBER_ADMISSION=OFF"
 
 echo "=== M32400-M32800: CI-only synthetic claim ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_claim_ci=1' \
