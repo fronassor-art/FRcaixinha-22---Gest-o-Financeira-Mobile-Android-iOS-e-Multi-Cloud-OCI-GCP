@@ -15,6 +15,7 @@ from app.dependencies import AuthenticatedSession
 from app.models import InvitationCreateRequest, ForgotPasswordRequest
 from app.routers.invitations import create_invitation
 from app.routers.auth import forgot_password
+from app.config import settings
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -168,7 +169,8 @@ def test_invalid_flow_and_zero_uuid_are_not_accepted():
         assess_journey(object())
 
 
-def test_preexisting_public_invite_and_recovery_remain_blocked():
+def test_preexisting_public_invite_and_recovery_remain_blocked(monkeypatch):
+    monkeypatch.setattr(settings, "DATABASE_URL", "postgresql://localhost/ci-placeholder")
     tenant=uuid4()
     admin=AuthenticatedSession(str(uuid4()), "TENANT_ADMIN", str(tenant),
                               "synthetic@invalid.example", "CI only", False)
