@@ -49,6 +49,8 @@ CREATE ROLE frcaixinha_saas_enroll_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_capacity_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_saas_renewal_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -148,9 +150,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -660,6 +662,23 @@ CI_SAAS_CAPACITY_DB_ADMIN_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432
 PYTHONPATH=backend python -m pytest -q backend/tests/test_m31800_saas_capacity_pg_ci.py
 echo "M31800_SAAS_CAPACITY_PG=PASS"
 echo "M31800_REAL_LICENSE_OPERATIONS=OFF"
+
+echo "=== M31900-M32300: CI-only SaaS renewal ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_renewal_ci=1' \
+ psql -X -v ON_ERROR_STOP=1 \
+ -f backend/staging_migrations/061_saas_renewal_review_staging_only.sql >/dev/null 2>&1; then
+ echo "BLOCKED=M32300_SQL_WRONG_DATABASE"; exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_renewal_ci=1' psql -X -v ON_ERROR_STOP=1 \
+ -f backend/staging_migrations/061_saas_renewal_review_staging_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.saas_renewal_ci=1' psql -X -v ON_ERROR_STOP=1 \
+ -f backend/ci_migrations/060_saas_renewal_review_fixture_ci_only.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+ CI_SAAS_RENEWAL_DB_URL='postgresql://frcaixinha_saas_renewal_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_RENEWAL_DB_ADMIN_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ PYTHONPATH=backend python -m pytest -q backend/tests/test_m32300_saas_renewal_pg_ci.py
+echo "M32300_RENEWAL_PG=PASS"
+echo "M32300_REAL_BILLING_AND_ENTITLEMENTS=OFF"
 
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
