@@ -53,6 +53,9 @@ CREATE ROLE frcaixinha_saas_renewal_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_claim_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_saas_admission_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS INHERIT NOCREATEDB NOCREATEROLE;
+GRANT frcaixinha_app_role TO frcaixinha_saas_admission_ci;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -684,7 +687,7 @@ echo "M32300_REAL_BILLING_AND_ENTITLEMENTS=OFF"
 
 echo "=== M33400-M33800: SaaS plan RLS admission read gate ==="
 GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
- CI_SAAS_ADMISSION_APP_URL='postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_ADMISSION_APP_URL='postgresql://frcaixinha_saas_admission_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
  CI_SAAS_ADMISSION_ADMIN_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
  PYTHONPATH=backend python -m pytest -q backend/tests/test_m33800_saas_admission_pg_ci.py
 echo "M33800_SAAS_ADMISSION_RLS_PG=PASS"
