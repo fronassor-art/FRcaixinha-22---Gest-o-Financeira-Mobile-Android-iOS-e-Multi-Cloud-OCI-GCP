@@ -952,6 +952,26 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "6c67f95573f24061f09076e44ade1fbf20845d36"
+    },
+    {
+      "id": "staging_migrations:059",
+      "source_path": "backend/staging_migrations/059_saas_enrollment_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.saas_enrollment_requests_staging",
+      "local_evidence": null,
+      "source_blob_sha": "e4c5e8aa5bf44d0820cf189021f26ad20ba6ba38"
+    },
+    {
+      "id": "ci_migrations:058",
+      "source_path": "backend/ci_migrations/058_saas_enrollment_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "2363e279770f67c5c867ea7e210262aca7a7d208"
     }
   ]
 }

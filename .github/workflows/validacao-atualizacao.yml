@@ -415,6 +415,7 @@ jobs:
           python -m pytest -q backend/tests/test_m29810_fr_finance_identity_ci.py
           python -m pytest -q backend/tests/test_m29900_m30300_contract_coverage_ci.py
           python -m pytest -q backend/tests/test_m30400_m30800_annual_ci.py
+          python -m pytest -q backend/tests/test_m30900_m31300_saas_enrollment_ci.py
           bash -n backend/scripts/frfinance_rename_termux_directory.sh
           python -m pytest -q backend/tests/test_m25700_local_attestation_guard_ci.py
           python -m pytest -q backend/tests/test_m25900_staging_outbox_contract_ci.py

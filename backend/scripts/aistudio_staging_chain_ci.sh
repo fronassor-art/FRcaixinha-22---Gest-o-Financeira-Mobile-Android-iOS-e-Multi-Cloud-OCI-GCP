@@ -45,6 +45,8 @@ CREATE ROLE frcaixinha_email_attestor_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_annual_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_saas_enroll_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -144,9 +146,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -529,6 +531,70 @@ if psql -XAt -v ON_ERROR_STOP=1 -c \
  echo "BLOCKED=APPEND_ONLY_MUTATION"; exit 1
 fi
 echo "M30800_CI_ANNUAL_CONSENT_POSTGRES=PASS"
+
+echo "=== M30900-M31300: SaaS contract/preparation in disposable PG ==="
+# The same schema MUST refuse to run in the base database.
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_enroll_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/059_saas_enrollment_staging_only.sql >/dev/null 2>&1; then
+ echo "BLOCKED=SAAS_CI_MIGRATION_WRONG_DATABASE"; exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_enroll_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/059_saas_enrollment_staging_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.saas_enroll_staging_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/058_saas_enrollment_fixture_ci_only.sql >/dev/null
+
+SAAS_TENANT='daba0000-0000-4000-8000-000000000010'
+SAAS_OTHER_TENANT='daba0000-0000-4000-8000-000000000020'
+SAAS_ADMIN='daba0000-0000-4000-8000-000000000001'
+SAAS_OTHER_ADMIN='daba0000-0000-4000-8000-000000000002'
+SAAS_ACCEPT='daba0000-0000-4000-8000-000000000040'
+SAAS_OTHER_ACCEPT='daba0000-0000-4000-8000-000000000041'
+SAAS_DRAFT_ACCEPT='daba0000-0000-4000-8000-000000000042'
+SAAS_PRICE="$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT id FROM public.platform_license_price_versions WHERE plan_tier='ESSENCIAL' ORDER BY created_at,id LIMIT 1")"
+test -n "$SAAS_PRICE"
+saas_prepare() {
+  PGOPTIONS='-c frcaixinha.saas_enroll_staging_ci=1' \
+  PGUSER=frcaixinha_saas_enroll_ci \
+  psql -XAt -v ON_ERROR_STOP=1 -c \
+  "SELECT public.saas_prepare_enrollment_staging_ci('$1','$2','$3','$SAAS_PRICE','$4','$5')->>'state'"
+}
+SAAS_REQUEST='daba0000-0000-4000-8000-000000000050'
+test "$(saas_prepare "$SAAS_REQUEST" "$SAAS_TENANT" "$SAAS_ADMIN" "$SAAS_ACCEPT" MONTHLY)" = "PREPARED_CI_NO_PAYMENT"
+test "$(saas_prepare "$SAAS_REQUEST" "$SAAS_TENANT" "$SAAS_ADMIN" "$SAAS_ACCEPT" MONTHLY)" = "REPLAY_CI_NO_PAYMENT"
+test "$(saas_prepare "$SAAS_REQUEST" "$SAAS_TENANT" "$SAAS_ADMIN" "$SAAS_ACCEPT" ANNUAL)" = "DENIED"
+test "$(saas_prepare 'daba0000-0000-4000-8000-000000000051' "$SAAS_TENANT" "$SAAS_ADMIN" "$SAAS_ACCEPT" MONTHLY)" = "EXISTING_PREPARATION_REQUIRES_REVIEW"
+test "$(saas_prepare 'daba0000-0000-4000-8000-000000000052' "$SAAS_TENANT" "$SAAS_ADMIN" "$SAAS_OTHER_ACCEPT" MONTHLY)" = "DENIED"
+test "$(saas_prepare 'daba0000-0000-4000-8000-000000000053' "$SAAS_TENANT" "$SAAS_ADMIN" "$SAAS_DRAFT_ACCEPT" MONTHLY)" = "DENIED"
+test "$(saas_prepare 'daba0000-0000-4000-8000-000000000054' "$SAAS_OTHER_TENANT" "$SAAS_ADMIN" "$SAAS_ACCEPT" MONTHLY)" = "DENIED"
+test "$(saas_prepare 'daba0000-0000-4000-8000-000000000055' "$SAAS_TENANT" "$SAAS_OTHER_ADMIN" "$SAAS_OTHER_ACCEPT" MONTHLY)" = "DENIED"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.saas_subscription_preparations WHERE tenant_id='$SAAS_TENANT'")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.saas_enrollment_requests_staging WHERE tenant_id='$SAAS_TENANT' AND NOT payment_created AND NOT entitlement_created")" = "1"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.saas_payment_intents WHERE tenant_id='$SAAS_TENANT'")" = "0"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.saas_license_entitlements WHERE tenant_id='$SAAS_TENANT'")" = "0"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.ledger_entries WHERE tenant_id='$SAAS_TENANT'")" = "0"
+if PGUSER=frcaixinha_saas_enroll_ci psql -XAt -v ON_ERROR_STOP=1 \
+ -c "SELECT count(*) FROM public.saas_enrollment_requests_staging" >/dev/null 2>&1; then
+ echo "BLOCKED=SAAS_CI_WORKER_CAN_READ_ENROLLMENTS"; exit 1
+fi
+if PGUSER=frcaixinha_saas_enroll_ci psql -XAt -v ON_ERROR_STOP=1 \
+ -c "INSERT INTO public.saas_subscription_preparations DEFAULT VALUES" >/dev/null 2>&1; then
+ echo "BLOCKED=SAAS_CI_WORKER_CAN_INSERT_DIRECTLY"; exit 1
+fi
+if psql -XAt -v ON_ERROR_STOP=1 \
+ -c "DELETE FROM public.saas_enrollment_requests_staging" >/dev/null 2>&1; then
+ echo "BLOCKED=SAAS_CI_IDEMPOTENCY_HISTORY_MUTABLE"; exit 1
+fi
+echo "M31300_SAAS_ENROLLMENT_POSTGRES=PASS"
+echo "M31300_REAL_SAAS_BILLING=OFF"
 
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
