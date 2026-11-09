@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app.local_pg18_evidence_readonly import (
     DBNAME,ROLE,PORT,LocalEvidenceBlocked,audit_local_catalog,format_local_evidence,
