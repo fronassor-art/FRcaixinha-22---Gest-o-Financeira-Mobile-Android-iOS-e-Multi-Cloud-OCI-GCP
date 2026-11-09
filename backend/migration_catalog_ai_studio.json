@@ -1051,7 +1051,7 @@
       "do_not_apply_source_to_termux": false,
       "inspect_object": "public.memberships and public.quotas: DML revoked; write lock triggers",
       "local_evidence": null,
-      "source_blob_sha": "76218c731be6ec4cab9178e7d69e55d94d598bd5"
+      "source_blob_sha": "6dab10eec22118bbe18b5c30d4612a185eedfb61"
     }
   ]
 }

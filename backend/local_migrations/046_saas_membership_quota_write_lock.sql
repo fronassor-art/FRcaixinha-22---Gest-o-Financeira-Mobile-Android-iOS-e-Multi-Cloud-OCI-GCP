@@ -17,7 +17,16 @@ END $guard$;
 REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON
   public.memberships,public.quotas
   FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,
-       frcaixinha_verifier_role,frc_ai_app,frc_ai_auth;
+       frcaixinha_verifier_role;
+-- The PostgreSQL-16 disposable job does not create the local Termux
+-- login roles frc_ai_app/frc_ai_auth. Revoke them only if present.
+DO $optional_roles$ DECLARE r text; BEGIN
+  FOREACH r IN ARRAY ARRAY['frc_ai_app','frc_ai_auth'] LOOP
+    IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname=r) THEN
+      EXECUTE format('REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON public.memberships,public.quotas FROM %I',r);
+    END IF;
+  END LOOP;
+END $optional_roles$;
 ALTER TABLE public.memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.memberships FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.quotas ENABLE ROW LEVEL SECURITY;
@@ -43,7 +52,14 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION public.saas_unlicensed_member_quota_guard()
   FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,
-       frcaixinha_verifier_role,frc_ai_app,frc_ai_auth;
+       frcaixinha_verifier_role;
+DO $optional_function_roles$ DECLARE r text; BEGIN
+  FOREACH r IN ARRAY ARRAY['frc_ai_app','frc_ai_auth'] LOOP
+    IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname=r) THEN
+      EXECUTE format('REVOKE ALL ON FUNCTION public.saas_unlicensed_member_quota_guard() FROM %I',r);
+    END IF;
+  END LOOP;
+END $optional_function_roles$;
 CREATE TRIGGER memberships_unlicensed_write_lock
   BEFORE INSERT OR UPDATE OR DELETE ON public.memberships
   FOR EACH ROW EXECUTE FUNCTION public.saas_unlicensed_member_quota_guard();
@@ -57,6 +73,7 @@ BEGIN
    'frcaixinha_app_role','frcaixinha_auth_role',
    'frcaixinha_verifier_role','frc_ai_app','frc_ai_auth'
   ] LOOP
+    IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=role_name) THEN CONTINUE; END IF;
     FOREACH tbl IN ARRAY ARRAY['public.memberships','public.quotas'] LOOP
       IF has_table_privilege(role_name,tbl,'INSERT')
       OR has_table_privilege(role_name,tbl,'UPDATE')
