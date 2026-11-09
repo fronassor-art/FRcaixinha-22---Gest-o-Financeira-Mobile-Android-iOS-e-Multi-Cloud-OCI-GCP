@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M37341–M37350 — IAM privilegios minimos plano inerte e classificacao sem mutacoes
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37341_m37350_oci_iam_review_plan_ci.py
       - name: M37331–M37340 — inventario OCI IAM policies e dynamic groups somente leitura
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37331_m37340_oci_iam_readonly_ci.py
       - name: M37323–M37330 — OCI bootstrap plan only e bloqueios de seguranca

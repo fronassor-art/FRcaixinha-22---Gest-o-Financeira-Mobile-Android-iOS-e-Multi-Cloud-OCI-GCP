@@ -13,9 +13,13 @@ from typing import Callable
 TARGET_REGION="sa-saopaulo-1"
 TARGET_COMPARTMENT="fr-finance-staging"
 _PROJECT_NAME=re.compile(r"fr[-_]?finance", re.IGNORECASE)
+# Candidate review ONLY: Oracle may scope by compartment name, compartment id,
+# or tenancy + target.secret.id; identity domains may qualify group names.
+# This is deliberately broad, NOT a proof of effective permission or tenancy.
 _CANDIDATE_STATEMENT=re.compile(
-    r"allow\s+dynamic-group\s+[A-Za-z0-9_.-]+\s+to\s+read\s+"
-    r"secret-bundles\s+in\s+compartment\s+fr-finance-staging",
+    r"allow\s+dynamic-group\s+\S+\s+to\s+read\s+"
+    r"secret-bundles\s+in\s+(?:tenancy|compartment(?:\s+id)?\s+\S+)"
+    r"(?:\s+where\s+.+)?",
     flags=re.IGNORECASE,
 )
 
