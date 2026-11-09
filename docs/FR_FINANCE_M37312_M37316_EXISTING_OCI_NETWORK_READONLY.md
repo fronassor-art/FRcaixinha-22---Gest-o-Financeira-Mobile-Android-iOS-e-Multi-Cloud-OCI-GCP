@@ -88,3 +88,20 @@ https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.
 Quando `prohibit_public_ip_on_vnic=true`, o relatório marca `NETWORK_SUBNET_PROHIBITS_PUBLIC_IP_NEEDS_ARCHITECTURE_REVIEW` mesmo que haja regra 443. Uma futura API pública poderia usar balanceador/proxy em subnet apropriada, mas **nada disso foi provisionado nem aprovado**. Nenhum Terraform apply ou alteração de CIDR é executado.
 
 A primeira execução da CI para o commit anterior não chegou a instanciar todos os seis jobs; por isso não é uma homologação. Esta correção dispara nova execução, sujeita a verificação integral.
+
+## Registro da CI incompleta (09/11/2026)
+
+- Run GitHub `42671682836`: conclusão geral failure, apenas 1 job
+  registrado (API), o qual terminou em success. Os demais jobs não
+  foram criados; isto **não** atesta falha funcional nem 6/6 PASS.
+- Run GitHub `42672618328`: conclusão geral failure, apenas 4 jobs
+  registrados (API, PostgreSQL 16, PostgreSQL 18 e empacotamento),
+  **todos success**; frontend e Android não constaram como executados.
+- Os **22 testes específicos de rede** foram aprovados no job PG18 da
+  segunda execução. A instalação e o provisionamento reais não foram
+  testados.
+- Até que um workflow novo entregue seis jobs concluídos com sucesso,
+  a homologação completa `6/6 PASS` permanece pendente. Não substituir
+  resultado de GitHub Actions por suposição ou por contagem de jobs ausentes.
+
+A auditoria da OCI real continua segura e exclusivamente de leitura.
