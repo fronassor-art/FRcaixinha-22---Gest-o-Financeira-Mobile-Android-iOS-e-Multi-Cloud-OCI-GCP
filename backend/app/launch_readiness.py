@@ -56,7 +56,7 @@ def _engineering_evidence() -> dict[str, bool]:
         "RUNTIME_SHA": False,
         "ANDROID_RELEASE": (ROOT / ".github/workflows/validacao-atualizacao.yml").is_file(),
         "MP_CONNECT": (ROOT / "backend/app/mp_oauth_connect_preflight.py").is_file(),
-        "PIX_INBOUND": (ROOT / "backend/app/pix_automation_service.py").is_file(),
+        "PIX_INBOUND": (ROOT / "backend/app/pix_automation_workflows.py").is_file(),
         "PIX_OUTBOUND": False,
         "FINANCIAL_RECONCILIATION": (ROOT / "backend/app/financial_three_source_preflight.py").is_file(),
         "ANNUAL_CLOSING": (ROOT / "backend/app/routers/closings.py").is_file(),
