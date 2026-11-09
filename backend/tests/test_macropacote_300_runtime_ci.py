@@ -4,9 +4,9 @@ from fastapi.testclient import TestClient
 from app.main import app, backend_feature_gates, health_check
 ROOT = Path(__file__).resolve().parents[2]
 def test_product_and_runtime_identity():
-    assert health_check()["app"] == "FR Caixinha"
+    assert health_check()["app"] == "FR Finance"
     assert backend_feature_gates() == {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "feature_contract": "FR_CAIXINHA_M300_RUNTIME_V1",
         "ledger_account_journal_page_max": 50,

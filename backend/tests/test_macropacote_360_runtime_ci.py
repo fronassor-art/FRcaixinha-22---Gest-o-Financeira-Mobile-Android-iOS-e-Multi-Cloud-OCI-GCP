@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_m360_contract_and_import_fingerprints_only():
     body = backend_m360_feature_contract()
-    assert body["product"] == "FR Caixinha"
+    assert body["product"] == "FR Finance"
     assert body["workstream"] == "AI_STUDIO"
     assert body["contract"] == "FR_CAIXINHA_M360_KEYSET_V1"
     assert body["page_max"] == 50

@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def test_contract_is_loaded_without_database_or_credentials():
     assert backend_m320_feature_contract()=={
-        "product":"FR Caixinha",
+        "product":"FR Finance",
         "workstream":"AI_STUDIO",
         "contract":"FR_CAIXINHA_M320_EMPTY_LEDGER_V1",
         "account_directory_read_only":True,
