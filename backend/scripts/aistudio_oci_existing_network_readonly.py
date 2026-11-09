@@ -18,6 +18,35 @@ from app.oci_existing_network_audit import (
 )
 
 
+def _sdk_fields(raw, *, depth=0):
+    """Normalize OCI Python SDK snake_case keys to the audited CLI-style schema.
+
+    oci.util.to_dict() returns Python attribute names, not CLI JSON keys.
+    Malformed or colliding names fail closed; no provider payload is logged.
+    """
+    if depth > 12:
+        raise NetworkAuditBlocked("OCI_NETWORK_SDK_SCHEMA_INVALID")
+    if type(raw) is dict:
+        result={}
+        if len(raw)>300:
+            raise NetworkAuditBlocked("OCI_NETWORK_SDK_SCHEMA_INVALID")
+        for key,value in raw.items():
+            if type(key) is not str or not key or len(key)>128:
+                raise NetworkAuditBlocked("OCI_NETWORK_SDK_SCHEMA_INVALID")
+            name=key.replace("_","-")
+            if name in result:
+                raise NetworkAuditBlocked("OCI_NETWORK_SDK_SCHEMA_INVALID")
+            result[name]=_sdk_fields(value,depth=depth+1)
+        return result
+    if type(raw) is list:
+        if len(raw)>1000:
+            raise NetworkAuditBlocked("OCI_NETWORK_SDK_SCHEMA_INVALID")
+        return [_sdk_fields(x,depth=depth+1) for x in raw]
+    if raw is None or type(raw) in (str,bool,int,float):
+        return raw
+    raise NetworkAuditBlocked("OCI_NETWORK_SDK_SCHEMA_INVALID")
+
+
 def _sdk_query(client, oci, command):
     key=tuple(command[:3])
     lists={
@@ -30,9 +59,10 @@ def _sdk_query(client, oci, command):
         ("network","security-list","get"):"get_security_list",
     }
     if key in lists:
-        if (command[-1]!="--all" or len(command) not in (6,8)
+        expected_length=6 if key==("network","vcn","list") else 8
+        if (command[-1]!="--all" or len(command)!=expected_length
                 or command[3]!="--compartment-id"
-                or (len(command)==8 and command[5]!="--vcn-id")):
+                or (expected_length==8 and command[5]!="--vcn-id")):
             raise NetworkAuditBlocked("OCI_NETWORK_COMMAND_DENIED")
         method=getattr(client,lists[key])
         args={"limit":100,"retry_strategy":oci.retry.NoneRetryStrategy()}
@@ -52,7 +82,7 @@ def _sdk_query(client, oci, command):
             if (type(response.status) is not int or response.status!=200
                     or type(response.data) is not list or len(response.data)>100):
                 raise NetworkAuditBlocked("OCI_NETWORK_LIST_RESPONSE_INVALID")
-            results.extend(oci.util.to_dict(x) for x in response.data)
+            results.extend(_sdk_fields(oci.util.to_dict(x)) for x in response.data)
             if len(results)>1000:
                 raise NetworkAuditBlocked("OCI_NETWORK_LIST_TOO_LARGE")
             page=response.next_page
@@ -76,7 +106,7 @@ def _sdk_query(client, oci, command):
             raise NetworkAuditBlocked("OCI_NETWORK_GET_FAILED") from None
         if type(response.status) is not int or response.status!=200 or response.data is None:
             raise NetworkAuditBlocked("OCI_NETWORK_GET_RESPONSE_INVALID")
-        return {"data":oci.util.to_dict(response.data)}
+        return {"data":_sdk_fields(oci.util.to_dict(response.data))}
     raise NetworkAuditBlocked("OCI_NETWORK_COMMAND_DENIED")
 
 

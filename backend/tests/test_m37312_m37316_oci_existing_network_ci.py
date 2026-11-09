@@ -191,6 +191,16 @@ def _script():
     return module
 
 
+def _as_actual_sdk_json(value):
+    """OCI Python SDK to_dict produces snake_case, unlike CLI kebab-case."""
+    if type(value) is dict:
+        return {key.replace("-","_"):_as_actual_sdk_json(val)
+                for key,val in value.items()}
+    if type(value) is list:
+        return [_as_actual_sdk_json(x) for x in value]
+    return value
+
+
 def fake_sdk(monkeypatch,source):
     calls=[]
     class NoRetry:
@@ -225,7 +235,7 @@ def fake_sdk(monkeypatch,source):
         config=SimpleNamespace(from_file=lambda **kw:{"tenancy":TEN,"region":"sa-saopaulo-1"}),
         core=SimpleNamespace(VirtualNetworkClient=Client),
         retry=SimpleNamespace(NoneRetryStrategy=NoRetry),
-        util=SimpleNamespace(to_dict=lambda x:x),
+        util=SimpleNamespace(to_dict=_as_actual_sdk_json),
     )
     monkeypatch.setitem(sys.modules,"oci",sdk)
     return calls,sdk
@@ -259,6 +269,41 @@ def test_sdk_list_no_untrusted_methods(monkeypatch):
     calls,sdk=fake_sdk(monkeypatch,data())
     with pytest.raises(NetworkAuditBlocked,match="OCI_NETWORK_COMMAND_DENIED"):
         m._sdk_query(None,sdk,("network","vcn","create","--compartment-id",TEN))
+
+
+def test_python_sdk_snake_case_field_conversion_including_nested_rules():
+    m=_script()
+    result=m._sdk_fields({
+        "display_name":"FR Finance",
+        "cidr_blocks":["10.71.0.0/16"],
+        "ingress_security_rules":[
+            {"source":"0.0.0.0/0","protocol":"6",
+             "tcp_options":{"destination_port_range":{"min":443,"max":443}}}
+        ],
+    })
+    assert result["display-name"]=="FR Finance"
+    assert result["cidr-blocks"]==["10.71.0.0/16"]
+    assert result["ingress-security-rules"][0]["tcp-options"]["destination-port-range"]["min"]==443
+
+
+def test_sdk_key_collision_fails_closed():
+    m=_script()
+    with pytest.raises(NetworkAuditBlocked,match="OCI_NETWORK_SDK_SCHEMA_INVALID"):
+        m._sdk_fields({"display_name":"FR Finance","display-name":"ANOTHER"})
+
+
+def test_sdk_unknown_object_type_fails_closed():
+    m=_script()
+    with pytest.raises(NetworkAuditBlocked,match="OCI_NETWORK_SDK_SCHEMA_INVALID"):
+        m._sdk_fields({"unexpected":object()})
+
+
+def test_sdk_rejects_extra_vcn_id_on_list_vcns(monkeypatch):
+    m=_script()
+    calls,sdk=fake_sdk(monkeypatch,data())
+    with pytest.raises(NetworkAuditBlocked,match="OCI_NETWORK_COMMAND_DENIED"):
+        m._sdk_query(None,sdk,(
+            "network","vcn","list","--compartment-id",TEN,"--vcn-id",VCN,"--all"))
 
 
 def test_mutating_code_paths_not_present():
