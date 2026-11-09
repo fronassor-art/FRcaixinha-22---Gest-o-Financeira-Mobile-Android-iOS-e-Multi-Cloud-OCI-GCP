@@ -205,6 +205,8 @@ def inspect_existing_root_network(tenancy_id: str, region: str, query: Callable)
     db=any(_port_exposed(x,p) for x in inbound for p in (5432,5433))
     if db or p22:
         state="NETWORK_PUBLIC_ADMIN_OR_DATABASE_EXPOSURE_REVIEW"
+    elif public_flag:
+        state="NETWORK_SUBNET_PROHIBITS_PUBLIC_IP_NEEDS_ARCHITECTURE_REVIEW"
     elif not to_igw:
         state="NETWORK_NO_CONFIRMED_DEFAULT_IGW_ROUTE"
     elif not p443:

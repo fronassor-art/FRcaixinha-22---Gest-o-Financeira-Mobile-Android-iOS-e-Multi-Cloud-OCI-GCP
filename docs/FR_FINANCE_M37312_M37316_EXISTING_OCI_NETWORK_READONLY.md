@@ -82,3 +82,9 @@ por ausência de autorização para upgrade pago.
 
 Referência SDK Oracle:
 https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.VirtualNetworkClient.html
+
+## M37316.1 — bloqueio explícito de subnet privada
+
+Quando `prohibit_public_ip_on_vnic=true`, o relatório marca `NETWORK_SUBNET_PROHIBITS_PUBLIC_IP_NEEDS_ARCHITECTURE_REVIEW` mesmo que haja regra 443. Uma futura API pública poderia usar balanceador/proxy em subnet apropriada, mas **nada disso foi provisionado nem aprovado**. Nenhum Terraform apply ou alteração de CIDR é executado.
+
+A primeira execução da CI para o commit anterior não chegou a instanciar todos os seis jobs; por isso não é uma homologação. Esta correção dispara nova execução, sujeita a verificação integral.

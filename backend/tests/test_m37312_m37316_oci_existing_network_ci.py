@@ -114,6 +114,7 @@ def test_missing_default_route_not_proof_of_public_access():
 def test_private_subnet_remains_unproven_for_public_api():
     r,_=check(subnet_public=False,rule_ports=(443,))
     assert not r.subnet_allows_public_ip
+    assert r.state=="NETWORK_SUBNET_PROHIBITS_PUBLIC_IP_NEEDS_ARCHITECTURE_REVIEW"
     assert not r.public_https_verified and not r.deployment_authorized
 
 
