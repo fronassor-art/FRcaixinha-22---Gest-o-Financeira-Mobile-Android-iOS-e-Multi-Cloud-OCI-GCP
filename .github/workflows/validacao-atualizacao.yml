@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M35400–M35800 — RLS master, preco fixado e conferencia do GET SaaS
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m35400_m35800_saas_persisted_readback_ci.py
       - name: M34900–M35300 — GET autenticado da plataforma e auditoria de pagamento
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m34900_m35300_saas_provider_readback_ci.py
       - name: M34400–M34800 — provas atomicas do pre-cadastro em CI
