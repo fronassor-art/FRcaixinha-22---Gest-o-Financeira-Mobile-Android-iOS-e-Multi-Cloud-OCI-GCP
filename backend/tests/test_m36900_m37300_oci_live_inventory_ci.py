@@ -26,7 +26,7 @@ def inputs(*,machines=(),rootmachines=(),vaults=(),vcn=True,subnet=True,comp=Tru
             {"region-name":TARGET_REGION,"is-home-region":True,"status":"READY"}
         ] if region else [],
         ("iam","compartment","list"): [
-            {"id":COMP,"display-name":"fr-finance-staging","lifecycle-state":"ACTIVE"}
+            {"id":COMP,"name":"fr-finance-staging","lifecycle-state":"ACTIVE"}
         ] if comp else [],
         ("network","vcn","list"): [
             {"id":VCN,"display-name":"FR Finance","lifecycle-state":"AVAILABLE"}
@@ -106,6 +106,35 @@ def test_root_running_instance_is_reported_separately():
     assert not r.staging_vm_present
     assert not r.deployment_authorized
     assert len(calls)==7
+
+def test_oci_compartment_uses_name_not_display_name():
+    # Oracle Identity compartment JSON has "name", not "display-name".
+    run,calls,data=inputs()
+    record=data[("iam","compartment","list")][0]
+    assert "name" in record and "display-name" not in record
+    result=inspect_live_oci_inventory(tenancy_id=TEN,region=TARGET_REGION,query=run)
+    assert result.staging_compartment=="ACTIVE" and len(calls)==7
+
+
+def test_iam_display_name_decoy_must_not_match():
+    run,calls,data=inputs()
+    record=data[("iam","compartment","list")][0]
+    record["name"]="different-active-compartment"
+    record["display-name"]="fr-finance-staging"
+    with pytest.raises(OCIInventoryBlocked,match="OCI_STAGING_COMPARTMENT_NOT_FOUND"):
+        inspect_live_oci_inventory(tenancy_id=TEN,region=TARGET_REGION,query=run)
+
+
+def test_vcn_display_name_still_required():
+    run,calls,data=inputs()
+    record=data[("network","vcn","list")][0]
+    record["name"]="FR Finance"
+    record["display-name"]="different-vcn"
+    result=inspect_live_oci_inventory(tenancy_id=TEN,region=TARGET_REGION,query=run)
+    assert result.root_vcn=="MISSING"
+    assert result.root_subnet=="NOT_CHECKED"
+    assert not result.deployment_authorized
+
 
 def test_missing_compartment_fails_closed():
     with pytest.raises(OCIInventoryBlocked,match="OCI_STAGING_COMPARTMENT_NOT_FOUND"):

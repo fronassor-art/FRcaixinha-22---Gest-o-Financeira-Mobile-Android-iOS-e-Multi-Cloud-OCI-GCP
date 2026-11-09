@@ -65,8 +65,11 @@ def _data(response: object) -> list[dict]:
     return response["data"]
 
 
-def _match_one(rows: list[dict], name: str, lifecycle: str, id_type: str) -> dict | None:
-    matches = [r for r in rows if r.get("display-name") == name
+def _match_one(rows: list[dict], name: str, lifecycle: str, id_type: str, *, name_field: str = "display-name") -> dict | None:
+    # Identity compartments use "name"; VCN and compute resources use "display-name".
+    if name_field not in ("name", "display-name"):
+        raise OCIInventoryBlocked("OCI_RESPONSE_SCHEMA_DENIED")
+    matches = [r for r in rows if r.get(name_field) == name
                and r.get("lifecycle-state") == lifecycle]
     if len(matches)>1:
         raise OCIInventoryBlocked("OCI_AMBIGUOUS_RESOURCE")
@@ -106,7 +109,7 @@ def inspect_live_oci_inventory(*,tenancy_id: str, region: str,
 
     compartments=_list(query,("iam","compartment","list",
         "--compartment-id",tenancy_id,"--all"))
-    folder=_match_one(compartments,TARGET_COMPARTMENT,"ACTIVE","compartment")
+    folder=_match_one(compartments,TARGET_COMPARTMENT,"ACTIVE","compartment",name_field="name")
     if folder is None:
         raise OCIInventoryBlocked("OCI_STAGING_COMPARTMENT_NOT_FOUND")
 

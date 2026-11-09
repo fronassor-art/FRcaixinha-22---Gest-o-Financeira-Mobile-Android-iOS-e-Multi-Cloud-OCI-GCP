@@ -20,8 +20,10 @@ Novo `backend/scripts/aistudio_oci_live_inventory_readonly.py`:
   `OCI_CLI_PROFILE` e `OCI_CLI_CONFIG_FILE` em todas as consultas;
 - recusa outra região que não `sa-saopaulo-1` e verifica assinatura/home
   region `READY`;
-- observa `fr-finance-staging` em IAM e a VCN/subnet `FR Finance`
-  existentes no compartimento raiz;
+- observa `fr-finance-staging` em IAM pelo atributo oficial `name`
+  (diferente de `display-name`, usado pela VCN/subnet `FR Finance`)
+  no compartimento raiz; nunca conclui ausência de um compartment
+  apenas por um atributo JSON de outro tipo de recurso;
 - consulta **somente com comandos list** as VMs no compartimento raiz
   (contagem separada), as VMs no staging (RUNNING e PROVISIONING) e os
   Vaults ativos no staging. Uma VM fora do staging não comprova deploy;
@@ -66,3 +68,13 @@ alteração de VCN/firewall, upgrade pago, migrações no PostgreSQL local
 
 **Catálogo SQL:** permanece 106; não há nova migração. O observador
 automatizado A1 existente não é alterado nem duplicado.
+
+## Correção M37303 — campo IAM confirmado
+
+A primeira execução real, com OCI CLI 3.96.0 localizado em
+`/root/.venvs/oci-cli/bin/oci`, retornou o bloqueio
+`OCI_STAGING_COMPARTMENT_NOT_FOUND`. A API de compartimentos fornece
+`name`, mas o contrato inicial procurava `display-name`. O parser e os
+fixtures de CI foram corrigidos. Não houve operação de criação, exclusão,
+implantação ou cobrança. O novo PASS da CI permanece apenas ensaio de
+parser sintético; a conta Oracle precisa ser consultada novamente no Debian.
