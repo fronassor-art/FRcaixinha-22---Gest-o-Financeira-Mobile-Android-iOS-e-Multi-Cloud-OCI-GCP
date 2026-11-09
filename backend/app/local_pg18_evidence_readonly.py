@@ -108,7 +108,9 @@ def audit_local_catalog(conn,auth_checker)->LocalEvidence:
             or type(identity[3]) is not int or not 180000<=identity[3]<190000
             or identity[4]!=PGDATA or identity[5]!="on"):
         raise LocalEvidenceBlocked("LOCAL_PG18_IDENTITY_OR_READ_ONLY_DENIED")
-    lifecycle=_one(conn,LIFECYCLE_SQL) and _one(conn,ROUND_INDEX_SQL)
+    lifecycle_tables=_one(conn,LIFECYCLE_SQL)
+    lifecycle_index=_one(conn,ROUND_INDEX_SQL)
+    lifecycle=lifecycle_tables and lifecycle_index
     parity=_one(conn,PARITY_SQL)
     inbox=_one(conn,INBOX_SQL)
     price=_one(conn,PRICE_SQL)
