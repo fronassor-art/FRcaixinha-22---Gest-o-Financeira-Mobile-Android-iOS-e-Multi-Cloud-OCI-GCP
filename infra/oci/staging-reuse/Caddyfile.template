@@ -1,0 +1,22 @@
+# FR Finance OCI STAGING — DESIGN ONLY; never public before VM + IAM
+# + domain ownership/DNS, certificate issuance, WAF/rate-limit/NSGs,
+# database and auth preflight, manual reviewed deployment plan.
+# FR_FINANCE_API_FQDN is a future operator-approved public hostname.
+{$FR_FINANCE_API_FQDN} {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+    }
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle {
+        respond 404
+    }
+}

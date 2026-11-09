@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M37323–M37330 — OCI bootstrap plan only e bloqueios de seguranca
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37323_m37330_oci_bootstrap_plan_ci.py
       - name: M37318–M37322 — OCI gates operacionais sem deploy e SDK padronizado
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37318_m37322_oci_operational_readiness_ci.py
       - name: M37312–M37316 — rede OCI existente segura sem aplicar Terraform

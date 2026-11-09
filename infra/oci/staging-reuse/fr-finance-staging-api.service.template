@@ -1,0 +1,32 @@
+# FR Finance AI Studio OCI — STAGING DESIGN ONLY; DO NOT INSTALL OR ENABLE.
+# Requires signed manual authorization, OCI VM RUNNING, IAM, Vault, TLS,
+# private PostgreSQL with verified RLS and successful restore rehearsal.
+# Requires an operator-owned review file. Its presence is NOT approval.
+[Unit]
+Description=FR Finance API staging (NOT FOR REAL USERS OR PAYMENTS)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/fr-finance/explicitly-reviewed-staging-deploy
+
+[Service]
+Type=simple
+User=frfinance
+Group=frfinance
+WorkingDirectory=/opt/fr-finance/current/backend
+EnvironmentFile=/run/fr-finance/runtime.env
+ExecStart=/opt/fr-finance/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+StateDirectory=fr-finance
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
