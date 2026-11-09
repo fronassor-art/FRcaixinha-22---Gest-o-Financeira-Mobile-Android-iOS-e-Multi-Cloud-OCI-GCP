@@ -90,6 +90,17 @@ async def fetch_canonical_contract_content(
     )
 
 
+@router.post("/preflight/saas-capacity")
+async def preview_saas_member_capacity(
+    payload: InvitationContractReadinessRequest,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Leituras autenticadas de licença/capacidade; NUNCA emitir convite."""
+    from ..saas_member_admission_readiness import member_admission_readiness
+    return await member_admission_readiness(session=session,payload=payload,conn=conn)
+
+
 @router.post("")
 def create_invitation(
     payload: InvitationCreateRequest,

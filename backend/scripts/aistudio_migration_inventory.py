@@ -50,7 +50,7 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
-          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44,45) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"

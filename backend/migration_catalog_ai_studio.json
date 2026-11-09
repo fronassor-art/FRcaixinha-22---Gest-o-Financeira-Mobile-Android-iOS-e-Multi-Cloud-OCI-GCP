@@ -1032,6 +1032,16 @@
       "inspect_object": "public.saas_capacity_expiry_events_staging",
       "local_evidence": null,
       "source_blob_sha": "78ef7e3f86e14118fd2c864fe1c487aff5ce4c7d"
+    },
+    {
+      "id": "local_migrations:045",
+      "source_path": "backend/local_migrations/045_saas_member_plan_visibility.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.platform_license_plans (RLS admin licensed read)",
+      "local_evidence": null,
+      "source_blob_sha": "444312b6cae0c889193dcf2c51c0442c6df16a70"
     }
   ]
 }
