@@ -1,6 +1,6 @@
 """
-FR Caixinha — backend da frente AI Studio.
-Mesmo produto e Contrato Tecnico Mestre, com codigo/banco isolados da frente anterior.
+FR Finance — backend da frente AI Studio.
+Contrato Tecnico Mestre FR Finance exclusivo deste repositorio; FR Caixinha 2.2 independente.
 """
 
 from fastapi import FastAPI, Request, Response, HTTPException
@@ -105,7 +105,7 @@ if _M2040_CI_EVIDENCE_READS:
 def health_check():
     return {
         "status": "ONLINE",
-        "app": "FR Caixinha",
+        "app": "FR Finance",
         "framework": "FastAPI (Python)",
         "database_backend": "PostgreSQL com Row-Level Security (RLS)",
         "database_configured": settings.is_database_configured,
@@ -136,7 +136,7 @@ def backend_runtime_contract():
 def backend_feature_gates():
     """Identidade oficial e funcionalidades em homologacao carregadas pelo processo."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "feature_contract": "FR_CAIXINHA_M300_RUNTIME_V1",
         "ledger_account_journal_page_max": ledger.MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE,
@@ -152,7 +152,7 @@ def backend_feature_gates():
 def backend_m320_feature_contract():
     """Prova do modulo diretorio M320 carregado, sem consultar dados privados."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": "FR_CAIXINHA_M320_EMPTY_LEDGER_V1",
         "account_directory_read_only": True,
@@ -178,7 +178,7 @@ _M360_SOURCE_AT_IMPORT = {
 @app.get("/api/health/features/m360", include_in_schema=False)
 def backend_m360_feature_contract():
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": "FR_CAIXINHA_M360_KEYSET_V1",
         "keyset_read_only": True,
@@ -196,7 +196,7 @@ def backend_m360_feature_contract():
 def backend_m1720_feature_contract():
     """Somente contrato de capacidades locais; nunca indica conciliação bancária."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": _financial_lab.LAB_CONTRACT,
         "sandbox_preview_only": True,
@@ -216,7 +216,7 @@ def backend_m1720_feature_contract():
 def backend_m1880_feature_contract():
     """Somente capacidades de oráculos puros, SEM prova bancária ou I/O."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "journal_contract": _synthetic_journal.CONTRACT,
         "annual_contract": _annual_evidence.CONTRACT,
@@ -238,7 +238,7 @@ def backend_m1880_feature_contract():
 def backend_m2040_feature_contract():
     """Status de laboratorio CI; nao prova de pagamento, capital ou fechamento."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": "AI_STUDIO_M2040_CI_SANDBOX_PERSISTENCE_V1",
         "database_migration_applied_locally": False,
@@ -261,7 +261,7 @@ def backend_m2040_feature_contract():
 def backend_m2200_three_source_contract():
     """Diagnóstico do laboratório de reconciliação de registros, SEM I/O."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": _three_source.CONTRACT,
         "three_source_preflight_only": True,
@@ -283,7 +283,7 @@ def backend_m2300_operational_preflight_contract():
     """Status do parser offline e validador puro HMAC, sem conexão com PSP."""
     from .mp_operational_preflight import CONTRACT as mp_contract
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": mp_contract,
         "offline_csv_preview_only": True,
@@ -303,7 +303,7 @@ def backend_m2400_connect_webhook_preflight_contract():
     """Pré-validação de segurança sem conexão OAuth, token, rota webhook ou banco."""
     from .mp_oauth_connect_preflight import CONTRACT as contract
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": contract,
         "oauth_pkce_preflight_only": True,
@@ -323,7 +323,7 @@ def backend_m2400_connect_webhook_preflight_contract():
 def backend_m2500_ci_only_persistence_contract():
     """Migração 032 SOMENTE CI descartável, sem acessar PostgreSQL."""
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": "AI_STUDIO_M2500_CI_OAUTH_INBOX_PERSISTENCE_V1",
         "ci_only_synthetic_migration_032": True,
@@ -345,7 +345,7 @@ def backend_m2600_readonly_gateway_contract():
     """Somente informativo; não consulta Mercado Pago/OCI ou PostgreSQL."""
     from .mp_readonly_gateway import CONTRACT
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": CONTRACT,
         "gateway_unwired": True,
@@ -365,7 +365,7 @@ def backend_m2700_oci_plan_gate_contract():
     """Somente prova do código de verificação; NÃO é auditoria OCI em tempo real."""
     from .oci_staging_plan_guard import CONTRACT
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": CONTRACT,
         "oci_plan_guard_enabled": True,
@@ -385,7 +385,7 @@ def backend_m2800_oci_mercado_pago_connectors_contract():
     """Somente presença de código: sem chamadas, tokens ou infraestrutura reais."""
     from .oci_secret_bridge import CONTRACT
     return {
-        "product": "FR Caixinha",
+        "product": "FR Finance",
         "workstream": "AI_STUDIO",
         "contract": CONTRACT,
         "oci_sdk_adapter_in_code": True,

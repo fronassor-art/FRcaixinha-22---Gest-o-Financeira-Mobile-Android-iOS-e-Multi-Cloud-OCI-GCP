@@ -15,3 +15,9 @@ Em `https://www.mercadopago.com.br/developers/panel/app`, informar **FR Finance*
 
 ## Testes
 `npx tsx src/tests/m21300_fr_finance_brand_ci.test.ts` e as verificações habituais CI Android/PostgreSQL. O banco local foi comprovado com 46 tabelas e 044 aplicada pelo usuário antes desta mudança; não há migrações novas.
+
+## M29810 — Diretório e documentos exclusivos do FR Finance
+- O diretório **local** do clone pode ser renomeado de `$HOME/frcaixinha-aistudio-mobile` para `$HOME/fr-finance` pelo script versionado. Isso NÃO renomeia o repositório remoto, a branch, o appId Android, a role ou o banco.
+- Fonte vigente de governança documental: `docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md` e `docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md`.
+- PDFs legados nomeados FRcaixinha 2.2 e registros de auditoria originais continuam com seus nomes e hashes históricos para não produzir fraude documental ou invalidar verificações de integridade.
+- `metadata.json`, o nome do pacote npm e a apresentação pública da API passam a usar FR Finance. O nome histórico da pasta passa a ser apenas referência de migração.

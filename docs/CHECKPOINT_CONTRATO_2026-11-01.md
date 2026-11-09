@@ -1,6 +1,8 @@
-# Checkpoint atualizado — FRcaixinha 2.2
+# Checkpoint histórico contratual — FR Finance AI Studio (fontes legadas FRcaixinha 2.2)
 
 Data: 01/11/2026 UTC. Branch atualizacao-ai-studio-9b46a63187. Base da rodada: 9200d4a831739c4a5131049f3fc7fd88a73d49d7. Fotografia anterior preservada em CHECKPOINT_CONTRATO_HISTORICO_74b9a543.md.
+
+**NOTA DE GOVERNANÇA M29810:** este checkpoint é fotografia da frente AI Studio feita com PDFs legados do FRcaixinha 2.2. Os documentos específicos do FR Finance são `docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md` e `docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md`. Não renomear os PDFs de origem nem assumir que as 147 cláusulas foram revalidadas.
 
 ## Fontes e critério
 

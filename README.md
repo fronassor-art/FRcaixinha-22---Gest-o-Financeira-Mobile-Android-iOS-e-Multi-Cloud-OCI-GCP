@@ -1,19 +1,22 @@
 # FR Finance — frente de desenvolvimento Google AI Studio
 
-> **Nome comercial aprovado:** **FR Finance**. A sigla FR identifica a marca do produto. O nome técnico legado do projeto permanece apenas em identificadores para preservar compatibilidade.
-> **Mesmo produto, duas frentes técnicas.** O **Documento Mestre e o Contrato Técnico Mestre** orientam as regras funcionais comuns do aplicativo. A frente original está pausada; esta implementação foi iniciada do zero no Google AI Studio e possui repositório, branch, código, banco de dados, usuários técnicos, credenciais, backups e infraestrutura isolados.
-> Não importar automaticamente código ou dados da frente anterior. Divergências contratuais e decisões arquiteturais exigem rastreabilidade e aprovação; não mudar estados das 147 cláusulas por inferência.
+> **Identidade vigente:** **FR Finance** — aplicação de gestão financeira da frente **Google AI Studio**, independente do **FR Caixinha 2.2** (outro projeto). O nome técnico legado do repositório, do APK e do PostgreSQL fica preservado SOMENTE por compatibilidade.
+> **Frente FR Finance AI Studio independente do FR Caixinha 2.2.** Seu repositório, branch, código, banco, credenciais, backups e infraestrutura são exclusivos, sem sincronização com o projeto 2.2.
+> **Documentação própria:** [Caderno Mestre FR Finance](docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md) e [Contrato Técnico Mestre FR Finance](docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md). Fontes antigas FRcaixinha 2.2 presentes em `public/assets/aistudio/` são histórico técnico, NÃO passam a ser documentos novos aprovados por mera troca de nome.
+> O registro das 147 cláusulas é baseline histórico para reauditoria individual. Não importar automaticamente código ou dados de outra frente e não promover bloqueios a PASS por inferência.
 >
-> **Nota de implantação:** React + Capacitor é a implementação aprovada e exibe FR Finance como marca. OCI/GCP e operações financeiras reais não estão homologados.
+> **Implantação:** React + Capacitor identifica-se como FR Finance. OCI/GCP, cadastro de pessoas e operações financeiras reais ainda não estão homologados.
 
 ## Repositório e fluxo oficial
+
+**Diretório canônico no Termux:** `$HOME/fr-finance`. Para migrar a pasta existente sem clonar novamente, use `bash backend/scripts/frfinance_rename_termux_directory.sh` uma única vez, ainda na pasta antiga, e depois `cd "$HOME/fr-finance"`. O script impede colisão de pastas e verifica origem Git/branch. Não renomeia o repositório remoto.
 
 - **Repositório:** `fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP`
 - **Branch de desenvolvimento:** `atualizacao-ai-studio-9b46a63187`
 - **PR de integração:** [#2](https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP/pull/2), mantida **em rascunho** até autorização expressa.
 - **Fonte do desenvolvimento:** commits efetuados diretamente no GitHub, acompanhados por GitHub Actions.
-- **Termux (Android):** clone local `~/frcaixinha-aistudio-mobile` apenas para sincronização, conferências e homologação especificamente autorizada, via `git fetch` e `git merge --ff-only`.
-- **Separação obrigatória:** não misturar bancos, clusters, credenciais, backups, repositórios ou código das duas frentes. Aplicar o mesmo Documento Mestre e Contrato Técnico Mestre ao produto.
+- **Termux (Android):** clone local `~/fr-finance` apenas para sincronização, conferências e homologação especificamente autorizada, via `git fetch` e `git merge --ff-only`.
+- **Separação obrigatória:** não misturar bancos, clusters, credenciais, backups, repositórios ou código do FR Finance AI Studio com o FR Caixinha 2.2. Para decisões atuais, usar os dois documentos mestres exclusivos do FR Finance; as fontes antigas são referências históricas, sujeitas à revisão por cláusula.
 
 **Não executar `git branch -M main`, `git push` do Termux, `git reset --hard`, `git clean` ou migrações para realizar a sincronização ordinária.** A branch de trabalho é a da PR #2 e a `main` permanece preservada.
 
@@ -69,7 +72,7 @@ O teste `backend/tests/test_price_contract.py` verifica esses valores. Portanto,
 No terminal do Android (fora do Debian), primeiro conferir branch e alterações:
 
 ```bash
-cd "$HOME/frcaixinha-aistudio-mobile" || exit 1
+cd "$HOME/fr-finance" || exit 1
 git status --short --branch
 git branch --show-current
 ```

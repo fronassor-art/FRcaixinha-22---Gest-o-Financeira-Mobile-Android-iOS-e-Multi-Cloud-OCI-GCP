@@ -1,6 +1,6 @@
 """
-FR Caixinha — configuracoes da frente AI Studio
-Referencias: Documento Mestre e Contrato Tecnico Mestre comuns ao produto.
+FR Finance — configuracoes da frente AI Studio
+Referencias: Caderno Mestre e Contrato Tecnico Mestre FR Finance, exclusivos desta frente.
 """
 
 import ipaddress
@@ -61,7 +61,7 @@ def cors_origins_for(env: Mapping[str, str]) -> list[str]:
     return allowed
 
 class Settings(BaseModel):
-    PROJECT_NAME: str = "FR Caixinha — API de homologação"
+    PROJECT_NAME: str = "FR Finance — API de homologação"
     VERSION: str = "2.2.0"
     API_V1_STR: str = "/api/v1"
     

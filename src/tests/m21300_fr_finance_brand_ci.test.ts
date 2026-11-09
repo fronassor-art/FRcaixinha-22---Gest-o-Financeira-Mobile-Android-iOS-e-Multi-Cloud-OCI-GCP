@@ -10,7 +10,7 @@ const files=[
  'src/components/Navbar.tsx','src/components/LoginView.tsx',
  'src/App.tsx','src/components/NotificationsView.tsx',
  'docs/FR_CAIXINHA_M21200_MERCADO_PAGO_CONFIGURATION.md',
- 'README.md','server.ts'
+ 'README.md','server.ts','metadata.json'
 ];
 for(const f of files){
  const src=read(f);
@@ -28,4 +28,8 @@ assert.match(read('src/components/MobileInstallModal.tsx'),/FR Finance/);
 assert.match(read('src/components/GitHubSyncModal.tsx'),/FR Finance/);
 assert.match(read('src/services/zipExportService.ts'),/FR Finance/);
 assert.ok(read('docs/FR_FINANCE_REBRANDING_M21300.md').includes('com.frcaixinha.app'));
+assert.equal(JSON.parse(read('metadata.json')).name,'FR Finance — Gestão Financeira');
+assert.equal(JSON.parse(read('package.json')).name,'fr-finance-aistudio');
+assert.equal(JSON.parse(read('package-lock.json')).name,'fr-finance-aistudio');
+assert.equal(JSON.parse(read('package-lock.json')).packages[''].name,'fr-finance-aistudio');
 console.log('M21300_FR_FINANCE_COMMERCIAL_BRAND_AND_ANDROID_ID=PASS');
