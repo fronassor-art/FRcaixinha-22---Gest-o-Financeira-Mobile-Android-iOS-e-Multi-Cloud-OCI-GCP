@@ -43,6 +43,8 @@ CREATE ROLE frcaixinha_email_proof_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_email_attestor_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_annual_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -142,9 +144,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -471,6 +473,62 @@ CI_MP_DISPOSABLE_DATABASE_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432
 PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto \
  backend/tests/test_m6700_disposable_ledger_atomicity_ci.py
 echo "M6700_LEDGER_DISPOSABLE=PASS"
+
+
+echo "=== M30400-M30800: PostgreSQL annual consent disposable ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.annual_ci=1' \
+psql -X -v ON_ERROR_STOP=1 \
+-f backend/staging_migrations/058_annual_self_loan_consent_staging_only.sql >/dev/null 2>&1; then
+ echo "BLOCKED=STAGING_SQL_ACCEPTED_WRONG_DB"; exit 1
+fi
+PGOPTIONS='-c frcaixinha.annual_ci=1' \
+psql -X -v ON_ERROR_STOP=1 \
+-f backend/staging_migrations/058_annual_self_loan_consent_staging_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.annual_ci=1' \
+psql -X -v ON_ERROR_STOP=1 \
+-f backend/ci_migrations/057_annual_self_loan_fixture_ci_only.sql >/dev/null
+T='dada0000-0000-4000-8000-000000000010'
+A='dada0000-0000-4000-8000-000000000001'
+M1='dada0000-0000-4000-8000-000000000012'
+M2='dada0000-0000-4000-8000-000000000013'
+U1='dada0000-0000-4000-8000-000000000002'
+U2='dada0000-0000-4000-8000-000000000003'
+TERMS="$(printf 'a%.0s' {1..64})"
+DIGEST="$(printf 'b%.0s' {1..64})"
+DATE='2027-06-01 12:00:00+00'
+write_annual() {
+ PGUSER=frcaixinha_annual_ci PGOPTIONS='-c frcaixinha.annual_ci=1' \
+ psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT public.annual_event_record_ci('$1','$T',2027,'$A','$2','$3','$TERMS','$4','$DIGEST','$DATE')"
+}
+read_annual() {
+ PGUSER=frcaixinha_annual_ci PGOPTIONS='-c frcaixinha.annual_ci=1' \
+ psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT public.annual_event_review_ci('$T',2027,'$A','$TERMS','$DATE')->>'$1'"
+}
+test "$(read_annual unanimous_synthetic)" = "false"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000021' "$M1" "$U1" SIGNED)" = "RECORDED_CI_NOT_AUTHORIZED"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000021' "$M1" "$U1" SIGNED)" = "REPLAY_CI"
+test "$(read_annual missing)" = "1"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000022' "$M2" "$U2" SIGNED)" = "RECORDED_CI_NOT_AUTHORIZED"
+test "$(read_annual unanimous_synthetic)" = "true"
+test "$(read_annual real_authorized)" = "false"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000023' "$M1" "$U1" REVOKED)" = "RECORDED_CI_NOT_AUTHORIZED"
+test "$(read_annual unanimous_synthetic)" = "false"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000024' "$M1" "$U1" SIGNED)" = "RECORDED_CI_NOT_AUTHORIZED"
+test "$(read_annual unanimous_synthetic)" = "true"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000024' "$M2" "$U2" SIGNED)" = "DENIED"
+test "$(write_annual 'dada0000-0000-4000-8000-000000000025' "$M1" "$A" SIGNED)" = "DENIED"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.annual_self_loan_events_staging")" = "4"
+if PGUSER=frcaixinha_annual_ci psql -XAt -v ON_ERROR_STOP=1 \
+-c 'SELECT count(*) FROM public.annual_self_loan_events_staging' >/dev/null 2>&1; then
+ echo "BLOCKED=UNPRIVILEGED_RAW_READ"; exit 1
+fi
+if psql -XAt -v ON_ERROR_STOP=1 -c \
+'DELETE FROM public.annual_self_loan_events_staging' >/dev/null 2>&1; then
+ echo "BLOCKED=APPEND_ONLY_MUTATION"; exit 1
+fi
+echo "M30800_CI_ANNUAL_CONSENT_POSTGRES=PASS"
 
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
