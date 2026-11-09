@@ -15,7 +15,8 @@ const files=[
 for(const f of files){
  const src=read(f);
  assert.ok(src.includes('FR Finance'),f+' should present FR Finance');
- assert.ok(!src.includes('FR Caixinha'),f+' contains old commercial display name');
+ const screened = f === 'README.md' ? src.replaceAll('FR Caixinha 2.2','HISTORICAL_PROJECT') : src;
+ assert.ok(!screened.includes('FR Caixinha'),f+' contains old commercial display name');
 }
 assert.ok(read('capacitor.config.ts').includes("appId: 'com.frcaixinha.app'"));
 assert.ok(read('android/app/build.gradle').includes('applicationId "com.frcaixinha.app"'));

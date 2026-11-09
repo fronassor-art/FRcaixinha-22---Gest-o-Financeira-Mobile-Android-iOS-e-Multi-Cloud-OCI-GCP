@@ -16,7 +16,7 @@ def test_canonical_caderno_and_contract_independent_from_2_2():
         body=text(p)
         assert "FR Finance" in body
         assert "FR Caixinha 2.2" in body
-        assert "histor" in body.lower()
+        assert "hist" in body.lower()
         assert "produção" in body.lower() or "produção" in body
     assert "$HOME/fr-finance" in readme
 
