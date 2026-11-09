@@ -1062,6 +1062,16 @@
       "inspect_object": "public.saas_member_admission_intents_staging",
       "local_evidence": null,
       "source_blob_sha": "38013df5744ae197590fe6bc04751b5a5b5498a3"
+    },
+    {
+      "id": "staging_migrations:065",
+      "source_path": "backend/staging_migrations/065_saas_reconciliation_review_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.saas_reconciliation_reviews_staging",
+      "local_evidence": null,
+      "source_blob_sha": "0c607e73811b292ed2380815fa533aaa7a307bac"
     }
   ]
 }
