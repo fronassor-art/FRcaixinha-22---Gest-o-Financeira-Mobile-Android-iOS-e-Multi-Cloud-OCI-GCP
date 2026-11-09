@@ -29,7 +29,7 @@ class DB:
         assert "JOIN public.saas_subscription_preparations" in query
         assert "JOIN public.platform_license_price_versions" in query
         assert "s.price_version_id=i.price_version_id" in query
-        assert "i.admin_user_id=s.admin_user_id" in query
+        assert "s.admin_user_id=i.admin_user_id" in query
         assert "JOIN public.tenants t" in query
         assert "WHERE i.id=$1::uuid" in query
         assert "ledger_entries" not in query
