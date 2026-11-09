@@ -746,6 +746,8 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
  CI_SAAS_INTENT_WORKER_URL='postgresql://frcaixinha_saas_admission_intent_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
  CI_SAAS_INTENT_OWNER_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
  CI_SAAS_INTENT_APP_URL='postgresql://frcaixinha_saas_admission_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_INTENT_CAPACITY_URL='postgresql://frcaixinha_saas_capacity_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_INTENT_CLAIM_URL='postgresql://frcaixinha_saas_claim_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
  PYTHONPATH=backend python -m pytest -q backend/tests/test_m34800_saas_admission_intent_pg_ci.py
 echo "M34800_INTENT_PG=PASS"
 echo "M34800_REAL_MEMBERS_AND_PIX=OFF"

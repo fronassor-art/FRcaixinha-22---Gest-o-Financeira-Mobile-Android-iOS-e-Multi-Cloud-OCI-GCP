@@ -44,3 +44,10 @@ contra mudanças de licença no meio da transação; função atômica de
 criação de membership/quota com GRANT mínimo; logs íntegros e ensaios
 de recuperação no ambiente OCI com backup. Não implementar atalhos via
 credenciais PostgreSQL de proprietário.
+
+**Cuidado com reservas em lote:** a suíte M32800 utiliza também uma
+reserva sintética de 20 vagas. O teste M34800 não reaproveita essa reserva
+como se fosse uma vaga: ele cria uma caixinha isolada com licença fictícia,
+reserva exatamente **uma vaga** e vincula a única intenção ao claim e à
+pessoa, com restrição UNIQUE por par (tenant, pessoa). Toda simulação ocorre
+exclusivamente no banco descartável da CI.

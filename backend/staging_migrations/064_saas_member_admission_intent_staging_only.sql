@@ -24,6 +24,7 @@ CREATE TABLE public.saas_member_admission_intents_staging (
  contract_acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id) ON DELETE RESTRICT,
  email_proof_id uuid NOT NULL REFERENCES public.invite_email_verification(id) ON DELETE RESTRICT,
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ CONSTRAINT saas_admission_target_tenant_ci UNIQUE(tenant_id,target_user_id),
  ci_only boolean NOT NULL DEFAULT true CHECK(ci_only),
  provider_readback_verified boolean NOT NULL DEFAULT false CHECK(NOT provider_readback_verified),
  real_member_created boolean NOT NULL DEFAULT false CHECK(NOT real_member_created),
