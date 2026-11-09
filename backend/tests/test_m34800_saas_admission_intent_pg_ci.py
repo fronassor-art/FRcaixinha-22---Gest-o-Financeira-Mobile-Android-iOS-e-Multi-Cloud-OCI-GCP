@@ -27,6 +27,13 @@ def test_transactional_admission_intent_excludes_unverified_or_double_admission(
          "WHERE tenant_id=%s AND category='MEMBER' LIMIT 1",(TA,)).fetchone()
         assert claim is not None, "M32800 member claim required first"
         claim=claim[0]
+        # Synthetic reconciliation in the disposable DB: NOT provider readback.
+        # M32300 fixture intentionally contains no provider-backed receipt.
+        conn.execute(
+            "UPDATE public.saas_payment_intents SET reconciled_at="
+            "clock_timestamp()-interval '5 minutes' "
+            "WHERE tenant_id=%s AND status='APPROVED' AND NOT live_mode",
+            (TA,))
         conn.execute("INSERT INTO public.users(id,email,full_name,cpf,phone,email_verified_at) "
             "VALUES(%s,%s,'Synthetic intent CI','99993480001','00000000000',"
             "clock_timestamp()-interval '3 minutes')",(target,email))
