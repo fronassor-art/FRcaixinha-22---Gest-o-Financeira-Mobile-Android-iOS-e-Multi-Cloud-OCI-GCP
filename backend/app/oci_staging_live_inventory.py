@@ -14,7 +14,7 @@ TARGET_REGION = "sa-saopaulo-1"
 TARGET_COMPARTMENT = "fr-finance-staging"
 TARGET_VCN = "FR Finance"
 TARGET_SUBNET = "FR Finance"
-_OCID = re.compile(r"ocid1\\.(?:tenancy|compartment|vcn|instance)\\.oc1\\.(?:\\.[a-z0-9]{8,256}|[a-z0-9-]+\\.[a-z0-9]{8,256})\\Z")
+_OCID = re.compile(r"ocid1\.(?:tenancy|compartment|vcn|instance)\.oc1\.(?:\.[a-z0-9]{8,256}|[a-z0-9-]+\.[a-z0-9]{8,256})\Z")
 SAFE_QUERY_GROUPS = frozenset((
     ("iam","region-subscription","list"),
     ("iam","compartment","list"),
