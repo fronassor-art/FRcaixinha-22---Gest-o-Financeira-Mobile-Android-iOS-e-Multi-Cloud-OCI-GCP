@@ -97,11 +97,16 @@ def test_different_group_name_not_project():
     assert inspect_iam_readonly(TEN,"sa-saopaulo-1",q).project_named_dynamic_groups_active==0
 
 
-def test_scope_not_staging_is_not_candidate():
+def test_tenancy_scoped_secret_read_is_review_candidate_not_proof():
     p=fixtures()["policy-root"][0].copy()
     p["statements"]=["Allow dynamic-group fr-finance-staging-instances to read secret-bundles in tenancy"]
     q,_=query_for(fixtures(root_policies=[p]))
-    assert inspect_iam_readonly(TEN,"sa-saopaulo-1",q).candidate_secret_bundle_statements==0
+    result=inspect_iam_readonly(TEN,"sa-saopaulo-1",q)
+    # Broad candidate scan counts unfamiliar valid OCI policy syntax,
+    # but NEVER attests effective permissions or authorizes deployment.
+    assert result.candidate_secret_bundle_statements==1
+    assert not result.policy_effective_permissions_verified
+    assert not result.deployment_authorized
 
 
 def test_unrelated_broad_tenancy_policy_is_only_manual_warning():
