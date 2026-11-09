@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M37401–M37420 — sessao sintética inexistente e perfil forjado GET-only
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37401_m37420_local_session_boundary_ci.py
       - name: M37381–M37400 — smoke local GET sem credenciais nem efeitos financeiros
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37381_m37400_local_runtime_smoke_ci.py
       - name: M37361–M37370 — atestacao read-only das estruturas PG18 locais
