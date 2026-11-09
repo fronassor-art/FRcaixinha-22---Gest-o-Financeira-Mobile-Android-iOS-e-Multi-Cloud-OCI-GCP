@@ -698,6 +698,23 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
 echo "M32800_SAAS_CLAIM_PG=PASS"
 echo "M32800_REAL_USERS_AND_PIX=OFF"
 
+
+echo "=== M32900-M33300: CI-only stale hold recovery ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_expiry_ci=1' \
+ psql -X -v ON_ERROR_STOP=1 \
+ -f backend/staging_migrations/063_saas_capacity_expiry_staging_only.sql >/dev/null 2>&1; then
+ echo "BLOCKED=M33300_WRONG_DATABASE"; exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_expiry_ci=1' psql -X -v ON_ERROR_STOP=1 \
+ -f backend/staging_migrations/063_saas_capacity_expiry_staging_only.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+ CI_SAAS_EXPIRY_DB_URL='postgresql://frcaixinha_saas_capacity_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_EXPIRY_CLAIM_URL='postgresql://frcaixinha_saas_claim_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_EXPIRY_DB_ADMIN_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ PYTHONPATH=backend python -m pytest -q backend/tests/test_m33300_saas_capacity_expiry_pg_ci.py
+echo "M33300_EXPIRY_PG=PASS"
+echo "M33300_REAL_USERS_AND_PIX=OFF"
+
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
 echo "OCI_APPLY=NOT_EXECUTED"

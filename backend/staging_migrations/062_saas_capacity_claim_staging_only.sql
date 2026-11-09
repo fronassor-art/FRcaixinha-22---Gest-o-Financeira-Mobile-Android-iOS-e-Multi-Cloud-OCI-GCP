@@ -64,7 +64,7 @@ BEGIN
   RETURN jsonb_build_object('state','REQUEST_COLLISION_DENIED','real_authorized',false);
  END IF;
 
- SELECT h.event_id,h.category,h.quantity INTO held_event
+ SELECT h.event_id,h.category,h.quantity,h.created_at INTO held_event
  FROM public.saas_capacity_events_staging h
  WHERE h.event_id=p_hold AND h.tenant_id=p_tenant AND h.admin_user_id=p_admin
  AND h.action='HOLD' AND h.category=p_category FOR UPDATE;
@@ -75,6 +75,9 @@ BEGIN
  IF EXISTS(SELECT 1 FROM public.saas_capacity_claims_staging c
   WHERE c.hold_event_id=p_hold)
  THEN RETURN jsonb_build_object('state','HOLD_ALREADY_CLAIMED','real_authorized',false); END IF;
+ -- A stale reservation cannot be claimed while recovery is pending.
+ IF held_event.created_at<=clock_timestamp()-interval '60 minutes'
+ THEN RETURN jsonb_build_object('state','EXPIRED_HOLD_DENIED','real_authorized',false); END IF;
 
  -- Existing payment record is synthetic CI fixture, NOT provider verification.
  SELECT e.id INTO licensed FROM public.saas_license_entitlements e

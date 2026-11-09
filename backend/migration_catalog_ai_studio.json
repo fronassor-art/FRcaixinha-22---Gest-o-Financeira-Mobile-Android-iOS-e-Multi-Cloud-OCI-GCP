@@ -1021,7 +1021,17 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.saas_capacity_claims_staging",
       "local_evidence": null,
-      "source_blob_sha": "3fb6b327c32b303803d4c55d69b446f96fa70fb6"
+      "source_blob_sha": "8c1f9fe166992218313b408bdbd3b4bd059c042d"
+    },
+    {
+      "id": "staging_migrations:063",
+      "source_path": "backend/staging_migrations/063_saas_capacity_expiry_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.saas_capacity_expiry_events_staging",
+      "local_evidence": null,
+      "source_blob_sha": "78ef7e3f86e14118fd2c864fe1c487aff5ce4c7d"
     }
   ]
 }

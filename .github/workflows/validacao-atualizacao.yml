@@ -786,6 +786,9 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M32900–M33300 — recuperar reservas expiradas somente em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m32900_m33300_saas_expiry_static_ci.py
+
       - name: M6300 — PostgreSQL 18 staging descartável, replay e worker RBAC
         env:
           GITHUB_ACTIONS: 'true'
