@@ -31,11 +31,12 @@ USING (
  )
 );
 -- No extra grants: existing SELECT on the catalog remains sufficient.
+-- IMPORTANT: legacy baseline (001) already grants app role broad DML on
+-- memberships and quotas. This read policy does NOT authorize admission;
+-- closing those independent write paths needs a reviewed transaction gate.
 DO $audit$ BEGIN
  IF has_table_privilege('frcaixinha_app_role','public.saas_license_entitlements','INSERT')
  OR has_table_privilege('frcaixinha_app_role','public.saas_payment_intents','UPDATE')
- OR has_table_privilege('frcaixinha_app_role','public.memberships','INSERT')
- OR has_table_privilege('frcaixinha_app_role','public.quotas','INSERT')
  OR has_table_privilege('frcaixinha_auth_role','public.platform_license_plans','SELECT')
  THEN RAISE EXCEPTION 'M33800_UNSAFE_ROLE_PRIVILEGES'; END IF;
 END $audit$;

@@ -45,3 +45,13 @@ de identidade. A admissão final ainda exige transação atômica de convite,
 vínculo, uso único, consentimento, cobrança SaaS autenticada no provedor,
 reserva e compensação de capacidade; além da OCI/HTTPS e dos 27 gates
 técnicos/externos. Valores sintéticos de testes NÃO validam Mercado Pago.
+
+## Alerta de auditoria de permissões legadas
+
+A CI inicial de M33800 identificou que o esquema da migração 001 concedeu
+permissões amplas de INSERT/UPDATE/DELETE ao papel da aplicação. A alteração
+045 **não concede nenhuma dessas permissões**; ela muda apenas a visibilidade
+dos limites do plano. A revisão/revogação das gravações de membros e cotas é
+uma **pendência explícita e bloqueadora** para ativação real: a futura função
+de cadastro deverá impor limite SaaS dentro da própria transação.
+Não confundir o snapshot desta API com barreira de escrita.
