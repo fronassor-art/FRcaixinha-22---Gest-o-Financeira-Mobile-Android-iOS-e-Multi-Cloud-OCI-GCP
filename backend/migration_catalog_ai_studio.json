@@ -1012,6 +1012,16 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "4ec8ae5092ddea75105a57f12b85310f6b1a45ce"
+    },
+    {
+      "id": "staging_migrations:062",
+      "source_path": "backend/staging_migrations/062_saas_capacity_claim_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.saas_capacity_claims_staging",
+      "local_evidence": null,
+      "source_blob_sha": "3fb6b327c32b303803d4c55d69b446f96fa70fb6"
     }
   ]
 }
