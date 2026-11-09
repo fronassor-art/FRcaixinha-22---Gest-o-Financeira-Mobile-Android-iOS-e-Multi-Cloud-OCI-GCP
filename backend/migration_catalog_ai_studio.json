@@ -972,6 +972,26 @@
       "inspect_object": null,
       "local_evidence": null,
       "source_blob_sha": "2363e279770f67c5c867ea7e210262aca7a7d208"
+    },
+    {
+      "id": "staging_migrations:060",
+      "source_path": "backend/staging_migrations/060_saas_capacity_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.saas_capacity_events_staging",
+      "local_evidence": null,
+      "source_blob_sha": "c9daabf39183e3d50c98ebc89919a4534e10e9d7"
+    },
+    {
+      "id": "ci_migrations:059",
+      "source_path": "backend/ci_migrations/059_saas_capacity_fixture_ci_only.sql",
+      "classification": "CI_ONLY_TEST_OR_FIXTURE",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": null,
+      "local_evidence": null,
+      "source_blob_sha": "bd6fb374779726a0265079c0269f693738cc233a"
     }
   ]
 }

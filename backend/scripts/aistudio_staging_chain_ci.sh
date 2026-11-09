@@ -47,6 +47,8 @@ CREATE ROLE frcaixinha_annual_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_enroll_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_saas_capacity_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 SQL
 
 echo "=== STAGING CI: VERIFY WRONG-DATABASE GUARD + ROLLBACK ==="
@@ -146,9 +148,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -595,6 +597,69 @@ if psql -XAt -v ON_ERROR_STOP=1 \
 fi
 echo "M31300_SAAS_ENROLLMENT_POSTGRES=PASS"
 echo "M31300_REAL_SAAS_BILLING=OFF"
+
+
+echo "=== M31400-M31800: SaaS capacity disposable CI ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/060_saas_capacity_staging_only.sql >/dev/null 2>&1; then
+ echo "BLOCKED=SAAS_CAPACITY_WRONG_DB"; exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/staging_migrations/060_saas_capacity_staging_only.sql >/dev/null
+PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/ci_migrations/059_saas_capacity_fixture_ci_only.sql >/dev/null
+CAP_TENANT='daba0000-0000-4000-8000-000000000010'
+CAP_ADMIN='daba0000-0000-4000-8000-000000000001'
+CAP_OTHER='daba0000-0000-4000-8000-000000000020'
+capacity_hold() {
+  PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
+  PGUSER=frcaixinha_saas_capacity_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+   "SELECT public.saas_capacity_hold_ci('$1','$2','$3','$4',$5)->>'state'"
+}
+CAP_ID='daba0000-0000-4000-8000-000000000060'
+test "$(capacity_hold "$CAP_ID" "$CAP_TENANT" "$CAP_ADMIN" MEMBER 20)" = "HELD_CI_NO_REAL_ALLOCATION"
+test "$(capacity_hold "$CAP_ID" "$CAP_TENANT" "$CAP_ADMIN" MEMBER 20)" = "REPLAY_CI"
+test "$(capacity_hold "$CAP_ID" "$CAP_TENANT" "$CAP_ADMIN" MEMBER 19)" = "DENIED"
+test "$(capacity_hold 'daba0000-0000-4000-8000-000000000061' "$CAP_TENANT" "$CAP_ADMIN" MEMBER 1)" = "CAPACITY_EXCEEDED"
+test "$(capacity_hold 'daba0000-0000-4000-8000-000000000062' "$CAP_OTHER" "$CAP_ADMIN" MEMBER 1)" = "DENIED"
+test "$(capacity_hold 'daba0000-0000-4000-8000-000000000063' "$CAP_TENANT" "$CAP_ADMIN" QUOTA 40)" = "HELD_CI_NO_REAL_ALLOCATION"
+test "$(capacity_hold 'daba0000-0000-4000-8000-000000000064' "$CAP_TENANT" "$CAP_ADMIN" QUOTA 1)" = "CAPACITY_EXCEEDED"
+CAP_HOLD="$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT event_id FROM public.saas_capacity_events_staging WHERE request_id='$CAP_ID'")"
+test -n "$CAP_HOLD"
+capacity_release() {
+ PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
+ PGUSER=frcaixinha_saas_capacity_ci psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT public.saas_capacity_release_ci('$1','$2','$3','$4')->>'state'"
+}
+CAP_RELEASE='daba0000-0000-4000-8000-000000000065'
+test "$(capacity_release "$CAP_RELEASE" "$CAP_TENANT" "$CAP_ADMIN" "$CAP_HOLD")" = "RELEASED_CI"
+test "$(capacity_release "$CAP_RELEASE" "$CAP_TENANT" "$CAP_ADMIN" "$CAP_HOLD")" = "REPLAY_RELEASE_CI"
+test "$(capacity_release 'daba0000-0000-4000-8000-000000000066' "$CAP_TENANT" "$CAP_ADMIN" "$CAP_HOLD")" = "DENIED"
+test "$(capacity_hold 'daba0000-0000-4000-8000-000000000067' "$CAP_TENANT" "$CAP_ADMIN" MEMBER 20)" = "HELD_CI_NO_REAL_ALLOCATION"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.memberships WHERE tenant_id='$CAP_TENANT' AND role='TENANT_MEMBER'")" = "0"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.quotas WHERE tenant_id='$CAP_TENANT'")" = "0"
+test "$(psql -XAt -v ON_ERROR_STOP=1 -c \
+ "SELECT count(*) FROM public.saas_payment_intents WHERE tenant_id='$CAP_TENANT'")" = "0"
+if PGUSER=frcaixinha_saas_capacity_ci psql -XAt -v ON_ERROR_STOP=1 \
+ -c "SELECT count(*) FROM public.saas_capacity_events_staging" >/dev/null 2>&1; then
+ echo "BLOCKED=CAPACITY_WORKER_RAW_SELECT"; exit 1
+fi
+if psql -XAt -v ON_ERROR_STOP=1 \
+ -c "DELETE FROM public.saas_capacity_events_staging" >/dev/null 2>&1; then
+ echo "BLOCKED=CAPACITY_HISTORY_MUTATION"; exit 1
+fi
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+CI_SAAS_CAPACITY_DB_URL='postgresql://frcaixinha_saas_capacity_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+CI_SAAS_CAPACITY_DB_ADMIN_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+PYTHONPATH=backend python -m pytest -q backend/tests/test_m31800_saas_capacity_pg_ci.py
+echo "M31800_SAAS_CAPACITY_PG=PASS"
+echo "M31800_REAL_LICENSE_OPERATIONS=OFF"
 
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
