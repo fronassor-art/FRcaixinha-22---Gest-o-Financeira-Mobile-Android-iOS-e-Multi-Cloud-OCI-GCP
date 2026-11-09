@@ -212,7 +212,11 @@ class TestPostgreSQLRowLevelSecurityCRUD:
                     INSERT INTO quotas (id, tenant_id, membership_id, quota_number, value_brl, status)
                     VALUES ($1, $2, $3, 999, 100.00, 'ATIVA');
                 """, uuid.uuid4(), uuid.UUID(victim_tenant), uuid.uuid4())
-            assert "violates row-level security policy" in str(exc_info.value).lower()
+            # From M34300 onward the table GRANT denies DML *before* the
+            # tenant RLS predicate runs. This is stronger, not a regression.
+            msg=str(exc_info.value).lower()
+            assert ("permission denied for table quotas" in msg
+                    or "violates row-level security policy" in msg)
 
     async def test_rls_blocks_cross_tenant_update(self, setup_db):
         """
@@ -248,10 +252,17 @@ class TestPostgreSQLRowLevelSecurityCRUD:
             await conn.execute(f"SET LOCAL app.current_tenant_id = '{target_tenant}';")
             await conn.execute("SELECT set_config('app.current_role', 'TENANT_ADMIN', true);")
 
-            result = await conn.execute("""
-                DELETE FROM memberships WHERE tenant_id = $1;
-            """, uuid.UUID(target_tenant))
-            assert result == "DELETE 0"
+            # M34300 revokes DELETE on memberships for the app role.
+            # Old schemas may still return DELETE 0 under tenant RLS.
+            try:
+                result = await conn.execute("""
+                    DELETE FROM memberships WHERE tenant_id = $1;
+                """, uuid.UUID(target_tenant))
+            except Exception as exc:
+                assert ("permission denied for table memberships"
+                        in str(exc).lower())
+            else:
+                assert result == "DELETE 0"
 
     async def test_master_has_zero_access_to_tenant_ledger(self, setup_db):
         """
