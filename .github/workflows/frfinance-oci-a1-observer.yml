@@ -1,0 +1,76 @@
+name: FR Finance — observar VM A1 OCI
+
+# O Github nunca cria maquinas. O Termux M28619 continua como criador unico.
+# O agendamento so executa quando a variable FR_FINANCE_OCI_MONITOR_ENABLED=true.
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: frfinance-oci-a1-observer
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    name: Consultar instancias OCI (read-only)
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.FR_FINANCE_OCI_MONITOR_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Obter script de observacao
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar SDK OCI
+        run: python -m pip install --disable-pip-version-check 'oci==2.190.0'
+
+      - name: Verificar VM A1 (nenhum launch)
+        id: monitor
+        shell: bash
+        env:
+          FRF_OCI_USER_OCID: ${{ secrets.FRF_OCI_USER_OCID }}
+          FRF_OCI_TENANCY_OCID: ${{ secrets.FRF_OCI_TENANCY_OCID }}
+          FRF_OCI_FINGERPRINT: ${{ secrets.FRF_OCI_FINGERPRINT }}
+          FRF_OCI_PRIVATE_KEY_PEM: ${{ secrets.FRF_OCI_PRIVATE_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          for field in FRF_OCI_USER_OCID FRF_OCI_TENANCY_OCID FRF_OCI_FINGERPRINT FRF_OCI_PRIVATE_KEY_PEM; do
+            if [ -z "${!field:-}" ]; then
+              echo 'BLOCKED: Configure os quatro GitHub Actions Secrets.'
+              exit 2
+            fi
+          done
+          umask 077
+          key_path="$(mktemp "$RUNNER_TEMP/frfinance-oci-key.XXXXXXXX")"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s\n' "$FRF_OCI_PRIVATE_KEY_PEM" > "$key_path"
+          unset FRF_OCI_PRIVATE_KEY_PEM
+          export FRF_OCI_KEY_PATH="$key_path"
+          python .github/scripts/frfinance_oci_a1_observer.py
+
+      - name: Abrir alerta unico quando A1 encontrada
+        if: ${{ steps.monitor.outputs.vm_found == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OCI_VM_STATE: ${{ steps.monitor.outputs.vm_state }}
+        run: |
+          set -euo pipefail
+          title='FR Finance — A1 encontrada na Oracle OCI'
+          if gh issue list --state all --limit 200 --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo 'ALERT_ALREADY_EXISTS=YES'
+            exit 0
+          fi
+          body="$(printf 'O monitor detectou a VM A1 Flex (2 OCPUs / 12 GB) na regiao sa-saopaulo-1.\n\nEstado visto: **%s**.\n\nVerifique o provisionamento no Console OCI. Este workflow NAO cria instancias e NAO autoriza operacoes financeiras reais.\n' "$OCI_VM_STATE")"
+          gh issue create --title "$title" --body "$body"
