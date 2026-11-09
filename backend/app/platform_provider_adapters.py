@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
+import json
 from email.message import EmailMessage
 import os
 import re
@@ -160,11 +162,28 @@ async def fetch_authoritative_saas_payment(*, config: PlatformMpConfig,
         response=await client.send(request,follow_redirects=False)
         if response.status_code != 200 or len(response.content)>65536:
             raise ProviderUnavailable("Consulta ao pagamento indisponível.")
-        result=response.json()
-        if not isinstance(result,dict) or str(result.get("id"))!=payment_id:
+        # M34900-M35300: do not trust float JSON, duplicate keys or NaN.
+        # Identical-looking duplicate fields (status, id, collector_id) are
+        # ambiguous and MUST NOT authorize any reconciliation.
+        def unique_pairs(pairs):
+            obj={}
+            for key,value in pairs:
+                if key in obj:
+                    raise ValueError("duplicate provider response field")
+                obj[key]=value
+            return obj
+
+        def no_constant(value):
+            raise ValueError("invalid provider numeric constant")
+
+        result=json.loads(
+            response.content,parse_float=Decimal,
+            parse_constant=no_constant,object_pairs_hook=unique_pairs,
+        )
+        if type(result) is not dict or str(result.get("id"))!=payment_id:
             raise ProviderUnavailable("Pagamento não pertence à consulta.")
         return result
-    except (httpx.HTTPError,ValueError) as exc:
+    except (httpx.HTTPError,ValueError,UnicodeError,OverflowError,TypeError) as exc:
         raise ProviderUnavailable("Consulta ao Mercado Pago não validada.") from exc
 
 
