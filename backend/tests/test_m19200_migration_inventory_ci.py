@@ -18,7 +18,7 @@ def test_full_migration_catalog():
     assert c("CI_ONLY_NEEDS_PORT")==3
     assert c("STAGING_ONLY_NEEDS_PORT")>=16
     assert c("CI_ONLY_TEST_OR_FIXTURE")>=21
-    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==14
+    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==15
     assert all(x["do_not_apply_source_to_termux"]
                for x in entries if x["source_path"].startswith("backend/staging_migrations/"))
 
