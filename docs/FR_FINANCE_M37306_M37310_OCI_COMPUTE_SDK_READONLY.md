@@ -64,3 +64,22 @@ backup/restauração, licenças, Pix ou prontidão de produção.
 
 **Catálogo:** 106 SQL, sem nova migração. Banco PostgreSQL local porta
 5433 intacto. Mercado Pago e Pix reais OFF; ativação real não autorizada.
+
+## Extensão M37311 — Vaults pelo SDK
+
+As consultas `kms management vault list` também não devem converter
+retorno de stdout vazio (mesmo com código CLI 0) em zero recursos.
+Antes que o operador execute novamente o inventário, o comando passa a
+usar `oci.key_management.KmsVaultClient.list_vaults`, em modo de leitura,
+exigindo HTTP 200, lista tipada e paginação segura. Apenas o estado do
+Vault (`ACTIVE`, etc.) chega à camada de inventário; os OCIDs não são
+mostrados, e chaves e segredos não são consultados.
+
+Isso **não significa** que exista Vault ativo, nem que política IAM esteja
+correta. Somente uma resposta autenticada da conta atual comprovará
+quantidade e estados de Vaults nesse compartimento. A prova não autoriza
+gastos, migrations, usuários ou pagamentos reais.
+
+O código deve ser executado com o Python da virtualenv OCI CLI, que
+contém o SDK. A CLI permanece em uso para IAM, VCN e subnet, cujas
+respostas JSON já foram confirmadas no diagnóstico real M37304.

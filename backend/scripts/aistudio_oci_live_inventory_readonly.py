@@ -111,9 +111,67 @@ def _sdk_compute_list(command:tuple[str,...]):
         raise OCIInventoryBlocked("OCI_COMPUTE_SDK_READ_FAILED") from None
 
 
+def _sdk_vault_list(command:tuple[str,...]):
+    """Read Vault summaries with authenticated typed SDK response (HTTP 200).
+
+    A CLI exit code 0 with empty stdout is never interpreted as proof that
+    there are no vaults. No secret, key or vault contents are requested.
+    """
+    if (len(command)!=7 or command[:4]!=("kms","management","vault","list")
+            or command[4]!="--compartment-id" or command[6]!="--all"):
+        raise OCIInventoryBlocked("OCI_COMMAND_NOT_READ_ONLY")
+    compartment=command[5]
+    if (type(compartment) is not str
+            or not compartment.startswith("ocid1.compartment.oc1.")):
+        raise OCIInventoryBlocked("OCI_VAULT_SCOPE_INVALID")
+    try:
+        import oci
+        cfg=oci.config.from_file(
+            file_location=str(Path(os.environ.get(
+                "OCI_CLI_CONFIG_FILE","~/.oci/config")).expanduser()),
+            profile_name=os.environ.get("OCI_CLI_PROFILE","DEFAULT"),
+        )
+        if cfg.get("region")!=TARGET_REGION:
+            raise OCIInventoryBlocked("OCI_TENANCY_OR_REGION_DENIED")
+        client=oci.key_management.KmsVaultClient(
+            cfg,timeout=(5,30),retry_strategy=oci.retry.NoneRetryStrategy(),
+        )
+        results=[]
+        page=None
+        visited_pages=set()
+        for _ in range(100):
+            opts={"limit":100,"retry_strategy":oci.retry.NoneRetryStrategy()}
+            if page is not None:
+                opts["page"]=page
+            response=client.list_vaults(compartment,**opts)
+            if (type(response.status) is not int or response.status!=200
+                    or type(response.data) is not list
+                    or len(response.data)>100):
+                raise OCIInventoryBlocked("OCI_VAULT_SDK_RESPONSE_INVALID")
+            for vault in response.data:
+                state=getattr(vault,"lifecycle_state",None)
+                if type(state) is not str:
+                    raise OCIInventoryBlocked("OCI_VAULT_SDK_RESPONSE_INVALID")
+                results.append({"lifecycle-state":state})
+            page=response.next_page
+            if page is None:
+                return {"data":results}
+            if (type(page) is not str or not page or len(page)>2048
+                    or page in visited_pages):
+                raise OCIInventoryBlocked("OCI_VAULT_PAGINATION_INVALID")
+            visited_pages.add(page)
+        raise OCIInventoryBlocked("OCI_VAULT_PAGINATION_LIMIT")
+    except OCIInventoryBlocked:
+        raise
+    except Exception:
+        raise OCIInventoryBlocked("OCI_VAULT_SDK_READ_FAILED") from None
+
+
 def _run(command:tuple[str,...]):
     if command[:3]==("compute","instance","list"):
         return _sdk_compute_list(command)
+    if command[:4]==("kms","management","vault","list"):
+        return _sdk_vault_list(command)
     if shutil.which("oci") is None:
         raise OCIInventoryBlocked("OCI_CLI_NOT_INSTALLED")
     # Explicit allowlist enforcement also lives in the inspection module.
@@ -158,6 +216,7 @@ def main()->int:
     print("OCI_ROOT_SUBNET="+result.root_subnet)
     print("OCI_ROOT_VM_RUNNING="+str(result.root_instances_running))
     print("OCI_COMPUTE_SOURCE=SDK_HTTP_200_TYPED_LIST")
+    print("OCI_VAULT_SOURCE=SDK_HTTP_200_TYPED_LIST")
     print("OCI_STAGING_VM_RUNNING="+str(result.staging_instances_running))
     print("OCI_STAGING_VM_PROVISIONING="+str(result.staging_instances_provisioning))
     print("OCI_STAGING_VAULT_ACTIVE="+str(result.staging_vaults_active))
