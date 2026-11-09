@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M36900–M37300 — inventario OCI real com API simulada sem mutacoes
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m36900_m37300_oci_live_inventory_ci.py
       - name: M36400–M36800 — tres fontes SaaS e segregacao de revisores CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m36400_m36800_saas_three_source_ci.py
       - name: M35900–M36300 — trilha append-only de conciliacao SaaS em CI
