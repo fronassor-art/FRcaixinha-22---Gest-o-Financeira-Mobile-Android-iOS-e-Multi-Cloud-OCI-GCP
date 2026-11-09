@@ -246,11 +246,14 @@ jobs:
             if ./gradlew --no-daemon assembleDebug 2>&1 | tee "$LOG"; then
               exit 0
             fi
-            if [[ "$attempt" == 3 ]] || ! grep -Eq 'Received status code 429|Too Many Requests' "$LOG"; then
+            # Retry ONLY transient download/network failures. Do not retry
+            # compiler, signing, lint, dependency-integrity or Gradle task errors.
+            if [[ "$attempt" == 3 ]] || ! grep -Eqi \
+              'Received status code 429|Too Many Requests|SocketTimeoutException|Read timed out|Downloading .* failed: timeout|Connect timed out|Connection reset' "$LOG"; then
               exit 1
             fi
-            echo "::warning::Maven Central limitou requisições (HTTP 429); nova tentativa controlada."
-            sleep $((attempt * 30))
+            echo "::warning::Download Gradle/Maven transitório; repetição limitada sem ignorar erro de compilação."
+            sleep $((attempt * 15))
           done
       - name: Verificar pacote Android independente antes do upload
         run: |
