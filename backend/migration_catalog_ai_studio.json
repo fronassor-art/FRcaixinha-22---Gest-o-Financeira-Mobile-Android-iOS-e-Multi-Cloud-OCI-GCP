@@ -1052,6 +1052,16 @@
       "inspect_object": "public.memberships and public.quotas: DML revoked; write lock triggers",
       "local_evidence": null,
       "source_blob_sha": "6dab10eec22118bbe18b5c30d4612a185eedfb61"
+    },
+    {
+      "id": "staging_migrations:064",
+      "source_path": "backend/staging_migrations/064_saas_member_admission_intent_staging_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.saas_member_admission_intents_staging",
+      "local_evidence": null,
+      "source_blob_sha": "2c2af586a830411b1a79b439b8165a9b8c735071"
     }
   ]
 }

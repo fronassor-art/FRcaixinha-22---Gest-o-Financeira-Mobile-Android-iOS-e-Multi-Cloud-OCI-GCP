@@ -55,6 +55,8 @@ CREATE ROLE frcaixinha_saas_claim_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_admission_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS INHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_saas_admission_intent_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 GRANT frcaixinha_app_role TO frcaixinha_saas_admission_ci;
 SQL
 
@@ -155,9 +157,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci,frcaixinha_saas_admission_intent_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci,frcaixinha_saas_admission_intent_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -732,6 +734,21 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
  PYTHONPATH=backend python -m pytest -q backend/tests/test_m33300_saas_capacity_expiry_pg_ci.py
 echo "M33300_EXPIRY_PG=PASS"
 echo "M33300_REAL_USERS_AND_PIX=OFF"
+echo "=== M34400-M34800: synthetic verified admission intent ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.admission_intent_ci=1' \
+ psql -X -v ON_ERROR_STOP=1 \
+ -f backend/staging_migrations/064_saas_member_admission_intent_staging_only.sql >/dev/null 2>&1; then
+ echo "BLOCKED=M34800_WRONG_DATABASE"; exit 1
+fi
+PGOPTIONS='-c frcaixinha.admission_intent_ci=1' psql -X -v ON_ERROR_STOP=1 \
+ -f backend/staging_migrations/064_saas_member_admission_intent_staging_only.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+ CI_SAAS_INTENT_WORKER_URL='postgresql://frcaixinha_saas_admission_intent_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_INTENT_OWNER_URL='postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ CI_SAAS_INTENT_APP_URL='postgresql://frcaixinha_saas_admission_ci:ci-test-only@127.0.0.1:5432/frcaixinha_staging' \
+ PYTHONPATH=backend python -m pytest -q backend/tests/test_m34800_saas_admission_intent_pg_ci.py
+echo "M34800_INTENT_PG=PASS"
+echo "M34800_REAL_MEMBERS_AND_PIX=OFF"
 
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"

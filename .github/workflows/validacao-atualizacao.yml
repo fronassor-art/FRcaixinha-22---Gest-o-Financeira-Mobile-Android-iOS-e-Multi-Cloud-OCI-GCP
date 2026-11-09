@@ -794,6 +794,8 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
 
+      - name: M34400–M34800 — provas atomicas do pre-cadastro em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m34400_m34800_saas_admission_intent_static_ci.py
       - name: M33900–M34300 — travar DML direto de membros e cotas
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m33900_m34300_saas_write_lock_static_ci.py
       - name: M33400–M33800 — integracao de preflight SaaS e isolamento
