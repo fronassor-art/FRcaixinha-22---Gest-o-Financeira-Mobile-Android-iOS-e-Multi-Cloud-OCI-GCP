@@ -31,7 +31,7 @@ CREATE FUNCTION public.saas_renewal_review_ci(
  p_price uuid,p_acceptance uuid,p_period varchar
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,public,pg_temp AS $fn$
-DECLARE locked uuid; prev record; e record; offer record;
+DECLARE locked uuid; prev record; old_license record; offer record;
  members bigint; quotas bigint; held_m bigint; held_q bigint;
 BEGIN
  IF current_database()<>'frcaixinha_staging'
@@ -40,7 +40,7 @@ BEGIN
  THEN RAISE EXCEPTION 'M32300_CI_ROLE_DENIED'; END IF;
  IF p_request IS NULL OR p_request='00000000-0000-0000-0000-000000000000'::uuid
  OR p_tenant IS NULL OR p_admin IS NULL OR p_entitlement IS NULL OR p_price IS NULL
- OR p_acceptance IS NULL OR p_period NOT IN ('MONTHLY','ANNUAL')
+ OR p_acceptance IS NULL OR p_period IS NULL OR p_period NOT IN ('MONTHLY','ANNUAL')
  THEN RETURN jsonb_build_object('state','DENIED','charge_authorized',false); END IF;
  SELECT t.id INTO locked FROM public.tenants t WHERE t.id=p_tenant FOR UPDATE;
  IF NOT FOUND OR NOT public.saas_capacity_actor_ci(p_tenant,p_admin)
@@ -54,7 +54,7 @@ BEGIN
   THEN RETURN jsonb_build_object('state','REPLAY_CI_NO_CHARGE','charge_authorized',false); END IF;
   RETURN jsonb_build_object('state','REQUEST_COLLISION_DENIED','charge_authorized',false);
  END IF;
- SELECT e.id INTO e FROM public.saas_license_entitlements e
+ SELECT e.id INTO old_license FROM public.saas_license_entitlements e
  JOIN public.saas_subscription_preparations s ON s.id=e.preparation_id
  JOIN public.saas_payment_intents i ON i.id=e.payment_intent_id
  WHERE e.id=p_entitlement AND e.tenant_id=p_tenant AND s.tenant_id=p_tenant
@@ -67,7 +67,8 @@ BEGIN
  INTO offer FROM public.platform_license_price_versions v
  JOIN public.platform_license_plans p ON p.tier=v.plan_tier WHERE v.id=p_price;
  IF NOT FOUND OR offer.status<>'ACTIVE' OR offer.members_limit IS NULL
- OR offer.quotas_limit IS NULL OR offer.monthly_price<=0 OR offer.annual_price<=0
+ OR offer.quotas_limit IS NULL OR offer.monthly_price IS NULL
+ OR offer.annual_price IS NULL OR offer.monthly_price<=0 OR offer.annual_price<=0
  THEN RETURN jsonb_build_object('state','OFFER_UNVERIFIED','charge_authorized',false); END IF;
  IF NOT EXISTS(SELECT 1 FROM public.contract_acceptances a
  JOIN public.contract_documents d ON d.id=a.document_id

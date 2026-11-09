@@ -118,7 +118,12 @@ def preview_renewal(s: RenewalSnapshot) -> Preview:
     c=s.capacity
     common=preview_capacity(c)
     if not common.review_only:
-        return Preview("BASE_"+common.state)
+        # Renewal is not an extra seat allocation. A fully occupied plan
+        # can be renewed if total occupied + held remains <= proposed limit.
+        if common.state!="CAPACITY_EXCEEDED" or (
+            c.members+c.held_members>c.max_members or
+            c.quotas+c.held_quotas>c.max_quotas):
+            return Preview("BASE_"+common.state)
     if s.period not in ("MONTHLY","ANNUAL") or s.currency!="BRL":
         return Preview("INVALID_RENEWAL_OFFER")
     if not SHA.fullmatch(s.contract_published_sha) or s.contract_accepted_sha!=s.contract_published_sha:

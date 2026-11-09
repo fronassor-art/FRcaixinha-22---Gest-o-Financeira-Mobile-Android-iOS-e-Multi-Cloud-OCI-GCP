@@ -1001,7 +1001,7 @@
       "do_not_apply_source_to_termux": true,
       "inspect_object": "public.saas_renewal_reviews_staging",
       "local_evidence": null,
-      "source_blob_sha": "6cafe684d49397bdc4b5e2cd9856ce117ee79f15"
+      "source_blob_sha": "a412654593d7f5a378536098be9121ed0cf591cf"
     },
     {
       "id": "ci_migrations:060",

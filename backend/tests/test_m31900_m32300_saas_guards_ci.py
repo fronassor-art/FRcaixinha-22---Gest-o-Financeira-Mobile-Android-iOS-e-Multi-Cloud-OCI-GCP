@@ -66,6 +66,13 @@ def test_invalid_types_raise(kw):
     with pytest.raises(ValueError,match="INVALID_CAPACITY_SNAPSHOT"):
         preview_capacity(capacity(**kw))
 
+def test_renewal_at_exact_capacity_never_allocates_extra_slot():
+    full=capacity(members=20,quotas=40,held_quotas=0)
+    assert preview_capacity(full).state=="CAPACITY_EXCEEDED"
+    d=preview_renewal(renewal(capacity=full))
+    assert d.state=="RENEWAL_REVIEW_CI_NO_CHARGE" and d.review_only
+    safe(d)
+
 @pytest.mark.parametrize("kw,state",[
     ({"source":"WEBHOOK"},"UNTRUSTED_SOURCE"),
     ({"period":"WEEKLY"},"INVALID_RENEWAL_OFFER"),
