@@ -1,4 +1,4 @@
-# AI Studio — Integracao do Administrador Master existente ao PostgreSQL local
+# FR Finance AI Studio — Integracao do Administrador Master existente ao PostgreSQL local
 
 **Repositorio unico desta tarefa:** 
 fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP
@@ -20,7 +20,7 @@ MASTER do aplicativo NAO e PostgreSQL SUPERUSER.
 
 ## Estado verificado em 01/11/2026 pelo operador
 
-- Git checkout em `~/frcaixinha-aistudio-mobile`, branch da PR #2.
+- Git checkout em `~/fr-finance`, branch da PR #2.
 - Cluster PostgreSQL 18.6: `$PREFIX/var/lib/frcaixinha_aistudio_pg18`, escutando apenas `127.0.0.1:5433`.
 - Banco vazio `frcaixinha_aistudio_dev`, de propriedade de `frc_ai_owner`.
 - Usuarios de LOGIN `frc_ai_app` e `frc_ai_auth` criados, sem SUPERUSER ou BYPASSRLS, e senhas definidas localmente.
@@ -32,7 +32,7 @@ MASTER do aplicativo NAO e PostgreSQL SUPERUSER.
 No Termux (nao precisa entrar em Debian):
 
 ```bash
-cd ~/frcaixinha-aistudio-mobile || exit 1
+cd ~/fr-finance || exit 1
 git status --short --branch
 git fetch origin
 git merge --ff-only origin/atualizacao-ai-studio-9b46a63187
@@ -44,7 +44,7 @@ Se houver conflito ou alteracoes locais, nao usar reset/clean/force. Parar e con
 ## Inspecao de seguranca — SOMENTE LEITURA
 
 ```bash
-cd ~/frcaixinha-aistudio-mobile || exit 1
+cd ~/fr-finance || exit 1
 bash backend/scripts/aistudio_db_local.sh check
 ```
 
@@ -58,7 +58,7 @@ A autorizacao para escrever codigos no GitHub NAO equivale a autorizacao para mo
 Apos revisar a sequencia, backup, versoes e obter autorizacao expressa:
 
 ```bash
-cd ~/frcaixinha-aistudio-mobile || exit 1
+cd ~/fr-finance || exit 1
 AI_STUDIO_APPLY_MIGRATIONS=YES bash backend/scripts/aistudio_db_local.sh apply
 ```
 
@@ -80,7 +80,7 @@ Depois de migrar e validar RLS, e mediante autorizacao especifica, usar apenas a
 
 ```bash
 proot-distro login debian -- /bin/bash -lc '
-cd /data/data/com.termux/files/home/frcaixinha-aistudio-mobile || exit 1
+cd /data/data/com.termux/files/home/fr-finance || exit 1
 AI_STUDIO_ALLOW_MASTER_BOOTSTRAP=YES \
   /root/.venvs/frcaixinha-aistudio/bin/python \
   backend/scripts/bootstrap_aistudio_master.py
@@ -98,7 +98,7 @@ Nao usar `frc_ai_app` nem `frc_ai_auth` para bootstrap, pois nao devem ter poder
 ## Integracao FastAPI — etapa seguinte
 
 O arquivo privado de variaveis continua em
-`/root/.config/frcaixinha-aistudio-mobile/api.env` dentro do Debian PRoot,
+`/root/.config/fr-finance/api.env` dentro do Debian PRoot,
 permissao `600`; nunca versionar.
 Usar `DATABASE_URL` com `frc_ai_app` e `AUTH_DATABASE_URL` com `frc_ai_auth`,
 ambas no banco AI Studio `127.0.0.1:5433/frcaixinha_aistudio_dev`.

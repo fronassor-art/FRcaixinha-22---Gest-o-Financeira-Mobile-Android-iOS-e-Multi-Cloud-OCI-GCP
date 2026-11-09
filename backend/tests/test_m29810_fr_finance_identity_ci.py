@@ -48,3 +48,15 @@ def test_renaming_script_is_local_only_and_not_database():
     assert 'NEW="$HOME/fr-finance"' in script
     for forbidden in ("git clone","git push","DROP DATABASE","psql ","oci compute","rm -rf"):
         assert forbidden not in script
+
+def test_current_termux_runbooks_use_fr_finance_directory():
+    paths=(
+        "docs/AI_STUDIO_MASTER_TERMUX.md",
+        "docs/FR_FINANCE_SUPER_MACRO_M28700_M29000_RELEASE_EVIDENCE.md",
+        "docs/FR_FINANCE_SUPER_MACRO_M29100_M29400_ONBOARDING_CHAIN.md",
+        "docs/FR_FINANCE_SUPER_MACRO_M29500_M29800_TWO_TENANT_CLOSING.md",
+    )
+    for path in paths:
+        content=text(path)
+        assert "$HOME/fr-finance" in content or "~/fr-finance" in content
+        assert "frcaixinha-aistudio-mobile" not in content

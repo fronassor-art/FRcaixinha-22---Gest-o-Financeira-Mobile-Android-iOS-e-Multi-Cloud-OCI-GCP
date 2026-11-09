@@ -50,7 +50,7 @@ nem autorização de produção.
 ## Verificação local segura no Termux normal
 
 ```bash
-cd "$HOME/frcaixinha-aistudio-mobile"
+cd "$HOME/fr-finance"
 PYTHONPATH=backend python3 -m pytest -q backend/tests/test_m29100_m29400_onboarding_chain_ci.py
 PYTHONPATH=backend python3 backend/scripts/aistudio_m29100_m29400_checkpoint.py audit
 git rev-parse --short HEAD

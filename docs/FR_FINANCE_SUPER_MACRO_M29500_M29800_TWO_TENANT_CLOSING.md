@@ -1,7 +1,7 @@
 # FR Finance AI Studio — M29500–M29800
 
 Este pacote atua exclusivamente no repositório AI Studio. A sincronização com
-o celular é feita **dentro de `$HOME/frcaixinha-aistudio-mobile` no Termux
+o celular é feita **dentro de `$HOME/fr-finance` no Termux
 normal**. Nunca rodar comandos do projeto no Debian `root@localhost` da
 automação OCI.
 
@@ -23,7 +23,7 @@ autorização de fechamento real.
 
 ## Termux — executar após CI aprovada
 ```bash
-cd "$HOME/frcaixinha-aistudio-mobile"
+cd "$HOME/fr-finance"
 git remote -v
 git branch --show-current
 git status --short

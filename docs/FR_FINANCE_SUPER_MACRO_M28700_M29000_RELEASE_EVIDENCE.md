@@ -63,7 +63,7 @@ em `$HOME/.config/frfinance-aistudio/provider-public-inputs.json`, se
 existir. Não exibe valores nem credenciais.
 
 ```bash
-cd "$HOME/frcaixinha-aistudio-mobile"
+cd "$HOME/fr-finance"
 git status --short
 git fetch origin atualizacao-ai-studio-9b46a63187
 git pull --ff-only origin atualizacao-ai-studio-9b46a63187
