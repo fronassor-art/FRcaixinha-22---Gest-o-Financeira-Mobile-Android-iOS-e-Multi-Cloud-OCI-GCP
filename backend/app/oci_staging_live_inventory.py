@@ -36,6 +36,7 @@ class OCIInventorySummary:
     staging_compartment: str
     root_vcn: str
     root_subnet: str
+    root_instances_running: int
     staging_instances_running: int
     staging_instances_provisioning: int
     staging_vaults_active: int
@@ -124,12 +125,15 @@ def inspect_live_oci_inventory(*,tenancy_id: str, region: str,
     else:
         subnet_status="NOT_CHECKED"
 
+    root_machines=_list(query,("compute","instance","list",
+        "--compartment-id",tenancy_id,"--all"))
     machines=_list(query,("compute","instance","list",
         "--compartment-id",folder["id"],"--all"))
-    for machine in machines:
+    for machine in root_machines+machines:
         if not _ocid(machine.get("id"),"instance"):
             # Instance IDs have the same public OCI format as other resource IDs.
             raise OCIInventoryBlocked("OCI_RESPONSE_SCHEMA_DENIED")
+    root_running=sum(r.get("lifecycle-state")=="RUNNING" for r in root_machines)
     running=sum(r.get("lifecycle-state")=="RUNNING" for r in machines)
     provisioning=sum(r.get("lifecycle-state") in ("PROVISIONING","STARTING") for r in machines)
 
@@ -140,6 +144,7 @@ def inspect_live_oci_inventory(*,tenancy_id: str, region: str,
     return OCIInventorySummary(
         region=region,home_region_observed=True,staging_compartment="ACTIVE",
         root_vcn="AVAILABLE" if vcn else "MISSING",root_subnet=subnet_status,
+        root_instances_running=root_running,
         staging_instances_running=running,staging_instances_provisioning=provisioning,
         staging_vaults_active=active,staging_vm_present=running>0,
         observations_from_live_api=True,

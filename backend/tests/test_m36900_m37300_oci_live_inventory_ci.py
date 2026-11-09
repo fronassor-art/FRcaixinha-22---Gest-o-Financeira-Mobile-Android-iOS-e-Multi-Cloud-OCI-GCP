@@ -18,7 +18,7 @@ COMP="ocid1.compartment.oc1.."+"b"*20
 VCN="ocid1.vcn.oc1.sa-saopaulo-1."+"c"*20
 VM="ocid1.instance.oc1.sa-saopaulo-1."+"d"*20
 
-def inputs(*,machines=(),vaults=(),vcn=True,subnet=True,comp=True,region=True):
+def inputs(*,machines=(),rootmachines=(),vaults=(),vcn=True,subnet=True,comp=True,region=True):
     """Each command is an OCI CLI read-only list; no real network in CI."""
     calls=[]
     data={
@@ -53,9 +53,12 @@ def inputs(*,machines=(),vaults=(),vcn=True,subnet=True,comp=True,region=True):
             assert command==("network","subnet","list","--compartment-id",TEN,
                              "--vcn-id",VCN,"--all")
         elif command[:3]==("compute","instance","list"):
-            assert command==("compute","instance","list","--compartment-id",COMP,"--all")
+            assert command in (("compute","instance","list","--compartment-id",TEN,"--all"),
+                               ("compute","instance","list","--compartment-id",COMP,"--all"))
         else:
             assert command==("kms","management","vault","list","--compartment-id",COMP,"--all")
+        if command[:3]==("compute","instance","list"):
+            return {"data":list(rootmachines if command[-2]==TEN else machines)}
         return {"data":data[command[:4] if command[0]=="kms" else command[:3]]}
     return run,calls,data
 
@@ -65,9 +68,10 @@ def check(**kwargs):
 
 def test_live_root_network_and_staging_compartment_but_no_machine():
     r,calls=check()
-    assert len(calls)==6
+    assert len(calls)==7
     assert r.home_region_observed and r.staging_compartment=="ACTIVE"
     assert r.root_vcn=="AVAILABLE" and r.root_subnet=="AVAILABLE"
+    assert r.root_instances_running==0
     assert r.staging_instances_running==0
     assert r.staging_vaults_active==0
     assert r.observations_from_live_api is True
@@ -94,6 +98,14 @@ def test_missing_network_reports_absence_not_success(kwargs,expected):
     result,_=check(**kwargs)
     assert expected in (result.root_vcn,result.root_subnet)
     assert result.deployment_authorized is False
+
+def test_root_running_instance_is_reported_separately():
+    r,calls=check(rootmachines=({"id":VM,"lifecycle-state":"RUNNING"},))
+    assert r.root_instances_running==1
+    assert r.staging_instances_running==0
+    assert not r.staging_vm_present
+    assert not r.deployment_authorized
+    assert len(calls)==7
 
 def test_missing_compartment_fails_closed():
     with pytest.raises(OCIInventoryBlocked,match="OCI_STAGING_COMPARTMENT_NOT_FOUND"):
@@ -166,7 +178,7 @@ def test_cli_redacts_ocids_and_denies_cloud_actions(monkeypatch,capsys):
     assert "OCI_DEPLOYMENT_AUTHORIZED=NO" in stdout
     assert "PIX_REAL=OFF" in stdout
     assert all(s not in stdout for s in (TEN,COMP,VCN,VM))
-    assert len(calls)==6
+    assert len(calls)==7
 
 def test_cli_config_not_present_fails_with_safe_reason(monkeypatch,capsys):
     m=_cli_module()
@@ -192,6 +204,25 @@ def test_cli_config_parses_existing_profile_without_output(monkeypatch,tmp_path)
                  "fingerprint=aa:bb:cc\nkey_file=/root/secrets/private.pem\n")
     monkeypatch.setenv("OCI_CLI_CONFIG_FILE",str(p))
     assert m.read_cli_identity()==(TEN,TARGET_REGION)
+
+def test_cli_forwards_selected_oci_profile_without_exposing_config(monkeypatch):
+    m=_cli_module()
+    calls=[]
+    monkeypatch.setenv("OCI_CLI_PROFILE","FR_FINANCE_OCI")
+    monkeypatch.setenv("OCI_CLI_CONFIG_FILE","/tmp/oci-m37300-example-config")
+    monkeypatch.setattr(m.shutil,"which",lambda name:"/usr/bin/oci")
+    def mock_run(args,**kw):
+        calls.append((args,kw))
+        return SimpleNamespace(returncode=0,stdout=b'{"data":[]}',stderr=b'PRIVATE_KEY_TEXT')
+    monkeypatch.setattr(m.subprocess,"run",mock_run)
+    assert m._run(("iam","region-subscription","list","--all"))=={"data":[]}
+    assert len(calls)==1
+    args,opts=calls[0]
+    assert args[:4]==["oci","iam","region-subscription","list"]
+    assert args[args.index("--profile")+1]=="FR_FINANCE_OCI"
+    assert args[args.index("--config-file")+1]=="/tmp/oci-m37300-example-config"
+    assert opts["capture_output"] is True
+
 
 def test_source_contains_only_oci_list_commands():
     code=(ROOT/"backend/app/oci_staging_live_inventory.py").read_text()

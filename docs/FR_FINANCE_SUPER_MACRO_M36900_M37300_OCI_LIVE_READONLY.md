@@ -16,13 +16,15 @@ backend. Não invocar o workflow como prova de instância criada.
 Novo `backend/scripts/aistudio_oci_live_inventory_readonly.py`:
 
 - usa **OCI CLI já configurado**, lendo apenas tenancy e região do perfil
-  privado (não revela nem registra OCIDs);
+  privado (não revela nem registra OCIDs), respeitando o mesmo
+  `OCI_CLI_PROFILE` e `OCI_CLI_CONFIG_FILE` em todas as consultas;
 - recusa outra região que não `sa-saopaulo-1` e verifica assinatura/home
   region `READY`;
 - observa `fr-finance-staging` em IAM e a VCN/subnet `FR Finance`
   existentes no compartimento raiz;
-- consulta **somente com comandos list** as VMs no compartment de staging
-  (RUNNING e PROVISIONING) e Vaults ativos nesse compartment;
+- consulta **somente com comandos list** as VMs no compartimento raiz
+  (contagem separada), as VMs no staging (RUNNING e PROVISIONING) e os
+  Vaults ativos no staging. Uma VM fora do staging não comprova deploy;
 - imprime **apenas estados e contagens**, nunca detalhes das respostas
   OCI, endereços IP, OCIDs, credenciais, arquivos ou erros do serviço;
 - usa timeout, limite de JSON e trava no primeiro erro de autorização,

@@ -8,6 +8,7 @@ from __future__ import annotations
 import configparser
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -38,7 +39,7 @@ def _no_nonfinite(_):
 def read_cli_identity():
     path=Path(os.environ.get("OCI_CLI_CONFIG_FILE","~/.oci/config")).expanduser()
     profile=os.environ.get("OCI_CLI_PROFILE","DEFAULT")
-    if not profile or not profile.isalnum() or not path.is_file():
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,64}",profile or "") is None or not path.is_file():
         raise OCIInventoryBlocked("OCI_CLI_CONFIG_UNAVAILABLE")
     cfg=configparser.RawConfigParser()
     try:
@@ -56,8 +57,11 @@ def _run(command:tuple[str,...]):
     # Explicit allowlist enforcement also lives in the inspection module.
     # Never echo the command: it contains the tenancy's public OCID.
     try:
+        flags=["--profile",os.environ.get("OCI_CLI_PROFILE","DEFAULT")]
+        if os.environ.get("OCI_CLI_CONFIG_FILE"):
+            flags.extend(("--config-file",str(Path(os.environ["OCI_CLI_CONFIG_FILE"]).expanduser())))
         completed=subprocess.run(
-            ["oci",*command,"--region",TARGET_REGION,"--output","json","--no-retry"],
+            ["oci",*command,"--region",TARGET_REGION,"--output","json","--no-retry",*flags],
             capture_output=True,check=False,timeout=MAX_SECONDS,
         )
         if completed.returncode!=0 or not 0<len(completed.stdout)<=MAX_OUTPUT:
@@ -90,6 +94,7 @@ def main()->int:
     print("OCI_STAGING_COMPARTMENT="+result.staging_compartment)
     print("OCI_ROOT_VCN="+result.root_vcn)
     print("OCI_ROOT_SUBNET="+result.root_subnet)
+    print("OCI_ROOT_VM_RUNNING="+str(result.root_instances_running))
     print("OCI_STAGING_VM_RUNNING="+str(result.staging_instances_running))
     print("OCI_STAGING_VM_PROVISIONING="+str(result.staging_instances_provisioning))
     print("OCI_STAGING_VAULT_ACTIVE="+str(result.staging_vaults_active))
