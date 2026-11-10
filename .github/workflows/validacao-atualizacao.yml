@@ -798,6 +798,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37435 — dependencias dos valores de desenvolvimento no mesmo PG18
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37435_legacy_dependency_inventory_ci.py
       - name: M37434 — contrato de piso e banco unico existente
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37434_same_database_price_ci.py
       - name: M37432 — ensaio seguro de recuperacao isolada PG18
