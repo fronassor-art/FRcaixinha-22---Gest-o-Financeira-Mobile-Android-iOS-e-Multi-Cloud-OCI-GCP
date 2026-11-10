@@ -49,7 +49,10 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
  }
  async function openConfirmed(){
    if(!preview||!preview.cycle_creation_enabled||!preview.preconditions_satisfied||opening||opened)return;
-   const selected=parseCyclePriceInput(amount);
+   let selected:number;
+   try{selected=parseCyclePriceInput(amount);}catch{
+     setOpenMessage('Valor inválido. Consulte novamente a prévia.');return;
+   }
    if(preview.amount_cents!==selected||preview.year!==Number(year)){
      setOpenMessage('O valor ou ano mudou. Consulte novamente a prévia antes de abrir.');return;
    }

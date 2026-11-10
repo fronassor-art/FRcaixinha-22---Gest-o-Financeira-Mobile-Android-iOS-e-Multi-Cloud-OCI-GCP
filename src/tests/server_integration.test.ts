@@ -5,7 +5,7 @@ import { normalizeContributions, contributionScopeKey } from '../services/contri
 
 async function main() {
   const apiRow = { id: 'c1', tenant_id: 't1', cycle_id: '2027', membership_id: 'm1',
-    competence: '2027-01', due_date: '2027-01-10', amount_due: '100.00', amount_paid: '0.00',
+    competence: '2027-01', due_date: '2027-01-10', amount_due: '150.00', amount_paid: '0.00',
     payment_status: 'PENDENTE', due_status: 'NO_PRAZO', member_name: 'Pessoa teste' };
   const adminScope = contributionScopeKey('same-user', 't1', 'TENANT_ADMIN');
   assert.notEqual(adminScope, contributionScopeKey('same-user', 't1', 'TENANT_MEMBER'),
@@ -15,7 +15,7 @@ async function main() {
   assert.notEqual(adminScope, contributionScopeKey('other-user', 't1', 'TENANT_ADMIN'),
     'A troca de pessoa deve invalidar as respostas anteriores');
   const parsed = normalizeContributions([apiRow], 't1');
-  assert.equal(parsed[0].amount_due, 100);
+  assert.equal(parsed[0].amount_due, 150);
   assert.equal(parsed[0].due_status, 'A_VENCER');
   assert.throws(() => normalizeContributions([apiRow], 'outra-caixinha'));
   assert.throws(() => normalizeContributions([{ ...apiRow, amount_paid: null }], 't1'));

@@ -155,7 +155,7 @@ async def test_contributions_restricted_by_user_and_tenant(isolated_rows):
     try:
         await admin.execute("INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) VALUES($1,$2,2027,$3,$4,$5)", cycle, ids['tenant_a'], date(2027,1,1), date(2027,12,31), date(2028,1,10))
         for item, membership in ((first, ids['membership_a']), (second, ids['membership_a2'])):
-            await admin.execute("INSERT INTO contributions(id,tenant_id,cycle_id,membership_id,competence,due_date,amount_due) VALUES($1,$2,$3,$4,'2027-01',$5,100)", item, ids['tenant_a'], cycle, membership, date(2027,1,10))
+            await admin.execute("INSERT INTO contributions(id,tenant_id,cycle_id,membership_id,competence,due_date,amount_due) VALUES($1,$2,$3,$4,'2027-01',$5,150)", item, ids['tenant_a'], cycle, membership, date(2027,1,10))
         async def visible(user, tenant, role):
             async with conn.transaction():
                 await conn.execute("SELECT set_config('app.current_user_id',$1,true)", str(user))
@@ -193,7 +193,7 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
         cycle = uuid.uuid4()
         await admin.execute("INSERT INTO cycles(id,tenant_id,year,start_date,end_date,settlement_date) VALUES($1,$2,2027,$3,$4,$5)", cycle, ids['tenant_a'], date(2027,1,1), date(2027,12,31), date(2028,1,10))
         for membership in (ids['membership_a'], ids['membership_a2']):
-            await admin.execute("INSERT INTO contributions(id,tenant_id,cycle_id,membership_id,competence,due_date,amount_due) VALUES($1,$2,$3,$4,'2027-01',$5,100)", uuid.uuid4(), ids['tenant_a'], cycle, membership, date(2027,1,10))
+            await admin.execute("INSERT INTO contributions(id,tenant_id,cycle_id,membership_id,competence,due_date,amount_due) VALUES($1,$2,$3,$4,'2027-01',$5,150)", uuid.uuid4(), ids['tenant_a'], cycle, membership, date(2027,1,10))
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             for name, role in (("master", "MASTER"), ("admin_a", "TENANT_ADMIN"), ("member_a", "TENANT_MEMBER")):
                 email = f"{ids[name]}@example.com"
