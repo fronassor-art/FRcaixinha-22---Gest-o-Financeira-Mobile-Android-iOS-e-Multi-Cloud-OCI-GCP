@@ -51,7 +51,6 @@ def ci_endpoint_allowed(env: Mapping[str, str]) -> bool:
         environment_allowed(env)
         and env.get("FR_FINANCE_M37460_ROUTE") == "CI_DISPOSABLE_ONLY"
         and env.get("FRCAIXINHA_TERMUX_LOCAL_API") != "1"
-        and env.get("FRCAIXINHA_TEST_AUTH") != "1"
     )
 
 
