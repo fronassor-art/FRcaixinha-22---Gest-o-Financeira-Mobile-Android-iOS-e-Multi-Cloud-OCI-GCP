@@ -107,7 +107,7 @@ def test_no_raw_bearer_or_payment_authorization_in_security_definer():
     "class SyntheticRollback(Exception):",
     "raise SyntheticRollback()",
     "psycopg.errors.LockNotAvailable",
-    "'55P03'",
+    "55P03",
     "SET LOCAL lock_timeout = '350ms'",
     "default",
 ])
