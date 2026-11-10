@@ -224,7 +224,6 @@ def test_postgres_session_principal_still_checks_role_and_tenant(change):
     {"status":"SUSPENDED"},
     {"active_role":"MASTER"},
     {"active_tenant_id":OTHER},
-    {"is_master":True},
 ])
 async def test_db_role_revoked_invalid_expired_sessions_fail_before_refresh(monkeypatch,change):
     db=FakeDB(session_row(**change))
@@ -232,6 +231,14 @@ async def test_db_role_revoked_invalid_expired_sessions_fail_before_refresh(monk
         await run_auth(monkeypatch,db)
     assert exc.value.status_code==401
     assert not any("auth_refresh_session" in q[0] for q in db.queries)
+
+
+@pytest.mark.asyncio
+async def test_master_account_cannot_reuse_tenant_admin_saas_context(monkeypatch):
+    db=FakeDB(session_row(is_master=True))
+    s=await run_auth(monkeypatch,db)
+    assert s.is_master is True
+    assert check_server_identity_binding(s,make_context(),now=NOW()) is None
 
 
 @pytest.mark.asyncio
