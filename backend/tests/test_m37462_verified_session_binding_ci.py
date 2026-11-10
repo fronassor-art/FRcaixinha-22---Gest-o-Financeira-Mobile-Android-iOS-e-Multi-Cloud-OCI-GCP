@@ -264,11 +264,17 @@ async def test_revocation_during_refresh_is_denied(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_invalid_refresh_expiry_cannot_bind_ci_contract(monkeypatch):
-    db=FakeDB(expires=NOW().replace(tzinfo=None))
-    p=await run_auth(monkeypatch,db)
-    assert p.verification_source=="LEGACY_NO_SESSION_BINDING"
-    assert check_server_identity_binding(p,make_context(),now=NOW()) is None
+@pytest.mark.parametrize("invalid",[
+    False,"not-a-timestamp",
+    datetime(2026,11,10,16,0),
+    NOW()-timedelta(seconds=1),
+])
+async def test_invalid_refresh_expiry_fails_closed_for_all_routes(monkeypatch,invalid):
+    db=FakeDB(expires=invalid)
+    with pytest.raises(HTTPException) as exc:
+        await run_auth(monkeypatch,db)
+    assert exc.value.status_code==401
+    assert db.closed
 
 
 def _runner():
