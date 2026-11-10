@@ -209,7 +209,7 @@ async def async_main()->int:
             expect(cur.fetchone()[0],0,"ZERO_TENANT_LEDGER")
     print("M37462_REAL_SAAS_CONSENT=NOT_ATTESTED")
     print("M37462_PAYMENT_PIX_LICENSE_ACTIVATION=OFF")
-    print("M37462_TERМUX_LOCAL_DB=UNTOUCHED")
+    print("M37462_TERMUX_LOCAL_DB=UNTOUCHED")
     return 0
 
 
