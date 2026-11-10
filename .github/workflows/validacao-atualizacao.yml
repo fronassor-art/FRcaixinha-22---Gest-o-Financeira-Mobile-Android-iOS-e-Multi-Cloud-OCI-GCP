@@ -813,6 +813,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37440 — diagnostico agregado fail-closed das 18 contagens
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37440_baseline_readonly_ci.py
       - name: M37439 — aplicador local auditado (somente testes, nao executar apply)
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37439_guarded_local_installer_ci.py
       - name: M37438 — montar transacao ficticia sem commit

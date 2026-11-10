@@ -69,8 +69,45 @@ SELECT
  (SELECT count(*) FROM public.audit_events),
  (SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgrelid='public.cycle_contribution_price_audit'::regclass AND tgenabled='O' AND tgname IN ('cycle_price_immutable_row','cycle_price_immutable_truncate'))
 """
+BASELINE_LABELS=(
+    "POLICIES_BELOW_MINIMUM",
+    "QUOTAS_BELOW_MINIMUM",
+    "CONTRIBUTIONS_BELOW_MINIMUM",
+    "PRICE_AUDITS_BELOW_MINIMUM",
+    "CONTRIBUTION_PAYMENTS",
+    "PIX_PAYMENT_INTENTS",
+    "LEDGER_TRANSACTIONS",
+    "LEDGER_ENTRIES",
+    "LOANS",
+    "USERS",
+    "TENANTS",
+    "MEMBERSHIPS",
+    "GENERAL_AUDIT_EVENTS",
+    "PENDING_PRICE_REVIEW",
+    "OPEN_2027_CYCLES",
+    "OPENING_AUDIT_ROWS",
+    "IMMUTABLE_AUDIT_TRIGGERS",
+    "SQL_MINIMUM_150_CONSTRAINTS",
+)
+
 class Blocked(Exception):
     pass
+
+def require_baseline(observed):
+    # Report only safe aggregate counts, never identifiers or financial records.
+    if (type(observed) is not tuple or len(observed)!=len(BASELINE)
+        or len(BASELINE)!=len(BASELINE_LABELS)
+        or any(type(v) is not int or v<0 or v>100000000 for v in observed)):
+        raise Blocked("SYNTHETIC_BASELINE_UNREADABLE")
+    if observed!=BASELINE:
+        print("M37440_BASELINE_DIFFERENCES=FOUND")
+        for label,actual,expected in zip(BASELINE_LABELS,observed,BASELINE):
+            if actual!=expected:
+                print(f"M37440_{label}_EXPECTED={expected}")
+                print(f"M37440_{label}_OBSERVED={actual}")
+        print("M37440_DB_WRITES=NONE")
+        print("M37440_APPLY=BLOCKED_UNTIL_REVIEW")
+        raise Blocked("SYNTHETIC_BASELINE_CHANGED")
 
 def require(condition,reason):
     if not condition:
@@ -123,7 +160,7 @@ def inventory(password):
           and 180000<=identity[5]<190000 and identity[6]=="on",
           "ORIGINAL_POSTGRESQL_IDENTITY_MISMATCH")
         counts=conn.execute(BASELINE_SQL).fetchone()
-        require(counts==BASELINE,"SYNTHETIC_BASELINE_CHANGED")
+        require_baseline(counts)
         linked=conn.execute(GENERAL_AUDIT_SQL).fetchone()
         require(linked is not None and type(linked[0]) is int
                 and 0<=linked[0]<=100000000,"AUDIT_LINK_RESULT_INVALID")
