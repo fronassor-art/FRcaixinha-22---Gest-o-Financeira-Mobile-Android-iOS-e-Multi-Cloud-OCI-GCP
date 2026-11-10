@@ -49,6 +49,8 @@ CREATE ROLE frcaixinha_saas_enroll_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_consent_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
+CREATE ROLE frcaixinha_saas_preprep_ci LOGIN PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_capacity_ci LOGIN PASSWORD 'ci-test-only'
   NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE;
 CREATE ROLE frcaixinha_saas_renewal_ci LOGIN PASSWORD 'ci-test-only'
@@ -161,9 +163,9 @@ createdb -T frcaixinha_ci frcaixinha_staging
 export PGDATABASE=frcaixinha_staging
 psql -X -v ON_ERROR_STOP=1 <<'SQL'
 GRANT CONNECT ON DATABASE frcaixinha_staging
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_consent_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci,frcaixinha_saas_admission_intent_ci,frcaixinha_saas_review_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_consent_ci,frcaixinha_saas_preprep_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci,frcaixinha_saas_admission_intent_ci,frcaixinha_saas_review_ci;
 GRANT USAGE ON SCHEMA public
-  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_consent_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci,frcaixinha_saas_admission_intent_ci,frcaixinha_saas_review_ci;
+  TO frcaixinha_mp_webhook_ingest,frcaixinha_mp_oauth_worker,frcaixinha_mp_financial_worker,frcaixinha_notify_producer_ci,frcaixinha_invite_queue_ci,frcaixinha_account_recovery_ci,frcaixinha_invite_dispatch_ci,frcaixinha_mail_receipt_ci,frcaixinha_envelope_producer_ci,frcaixinha_email_proof_ci,frcaixinha_email_attestor_ci,frcaixinha_annual_ci,frcaixinha_saas_enroll_ci,frcaixinha_saas_consent_ci,frcaixinha_saas_preprep_ci,frcaixinha_saas_capacity_ci,frcaixinha_saas_renewal_ci,frcaixinha_saas_claim_ci,frcaixinha_saas_admission_intent_ci,frcaixinha_saas_review_ci;
 SQL
 
 echo "=== MIGRATIONS 034-038 IN STAGING CI (NOT OCI) ==="
@@ -652,6 +654,21 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
   python backend/scripts/aistudio_m37457_chronology_readback_ci.py
 echo "M37457_REAL_SAAS_ACTIVATION=OFF"
+
+echo "=== M37458: aceite antes de rascunho, PostgreSQL descartavel ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37458_saas_consent_before_preparation_ci.sql >/dev/null 2>&1; then
+  echo "BLOCKED=M37458_WRONG_DATABASE_ACCEPTED"
+  exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37458_saas_consent_before_preparation_ci.sql >/dev/null
+PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37458_preprep_transaction_ci.py
+echo "M37458_REAL_SAAS_ACTIVATION=OFF"
 
 echo "=== M31400-M31800: SaaS capacity disposable CI ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
