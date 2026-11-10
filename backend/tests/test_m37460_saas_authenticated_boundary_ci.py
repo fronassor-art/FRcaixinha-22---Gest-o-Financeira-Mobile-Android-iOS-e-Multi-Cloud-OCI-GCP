@@ -48,6 +48,10 @@ def session(*,role="TENANT_ADMIN",tenant=T,user=A,is_master=False):
         user_id=str(user),role=role,
         tenant_id=str(tenant) if tenant is not None else None,
         email="ci-admin@example.invalid",name="CI only",is_master=is_master,
+        verified_session_id=str(S),
+        verified_session_at=datetime.now(timezone.utc)-timedelta(seconds=10),
+        verified_session_expires_at=datetime.now(timezone.utc)+timedelta(minutes=60),
+        verification_source="POSTGRES_TOKEN_HASH_REFRESH",
     )
 
 
