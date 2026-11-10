@@ -11,7 +11,7 @@ class DB:
     def __init__(self,change=None):
         self.calls=[]
         self.row={'contribution_count':12,'pending_count':12,
-                  'total_due':Decimal('1200.00'),'amount_paid_recorded':Decimal('0.00')}
+                  'total_due':Decimal('1800.00'),'amount_paid_recorded':Decimal('0.00')}
         if change: self.row.update(change)
     async def fetchrow(self,sql,*params):
         self.calls.append((sql,params))
@@ -33,7 +33,7 @@ def test_authorized_read_only():
         r,db=go(role,TA,endpoint)
         assert r.status_code==200,r.text
         data=r.json()
-        assert data['remaining_due']=='1200.00' and data['profit_amount'] is None
+        assert data['remaining_due']=='1800.00' and data['profit_amount'] is None
         assert data['result_status']=='PREVIA_NAO_E_LIQUIDACAO'
         assert len(db.calls)==1
         sql,params=db.calls[0]
@@ -56,7 +56,7 @@ def test_invalid_counts_or_money_fail_closed():
     for change in [
         {'pending_count':13},{'pending_count':-1},{'contribution_count':-1},
         {'contribution_count':12.5},{'total_due':Decimal('-1.00')},
-        {'amount_paid_recorded':Decimal('1200.01')},
+        {'amount_paid_recorded':Decimal('1800.01')},
         {'amount_paid_recorded':Decimal('NaN')},
         {'total_due':Decimal('Infinity')}
     ]:
