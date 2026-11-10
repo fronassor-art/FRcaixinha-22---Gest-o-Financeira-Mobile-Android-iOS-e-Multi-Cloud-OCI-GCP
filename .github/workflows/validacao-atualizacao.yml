@@ -798,6 +798,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37431 — backup cifrado de desenvolvimento fail closed
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37431_dev_clean_backup_ci.py
       - name: M37421–M37425 — auditoria do preco legado somente leitura
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37425_dev_legacy_price_inventory_ci.py
       - name: M37401–M37420 — sessao sintética inexistente e perfil forjado GET-only
