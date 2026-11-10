@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { AppState } from '../services/store';
 import { financialApi } from '../services/financialApiService';
+import {classifyCyclePolicyLoadFailure} from '../services/cyclePolicyLoadBoundary';
 import { DisplayContribution, contributionScopeKey } from '../services/contributionsData';
 import { formatBRL } from '../services/financialEngine';
 import { authService } from '../services/authService';
@@ -29,7 +30,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
   const [pixBusyId, setPixBusyId] = useState<string | null>(null);
   const [pixCapability,setPixCapability]=useState<{key:string;enabled:boolean}>({key:'',enabled:false});
   const [pixFeedback, setPixFeedback] = useState('');
-  const [cyclePrice,setCyclePrice]=useState<{key:string;policy:CycleContributionPolicy|null;error:string}>({key:'',policy:null,error:''});
+  const [cyclePrice,setCyclePrice]=useState<{key:string;policy:CycleContributionPolicy|null;error:string;empty:boolean}>({key:'',policy:null,error:'',empty:false});
   const [cycleInput,setCycleInput]=useState('');
   const [cycleReason,setCycleReason]=useState('');
   const [cycleBusy,setCycleBusy]=useState(false);
@@ -45,7 +46,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     setPixFeedback('');
     setPixBusyId(null);
     setPixCapability({key:'',enabled:false});
-    setCyclePrice({key:'',policy:null,error:''});
+    setCyclePrice({key:'',policy:null,error:'',empty:false});
     setCycleMessage('');
     setLegacyReview({key:'',cycleId:'',busy:false,message:'',data:null});
     setCycleInput('');
@@ -80,15 +81,16 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
     if(state.currentRole==='TENANT_ADMIN' && state.currentTenantId){
       financialApi.fetchCycleContributionPolicy(state.currentTenantId).then(policy=>{
         if(!active)return;
-        setCyclePrice({key,policy,error:''});
+        setCyclePrice({key,policy,error:'',empty:false});
         setCycleInput(((policy.pending_requested_cents??Math.max(policy.amount_cents,15000))/100).toFixed(2).replace('.',','));
-      }).catch(()=>{
-        if(active)setCyclePrice({key,policy:null,error:
-          'Ciclo de teste com valor não homologado. Regularize o ambiente de desenvolvimento antes de exibir cobranças.'});
+      }).catch((failure:unknown)=>{
+        if(!active)return;
+        const outcome=classifyCyclePolicyLoadFailure(failure);
+        setCyclePrice({key,policy:null,error:outcome.message,empty:outcome.kind==='empty'});
       });
     }
     return ()=>{active=false};
-  },[key,state.currentRole,state.currentTenantId]);
+  },[key,state.currentRole,state.currentTenantId,revision]);
 
   async function submitCyclePrice(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();
@@ -121,7 +123,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
         : 'Solicitação de revisão registrada. Cobranças já emitidas não foram alteradas.');
       const revised=await financialApi.fetchCycleContributionPolicy(state.currentTenantId);
       if(authService.isSessionSnapshotCurrent(snapshot))
-        setCyclePrice({key,policy:revised,error:''});
+        setCyclePrice({key,policy:revised,error:'',empty:false});
     }catch(error){
       // Never expose an old account's response after logout or role switch.
       if(authService.isSessionSnapshotCurrent(snapshot))
@@ -198,7 +200,8 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
         <section aria-label="Valor da contribuição por ciclo" className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4">
           <h3 className="font-semibold text-emerald-950">Valor por cota do ciclo</h3>
           <p className="text-sm text-slate-700">Cada administrador define o valor do próprio ciclo, com <strong>mínimo de R$ 150,00 por cota</strong>. O valor não é universal ou fixado para todas as caixinhas.</p>
-          {cyclePrice.error && <p role="alert" className="text-sm text-rose-800">{cyclePrice.error}</p>}
+          {cyclePrice.empty && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">{cyclePrice.error}</p>}
+          {!cyclePrice.empty && cyclePrice.error && <p role="alert" className="text-sm text-rose-800">{cyclePrice.error}</p>}
           {cyclePrice.policy && <>
             <p className="text-sm text-slate-700">
               Ciclo {cyclePrice.policy.cycle_year} ({cyclePrice.policy.start_date.split('-').reverse().join('/')} a {cyclePrice.policy.end_date.split('-').reverse().join('/')}) · valor registrado: <strong>{formatBRL(cyclePrice.policy.amount_cents/100)}</strong>.
