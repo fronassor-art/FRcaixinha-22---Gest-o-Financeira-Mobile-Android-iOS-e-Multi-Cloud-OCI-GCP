@@ -77,9 +77,9 @@ def check_server_identity_binding(
 ) -> CIPrincipal | None:
     """Verify a session's principal against distinct server-side DB claim.
 
-    Real session ID and email verification are NOT available from the
-    existing AuthenticatedSession object; the test context is synthetic and
-    must not be mistaken for operational authentication/consent evidence.
+    M37462 requires the verified session ID and renewed token expiry
+    returned by get_current_session. The separate offer/consent readback is
+    still CI-synthetic: this is NOT operational identity or legal consent.
     """
     if (type(session) is not AuthenticatedSession
         or type(context) is not CITrustedServerContext
@@ -97,12 +97,25 @@ def check_server_identity_binding(
         or session.role != "TENANT_ADMIN"
         or context.session_role != "TENANT_ADMIN"
         or not context.session_active
-        or not context.email_verified):
+        or not context.email_verified
+        or session.verification_source != "POSTGRES_TOKEN_HASH_REFRESH"
+        or not _aware(session.verified_session_at)
+        or not _aware(session.verified_session_expires_at)):
         return None
     try:
         user_id = UUID(session.user_id)
         tenant_id = UUID(session.tenant_id or "")
+        verified_session_id = UUID(session.verified_session_id or "")
     except (ValueError, AttributeError, TypeError):
+        return None
+    if (verified_session_id.int == 0
+        or str(verified_session_id) != session.verified_session_id
+        or session.verified_session_at > now
+        or now - session.verified_session_at > timedelta(minutes=5)
+        or now >= session.verified_session_expires_at
+        or context.session_id != verified_session_id
+        or context.session_checked_at < session.verified_session_at
+        or context.session_expires_at > session.verified_session_expires_at):
         return None
     if (user_id != context.administrator_id
         or tenant_id != context.tenant_id
