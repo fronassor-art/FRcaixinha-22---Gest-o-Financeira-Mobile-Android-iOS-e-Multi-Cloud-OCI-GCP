@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {financialApi} from '../services/financialApiService';
 import {authService} from '../services/authService';
 import {parseCyclePriceInput} from '../services/cyclePriceBoundary';
@@ -13,6 +13,10 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [preview,setPreview]=useState<CycleOpeningPreview|null>(null);
+ const [opening,setOpening]=useState(false);
+ const [opened,setOpened]=useState(false);
+ const [openMessage,setOpenMessage]=useState('');
+ const attempt=useRef<{fingerprint:string;key:string}|null>(null);
  useEffect(()=>{
    if(Number.isInteger(suggestedYear) && Number(suggestedYear)<=2100)
      setYear(String(suggestedYear));
@@ -32,7 +36,7 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
      setError(e instanceof Error?e.message:'Valor por cota inválido.');return;
    }
    const snapshot=authService.captureSession();
-   setBusy(true);setError('');setPreview(null);
+   setBusy(true);setError('');setPreview(null);setOpenMessage('');setOpened(false);
    try{
      const result=await financialApi.previewCycleOpening(tenantId,yr,cents,reason.trim());
      if(authService.isSessionSnapshotCurrent(snapshot))setPreview(result);
@@ -41,6 +45,29 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
        setError(e instanceof Error?e.message:'A prévia não foi autorizada.');
    }finally{
      if(authService.isSessionSnapshotCurrent(snapshot))setBusy(false);
+   }
+ }
+ async function openConfirmed(){
+   if(!preview||!preview.cycle_creation_enabled||!preview.preconditions_satisfied||opening||opened)return;
+   const selected=parseCyclePriceInput(amount);
+   if(preview.amount_cents!==selected||preview.year!==Number(year)){
+     setOpenMessage('O valor ou ano mudou. Consulte novamente a prévia antes de abrir.');return;
+   }
+   const fingerprint=JSON.stringify([tenantId,preview.year,selected,reason.trim()]);
+   if(!attempt.current||attempt.current.fingerprint!==fingerprint)
+     attempt.current={fingerprint,key:crypto.randomUUID()};
+   const snapshot=authService.captureSession();
+   setOpening(true);setOpenMessage('');
+   try{
+     const result=await financialApi.openCycle(tenantId,preview.year,selected,reason.trim(),attempt.current.key);
+     if(authService.isSessionSnapshotCurrent(snapshot)){
+       setOpened(true);setOpenMessage('Ciclo aberto com valor escolhido de '+formatBRL(result.amount_cents/100)+'.');
+     }
+   }catch(err){
+     if(authService.isSessionSnapshotCurrent(snapshot))
+       setOpenMessage(err instanceof Error?err.message:'Abertura não confirmada.');
+   }finally{
+     if(authService.isSessionSnapshotCurrent(snapshot))setOpening(false);
    }
  }
  return <section aria-label="Preparação de novo ciclo" className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4">
@@ -72,8 +99,14 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
     <p>Prévia {preview.year}: <strong>{formatBRL(preview.amount_cents/100)}</strong> por cota.</p>
     {preview.blocked_reasons.length>0
       ? <p>Ainda bloqueado: {preview.blocked_reasons.join(', ')}</p>
-      : <p>Condições preliminares atendidas; abertura efetiva ainda não liberada.</p>}
+      : <p>Condições preliminares atendidas. {preview.cycle_creation_enabled?'Confirme a abertura com o valor escolhido.':'Abertura efetiva ainda não liberada.'}</p>}
+    {preview.cycle_creation_enabled&&preview.preconditions_satisfied&&<button type="button"
+       disabled={opening||opened} onClick={()=>{void openConfirmed();}}
+       className="mt-3 w-full rounded-lg bg-emerald-900 px-4 py-3 font-semibold text-white disabled:opacity-50">
+       {opening?'Abrindo...':opened?'Ciclo criado':'Confirmar abertura do ciclo'}
+    </button>}
     <p>Nenhum ciclo foi criado e nenhuma cobrança anterior foi alterada.</p>
   </div>}
+  {openMessage&&<p role="status" className="text-sm text-emerald-950">{openMessage}</p>}
  </section>;
 };

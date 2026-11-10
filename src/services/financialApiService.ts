@@ -31,7 +31,7 @@ import {LoanSimulation, parseLoanSimulation, validateSimulationRequest} from './
 import {DisplayContribution, normalizeContributions} from './contributionsData';
 import {CycleContributionPolicy,parseCycleContributionPolicy,CyclePriceChangeResult,parseCyclePriceChange} from './cyclePriceBoundary';
 import {LegacyContributionReview,parseLegacyContributionReview} from './legacyContributionReviewBoundary';
-import {CycleOpeningPreview,parseCycleOpeningPreview} from './cycleOpeningBoundary';
+import {CycleOpeningPreview,parseCycleOpeningPreview,CycleOpeningReceipt,parseCycleOpeningReceipt} from './cycleOpeningBoundary';
 import {MemberAnnualPreview, parseMemberAnnualPreview} from './memberAnnualPreview';
 import {MemberCycleRiskPreview,parseMemberCycleRiskPreview} from './memberCycleRiskBoundary';
 import {MemberObligationsPreview,parseMemberObligations} from './memberObligationsBoundary';
@@ -499,6 +499,14 @@ class FinancialApiService {
       '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price/opening-preview',
       {method:'POST',body:JSON.stringify({year,amount_cents:amountCents,reason})});
     return parseCycleOpeningPreview(raw,tenantId);
+  }
+
+  public async openCycle(tenantId:string,year:number,amountCents:number,reason:string,idempotencyKey:string):Promise<CycleOpeningReceipt>{
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price/opening',
+      {method:'POST',body:JSON.stringify({year,amount_cents:amountCents,reason,idempotency_key:idempotencyKey})});
+    return parseCycleOpeningReceipt(raw,tenantId);
   }
 
   public async fetchContributions(tenantId: string): Promise<DisplayContribution[]> {

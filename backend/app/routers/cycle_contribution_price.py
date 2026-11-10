@@ -4,6 +4,7 @@ Updating the policy before billing is allowed; existing obligations are NEVER
 repriced by this route. Those create a pending review audit record instead.
 """
 from __future__ import annotations
+import os
 from uuid import UUID
 
 import asyncpg
@@ -108,6 +109,14 @@ async def change(
     }
 
 
+class CycleOpeningCommitRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    year:int=Field(strict=True,ge=2027,le=2100)
+    amount_cents:int=Field(strict=True,ge=15000,le=1000000)
+    reason:str=Field(min_length=12,max_length=500)
+    idempotency_key:UUID
+
+
 class CycleOpeningPreviewRequest(BaseModel):
     """An admin must choose the quota amount explicitly for their next cycle."""
     model_config=ConfigDict(extra="forbid")
@@ -165,11 +174,60 @@ async def opening_preview(
         "historical_obligations_unchanged":True,
         "blocked_reasons":reasons,
         "preconditions_satisfied":not reasons,
-        "cycle_creation_enabled":False,
+        "cycle_creation_enabled":bool(not reasons and
+            os.getenv('FR_FINANCE_CYCLE_OPEN_ENABLED')=='YES' and
+            await conn.fetchval("SELECT to_regprocedure('public.cycle_open_create(text,uuid,integer,bigint,text,uuid)') IS NOT NULL") is True),
         "financial_effect":False,
         "reason_recorded":False,
     }
 
+
+
+
+@router.post("/opening")
+async def commit_cycle_opening(
+    tenant_id:UUID,payload:CycleOpeningCommitRequest,request:Request,
+    session:AuthenticatedSession=Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Authorized cycle creation uses PG security-definer M044, never seeds a price."""
+    _admin(tenant_id,session)
+    if os.getenv('FR_FINANCE_CYCLE_OPEN_ENABLED')!='YES':
+        raise HTTPException(503,"Abertura de ciclo indisponível até homologação e autorização operacional.")
+    if len(payload.reason.strip())<12:
+        raise HTTPException(422,"Justificativa de abertura inválida.")
+    try:
+        row=await conn.fetchrow(
+            "SELECT * FROM public.cycle_open_create("
+            "$1::text,$2::uuid,$3::integer,$4::bigint,$5::text,$6::uuid)",
+            bearer_token(request),tenant_id,payload.year,payload.amount_cents,
+            payload.reason.strip(),payload.idempotency_key,
+        )
+    except asyncpg.PostgresError as exc:
+        if exc.sqlstate=='42501':
+            raise HTTPException(403,"Abertura de ciclo não autorizada.") from None
+        if exc.sqlstate in ('23505','22023','P0001'):
+            raise HTTPException(409,"Abertura recusada pelas regras do contrato e do ciclo.") from None
+        if exc.sqlstate in ('42883','42P01'):
+            raise HTTPException(503,"Instalação M044 de abertura de ciclos ainda não homologada.") from None
+        raise HTTPException(503,"Abertura não confirmada no PostgreSQL.") from None
+    if (not row or row['opening_status'] not in ('CREATED','REPLAY')
+            or row['opened_year']!=payload.year
+            or row['opened_amount_cents']!=payload.amount_cents):
+        raise HTTPException(503,"Abertura não confirmada no PostgreSQL.")
+    return {
+        'contract':'FR_FINANCE_M37423_CYCLE_OPENING_V1',
+        'source':'POSTGRESQL_AUTHENTICATED_ADMIN_M044',
+        'tenant_id':str(tenant_id),
+        'opened_cycle_id':str(row['opened_cycle_id']),
+        'opened_policy_id':str(row['opened_policy_id']),
+        'year':row['opened_year'],
+        'amount_cents':row['opened_amount_cents'],
+        'opening_status':row['opening_status'],
+        'opening_audit_persisted':True,
+        'existing_contributions_repriced':False,
+        'payments_executed':False,
+    }
 
 
 # M22400: legacy contribution review; read-only, admin-specific and no PII.

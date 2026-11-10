@@ -13,7 +13,8 @@ const raw={
 assert.equal(parseCycleOpeningPreview(raw,tenant).amount_cents,25000);
 assert.throws(()=>parseCycleOpeningPreview({...raw,amount_cents:10000},tenant));
 assert.throws(()=>parseCycleOpeningPreview({...raw,financial_effect:true},tenant));
-assert.throws(()=>parseCycleOpeningPreview({...raw,cycle_creation_enabled:true},tenant));
+assert.equal(parseCycleOpeningPreview({...raw,cycle_creation_enabled:true},tenant).cycle_creation_enabled,true);
+assert.throws(()=>parseCycleOpeningPreview({...raw,cycle_creation_enabled:true,blocked_reasons:['YEAR_ALREADY_EXISTS'],preconditions_satisfied:false},tenant));
 assert.throws(()=>parseCycleOpeningPreview({...raw,tenant_id:'OTHER'},tenant));
 assert.throws(()=>parseCycleOpeningPreview({...raw,blocked_reasons:['YEAR_ALREADY_EXISTS']},tenant));
 assert.equal(parseCycleOpeningPreview({...raw,blocked_reasons:['YEAR_ALREADY_EXISTS'],preconditions_satisfied:false},tenant).cycle_creation_enabled,false);
