@@ -868,6 +868,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37465_saas_http_atomic_adapter_ci.py
       - name: M37466 — auditoria read-only de aceite pos-commit e sessao revogada CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37466_post_commit_audit_ci.py
+      - name: M37467 — oferta contratual congelada, valor e hash, idempotencia CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37467_frozen_offer_idempotence_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
