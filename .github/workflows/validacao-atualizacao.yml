@@ -813,6 +813,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37443 — auditoria pos-saneamento PG18 somente leitura
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37443_post_reset_ci.py
       - name: M37441 — distribuicao 3+2 de auditoria com guardia conservadora
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37441_audit_split_ci.py
       - name: M37440 — diagnostico agregado fail-closed das 18 contagens
