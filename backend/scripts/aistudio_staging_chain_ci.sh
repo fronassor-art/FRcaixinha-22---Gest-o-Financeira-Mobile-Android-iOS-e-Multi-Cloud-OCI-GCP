@@ -670,6 +670,13 @@ PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
   python backend/scripts/aistudio_m37458_preprep_transaction_ci.py
 echo "M37458_REAL_SAAS_ACTIVATION=OFF"
 
+echo "=== M37459: contrato API simulado e rollback transacional, PG descartavel ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37459_api_transaction_ci.py
+echo "M37459_REAL_SAAS_ACTIVATION=OFF"
+
 echo "=== M31400-M31800: SaaS capacity disposable CI ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
   psql -X -v ON_ERROR_STOP=1 \
