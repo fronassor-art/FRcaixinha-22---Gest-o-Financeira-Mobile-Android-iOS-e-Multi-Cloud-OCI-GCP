@@ -51,6 +51,11 @@ BEGIN
  SELECT u,'TENANT_ADMIN',t,'CI_SYNTHETIC_BASELINE','CI_FIXTURE','CI_MARKER',
  'Disposable transaction test for safe cleanup','CI_BENCHMARK'
  FROM generate_series(1,3);
+ INSERT INTO public.audit_events
+  (actor_id,actor_role,tenant_id,action,object_type,object_id,reason,evidence_ref)
+ SELECT u,'SYSTEM',NULL,'CI_UNRELATED_GLOBAL_EVENT','CI_BACKGROUND','CI_OTHER_SCOPE',
+  'Unrelated disposable CI evidence, outside affected tenant','CI_UNRELATED'
+ FROM generate_series(1,2);
  ALTER TABLE public.policies ADD CONSTRAINT policy_minimum_150_new
    CHECK (contribution_per_quota>=150.00) NOT VALID;
  ALTER TABLE public.quotas ADD CONSTRAINT quota_minimum_150_new

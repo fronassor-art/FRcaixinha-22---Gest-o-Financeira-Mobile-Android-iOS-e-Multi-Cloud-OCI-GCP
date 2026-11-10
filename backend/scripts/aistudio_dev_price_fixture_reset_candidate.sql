@@ -49,6 +49,7 @@ BEGIN
   OR (SELECT count(*) FROM public.tenants)<>1
   OR (SELECT count(*) FROM public.users)<>1
   OR (SELECT count(*) FROM public.memberships)<>2
+  OR (SELECT count(*) FROM public.audit_events)<>5
  THEN RAISE EXCEPTION 'M37437: baseline drift or financial trace; no changes allowed'; END IF;
  SELECT p.tenant_id,p.cycle_id,p.id INTO v_tenant,v_cycle,v_policy
  FROM public.policies p WHERE p.contribution_per_quota<150;
@@ -63,6 +64,7 @@ BEGIN
   OR (SELECT count(*) FROM public.cycle_contribution_price_audit)<>1
   OR (SELECT count(*) FROM public.cycle_opening_audit)<>0
   OR (SELECT count(*) FROM public.audit_events a WHERE a.tenant_id=v_tenant)<>3
+  OR (SELECT count(*) FROM public.audit_events a WHERE a.tenant_id IS DISTINCT FROM v_tenant)<>2
   OR (SELECT count(*) FROM public.contributions c
        WHERE c.tenant_id=v_tenant AND c.cycle_id=v_cycle AND c.amount_due<150
         AND c.amount_paid=0 AND c.paid_at IS NULL
@@ -84,6 +86,19 @@ BEGIN
     )
    )
  ) THEN RAISE EXCEPTION 'M37437: general audit events reference legacy price/cycle; review required'; END IF;
+ IF EXISTS (
+  SELECT 1 FROM public.audit_events a
+  WHERE a.tenant_id IS DISTINCT FROM v_tenant
+    AND (
+      strpos(coalesce(a.reason,''),'100')>0
+      OR strpos(coalesce(a.evidence_ref,''),'100')>0
+      OR a.object_id IN(v_cycle::text,v_policy::text)
+      OR a.object_id IN (
+        SELECT c.id::text FROM public.contributions c
+        WHERE c.cycle_id=v_cycle AND c.tenant_id=v_tenant
+      )
+    )
+ ) THEN RAISE EXCEPTION 'M37441: external audit event references legacy cycle; review required'; END IF;
  IF (SELECT count(*) FROM pg_catalog.pg_trigger
      WHERE tgrelid='public.cycle_contribution_price_audit'::regclass
        AND tgname IN('cycle_price_immutable_row','cycle_price_immutable_truncate')
@@ -137,6 +152,8 @@ BEGIN
   OR (SELECT count(*) FROM public.memberships)<>v_before_members
   OR (SELECT count(*) FROM public.sessions)<>v_before_sessions
   OR (SELECT count(*) FROM public.audit_events)<>v_before_audit_events+1
+  OR (SELECT count(*) FROM public.audit_events a WHERE a.tenant_id=v_tenant)<>4
+  OR (SELECT count(*) FROM public.audit_events a WHERE a.tenant_id IS DISTINCT FROM v_tenant)<>2
   OR (SELECT count(*) FROM public.cycles)<>0
   OR (SELECT count(*) FROM public.policies)<>0
   OR (SELECT count(*) FROM public.quotas)<>0

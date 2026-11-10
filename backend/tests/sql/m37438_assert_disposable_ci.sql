@@ -8,7 +8,9 @@ BEGIN
   OR (SELECT count(*) FROM public.quotas)<>0
   OR (SELECT count(*) FROM public.contributions)<>0
   OR (SELECT count(*) FROM public.cycle_contribution_price_audit)<>0
-  OR (SELECT count(*) FROM public.audit_events)<>4
+  OR (SELECT count(*) FROM public.audit_events)<>6
+  OR (SELECT count(*) FROM public.audit_events WHERE tenant_id IS NULL)<>2
+  OR (SELECT count(*) FROM public.audit_events WHERE tenant_id IS NOT NULL)<>4
   OR (SELECT count(*) FROM pg_constraint
       WHERE conname IN('policy_minimum_150_new','quota_minimum_150_new')
       AND convalidated)<>2

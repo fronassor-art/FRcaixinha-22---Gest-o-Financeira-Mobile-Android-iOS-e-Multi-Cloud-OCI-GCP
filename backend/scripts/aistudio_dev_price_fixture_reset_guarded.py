@@ -21,8 +21,8 @@ CLUSTER="/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18"
 BACKUP=Path.home()/".local/share/fr-finance/dev-backups/before_clean_dev_20261110T012710Z_4901.dump.age"
 BACKUP_SHA256="714bc50de8dfc42d25f1b9bbe54e9841df883f0d606f467015c0e153b4d9b88b"
 CANDIDATE=ROOT/"backend/scripts/aistudio_dev_price_fixture_reset_candidate.sql"
-BASELINE=(1,1,12,1,0,0,0,0,0,1,1,2,3,1,1,0,2,2)
-AFTER=(0,0,0,0,0,1,1,2,4,2)
+BASELINE=(1,1,12,1,0,0,0,0,0,1,1,2,5,1,1,0,2,2)
+AFTER=(0,0,0,0,0,1,1,2,6,2)
 
 BASELINE_SQL="""
 SELECT
@@ -45,6 +45,32 @@ SELECT
  (SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgrelid='public.cycle_contribution_price_audit'::regclass AND tgenabled='O' AND tgname IN ('cycle_price_immutable_row','cycle_price_immutable_truncate')),
  (SELECT count(*) FROM pg_catalog.pg_constraint WHERE conname IN ('policy_minimum_150_new','quota_minimum_150_new'))
 """
+
+AUDIT_SPLIT_SQL="""
+WITH legacy AS (
+ SELECT DISTINCT tenant_id,cycle_id,id AS policy_id
+ FROM public.policies WHERE contribution_per_quota<150
+)
+SELECT
+ (SELECT count(*) FROM public.audit_events a
+  WHERE EXISTS(SELECT 1 FROM legacy l WHERE a.tenant_id=l.tenant_id)),
+ (SELECT count(*) FROM public.audit_events a
+  WHERE NOT EXISTS(SELECT 1 FROM legacy l WHERE a.tenant_id=l.tenant_id)),
+ (SELECT count(*) FROM public.audit_events a
+  WHERE NOT EXISTS(SELECT 1 FROM legacy l WHERE a.tenant_id=l.tenant_id)
+  AND (
+    strpos(coalesce(a.reason,''),'100')>0
+    OR strpos(coalesce(a.evidence_ref,''),'100')>0
+    OR a.object_id IN (SELECT l.cycle_id::text FROM legacy l)
+    OR a.object_id IN (SELECT l.policy_id::text FROM legacy l)
+    OR a.object_id IN (
+      SELECT c.id::text FROM public.contributions c
+      JOIN legacy l ON l.cycle_id=c.cycle_id AND l.tenant_id=c.tenant_id
+    )
+  ))
+"""
+EXPECTED_AUDIT_SPLIT=(3,2,0)
+
 GENERAL_AUDIT_SQL="""
 SELECT count(*) FROM public.audit_events a
 WHERE a.tenant_id IN (SELECT tenant_id FROM public.policies WHERE contribution_per_quota<150)
@@ -109,6 +135,20 @@ def require_baseline(observed):
         print("M37440_APPLY=BLOCKED_UNTIL_REVIEW")
         raise Blocked("SYNTHETIC_BASELINE_CHANGED")
 
+def verify_audit_split(observed):
+    if (not isinstance(observed,tuple) or len(observed)!=3
+        or any(type(x) is not int or x<0 or x>100000000 for x in observed)):
+        raise Blocked("AUDIT_SPLIT_UNREADABLE")
+    if observed!=EXPECTED_AUDIT_SPLIT:
+        for key,expected,actual in zip(
+          ("AFFECTED_TENANT_EVENTS","OTHER_SCOPE_EVENTS","OTHER_SCOPE_LEGACY_REFERENCES"),
+          EXPECTED_AUDIT_SPLIT,observed):
+            if actual!=expected:
+                print(f"M37441_{key}_EXPECTED={expected}")
+                print(f"M37441_{key}_OBSERVED={actual}")
+        print("M37441_DB_WRITES=NONE")
+        raise Blocked("AUDIT_SCOPE_CHANGED_MUST_REVIEW")
+
 def require(condition,reason):
     if not condition:
         raise Blocked(reason)
@@ -161,6 +201,8 @@ def inventory(password):
           "ORIGINAL_POSTGRESQL_IDENTITY_MISMATCH")
         counts=conn.execute(BASELINE_SQL).fetchone()
         require_baseline(counts)
+        audit_split=conn.execute(AUDIT_SPLIT_SQL).fetchone()
+        verify_audit_split(audit_split)
         linked=conn.execute(GENERAL_AUDIT_SQL).fetchone()
         require(linked is not None and type(linked[0]) is int
                 and 0<=linked[0]<=100000000,"AUDIT_LINK_RESULT_INVALID")
@@ -227,6 +269,9 @@ def main():
         print("M37439_LEGACY_FIXTURES=1_POLICY_1_QUOTA_12_UNPAID_1_PRICE_AUDIT")
         print("M37439_RECORDED_FINANCIAL_OPERATIONS=NONE")
         print("M37439_GENERAL_AUDIT_LINKS="+str(linked))
+        print("M37441_AFFECTED_TENANT_AUDIT_EVENTS=3")
+        print("M37441_OTHER_SCOPE_AUDIT_EVENTS=2")
+        print("M37441_OTHER_SCOPE_LEGACY_REFERENCES=0")
         if mode=="preflight":
             print("M37439_PREFLIGHT=READ_ONLY_PASS")
             print("M37439_MIGRATION=NOT_EXECUTED")
@@ -251,7 +296,7 @@ def main():
         print("M37439_TRANSACTION=COMMITTED_AND_VERIFIED")
         print("M37439_REMOVED=12_CONTRIBUTIONS_1_QUOTA_1_PRICE_AUDIT_1_POLICY_1_CYCLE")
         print("M37439_IDENTITIES=KEPT")
-        print("M37439_GENERAL_AUDIT=PREVIOUS_3_PLUS_1_RESET_EVIDENCE")
+        print("M37439_GENERAL_AUDIT=PREVIOUS_5_PLUS_1_RESET_EVIDENCE")
         print("M37439_IMMUTABLE_AUDIT_TRIGGERS=RESTORED")
         print("M37439_NEW_DATABASE=NO")
         print("M37439_PIX_REAL=OFF")
