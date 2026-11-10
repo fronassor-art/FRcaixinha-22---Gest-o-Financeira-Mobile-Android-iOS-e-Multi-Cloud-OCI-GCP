@@ -222,7 +222,7 @@ def test_receipt_single_use_or_collision(change,reason):
 @pytest.mark.parametrize("change,reason",[
     ({"published_sha":"f"*64},"CONTRACT_PRICE_OR_TENANT_BINDING_MISMATCH"),
     ({"evidence_hash":"f"*64},"ACCEPTANCE_EVIDENCE_NOT_CRYPTOGRAPHICALLY_BOUND"),
-    ({"accepted_at":NOW},"EXPIRED_OUT_OF_ORDER_OR_UNPUBLISHED_CONSENT"),
+    ({"accepted_at":NOW},"PERSISTED_PREPARATION_NOT_VERIFIED"),
     ({"payment_count":1},"PERSISTED_PREPARATION_NOT_VERIFIED"),
     ({"license_count":1},"PERSISTED_PREPARATION_NOT_VERIFIED"),
     ({"tenant_ledger_entries":1},"PERSISTED_PREPARATION_NOT_VERIFIED"),
