@@ -132,10 +132,10 @@ BEGIN
  OR session_user<>'frcaixinha_saas_preprep_ci'
  OR current_setting('frcaixinha.saas_preprep_ci',true) IS DISTINCT FROM '1'
  THEN RAISE EXCEPTION 'M37458_WORKER_CI_ONLY'; END IF;
- IF p_action NOT IN ('ISSUE','ACCEPT','PREPARE')
+ IF p_action IS NULL OR p_action NOT IN ('ISSUE','ACCEPT','PREPARE')
  OR p_session IS NULL OR p_challenge IS NULL OR p_request IS NULL
  OR p_tenant IS NULL OR p_admin IS NULL OR p_document IS NULL
- OR p_price IS NULL OR p_period NOT IN ('MONTHLY','ANNUAL')
+ OR p_price IS NULL OR p_period IS NULL OR p_period NOT IN ('MONTHLY','ANNUAL')
  OR p_challenge='00000000-0000-0000-0000-000000000000'::uuid
  OR p_request='00000000-0000-0000-0000-000000000000'::uuid
  THEN RETURN 'DENIED_CI'; END IF;
@@ -194,7 +194,7 @@ BEGIN
  OR cc.session_id<>p_session OR cc.tenant_id<>p_tenant OR cc.admin_id<>p_admin
  OR cc.document_id<>p_document OR cc.price_version_id<>p_price
  OR cc.billing_period<>p_period
- OR cc.server_expires_at<=clock_timestamp()
+ OR (p_action='ACCEPT' AND cc.server_expires_at<=clock_timestamp())
  THEN RETURN 'DENIED_CI'; END IF;
 
  IF p_action='ACCEPT' THEN
@@ -228,6 +228,7 @@ BEGIN
  OR rr.billing_period<>p_period
  OR rr.document_sha<>cc.document_sha
  OR rr.server_recorded_at<cc.server_issued_at
+ OR rr.server_recorded_at>=cc.server_expires_at
  OR rr.server_recorded_at>clock_timestamp()
  OR EXISTS(
    SELECT 1 FROM public.saas_payment_intents i WHERE i.tenant_id=p_tenant
