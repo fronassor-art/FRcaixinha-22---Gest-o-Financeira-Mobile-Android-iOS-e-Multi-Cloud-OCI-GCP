@@ -166,6 +166,9 @@ async def check_real_token_lookup(*,context):
 async def async_main()->int:
     import psycopg
     from psycopg.rows import dict_row
+    # Other independent CI suites may already have synthetic rows. Snapshot
+    # counts and require that THIS authentication probe changes none of them.
+    initial_financial_counts={}
     with psycopg.connect(
         host="127.0.0.1",port=5432,dbname="frcaixinha_staging",
         user="postgres",password="ci-test-only",connect_timeout=5,
@@ -207,6 +210,12 @@ async def async_main()->int:
             if access["app_session_read"] or access["auth_hash_write"]:
                 print("M37462_BLOCKED=EXCESSIVE_SESSION_PRIVILEGES")
                 return 1
+            for table in ("saas_payment_intents","saas_license_entitlements",
+                          "ledger_entries"):
+                cur.execute(
+                    "SELECT count(*) FROM public."+table+" WHERE tenant_id=%s",(T,)
+                )
+                initial_financial_counts[table]=cur.fetchone()["count"]
     # auth_database_url checks technical role; no original DB and no
     # production environment. Never print bearer or connection string.
     os.environ["FRCAIXINHA_TEST_AUTH"]="1"
@@ -224,13 +233,14 @@ async def async_main()->int:
                 "SELECT revoked_at IS NOT NULL FROM public.sessions WHERE id=%s",(S1,)
             )
             expect(cur.fetchone()[0],True,"REVOKED_PERSISTED")
-            for table in ("saas_payment_intents","saas_license_entitlements"):
+            for table in ("saas_payment_intents","saas_license_entitlements",
+                          "ledger_entries"):
                 cur.execute(
                     "SELECT count(*) FROM public."+table+" WHERE tenant_id=%s",(T,)
                 )
-                expect(cur.fetchone()[0],0,"ZERO_FINANCIAL_ACTIVITY")
-            cur.execute("SELECT count(*) FROM public.ledger_entries WHERE tenant_id=%s",(T,))
-            expect(cur.fetchone()[0],0,"ZERO_TENANT_LEDGER")
+                expect(cur.fetchone()[0],initial_financial_counts[table],
+                       "FINANCIAL_TABLE_UNCHANGED_"+table)
+    print("M37462_FINANCIAL_TABLES_UNCHANGED=PASS")
     print("M37462_REAL_SAAS_CONSENT=NOT_ATTESTED")
     print("M37462_PAYMENT_PIX_LICENSE_ACTIVATION=OFF")
     print("M37462_TERMUX_LOCAL_DB=UNTOUCHED")
