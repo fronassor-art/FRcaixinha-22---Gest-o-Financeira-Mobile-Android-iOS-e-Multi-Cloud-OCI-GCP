@@ -92,7 +92,8 @@ export function parseMemberObligations(
       (raw[k] as number)>=0&&(raw[k] as number)<=500))
    throw Error('Prévia de obrigações não homologada ou com privilégio financeiro');
  const r=raw as unknown as MemberObligationsPreview;
- if(r.contribution_paid_recorded_cents>r.contribution_due_cents||
+ if((r.contribution_count>0&&r.contribution_due_cents<r.contribution_count*15000)||
+    r.contribution_paid_recorded_cents>r.contribution_due_cents||
     r.contribution_open_cents!==r.contribution_due_cents-r.contribution_paid_recorded_cents||
     r.contribution_now_open_cents>r.contribution_open_cents||
     r.contribution_overdue_count>r.contribution_count||

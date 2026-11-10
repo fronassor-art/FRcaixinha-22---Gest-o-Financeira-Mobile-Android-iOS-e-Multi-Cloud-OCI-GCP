@@ -9,5 +9,6 @@ def test_minimum_is_enforced_on_new_requests_only():
     ui=(ROOT/"src/services/cyclePriceBoundary.ts").read_text()
     assert "cents<15000" in ui
     historical=(ROOT/"backend/scripts/aistudio_homologation_cycle.py").read_text()
-    assert "script legado R$100 proibido" in historical
+    assert "SEED_LEGADO_DESATIVADO" in historical
+    assert 'QUOTA=Decimal("100.00")' not in historical
     assert "UPDATE public.contributions" not in historical

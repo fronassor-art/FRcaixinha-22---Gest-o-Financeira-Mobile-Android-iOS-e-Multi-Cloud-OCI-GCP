@@ -82,7 +82,7 @@ def inspect(cur,tenant):
         stop("é necessário um único ciclo 2027 ABERTO com política ACTIVE")
     policy=policies[0]
     amount=policy["contribution_per_quota"]
-    if not isinstance(amount,Decimal) or amount<=0 or amount.as_tuple().exponent < -2:
+    if not isinstance(amount,Decimal) or amount<Decimal('150.00') or amount.as_tuple().exponent < -2:
         stop("valor por cota não atende à precisão monetária")
     cur.execute("""SELECT id,membership_id,value_brl,status FROM public.quotas
                    WHERE tenant_id=%s AND quota_number=1""",(tenant["id"],))

@@ -84,7 +84,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
         setCycleInput(((policy.pending_requested_cents??Math.max(policy.amount_cents,15000))/100).toFixed(2).replace('.',','));
       }).catch(()=>{
         if(active)setCyclePrice({key,policy:null,error:
-          'Política do ciclo indisponível. Confirme a migração 042 e a sessão.'});
+          'Ciclo de teste com valor não homologado. Regularize o ambiente de desenvolvimento antes de exibir cobranças.'});
       });
     }
     return ()=>{active=false};

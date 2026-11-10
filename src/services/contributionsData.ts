@@ -65,7 +65,7 @@ export function normalizeContributions(value:unknown,tenantId:string):DisplayCon
     if(seen.has(id))throw new Error('Contribuição duplicada.');
     seen.add(id);
     const due=centValue(item.amount_due),paid=centValue(item.amount_paid);
-    if(due<=0||paid>due)throw new Error('Valores de contribuição inconsistentes.');
+    if(due<150||paid>due)throw new Error('Valores de contribuição inconsistentes.');
     if(item.payment_status==='QUITADA'&&paid!==due)
       throw new Error('Quitação sem valor integral confirmado.');
     return {

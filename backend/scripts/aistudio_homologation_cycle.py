@@ -23,7 +23,7 @@ DATA="/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18"
 DB="frcaixinha_aistudio_dev"
 BEGIN,END,SETTLE=date(2027,1,1),date(2027,12,31),date(2028,1,10)
 RATE=Decimal("0.2000")
-QUOTA=Decimal("100.00")
+QUOTA=None  # No implicit amount; historical seed is permanently retired.
 FINE=Decimal("10.00")
 MORA=Decimal("0.006667")
 ADMIN=Decimal("15.00")
@@ -105,6 +105,8 @@ def main():
     modes.add_argument("--plan",action="store_true")
     modes.add_argument("--apply",action="store_true")
     args=parser.parse_args()
+    # Development-only seed retired: no automatic price/cycle creation.
+    block('SEED_LEGADO_DESATIVADO: use abertura autenticada e escolha explicita acima do minimo de R$ 150')
     local_guard()
     pwd=getpass.getpass("Senha SQL AI Studio (oculta): ")
     if not pwd: block("senha vazia")

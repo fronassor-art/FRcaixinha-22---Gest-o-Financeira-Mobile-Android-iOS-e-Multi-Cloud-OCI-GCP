@@ -45,6 +45,7 @@ export function parseMemberAnnualPreview(raw:unknown,tenantId:string,year:number
   const due=money(raw.total_due),paid=money(raw.amount_paid_recorded),
     remaining=money(raw.remaining_due);
   if(paid>due||remaining!==due-paid)throw Error('Saldo não concilia');
+  if(total>0&&due<total*15000)throw Error('Contribuições antigas do desenvolvimento exigem saneamento.');
   return {
     source:'POSTGRESQL_RLS',tenant_id:tenantId,year,
     contribution_count:total,pending_count:pending,

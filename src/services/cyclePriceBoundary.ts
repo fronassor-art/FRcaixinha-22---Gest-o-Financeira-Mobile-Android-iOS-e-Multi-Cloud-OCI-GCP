@@ -23,7 +23,7 @@ export function parseCycleContributionPolicy(raw:unknown,tenant:string):CycleCon
  ||!whole(raw.cycle_year,2100)||raw.cycle_year<2020
  ||typeof raw.start_date!=='string'||typeof raw.end_date!=='string'
  ||!/^\d{4}-\d{2}-\d{2}$/.test(raw.start_date)||!/^\d{4}-\d{2}-\d{2}$/.test(raw.end_date)
- ||!whole(raw.amount_cents,100000000)||raw.amount_cents<=0
+ ||!whole(raw.amount_cents,1000000)||raw.amount_cents<15000
  ||!whole(raw.policy_version,100000)
  ||!whole(raw.registered_contributions,1000000)
  ||typeof raw.can_edit!=='boolean'
@@ -31,7 +31,7 @@ export function parseCycleContributionPolicy(raw:unknown,tenant:string):CycleCon
        'EDITAVEL_ANTES_DA_PRIMEIRA_COMPETENCIA'].includes(String(raw.blocked_reason))
  ||raw.real_payments_enabled!==false
  ||(raw.pending_requested_cents!==null&&
- (!whole(raw.pending_requested_cents,1000000)||raw.pending_requested_cents<100)))
+ (!whole(raw.pending_requested_cents,1000000)||raw.pending_requested_cents<15000)))
  throw new Error('Política da contribuição incompatível com o ciclo autenticado.');
  const d=raw;
  return {

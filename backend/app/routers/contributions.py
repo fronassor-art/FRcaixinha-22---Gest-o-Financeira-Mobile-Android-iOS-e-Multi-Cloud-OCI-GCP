@@ -58,6 +58,8 @@ async def list_tenant_quotas(
     query += " ORDER BY q.quota_number ASC;"
 
     rows = await conn.fetch(query, *params)
+    if any(to_cents(r['value_brl'])<Decimal('150.00') for r in rows):
+        raise HTTPException(409,'Cotas de desenvolvimento fora do mínimo contratual. Saneamento necessário.')
     return [
         QuotaResponse(
             id=str(r["id"]),
@@ -108,6 +110,8 @@ async def list_tenant_contributions(
     query += " ORDER BY c.competence DESC, c.due_date ASC;"
 
     rows = await conn.fetch(query, *params)
+    if any(to_cents(r['amount_due'])<Decimal('150.00') for r in rows):
+        raise HTTPException(409,'Contribuições de desenvolvimento fora do mínimo contratual. Saneamento necessário.')
     return [
         ContributionResponse(
             id=str(r["id"]),
@@ -144,6 +148,8 @@ def checked_annual_preview(row):
             raise ValueError("Invalid registered values")
     except (KeyError,ValueError,TypeError,InvalidOperation,OverflowError):
         raise HTTPException(status_code=503,detail="Prévia indisponível: dados inconsistentes.")
+    if count>0 and due<Decimal('150.00')*count:
+        raise HTTPException(409,'Demonstrativo com dados antigos de desenvolvimento. Saneamento necessário.')
     return count,pending,due,paid
 
 
