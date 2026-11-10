@@ -58,7 +58,6 @@ SELECT
   JOIN pg_class c ON c.oid=co.conrelid
   JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='public' AND co.contype='c'
-  AND NOT co.convalidated
   AND ((c.relname='policies' AND co.conname='policy_minimum_150_new')
     OR (c.relname='quotas' AND co.conname='quota_minimum_150_new'))
   AND position('150' in pg_get_constraintdef(co.oid))>0)=2
