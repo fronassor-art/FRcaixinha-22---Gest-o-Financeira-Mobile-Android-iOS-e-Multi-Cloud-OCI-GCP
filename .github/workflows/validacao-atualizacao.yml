@@ -974,6 +974,65 @@ jobs:
           PGDATABASE: frcaixinha_ci
         run: bash backend/scripts/aistudio_staging_chain_ci.sh
 
+  m37500-sql-disposable:
+    name: M37500 SQL 066-068 PostgreSQL 18 descartavel
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: ci-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exigir banco CI e aplicar tres SQL SEM dados financeiros reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d postgres -c 'CREATE DATABASE frcaixinha_staging'
+          {
+            printf '%s\n' "SET frfinance.m37500_ci = '1';"
+            cat backend/staging_migrations/066_release_gate_evidence_quarantine_ci_only.sql
+            cat backend/staging_migrations/067_mail_delivery_quarantine_ci_only.sql
+            cat backend/staging_migrations/068_payment_reconciliation_hold_ci_only.sql
+          } | psql -X -v ON_ERROR_STOP=1 -d frcaixinha_staging
+      - name: Verificar RLS append only e zero registros reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(psql -X -At -d frcaixinha_staging -c "
+          SELECT CASE WHEN
+            (SELECT count(*) FROM pg_class
+             WHERE oid IN (
+               'public.fr_m37500_release_gate_quarantine_ci'::regclass,
+               'public.fr_m37501_mail_quarantine_ci'::regclass,
+               'public.fr_m37502_reconciliation_hold_ci'::regclass
+             ) AND relrowsecurity AND relforcerowsecurity) = 3
+             AND (SELECT count(*) FROM public.fr_m37500_release_gate_quarantine_ci) = 0
+             AND (SELECT count(*) FROM public.fr_m37501_mail_quarantine_ci) = 0
+             AND (SELECT count(*) FROM public.fr_m37502_reconciliation_hold_ci) = 0
+             AND (SELECT count(*) FROM pg_trigger
+                  WHERE tgname LIKE 'fr_m3750%no_%_ci' AND NOT tgisinternal) = 6
+           THEN 'PASS' ELSE 'BLOCKED' END;")"
+          test "$result" = "PASS"
+          echo "M37500_SQL_PG18_DISPOSABLE=PASS"
+          echo "M37500_ORIGINAL_DB=NOT_ACCESSED"
+          echo "M37500_REAL_PIX=OFF"
+
   exportar-fonte-ai-studio:
     name: Empacotar codigo-fonte para AI Studio
     runs-on: ubuntu-latest
