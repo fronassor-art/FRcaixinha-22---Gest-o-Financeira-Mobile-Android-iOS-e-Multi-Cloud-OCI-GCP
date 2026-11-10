@@ -17,6 +17,8 @@
 - O cálculo anual *previsto para homologação* distribui **15% do lucro líquido real elegível** ao administrador da caixinha e **85%** aos membros elegíveis proporcionalmente ao Capital-Dias; a soma dos centavos deve fechar exatamente.
 - Capital aportado, principal de empréstimo e mera aprovação de Pix não são lucro realizado. Sem conciliação e prova contratual, os valores ficam em revisão e nenhuma transferência é feita.
 - As cotas e seus valores obedecem à política e à versão do ciclo da caixinha, com verificações de piso e competência no backend. Não alterar preços retroativamente.
+- Regra definitiva: o administrador escolhe explicitamente o valor por cota no início de cada ciclo, mínimo R$ 150,00 (não valor universal fixo), sem preenchimento automático.
+- Correção exclusivamente no projeto, repositório, diretório Termux e banco PostgreSQL 18 frcaixinha_aistudio_dev já existentes. Não clonar nem trocar bancos. GitHub/CI integral primeiro, depois fast-forward no Termux, auditoria e migração controlada somente na base atual com autorização específica, preservando backup e trilhas de auditoria.
 - Crédito e amortização Price são funcionalidades sujeitas a regras contratuais, idempotência e segregação; taxas presentes em testes são exemplos e não autorizam oferta real.
 
 ## 3. Inadimplência, saída e fechamento

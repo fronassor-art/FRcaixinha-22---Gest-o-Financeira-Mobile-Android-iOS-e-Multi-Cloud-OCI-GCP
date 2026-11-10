@@ -75,7 +75,7 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
  }
  return <section aria-label="Preparação de novo ciclo" className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4">
   <h3 className="font-semibold text-emerald-950">Preparar novo ciclo</h3>
-  <p className="text-sm text-slate-700">Escolha o valor por cota da sua caixinha, a partir de R$ 150,00. Cada ciclo tem sua própria política. Esta ferramenta só consulta a possibilidade de abertura; ainda não cria ciclos ou cobranças.</p>
+  <p className="text-sm text-slate-700">Escolha o valor por cota da sua caixinha, a partir de R$ 150,00. Cada ciclo tem sua própria política. A prévia não cria ciclos. A abertura exige confirmação do administrador e autorização no servidor.</p>
   <form onSubmit={event=>{void submit(event);}} className="grid gap-3 sm:grid-cols-2">
     <label className="grid gap-1 text-sm text-slate-800">Ano do ciclo
       <input aria-label="Ano do próximo ciclo" required type="number" min="2027" max="2100"
@@ -84,7 +84,7 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
     </label>
     <label className="grid gap-1 text-sm text-slate-800">Valor escolhido por cota (R$)
       <input aria-label="Valor por cota do próximo ciclo" required inputMode="decimal"
-        placeholder="150,00" value={amount} onChange={e=>{setAmount(e.target.value);setPreview(null);}}
+        placeholder="Digite o valor escolhido" value={amount} onChange={e=>{setAmount(e.target.value);setPreview(null);}}
         className="rounded-lg border border-slate-300 px-3 py-2"/>
     </label>
     <label className="grid gap-1 text-sm text-slate-800 sm:col-span-2">Justificativa de abertura
@@ -108,7 +108,7 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
        className="mt-3 w-full rounded-lg bg-emerald-900 px-4 py-3 font-semibold text-white disabled:opacity-50">
        {opening?'Abrindo...':opened?'Ciclo criado':'Confirmar abertura do ciclo'}
     </button>}
-    <p>Nenhum ciclo foi criado e nenhuma cobrança anterior foi alterada.</p>
+    <p>{opened?'Abertura registrada e auditada.':'A prévia não cria ciclos.'} Nenhuma cobrança anterior foi alterada.</p>
   </div>}
   {openMessage&&<p role="status" className="text-sm text-emerald-950">{openMessage}</p>}
  </section>;

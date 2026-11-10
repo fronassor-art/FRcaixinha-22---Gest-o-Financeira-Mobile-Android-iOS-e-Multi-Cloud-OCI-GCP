@@ -60,6 +60,13 @@ async def status(
         _db_error(exc)
     if row is None:
         raise HTTPException(404,"Ciclo aberto com política ativa não encontrado.")
+    if row["amount_cents"] is None or row["amount_cents"]<15000:
+        raise HTTPException(409,
+            "Política de desenvolvimento incompatível com o mínimo contratual. "
+            "Regularização auditada necessária no mesmo banco.")
+    if (row["pending_requested_cents"] is not None
+            and row["pending_requested_cents"]<15000):
+        raise HTTPException(409,"Revisão antiga incompatível com o mínimo contratual.")
     return {
       "contract":CONTRACT,
       "source":"POSTGRESQL_VERIFIED_SESSION",
