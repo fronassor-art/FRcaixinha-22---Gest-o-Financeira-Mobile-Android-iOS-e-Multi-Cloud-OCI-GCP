@@ -864,6 +864,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37463_token_scoped_offer_readback_ci.py
       - name: M37464 — transacao de consentimento atomico e revogacao concorrente CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37464_atomic_consent_lock_ci.py
+      - name: M37465 — HTTP contrato SaaS e executor atomico no PostgreSQL de CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37465_saas_http_atomic_adapter_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
