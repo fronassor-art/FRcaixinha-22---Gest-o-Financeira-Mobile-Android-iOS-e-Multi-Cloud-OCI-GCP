@@ -100,6 +100,13 @@ _M2040_CI_EVIDENCE_READS = (
 if _M2040_CI_EVIDENCE_READS:
     app.include_router(_sandbox_evidence_ci.router, prefix=settings.API_V1_STR)
 
+# M37460: endpoint CI para contrato SaaS autenticado. Requer flags restritas,
+# acesso autenticado ao backend e dependencias de CI; nunca em Termux/OCI real.
+# As dependencias de contrato/executor recusam por padrao (503).
+from .routers import saas_authenticated_contract_ci as _saas_authenticated_contract_ci
+if _saas_authenticated_contract_ci.ci_endpoint_allowed(os.environ):
+    app.include_router(_saas_authenticated_contract_ci.router, prefix=settings.API_V1_STR)
+
 
 @app.get("/api/health")
 def health_check():
