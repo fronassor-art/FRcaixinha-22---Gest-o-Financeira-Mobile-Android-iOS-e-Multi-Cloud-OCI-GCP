@@ -89,7 +89,7 @@ def make_context(*,session=S):
         tenant_id=T,administrator_id=A,session_id=session,
         session_role="TENANT_ADMIN",session_active=True,email_verified=True,
         session_checked_at=now-timedelta(seconds=1),
-        session_expires_at=now+timedelta(minutes=12),
+        session_expires_at=now+timedelta(minutes=8),
         request_id=R,challenge_id=C,
         offer=CIPublishedOffer(
             tenant_id=T,document_id=D,document_sha256="a"*64,
