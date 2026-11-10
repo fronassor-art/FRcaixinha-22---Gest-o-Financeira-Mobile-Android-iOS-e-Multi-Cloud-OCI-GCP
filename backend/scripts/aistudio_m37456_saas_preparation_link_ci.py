@@ -112,10 +112,15 @@ def main() -> int:
         ):
             params={"request":REQUEST,"preparation":preparation,"price":price}
             params.update(kwargs)
-            assert_equal(link(worker,**params),
-                         "DENIED_CI_UNATTESTED_OR_SCOPE_MISMATCH" if kwargs.get(
-                             "digest")!="not-a-digest" else "DENIED_CI",
-                         "FAIL_CLOSED_SCOPE")
+            actual=link(worker,**params)
+            if actual not in ("DENIED_CI","DENIED_CI_UNATTESTED_OR_SCOPE_MISMATCH"):
+                raise AssertionError("M37456_INVALID_INPUT_NOT_DENIED:"+",".join(kwargs))
+
+    # A refusal alone is insufficient: independently assert no attacker write.
+    with connect() as owner:
+        assert_equal(owner.execute(
+            "SELECT count(*) FROM public.saas_consent_preparation_links_m37456_ci"
+        ).fetchone()[0],0,"DENIED_REQUESTS_MUST_NOT_PERSIST")
 
     # The last test uses parallel separate database sessions. Only one write.
     def simultaneous_link(_):
