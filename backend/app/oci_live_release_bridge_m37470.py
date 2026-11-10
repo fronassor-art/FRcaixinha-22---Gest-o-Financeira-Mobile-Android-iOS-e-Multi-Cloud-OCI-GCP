@@ -185,6 +185,7 @@ def attach_oci_observation_to_release(
             or base.get("package")!="M37469"
             or base.get("mode")!="LOCAL_READ_ONLY_NO_NETWORK_NO_DB"
             or base.get("production_authorized") is not False
+            or base.get("staging_deployment_authorized") is not False
             or base.get("live_gates_verified")!=0
             or base.get("live_gate_count")!=20
             or base.get("provider_gates_verified")!=0
