@@ -183,15 +183,97 @@ def main()->int:
     with connect() as owner:
         expect(rowcounts(owner),(0,0,0),"ATOMIC_ROLLBACK_ALL_TABLES")
 
-    # Commit ISSUE -> ACCEPT -> PREPARE with one session row lock held
-    # throughout the transaction. Competing bearer revocation cannot
-    # commit in between the validation and the synthetic receipt.
+    # M37465: verify actual (CI-only) get_current_session against the
+    # disposable PostgreSQL authentication role before opening the worker
+    # transaction. The DB function still rechecks token hash and locks
+    # the canonical session row on EACH transition.
+    import asyncio
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from starlette.requests import Request as ASGIRequest
+    from app.dependencies import get_current_session
+    from app.saas_acceptance_api_contract_ci import CIPrincipal,CIPublishedOffer
+    from app.saas_atomic_api_adapter_ci import (
+        derive_server_binding_ci,CIAtomicSQLExecutor,evaluate_atomic_api_ci,
+    )
+    os.environ["FRCAIXINHA_TEST_AUTH"]="1"
+    os.environ["ENVIRONMENT"]="ci"
+    os.environ["AUTH_DATABASE_URL"]=(
+        "postgresql://frcaixinha_auth_atomic_ci:ci-test-only"
+        "@127.0.0.1:5432/frcaixinha_staging"
+    )
+    request=ASGIRequest({
+        "type":"http","method":"POST","path":"/ci/m37465/atomic",
+        "headers":[(b"authorization",("Bearer "+TOKEN).encode("ascii"))],
+        "query_string":b"",
+    })
+    authenticated=asyncio.run(get_current_session(request))
+    if authenticated.verified_session_id!=str(S) or authenticated.user_id!=str(A):
+        raise AssertionError("M37465_TOKEN_VERIFIED_SESSION_INVALID")
+    checked_at=datetime.now(timezone.utc)
+    binding=derive_server_binding_ci(authenticated,TOKEN,now=checked_at)
+    if binding is None:
+        raise AssertionError("M37465_TOKEN_BINDING_FAILED_CLOSED")
+    with connect() as owner:
+        contract=owner.execute(
+            "SELECT d.sha256,d.published_at,v.monthly_price "
+            "FROM public.contract_documents d "
+            "JOIN public.platform_license_price_versions v ON v.id=%s "
+            "WHERE d.id=%s AND d.document_kind='PLATFORM_LICENSE'",
+            (price_version,D),
+        ).fetchone()
+    if contract is None or type(contract[2]) is not Decimal:
+        raise AssertionError("M37465_PUBLISHED_OFFER_ABSENT")
+    cents=contract[2]*100
+    if cents!=cents.to_integral_value() or cents<=0:
+        raise AssertionError("M37465_PRICE_CENTS_INVALID")
+    principal=CIPrincipal(
+        user_id=A,tenant_id=T,session_id=S,
+        active_role="TENANT_ADMIN",active=True,email_verified=True,
+        server_checked_at=authenticated.verified_session_at,
+        expires_at=authenticated.verified_session_expires_at,
+    )
+    offer=CIPublishedOffer(
+        tenant_id=T,document_id=D,document_sha256=contract[0],
+        price_version_id=price_version,billing_period="MONTHLY",
+        price_cents=int(cents),published_at=contract[1],state="ACTIVE",
+    )
+    api_env=dict(GITHUB_ACTIONS="true",FRCAIXINHA_CI_ISOLATED="1",
+                 ENVIRONMENT="ci",FR_FINANCE_SAAS_REAL="OFF",
+                 FR_FINANCE_PIX_REAL="OFF")
+
+    # Commit ISSUE -> ACCEPT -> PREPARE using the real API-contract policy
+    # and the M37464 PostgreSQL row lock in ONE worker transaction.
     with connect("frcaixinha_saas_preprep_ci") as worker:
-        expect(act(worker,"ISSUE"),"CHALLENGE_ISSUED_CI","ISSUE")
-        expect(act(worker,"ACCEPT",confirmation=CONFIRM),
-               "CONSENT_RECORDED_CI_NO_LEGAL_PROOF","ACCEPT")
-        expect(act(worker,"PREPARE"),
-               "DRAFT_PREPARED_CI_NO_PAYMENT","PREPARE")
+        executor=CIAtomicSQLExecutor(
+            worker_conn=worker,binding=binding,
+            authenticated_session=authenticated,
+            offer=offer,env=api_env,now=datetime.now(timezone.utc),
+        )
+        for action, expected in (
+            ("ISSUE","CI_CHALLENGE_ISSUED_CI"),
+            ("ACCEPT","CI_CONSENT_RECORDED_CI_NO_LEGAL_PROOF"),
+            ("PREPARE","CI_DRAFT_PREPARED_CI_NO_PAYMENT"),
+        ):
+            body={"action":action,"request_id":str(REQUEST)}
+            if action!="ISSUE":
+                body["challenge_id"]=str(C)
+            if action=="ACCEPT":
+                body["confirmation"]=CONFIRM
+            decision=evaluate_atomic_api_ci(
+                body=body,principal=principal,offer=offer,
+                request_id_server=REQUEST,challenge_id_server=C,
+                executor=executor,env=api_env,
+                now=datetime.now(timezone.utc),
+            )
+            if (decision.status_code!=202 or decision.state!=expected
+                or decision.production_authorized
+                or decision.legal_consent_verified
+                or decision.payment_authorized
+                or decision.license_authorized
+                or decision.real_activation_authorized
+                or decision.real_writes_performed):
+                raise AssertionError("M37465_ATOMIC_API_POLICY_DENIED_"+decision.state)
 
         lock_blocked=False
         try:
@@ -253,6 +335,9 @@ def main()->int:
         expect(proof[3:],(False,False,False,False),
                "NO_REAL_AUTHORIZATION")
 
+    print("M37465_HTTP_CONTRACT_TO_ATOMIC_SQL=PASS")
+    print("M37465_SERVER_TOKEN_SESSION_CONFIRMED=CI_SYNTHETIC")
+    print("M37465_NO_PRODUCTION_WRITES=PASS")
     print("M37464_ATOMIC_TOKEN_SESSION_LOCK=PASS")
     print("M37464_CONCURRENT_REVOKER_BLOCKED_UNTIL_COMMIT=PASS")
     print("M37464_REVOKE_FIRST_BLOCKS_ACCEPTANCE=PASS")
