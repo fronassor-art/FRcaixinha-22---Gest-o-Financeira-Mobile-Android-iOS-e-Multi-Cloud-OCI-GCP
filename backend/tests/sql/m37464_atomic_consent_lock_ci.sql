@@ -15,8 +15,22 @@ BEGIN
     WHERE rolname='frcaixinha_saas_preprep_ci'
       AND NOT rolsuper AND NOT rolbypassrls
   )
+  OR NOT EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname='frcaixinha_auth_role'
+      AND NOT rolsuper AND NOT rolbypassrls
+  )
+  OR EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname='frcaixinha_auth_atomic_ci'
+  )
  THEN RAISE EXCEPTION 'M37464_DISPOSABLE_POSTGRES_ONLY'; END IF;
 END $m37464_guard$;
+
+CREATE ROLE frcaixinha_auth_atomic_ci LOGIN INHERIT PASSWORD 'ci-test-only'
+  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+GRANT frcaixinha_auth_role TO frcaixinha_auth_atomic_ci;
+GRANT CONNECT ON DATABASE frcaixinha_staging TO frcaixinha_auth_atomic_ci;
 
 -- Two independent synthetic sessions, one for commit/replay/race, one
 -- to prove that revocation strictly BEFORE issuance rejects all writes.
@@ -116,7 +130,7 @@ END $atomic$;
 REVOKE ALL ON FUNCTION public.m37464_atomic_consent_ci(
  text,text,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text
 ) FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,
-       frcaixinha_auth_token_ci,frcaixinha_saas_preprep_ci;
+       frcaixinha_auth_atomic_ci,frcaixinha_saas_preprep_ci;
 GRANT EXECUTE ON FUNCTION public.m37464_atomic_consent_ci(
  text,text,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text
 ) TO frcaixinha_saas_preprep_ci;
@@ -127,7 +141,7 @@ BEGIN
  OR has_column_privilege('frcaixinha_saas_preprep_ci','public.sessions','token_hash','SELECT')
  OR NOT has_function_privilege('frcaixinha_saas_preprep_ci',
   'public.m37464_atomic_consent_ci(text,text,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text)','EXECUTE')
- OR has_function_privilege('frcaixinha_auth_token_ci',
+ OR has_function_privilege('frcaixinha_auth_atomic_ci',
   'public.m37464_atomic_consent_ci(text,text,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text)','EXECUTE')
  THEN RAISE EXCEPTION 'M37464_CI_ROLE_PRIVILEGE_ISOLATION'; END IF;
 END $privs$;
