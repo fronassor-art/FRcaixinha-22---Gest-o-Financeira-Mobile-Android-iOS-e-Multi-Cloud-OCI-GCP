@@ -15,7 +15,7 @@ import {
   Layers
 } from 'lucide-react';
 import { AppState, appStore } from '../services/store';
-import { formatBRL, formatDateBR, calculateLicenseUpgradeProRata, roundCents } from '../services/financialEngine';
+import { formatBRL, formatDateBR, roundCents } from '../services/financialEngine';
 import { LicensePlanTier } from '../types';
 
 interface MasterLicensingViewProps {
@@ -124,7 +124,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
   // Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25)
   const [editingTier, setEditingTier] = useState<LicensePlanTier | null>(null);
-  const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(89.90);
+  const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(0);
   const [changeReason, setChangeReason] = useState<string>('Reajuste comercial anual');
 
   // Simulador de Upgrade Pro-Rata
@@ -219,14 +219,15 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
     </section>;
   }
 
-  // Cálculo pro-rata se for admin simulando upgrade
-  const upgradeProRata = calculateLicenseUpgradeProRata(
-    89.90, // De Essencial
-    109.90, // Para Intermediário
-    new Date('2026-10-16'),
-    new Date('2027-10-16'),
-    new Date()
-  );
+  // A diferença mensal vem apenas das versões do catálogo confirmadas no PostgreSQL.
+  // Não existe cálculo "a pagar" antes de uma licença com datas autenticadas.
+  const essentialMonthly = currentEssencialPrice?.monthly_price;
+  const intermediateMonthly = currentInterPrice?.monthly_price;
+  const illustrativeMonthlyDelta =
+    typeof essentialMonthly==='number' && Number.isFinite(essentialMonthly) && essentialMonthly>0 &&
+    typeof intermediateMonthly==='number' && Number.isFinite(intermediateMonthly) && intermediateMonthly>0
+      ? roundCents(Math.max(0,intermediateMonthly-essentialMonthly))
+      : null;
 
   return (
     <div className="space-y-6">
@@ -467,38 +468,34 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
         </div>
       </div>
 
-      {/* Seção de Demonstração do Cálculo de Upgrade Pro-Rata (Cláusula 3.10) */}
+      {/* M37451 — simulação educativa, sem datas fictícias nem cobrança. */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
         <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
           <Layers className="w-4 h-4 text-emerald-600" />
-          <span>Simulador de Upgrade Pro-Rata Transparente (Cláusula 3.10 / AT-20)</span>
+          <span>Prévia informativa de upgrade (Cláusula 3.10)</span>
         </h3>
+        <p className="text-xs text-slate-700">
+          Diferença mensal entre os planos Essencial e Intermediário, calculada
+          somente a partir dos preços atuais do catálogo PostgreSQL.
+          Esta comparação não é uma proposta de cobrança nem uma licença ativada.
+        </p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+          <span className="font-medium text-slate-700">Diferença mensal meramente ilustrativa: </span>
+          <strong className="text-slate-900">
+            {illustrativeMonthlyDelta!==null ? formatBRL(illustrativeMonthlyDelta) : 'Indisponível — catálogo não confirmado'}
+          </strong>
+        </div>
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+          Valor pro-rata a pagar: não calculado. O cálculo depende de assinatura
+          e licença válidas, datas reais de vigência e comprovação de pagamento.
+          Sem esses documentos, nenhum valor devido, desconto ou upgrade é confirmado.
+        </p>
         <p className="text-xs text-slate-600">
-          O cálculo do upgrade considera cada segmento de vigência já adquirido e não transcorrido pela fórmula:
-          <code className="mx-1 px-1.5 py-0.5 bg-slate-100 rounded text-slate-800 font-mono text-[11px]">
+          Fórmula contratual apenas para referência:
+          <code className="mx-1 px-1.5 py-0.5 bg-slate-100 font-mono text-[11px]">
             max(0, novo_preco - antigo_preco) × segundos_restantes / segundos_totais
           </code>.
         </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-          <div>
-            <span className="text-slate-500 block">Diferença de Valor:</span>
-            <strong className="text-slate-900 font-mono text-sm">{formatBRL(upgradeProRata.priceDifference)}</strong>
-          </div>
-          <div>
-            <span className="text-slate-500 block">Dias Restantes no Segmento:</span>
-            <strong className="text-slate-900 font-mono text-sm">{upgradeProRata.daysRemaining} de {upgradeProRata.totalDays} dias</strong>
-          </div>
-          <div>
-            <span className="text-slate-500 block">Valor Pro-Rata Devido:</span>
-            <strong className="text-emerald-700 font-mono text-base font-extrabold">{formatBRL(upgradeProRata.proRataAmount)}</strong>
-          </div>
-          <div className="flex items-center">
-            <span className="text-[11px] text-slate-500">
-              Mantém <code>active_until</code> e o dia âncora original sem deriva temporal.
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Modal de Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25) */}

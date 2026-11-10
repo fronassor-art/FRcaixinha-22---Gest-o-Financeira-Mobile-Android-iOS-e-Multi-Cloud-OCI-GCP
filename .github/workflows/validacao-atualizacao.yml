@@ -143,6 +143,8 @@ jobs:
         run: npx tsx src/tests/m20500_cycle_price_retry_ci.test.ts
       - name: M20600 piso contratual de R$150 por cota
         run: npx tsx src/tests/m20600_floor_ui_ci.test.ts
+      - name: M37451 — nao simular cobranca pro-rata sem licenca
+        run: npx tsx src/tests/m37451_master_no_fictitious_prorata_ci.test.ts
       - name: M37449 — estados 404 sem ciclo, 409 legado e bloqueios
         run: npx tsx src/tests/m37449_no_active_cycle_ui_ci.test.ts
       - name: M37447 — diagnostico de perfil de API no APK e login sem credenciais
