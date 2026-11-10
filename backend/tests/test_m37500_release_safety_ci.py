@@ -124,7 +124,7 @@ def test_member_rejects_missing_or_forged_evidence(field, value):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("tenant_id", OTHER.upper()),
+    ("tenant_id", "INVALID_TENANT"),
     ("request_key", "fake"),
     ("recipient_digest", "plaintext@example.com"),
     ("encrypted_envelope_digest", "x"),
