@@ -55,3 +55,26 @@ export function parseCycleOpeningReceipt(raw:unknown,tenantId:string):CycleOpeni
  throw Error('Recibo de abertura não comprovado');
  return p as CycleOpeningReceipt;
 }
+
+
+/** M37446: a server preview is valid only for the exact authorized form intent. */
+export type CycleOpeningFormIntent={tenantId:string;year:number;amountCents:number;reason:string};
+export function openingPreviewMatchesForm(
+ preview:CycleOpeningPreview,
+ authorized:CycleOpeningFormIntent,
+ current:CycleOpeningFormIntent,
+):boolean{
+ if(!preview||!authorized||!current)return false;
+ const fields=[authorized,current];
+ if(fields.some(f=>!f||typeof f.tenantId!=='string'||
+  !Number.isSafeInteger(f.year)||!Number.isSafeInteger(f.amountCents)||
+  typeof f.reason!=='string'||f.reason.length<12||f.reason.length>500||
+  f.reason!==f.reason.trim()))return false;
+ return authorized.tenantId===current.tenantId &&
+  authorized.year===current.year &&
+  authorized.amountCents===current.amountCents &&
+  authorized.reason===current.reason &&
+  preview.tenant_id===authorized.tenantId &&
+  preview.year===authorized.year &&
+  preview.amount_cents===authorized.amountCents;
+}

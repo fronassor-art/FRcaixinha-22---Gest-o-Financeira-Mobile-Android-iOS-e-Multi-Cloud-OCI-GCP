@@ -494,7 +494,8 @@ class FinancialApiService {
   }
 
   public async previewCycleOpening(tenantId:string,year:number,amountCents:number,reason:string):Promise<CycleOpeningPreview>{
-    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    // Only TENANT_ADMIN may reach preview/opening endpoints, even before server RBAC.
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'MEMBERS');
     const raw:unknown=await this.request(
       '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price/opening-preview',
       {method:'POST',body:JSON.stringify({year,amount_cents:amountCents,reason})});
@@ -502,7 +503,8 @@ class FinancialApiService {
   }
 
   public async openCycle(tenantId:string,year:number,amountCents:number,reason:string,idempotencyKey:string):Promise<CycleOpeningReceipt>{
-    assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    // Only TENANT_ADMIN may reach preview/opening endpoints, even before server RBAC.
+    assertTenantReadScope(this.currentTenantReader(),tenantId,'MEMBERS');
     const raw:unknown=await this.request(
       '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/cycle-contribution-price/opening',
       {method:'POST',body:JSON.stringify({year,amount_cents:amountCents,reason,idempotency_key:idempotencyKey})});

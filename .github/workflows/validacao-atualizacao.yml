@@ -143,6 +143,8 @@ jobs:
         run: npx tsx src/tests/m20500_cycle_price_retry_ci.test.ts
       - name: M20600 piso contratual de R$150 por cota
         run: npx tsx src/tests/m20600_floor_ui_ci.test.ts
+      - name: M37446 — integracao admin mobile UI, session e limite por ciclo
+        run: npx tsx src/tests/m37446_admin_cycle_open_ui_ci.test.ts
       - name: M37427 escolha explicita por ciclo e recibo assinado pelo servidor
         run: npx tsx src/tests/m37427_cycle_open_amount_ui_ci.test.ts
       - name: M20900 prévia de ciclo no aplicativo, sem criar cobranças
@@ -830,6 +832,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37446 — API de previa administrativa, sem banco e sem escrita
+        run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37446_admin_ui_api_contract_ci.py
       - name: M37445 — verificacao estatica de E2E SQL em CI descartavel
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37445_cycle_opening_disposable_ci.py
       - name: M37444 — prontidao da abertura de ciclo no PG18 original, read only

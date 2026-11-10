@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {financialApi} from '../services/financialApiService';
 import {authService} from '../services/authService';
 import {parseCyclePriceInput} from '../services/cyclePriceBoundary';
-import {CycleOpeningPreview} from '../services/cycleOpeningBoundary';
+import {CycleOpeningPreview, openingPreviewMatchesForm} from '../services/cycleOpeningBoundary';
 import {formatBRL} from '../services/financialEngine';
 
 /** Admin-only interface. The server enforces the role and cannot create cycles here. */
@@ -17,6 +17,18 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
  const [opened,setOpened]=useState(false);
  const [openMessage,setOpenMessage]=useState('');
  const attempt=useRef<{fingerprint:string;key:string}|null>(null);
+ const revision=useRef(0);
+ const approved=useRef<{tenantId:string;year:number;amountCents:number;reason:string;snapshot:ReturnType<typeof authService.captureSession>}|null>(null);
+ function invalidate(){
+   revision.current+=1;
+   approved.current=null;
+   setPreview(null);setOpenMessage('');setOpened(false);setBusy(false);
+ }
+ useEffect(()=>{
+   invalidate();
+   setYear('');setAmount('');setReason('');
+   attempt.current=null;
+ },[tenantId]);
  useEffect(()=>{
    if(Number.isInteger(suggestedYear) && Number(suggestedYear)<=2100)
      setYear(String(suggestedYear));
@@ -35,16 +47,26 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
    try{cents=parseCyclePriceInput(amount);}catch(e){
      setError(e instanceof Error?e.message:'Valor por cota inválido.');return;
    }
+   const normalizedReason=reason.trim();
    const snapshot=authService.captureSession();
+   const currentRevision=++revision.current;
+   approved.current=null;
    setBusy(true);setError('');setPreview(null);setOpenMessage('');setOpened(false);
    try{
-     const result=await financialApi.previewCycleOpening(tenantId,yr,cents,reason.trim());
-     if(authService.isSessionSnapshotCurrent(snapshot))setPreview(result);
+     const result=await financialApi.previewCycleOpening(tenantId,yr,cents,normalizedReason);
+     if(currentRevision===revision.current && authService.isSessionSnapshotCurrent(snapshot)){
+       if(!openingPreviewMatchesForm(result,{tenantId,year:yr,amountCents:cents,reason:normalizedReason},
+             {tenantId,year:yr,amountCents:cents,reason:normalizedReason})){
+         setError('Prévia do servidor não corresponde à escolha. Consulte novamente.');return;
+       }
+       approved.current={tenantId,year:yr,amountCents:cents,reason:normalizedReason,snapshot};
+       setPreview(result);
+     }
    }catch(e){
-     if(authService.isSessionSnapshotCurrent(snapshot))
+     if(currentRevision===revision.current && authService.isSessionSnapshotCurrent(snapshot))
        setError(e instanceof Error?e.message:'A prévia não foi autorizada.');
    }finally{
-     if(authService.isSessionSnapshotCurrent(snapshot))setBusy(false);
+     if(currentRevision===revision.current)setBusy(false);
    }
  }
  async function openConfirmed(){
@@ -53,21 +75,28 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
    try{selected=parseCyclePriceInput(amount);}catch{
      setOpenMessage('Valor inválido. Consulte novamente a prévia.');return;
    }
-   if(preview.amount_cents!==selected||preview.year!==Number(year)){
-     setOpenMessage('O valor ou ano mudou. Consulte novamente a prévia antes de abrir.');return;
+   const intent=approved.current;
+   if(!intent||!authService.isSessionSnapshotCurrent(intent.snapshot)||
+     !openingPreviewMatchesForm(preview,intent,{
+       tenantId,year:Number(year),amountCents:selected,reason:reason.trim()
+     })){
+     setOpenMessage('A sessão, a caixinha ou os dados mudaram. Consulte novamente a prévia.');
+     setPreview(null);approved.current=null;return;
    }
-   const fingerprint=JSON.stringify([tenantId,preview.year,selected,reason.trim()]);
+   const fingerprint=JSON.stringify([tenantId,preview.year,selected,reason.trim(),intent.snapshot.generation]);
    if(!attempt.current||attempt.current.fingerprint!==fingerprint)
      attempt.current={fingerprint,key:crypto.randomUUID()};
    const snapshot=authService.captureSession();
+   const openingRevision=revision.current;
    setOpening(true);setOpenMessage('');
    try{
      const result=await financialApi.openCycle(tenantId,preview.year,selected,reason.trim(),attempt.current.key);
-     if(authService.isSessionSnapshotCurrent(snapshot)){
+     if(openingRevision===revision.current && authService.isSessionSnapshotCurrent(snapshot) &&
+       result.year===preview.year && result.amount_cents===selected){
        setOpened(true);setOpenMessage('Ciclo aberto com valor escolhido de '+formatBRL(result.amount_cents/100)+'.');
      }
    }catch(err){
-     if(authService.isSessionSnapshotCurrent(snapshot))
+     if(openingRevision===revision.current && authService.isSessionSnapshotCurrent(snapshot))
        setOpenMessage(err instanceof Error?err.message:'Abertura não confirmada.');
    }finally{
      if(authService.isSessionSnapshotCurrent(snapshot))setOpening(false);
@@ -79,20 +108,20 @@ export const CycleOpeningPreviewPanel:React.FC<{tenantId:string;suggestedYear?:n
   <form onSubmit={event=>{void submit(event);}} className="grid gap-3 sm:grid-cols-2">
     <label className="grid gap-1 text-sm text-slate-800">Ano do ciclo
       <input aria-label="Ano do próximo ciclo" required type="number" min="2027" max="2100"
-        value={year} onChange={e=>{setYear(e.target.value);setPreview(null);}}
+        disabled={opening} value={year} onChange={e=>{invalidate();setYear(e.target.value);}}
         className="rounded-lg border border-slate-300 px-3 py-2"/>
     </label>
     <label className="grid gap-1 text-sm text-slate-800">Valor escolhido por cota (R$)
       <input aria-label="Valor por cota do próximo ciclo" required inputMode="decimal"
-        placeholder="Digite o valor escolhido" value={amount} onChange={e=>{setAmount(e.target.value);setPreview(null);}}
+        placeholder="Digite o valor escolhido" disabled={opening} value={amount} onChange={e=>{invalidate();setAmount(e.target.value);}}
         className="rounded-lg border border-slate-300 px-3 py-2"/>
     </label>
     <label className="grid gap-1 text-sm text-slate-800 sm:col-span-2">Justificativa de abertura
       <input aria-label="Motivo do valor escolhido" required minLength={12} maxLength={500}
-        value={reason} onChange={e=>{setReason(e.target.value);setPreview(null);}}
+        disabled={opening} value={reason} onChange={e=>{invalidate();setReason(e.target.value);}}
         className="rounded-lg border border-slate-300 px-3 py-2"/>
     </label>
-    <button type="submit" disabled={busy}
+    <button type="submit" disabled={busy||opening}
       className="rounded-lg bg-emerald-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2">
       {busy?'Verificando...':'Conferir prévia do ciclo'}
     </button>
