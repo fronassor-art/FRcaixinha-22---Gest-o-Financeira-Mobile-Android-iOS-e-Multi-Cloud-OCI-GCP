@@ -357,6 +357,8 @@ def test_integration_uses_live_homologation_auth_dependency():
         "M37462_DISPOSABLE_TOKEN_HASH_TO_SESSION_ID=PASS",
         "M37462_EXPIRED_AND_REVOKED_TOKEN=401",
         "M37462_PAYMENT_PIX_LICENSE_ACTIVATION=OFF",
+        "M37462_FINANCIAL_TABLES_UNCHANGED=PASS",
+        "initial_financial_counts",
         "M37462_REAL_SAAS_CONSENT=NOT_ATTESTED",
     ):
         assert marker in source
