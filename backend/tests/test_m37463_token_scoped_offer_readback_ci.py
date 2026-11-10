@@ -127,7 +127,7 @@ def test_invalid_verified_principal_never_builds_query(changed):
     denied(judge(s=session(**changed)))
 
 
-@pytest.mark.parametrize("request,digest",[
+@pytest.mark.parametrize("request_id,digest",[
     (OTHER,H),
     (UUID(int=0),H),
     ("not-a-uuid",H),
@@ -137,13 +137,13 @@ def test_invalid_verified_principal_never_builds_query(changed):
     (R,None),
     (R,123),
 ])
-def test_caller_request_or_digest_constraints(request,digest):
-    if request==OTHER:
-        assert token_scope_params(session(),request,digest,now=NOW) is not None
-        denied(judge(request=request))
+def test_caller_request_or_digest_constraints(request_id,digest):
+    if request_id==OTHER:
+        assert token_scope_params(session(),request_id,digest,now=NOW) is not None
+        denied(judge(request=request_id))
     else:
-        assert token_scope_params(session(),request,digest,now=NOW) is None
-        denied(judge(request=request,digest=digest))
+        assert token_scope_params(session(),request_id,digest,now=NOW) is None
+        denied(judge(request=request_id,digest=digest))
 
 
 @pytest.mark.parametrize("field",[
