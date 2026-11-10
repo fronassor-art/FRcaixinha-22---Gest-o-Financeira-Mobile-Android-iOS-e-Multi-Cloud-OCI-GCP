@@ -13,13 +13,26 @@ from .security import hash_token
 from .config import settings
 
 class AuthenticatedSession:
-    def __init__(self, user_id: str, role: str, tenant_id: Optional[str], email: str, name: str, is_master: bool):
+    def __init__(
+        self, user_id: str, role: str, tenant_id: Optional[str],
+        email: str, name: str, is_master: bool,
+        *, verified_session_id: Optional[str] = None,
+        verified_session_at: Optional[datetime.datetime] = None,
+        verified_session_expires_at: Optional[datetime.datetime] = None,
+        verification_source: str = "LEGACY_NO_SESSION_BINDING",
+    ):
         self.user_id = user_id
         self.role = role
         self.tenant_id = tenant_id
         self.email = email
         self.name = name
         self.is_master = is_master
+        # Populated only from a token-hash PostgreSQL lookup and token-bound
+        # refresh below. Legacy constructors deliberately lack this evidence.
+        self.verified_session_id = verified_session_id
+        self.verified_session_at = verified_session_at
+        self.verified_session_expires_at = verified_session_expires_at
+        self.verification_source = verification_source
 
 def auth_database_url() -> str:
     if os.getenv("ENVIRONMENT") == "production":
@@ -78,7 +91,8 @@ async def get_current_session(request: Request) -> AuthenticatedSession:
         try:
             async with conn.transaction():
                 row = await conn.fetchrow(
-                    "SELECT s.user_id,s.active_role,s.active_tenant_id,s.expires_at,s.revoked_at,"
+                    "SELECT s.id AS verified_session_id,s.user_id,s.active_role,"
+                    "s.active_tenant_id,s.expires_at,s.revoked_at,"
                     "u.email,u.full_name,u.is_master,u.status "
                     "FROM public.sessions s JOIN public.users u ON u.id=s.user_id "
                     "WHERE s.token_hash=$1", digest)
@@ -99,10 +113,41 @@ async def get_current_session(request: Request) -> AuthenticatedSession:
                     "SELECT public.auth_refresh_session($1::text)", raw_token)
                 if renewed_until is None:
                     raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
+            # M37462: the verified ID is selected from the very same
+            # token-hash session row whose refresh/revocation was checked.
+            # No raw bearer or token hash is returned to API controllers.
+            try:
+                verified_id = row['verified_session_id']
+            except (KeyError, IndexError):
+                # Legacy mocked rows may not expose the selected ID. They
+                # remain usable for old endpoints but FAIL the SaaS gate.
+                verified_id = None
+            from uuid import UUID
+            verified_id_str = (
+                str(verified_id)
+                if isinstance(verified_id, UUID) and verified_id.int != 0
+                else None
+            )
+            expiry_verified = (
+                renewed_until
+                if isinstance(renewed_until, datetime.datetime)
+                and renewed_until.tzinfo is not None
+                and renewed_until.utcoffset() is not None
+                and renewed_until > now
+                else None
+            )
             return AuthenticatedSession(
                 str(row['user_id']), row['active_role'],
                 str(row['active_tenant_id']) if row['active_tenant_id'] else None,
-                row['email'], row['full_name'], row['is_master'])
+                row['email'], row['full_name'], row['is_master'],
+                verified_session_id=verified_id_str,
+                verified_session_at=now if verified_id_str and expiry_verified else None,
+                verified_session_expires_at=expiry_verified if verified_id_str else None,
+                verification_source=(
+                    "POSTGRES_TOKEN_HASH_REFRESH"
+                    if verified_id_str and expiry_verified
+                    else "LEGACY_NO_SESSION_BINDING"
+                ))
         finally:
             await conn.close()
     except HTTPException:
