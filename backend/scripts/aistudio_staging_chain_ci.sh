@@ -677,6 +677,13 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   python backend/scripts/aistudio_m37459_api_transaction_ci.py
 echo "M37459_REAL_SAAS_ACTIVATION=OFF"
 
+echo "=== M37461: servidor PostgreSQL descartavel, sessao/contrato/preco SELECT-only ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37461_server_context_readback_ci.py
+echo "M37461_REAL_SAAS_PAYMENT_OR_LICENSE=OFF"
+
 echo "=== M31400-M31800: SaaS capacity disposable CI ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
   psql -X -v ON_ERROR_STOP=1 \
