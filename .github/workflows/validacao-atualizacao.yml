@@ -798,6 +798,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37437 — candidato SQL de saneamento sintetico, sem executar no CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37437_dev_fixture_reset_candidate_ci.py
       - name: M37436 — escopo e FKs do ciclo antigo no banco original
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37436_legacy_cycle_scope_ci.py
       - name: M37435 — dependencias dos valores de desenvolvimento no mesmo PG18
