@@ -135,7 +135,12 @@ async def test_actual_get_current_session_returns_database_session_id(monkeypatc
 @pytest.mark.asyncio
 async def test_real_db_principal_matches_test_context(monkeypatch):
     result=await run_auth(monkeypatch,FakeDB())
-    assert check_server_identity_binding(result,make_context(),now=NOW()) is not None
+    ctx=make_context()
+    # The context must be fetched AFTER the bearer/session was verified.
+    ctx=replace(ctx,session_checked_at=NOW(),
+                session_expires_at=min(ctx.session_expires_at,
+                                       result.verified_session_expires_at))
+    assert check_server_identity_binding(result,ctx,now=NOW()) is not None
 
 
 @pytest.mark.asyncio
