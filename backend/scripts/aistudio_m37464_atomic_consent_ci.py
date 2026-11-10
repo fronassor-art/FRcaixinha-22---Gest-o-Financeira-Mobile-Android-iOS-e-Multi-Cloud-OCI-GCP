@@ -31,7 +31,6 @@ C_REVOKED=UUID("daba0000-0000-4000-8000-000000000678")
 REQUEST=UUID("daba0000-0000-4000-8000-000000000675")
 REQUEST_REVOKED=UUID("daba0000-0000-4000-8000-000000000677")
 D=UUID("daba0000-0000-4000-8000-000000000030")
-P=UUID("daba0000-0000-4000-8000-000000000060")
 ORIGINAL_ACCEPTANCE=UUID("daba0000-0000-4000-8000-000000000040")
 TOKEN="m37464-ci-only-lock-session-NEVER-REAL-01"
 TOKEN_REVOKED="m37464-ci-only-pre-revoked-NEVER-REAL-02"
@@ -77,8 +76,10 @@ def expect(actual,expected,label):
         )
 
 
-def consent(conn,action,*,session=S,challenge=C,request=REQUEST,token=TOKEN,
-            admin=A,tenant=T,doc=D,price=P,confirmation=None):
+def consent(conn,action,*,price:UUID,session=S,challenge=C,request=REQUEST,
+            token=TOKEN,admin=A,tenant=T,doc=D,confirmation=None):
+    if type(price) is not UUID or price.int==0:
+        raise AssertionError("M37464_PUBLISHED_PRICE_VERSION_REQUIRED")
     hashed=sha256(token.encode("ascii")).hexdigest()
     return conn.execute(ATOMIC_SQL,(
         action,hashed,session,challenge,request,tenant,admin,
@@ -133,11 +134,25 @@ def main()->int:
         ).fetchone()
         expect(meta,("frcaixinha_staging","postgres","on","1","1",5432),
                "DATABASE_SCOPE")
+        price_row=owner.execute(
+            "SELECT price_version_id FROM public.saas_enrollment_requests_staging "
+            "WHERE request_id=%s",
+            (UUID("daba0000-0000-4000-8000-000000000050"),),
+        ).fetchone()
+        if (price_row is None or type(price_row[0]) is not UUID
+            or price_row[0].int==0):
+            raise AssertionError("M37464_PUBLISHED_CI_PRICE_NOT_FOUND")
+        price_version=price_row[0]
         before_fin=financial_counts(owner)
         before_original=original_acceptance(owner)
         expect(rowcounts(owner),(0,0,0),"EMPTY_REQUEST")
         expect(rowcounts(owner,REQUEST_REVOKED),(0,0,0),
                "EMPTY_PRE_REVOKED_REQUEST")
+
+    # Resolve the current published staging price once, on the server side.
+    # Never invent a pricing UUID or accept the version from a client.
+    def act(conn,action,**kwargs):
+        return consent(conn,action,price=price_version,**kwargs)
 
     # A revoked bearer cannot start a challenge, even if M37458
     # still has a separate, supposedly active, synthetic session record.
@@ -145,7 +160,7 @@ def main()->int:
         expect(revoke(auth,TOKEN_REVOKED),True,"FIRST_REVOKE")
     with connect("frcaixinha_saas_preprep_ci") as worker:
         expect(
-            consent(worker,"ISSUE",session=S_REVOKED,
+            act(worker,"ISSUE",session=S_REVOKED,
                     challenge=C_REVOKED,request=REQUEST_REVOKED,
                     token=TOKEN_REVOKED),
             "DENIED_CI_TOKEN_REVOKED_OR_SCOPE","REVOKE_WINS_RACE"
@@ -155,11 +170,11 @@ def main()->int:
     # or draft may be visible after a synthetic application failure.
     try:
         with connect("frcaixinha_saas_preprep_ci") as worker:
-            expect(consent(worker,"ISSUE"),
+            expect(act(worker,"ISSUE"),
                    "CHALLENGE_ISSUED_CI","ROLLBACK_ISSUE")
-            expect(consent(worker,"ACCEPT",confirmation=CONFIRM),
+            expect(act(worker,"ACCEPT",confirmation=CONFIRM),
                    "CONSENT_RECORDED_CI_NO_LEGAL_PROOF","ROLLBACK_ACCEPT")
-            expect(consent(worker,"PREPARE"),
+            expect(act(worker,"PREPARE"),
                    "DRAFT_PREPARED_CI_NO_PAYMENT","ROLLBACK_PREPARE")
             raise SyntheticRollback()
     except SyntheticRollback:
@@ -172,10 +187,10 @@ def main()->int:
     # throughout the transaction. Competing bearer revocation cannot
     # commit in between the validation and the synthetic receipt.
     with connect("frcaixinha_saas_preprep_ci") as worker:
-        expect(consent(worker,"ISSUE"),"CHALLENGE_ISSUED_CI","ISSUE")
-        expect(consent(worker,"ACCEPT",confirmation=CONFIRM),
+        expect(act(worker,"ISSUE"),"CHALLENGE_ISSUED_CI","ISSUE")
+        expect(act(worker,"ACCEPT",confirmation=CONFIRM),
                "CONSENT_RECORDED_CI_NO_LEGAL_PROOF","ACCEPT")
-        expect(consent(worker,"PREPARE"),
+        expect(act(worker,"PREPARE"),
                "DRAFT_PREPARED_CI_NO_PAYMENT","PREPARE")
 
         lock_blocked=False
@@ -199,7 +214,7 @@ def main()->int:
         ).fetchone()[0],True,"NO_PARTIAL_REVOCATION")
 
     with connect("frcaixinha_saas_preprep_ci") as worker:
-        expect(consent(worker,"PREPARE"),
+        expect(act(worker,"PREPARE"),
                "REPLAY_PREPARE_CI_NO_WRITE","IDEMPOTENCY")
 
     # After the transaction commits, revocation succeeds. The same
@@ -207,11 +222,11 @@ def main()->int:
     with connect("frcaixinha_auth_atomic_ci") as auth:
         expect(revoke(auth,TOKEN),True,"REVOCATION_AFTER_COMMIT")
     with connect("frcaixinha_saas_preprep_ci") as worker:
-        expect(consent(worker,"ACCEPT",confirmation=CONFIRM),
+        expect(act(worker,"ACCEPT",confirmation=CONFIRM),
                "DENIED_CI_TOKEN_REVOKED_OR_SCOPE","REVOKED_ACCEPT")
-        expect(consent(worker,"PREPARE"),
+        expect(act(worker,"PREPARE"),
                "DENIED_CI_TOKEN_REVOKED_OR_SCOPE","REVOKED_PREPARE")
-        expect(consent(worker,"ISSUE",token=TOKEN_REVOKED),
+        expect(act(worker,"ISSUE",token=TOKEN_REVOKED),
                "DENIED_CI_TOKEN_REVOKED_OR_SCOPE","FOREIGN_TOKEN")
 
     with connect() as owner:
