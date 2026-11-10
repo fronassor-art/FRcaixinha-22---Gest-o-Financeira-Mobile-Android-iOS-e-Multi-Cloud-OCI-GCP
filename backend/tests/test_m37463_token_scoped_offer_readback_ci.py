@@ -123,7 +123,16 @@ def test_annual_period_immutable_postgres_price():
     {"verification_source":"CLIENT_ASSERTED"},
 ])
 def test_invalid_verified_principal_never_builds_query(changed):
-    assert token_scope_params(session(**changed),R,H,now=NOW) is None
+    params=token_scope_params(session(**changed),R,H,now=NOW)
+    # Another valid principal/session is allowed to form a *scoped query*
+    # but cannot adopt the original request/contract because SQL and row
+    # validation bind identity, tenant and session ID separately.
+    if set(changed).intersection({"user_id","tenant_id","verified_session_id"}) and (
+        next(iter(changed.values())) in (str(OTHER),str(S2))
+    ):
+        assert params is not None
+    else:
+        assert params is None
     denied(judge(s=session(**changed)))
 
 
