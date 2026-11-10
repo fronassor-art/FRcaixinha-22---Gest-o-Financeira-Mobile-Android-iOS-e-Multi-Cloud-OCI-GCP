@@ -79,6 +79,10 @@ def test_hypothetical_server_offer_and_session_from_db():
     assert context.offer.source=="CI_SYNTHETIC_SERVER_OFFER_READBACK"
     synthetic=AuthenticatedSession(
         str(A),"TENANT_ADMIN",str(T),"admin@example.invalid","CI",False,
+        verified_session_id=str(S),
+        verified_session_at=NOW-timedelta(seconds=1),
+        verified_session_expires_at=context.session_expires_at,
+        verification_source="POSTGRES_TOKEN_HASH_REFRESH",
     )
     principal=check_server_identity_binding(synthetic,context,now=NOW)
     assert principal is not None
