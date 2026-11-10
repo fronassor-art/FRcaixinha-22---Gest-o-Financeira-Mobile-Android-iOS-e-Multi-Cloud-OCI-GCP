@@ -1072,6 +1072,36 @@
       "inspect_object": "public.saas_reconciliation_reviews_staging",
       "local_evidence": null,
       "source_blob_sha": "0c607e73811b292ed2380815fa533aaa7a307bac"
+    },
+    {
+      "id": "staging_migrations:066",
+      "source_path": "backend/staging_migrations/066_release_gate_evidence_quarantine_ci_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.fr_m37500_release_gate_quarantine_ci",
+      "local_evidence": null,
+      "source_blob_sha": "4fc4828169701e3c57b9f8c220bbb0b7c88f599f"
+    },
+    {
+      "id": "staging_migrations:067",
+      "source_path": "backend/staging_migrations/067_mail_delivery_quarantine_ci_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.fr_m37501_mail_quarantine_ci",
+      "local_evidence": null,
+      "source_blob_sha": "106c02ce597118eabef4964f6994000ba8c1c581"
+    },
+    {
+      "id": "staging_migrations:068",
+      "source_path": "backend/staging_migrations/068_payment_reconciliation_hold_ci_only.sql",
+      "classification": "STAGING_ONLY_NEEDS_PORT",
+      "requires_local_equivalent_before_use": true,
+      "do_not_apply_source_to_termux": true,
+      "inspect_object": "public.fr_m37502_reconciliation_hold_ci",
+      "local_evidence": null,
+      "source_blob_sha": "cbdf6ff4c54326efa1231e982cd0cb1e3c315b5e"
     }
   ]
 }
