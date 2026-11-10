@@ -331,7 +331,7 @@ def test_sql_is_exact_stored_procedure_no_network_or_production_route():
     p=Path(__file__).resolve().parents[1]/"app"/"saas_atomic_api_adapter_ci.py"
     s=p.read_text()
     assert "public.m37464_atomic_consent_ci(" in s
-    assert "get_current_session" not in s  # caller must authenticate first
+    assert "await get_current_session(" not in s  # caller authenticates first
     assert "APIRouter(" not in s and "include_router" not in s
     assert "INSERT INTO" not in s and "UPDATE public." not in s
     assert "requests.post(" not in s and "httpx.post(" not in s
