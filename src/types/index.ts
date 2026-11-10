@@ -89,7 +89,7 @@ export interface TenantPolicyVersion {
   version: number;
   monthly_interest_rate: number; // Ex: 0.20 para 20% a.m.
   max_installments: number; // Ex: 6 (inaugural) ou até 12
-  contribution_per_quota: number; // Ex: 100.00
+  contribution_per_quota: number; // valor escolhido por ciclo: mínimo R$ 150,00
   flat_fine_amount: number; // Ex: 10.00
   daily_mora_rate: number; // Ex: monthly_interest_rate / 30
   admin_pct: number; // Ex: 15 para 15%

@@ -195,7 +195,7 @@ const SEED_POLICIES: TenantPolicyVersion[] = [
     version: 1,
     monthly_interest_rate: 0.20, // 20% a.m. (Cláusula 4.2)
     max_installments: 6,         // Máximo de 6 parcelas
-    contribution_per_quota: 100.00, // R$ 100 por cota
+    contribution_per_quota: 150.00, // apenas exemplo de teste; preço real definido pelo administrador
     flat_fine_amount: 10.00,     // Multa única R$ 10,00
     daily_mora_rate: 0.20 / 30,  // 20%/30 ao dia sobre principal vencido
     admin_pct: 15,               // 15% administrador
@@ -361,22 +361,22 @@ const SEED_SUBSCRIPTIONS: LicenseSubscription[] = [
 
 const SEED_CONTRIBUTIONS: Contribution[] = [
   // Competência Janeiro 2027 (Vencimento 10/01/2027)
-  { id: 'c-1', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-joao', competence: '2027-01', due_date: '2027-01-10', amount_due: 100.00, amount_paid: 100.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-01-09T14:00:00Z' },
-  { id: 'c-2', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-maria', competence: '2027-01', due_date: '2027-01-10', amount_due: 200.00, amount_paid: 200.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-01-10T11:00:00Z' },
-  { id: 'c-3', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-pedro', competence: '2027-01', due_date: '2027-01-10', amount_due: 100.00, amount_paid: 100.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-01-08T16:20:00Z' },
-  { id: 'c-4', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-ana', competence: '2027-01', due_date: '2027-01-10', amount_due: 100.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'VENCIDA' },
+  { id: 'c-1', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-joao', competence: '2027-01', due_date: '2027-01-10', amount_due: 150.00, amount_paid: 150.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-01-09T14:00:00Z' },
+  { id: 'c-2', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-maria', competence: '2027-01', due_date: '2027-01-10', amount_due: 300.00, amount_paid: 300.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-01-10T11:00:00Z' },
+  { id: 'c-3', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-pedro', competence: '2027-01', due_date: '2027-01-10', amount_due: 150.00, amount_paid: 150.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-01-08T16:20:00Z' },
+  { id: 'c-4', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-ana', competence: '2027-01', due_date: '2027-01-10', amount_due: 150.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'VENCIDA' },
 
   // Competência Fevereiro 2027 (Vencimento 10/02/2027)
-  { id: 'c-5', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-joao', competence: '2027-02', due_date: '2027-02-10', amount_due: 100.00, amount_paid: 100.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-02-09T10:00:00Z' },
-  { id: 'c-6', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-maria', competence: '2027-02', due_date: '2027-02-10', amount_due: 200.00, amount_paid: 100.00, payment_status: 'PARCIAL', due_status: 'VENCIDA' }, // Exemplo AT-12: Parcial e Vencida simultaneamente!
-  { id: 'c-7', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-pedro', competence: '2027-02', due_date: '2027-02-10', amount_due: 100.00, amount_paid: 100.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-02-10T09:00:00Z' },
-  { id: 'c-8', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-ana', competence: '2027-02', due_date: '2027-02-10', amount_due: 100.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'VENCIDA' },
+  { id: 'c-5', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-joao', competence: '2027-02', due_date: '2027-02-10', amount_due: 150.00, amount_paid: 150.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-02-09T10:00:00Z' },
+  { id: 'c-6', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-maria', competence: '2027-02', due_date: '2027-02-10', amount_due: 300.00, amount_paid: 150.00, payment_status: 'PARCIAL', due_status: 'VENCIDA' }, // Exemplo AT-12: Parcial e Vencida simultaneamente!
+  { id: 'c-7', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-pedro', competence: '2027-02', due_date: '2027-02-10', amount_due: 150.00, amount_paid: 150.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-02-10T09:00:00Z' },
+  { id: 'c-8', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-ana', competence: '2027-02', due_date: '2027-02-10', amount_due: 150.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'VENCIDA' },
 
   // Competência Março 2027 (Vencimento 10/03/2027)
-  { id: 'c-9', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-joao', competence: '2027-03', due_date: '2027-03-10', amount_due: 100.00, amount_paid: 100.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-03-10T15:00:00Z' },
-  { id: 'c-10', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-maria', competence: '2027-03', due_date: '2027-03-10', amount_due: 200.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'A_VENCER' },
-  { id: 'c-11', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-pedro', competence: '2027-03', due_date: '2027-03-10', amount_due: 100.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'A_VENCER' },
-  { id: 'c-12', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-ana', competence: '2027-03', due_date: '2027-03-10', amount_due: 100.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'VENCIDA' },
+  { id: 'c-9', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-joao', competence: '2027-03', due_date: '2027-03-10', amount_due: 150.00, amount_paid: 150.00, payment_status: 'QUITADA', due_status: 'REGULARIZADA', paid_at: '2027-03-10T15:00:00Z' },
+  { id: 'c-10', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-maria', competence: '2027-03', due_date: '2027-03-10', amount_due: 300.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'A_VENCER' },
+  { id: 'c-11', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-pedro', competence: '2027-03', due_date: '2027-03-10', amount_due: 150.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'A_VENCER' },
+  { id: 'c-12', tenant_id: 'tenant-inaugural', cycle_id: 'cycle-2027-inaugural', membership_id: 'mem-ana', competence: '2027-03', due_date: '2027-03-10', amount_due: 150.00, amount_paid: 0, payment_status: 'PENDENTE', due_status: 'VENCIDA' },
 ];
 
 // Seed de autorização anual para crédito do administrador (Cláusula 2.5 e 8.8)
