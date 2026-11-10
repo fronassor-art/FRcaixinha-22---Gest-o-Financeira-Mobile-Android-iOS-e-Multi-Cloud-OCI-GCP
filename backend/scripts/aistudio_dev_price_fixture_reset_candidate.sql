@@ -25,6 +25,12 @@ BEGIN
   AND inet_server_port()=5433
   AND current_setting('data_directory')='/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18'
   AND current_setting('server_version_num')::int BETWEEN 180000 AND 189999
+ ) AND NOT (
+  current_database()='frcaixinha_ci'
+  AND session_user='postgres' AND current_user='postgres'
+  AND inet_server_port()=5432
+  AND current_setting('server_version_num')::int BETWEEN 180000 AND 189999
+  AND current_setting('frfinance.m37437_ci_disposable',true)='1'
  ) THEN RAISE EXCEPTION 'M37437: wrong or unsafe PostgreSQL cluster'; END IF;
  LOCK TABLE public.cycles,public.policies,public.quotas,
   public.contributions,public.cycle_contribution_price_audit,

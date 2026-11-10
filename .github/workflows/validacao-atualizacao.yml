@@ -755,6 +755,21 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frcaixinha_pg18_auth"
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_verifier LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO frcaixinha_pg18_verifier"
+      - name: M37438 — ensaio transacional e rollback no PostgreSQL 18 descartavel do CI
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          python backend/scripts/aistudio_m37438_disposable_ci_sql.py > "$RUNNER_TEMP/m37438_ci_rollback.sql"
+          PGOPTIONS='-c frfinance.dev_cleanup_m37437=EXPLICIT_DEV_ONLY_PURGE_APPROVED -c frfinance.m37437_verified_backup_sha=714bc50de8dfc42d25f1b9bbe54e9841df883f0d606f467015c0e153b4d9b88b -c frfinance.m37437_ci_disposable=1' \
+            psql -X -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/m37438_ci_rollback.sql"
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.users')" = 0
       - name: Verificar RLS do Master e precos com usuarios sinteticos
         env:
           PYTHONPATH: backend
@@ -798,6 +813,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37438 — montar transacao ficticia sem commit
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37438_disposable_rehearsal_ci.py
       - name: M37437 — candidato SQL de saneamento sintetico, sem executar no CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37437_dev_fixture_reset_candidate_ci.py
       - name: M37436 — escopo e FKs do ciclo antigo no banco original
