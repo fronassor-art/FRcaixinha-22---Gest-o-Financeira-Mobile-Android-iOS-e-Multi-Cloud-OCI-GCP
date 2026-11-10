@@ -677,6 +677,23 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   python backend/scripts/aistudio_m37459_api_transaction_ci.py
 echo "M37459_REAL_SAAS_ACTIVATION=OFF"
 
+echo "=== M37464: validar revogacao concorrente e aceite atomico, PostgreSQL descartavel ==="
+if PGDATABASE=frcaixinha_ci \
+  PGOPTIONS='-c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37464_atomic_consent_lock_ci.sql >/dev/null 2>&1; then
+  echo "BLOCKED=M37464_WRONG_DATABASE_ACCEPTED"
+  exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37464_atomic_consent_lock_ci.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37464_atomic_consent_ci.py
+echo "M37464_REAL_PAYMENTS_LICENSE_AND_PIX=OFF"
+
 echo "=== M37461: servidor PostgreSQL descartavel, sessao/contrato/preco SELECT-only ==="
 GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
