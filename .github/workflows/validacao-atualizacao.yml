@@ -852,6 +852,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37457_preparation_chronology_ci.py backend/tests/test_m37457_chronology_readback_ci.py
       - name: M37458 — consentimento ANTES do preparo em PG descartavel sem pagamento real
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37458_saas_consent_before_preparation_ci.py
+      - name: M37459 — contrato API SaaS, permissao server-only e rollback CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37459_saas_api_contract_ci.py backend/tests/test_m37459_saas_api_transaction_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
