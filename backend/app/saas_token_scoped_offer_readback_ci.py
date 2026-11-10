@@ -63,6 +63,7 @@ WHERE s.id=%s AND s.user_id=%s AND s.active_tenant_id=%s
  AND p.status='ACTIVE' AND d.document_kind='PLATFORM_LICENSE'
  AND d.published_at<=clock_timestamp()
  AND c.document_sha=d.sha256
+ AND c.server_expires_at>clock_timestamp()
 LIMIT 2
 """
 
