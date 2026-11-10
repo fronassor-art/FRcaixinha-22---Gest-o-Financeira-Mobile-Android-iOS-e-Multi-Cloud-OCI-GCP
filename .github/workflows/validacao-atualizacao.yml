@@ -844,6 +844,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37453_saas_disposable_readback_ci.py
       - name: M37454 — aceite explicito SaaS, hash de prova sintetica e anti-replay
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37454_saas_consent_linkage_ci.py
+      - name: M37455 — persistencia descartavel de aceite, unicidade e privilegios minimos
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37455_saas_disposable_consent_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
