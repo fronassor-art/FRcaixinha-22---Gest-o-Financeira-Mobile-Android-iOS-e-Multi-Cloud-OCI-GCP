@@ -134,7 +134,7 @@ def build_operational_blocker_report(
     *, root: Path, env: Mapping[str, str] | None = None,
 ) -> dict:
     """Pure offline report. Returns no authority even for all green sources."""
-    if type(root) is not Path:
+    if not isinstance(root, Path):
         raise ValueError("M37469_TRUSTED_REPOSITORY_ROOT_REQUIRED")
     # No environment secrets are copied, printed, hashed or validated. Only
     # exact OFF/NOT_DECLARED/NON_OFF classification of five known flag names.
