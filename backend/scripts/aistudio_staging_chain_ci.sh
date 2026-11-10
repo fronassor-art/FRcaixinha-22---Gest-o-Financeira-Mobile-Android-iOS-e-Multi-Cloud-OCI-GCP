@@ -609,6 +609,10 @@ fi
 echo "M31300_SAAS_ENROLLMENT_POSTGRES=PASS"
 echo "M31300_REAL_SAAS_BILLING=OFF"
 
+echo "=== M37453: readback de preparacao SaaS committed em PostgreSQL descartavel ==="
+PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37453_disposable_saas_readback.py
+
 
 echo "=== M31400-M31800: SaaS capacity disposable CI ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
