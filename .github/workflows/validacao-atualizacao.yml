@@ -862,6 +862,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37460_saas_authenticated_boundary_ci.py backend/tests/test_m37461_saas_server_context_readback_ci.py backend/tests/test_m37462_verified_session_binding_ci.py backend/tests/test_auth_session_fail_closed_ci.py
       - name: M37463 — escopo contrato/token/sessao antes e apos revogacao em CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37463_token_scoped_offer_readback_ci.py
+      - name: M37464 — transacao de consentimento atomico e revogacao concorrente CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37464_atomic_consent_lock_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
