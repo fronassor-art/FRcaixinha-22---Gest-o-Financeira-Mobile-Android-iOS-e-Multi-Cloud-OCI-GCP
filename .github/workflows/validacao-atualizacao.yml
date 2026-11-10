@@ -876,6 +876,10 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37469_release_blockers_readonly.py
       - name: M37469 — relatorio de prioridades operacionais somente leitura
         run: PYTHONPATH=backend python backend/scripts/aistudio_m37469_release_blockers_readonly.py plan
+      - name: M37470 — inventario OCI tipado ligado a bloqueios operacionais sem release
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37470_oci_live_release_bridge_ci.py
+      - name: M37470 — baseline OCI sem rede e sem credenciais
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37470_oci_live_release_readonly.py offline
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
