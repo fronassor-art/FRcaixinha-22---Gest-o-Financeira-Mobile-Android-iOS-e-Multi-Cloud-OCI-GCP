@@ -631,6 +631,21 @@ PGOPTIONS='-c frcaixinha.saas_consent_ci=1' PYTHONPATH=backend \
   python backend/scripts/aistudio_m37455_saas_disposable_ci.py
 echo "M37455_REAL_SAAS_BILLING=OFF"
 
+echo "=== M37456: vinculo consentimento/preparacao, somente CI descartavel ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_consent_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37456_saas_consent_preparation_link_ci.sql >/dev/null 2>&1; then
+  echo "BLOCKED=M37456_WRONG_DATABASE_ACCEPTED"
+  exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_consent_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37456_saas_consent_preparation_link_ci.sql >/dev/null
+PGOPTIONS='-c frcaixinha.saas_consent_ci=1' PYTHONPATH=backend \
+  PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37456_saas_preparation_link_ci.py
+echo "M37456_REAL_SAAS_BILLING=OFF"
+
 echo "=== M31400-M31800: SaaS capacity disposable CI ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
   psql -X -v ON_ERROR_STOP=1 \
