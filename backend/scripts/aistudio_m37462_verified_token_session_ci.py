@@ -93,12 +93,36 @@ async def check_real_token_lookup(*,context):
     for value in (TOKEN1,TOKEN2,TOKEN3,TOKEN4):
         if value in repr(s.__dict__):
             raise AssertionError("M37462_RAW_BEARER_LEAKED_FROM_PRINCIPAL")
+    # Authoritative readback must occur AFTER the bearer/session check,
+    # not merely be given a later timestamp. Re-query the disposable DB
+    # with a read-only transaction and compare to the earlier baseline.
+    import psycopg
+    from psycopg.rows import dict_row
+    with psycopg.connect(
+        host="127.0.0.1",port=5432,dbname="frcaixinha_staging",
+        user="postgres",password="ci-test-only",connect_timeout=5,
+        options="-c default_transaction_read_only=on",
+        row_factory=dict_row,
+    ) as ro:
+        rows=ro.execute(READBACK_SQL,(S1,T,A,REQUEST)).fetchall()
+        if len(rows)!=1:
+            raise AssertionError("M37462_POST_AUTH_READBACK_MISSING")
+        state,fresh=build_ci_trusted_context(
+            dict(rows[0]),session_id=S1,tenant_id=T,
+            admin_id=A,request_id=REQUEST,
+            checked_at=datetime.now(timezone.utc),
+        )
+        if state!="CI_DISPOSABLE_SERVER_CONTEXT_READBACK_ONLY" or fresh is None:
+            raise AssertionError("M37462_POST_AUTH_READBACK_INVALID")
+        if (fresh.offer!=context.offer
+            or fresh.session_id!=context.session_id
+            or fresh.administrator_id!=context.administrator_id):
+            raise AssertionError("M37462_CONTEXT_CHANGED_BETWEEN_READS")
     # Limit synthetic context expiry to actual refreshed bearer expiry.
-    # This is a CI-only comparison; the M37458 fixture itself was created
-    # without binding to an operational user login.
+    # The M37458 fixture itself was never an operational real login.
     bounded=replace(
-        context,session_expires_at=min(
-            context.session_expires_at,s.verified_session_expires_at),
+        fresh,session_expires_at=min(
+            fresh.session_expires_at,s.verified_session_expires_at),
     )
     principal=check_server_identity_binding(
         s,bounded,now=datetime.now(timezone.utc))
