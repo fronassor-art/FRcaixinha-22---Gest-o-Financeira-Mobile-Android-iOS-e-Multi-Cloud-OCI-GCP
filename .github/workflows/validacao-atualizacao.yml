@@ -838,6 +838,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37452 — cadeia SaaS sintetica e fail-closed sem licenca ou Pix real
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37452_saas_checkout_chain_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
