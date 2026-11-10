@@ -14,7 +14,7 @@ from .oci_existing_network_audit import NetworkReport
 from .oci_iam_readiness_readonly import IAMReadOnlySummary
 from .oci_staging_live_inventory import OCIInventorySummary
 from .oci_unified_readiness_readonly import UnifiedReadiness, assess_unified_readonly
-from .saas_operational_blockers_m37469 import build_operational_blocker_report
+from .saas_operational_blockers_m37469 import PRIORITY_ORDER, READ_ONLY_STATE
 
 
 class OCIRealEvidenceBlocked(ValueError):
@@ -191,6 +191,22 @@ def attach_oci_observation_to_release(
             or base.get("provider_gates_verified")!=0
             or base.get("provider_gate_count")!=7
             or base.get("release_approval_decision")!="NOT_ISSUED"
+            or base.get("writes_performed") is not False
+            or base.get("financial_tables_written") is not False
+            or base.get("sql_migrations_applied") is not False
+            or base.get("network_calls_performed") is not False
+            or base.get("ci_proof_is_live_attestation") is not False
+            or base.get("ci_only_code_cannot_activate_users") is not True
+            or type(base.get("all_live_actions_disabled_by_this_tool")) is not dict
+            or any(base["all_live_actions_disabled_by_this_tool"].get(k) is not False
+                   for k in READ_ONLY_STATE)
+            or type(base.get("blockers")) is not list
+            or len(base["blockers"])!=len(PRIORITY_ORDER)
+            or any(type(x) is not dict
+                   or x.get("verified_live") is not False
+                   or x.get("gate_id") not in PRIORITY_ORDER
+                   for x in base["blockers"])
+            or len({x["gate_id"] for x in base["blockers"]})!=len(PRIORITY_ORDER)
             or type(evidence) is not OCIRealEvidenceM37470
             or evidence.region!="sa-saopaulo-1"
             or evidence.inventory_from_authenticated_api is not True
