@@ -142,6 +142,13 @@ def test_financial_immutable_readback(marker):
     assert marker in SRC
 
 
+def test_price_version_is_read_from_published_disposable_staging_row():
+    assert "SELECT price_version_id FROM public.saas_enrollment_requests_staging" in SRC
+    assert "PUBLISHED_CI_PRICE_NOT_FOUND" in SRC
+    assert "price=price_version" in SRC
+    assert 'P=UUID("daba0000-0000-4000-8000-000000000060")' not in SRC
+
+
 def test_no_money_or_production_credentials_or_migrations_in_probe():
     for marker in (
         "INSERT INTO public.",
