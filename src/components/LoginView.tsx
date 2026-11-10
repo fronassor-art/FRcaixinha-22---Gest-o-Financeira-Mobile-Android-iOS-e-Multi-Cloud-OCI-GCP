@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users, BriefcaseBusiness, AlertCircle } from 'lucide-react';
-import { authService, AuthenticatedUser } from '../services/authService';
+import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform } from '../services/authService';
+import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthenticatedUser) => void;
@@ -21,6 +22,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   const [resetHelp, setResetHelp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backendCheckBusy, setBackendCheckBusy] = useState(false);
+  const [backendCheckMessage, setBackendCheckMessage] = useState<string | null>(null);
+  const backendProfile = inspectMobileBackend(isNativeMobilePlatform(),getApiBaseUrl());
+  const verifyBackend = async () => {
+    if (backendCheckBusy) return;
+    setBackendCheckBusy(true);
+    setBackendCheckMessage(null);
+    try {
+      const result = await authService.checkAuthStatus();
+      setBackendCheckMessage(interpretAuthenticationStatus(result));
+    } catch {
+      setBackendCheckMessage('Não foi possível confirmar a API. Nenhuma sessão foi iniciada.');
+    } finally {
+      setBackendCheckBusy(false);
+    }
+  };
   const build = String(import.meta.env?.VITE_APP_BUILD_REF || 'local').slice(0, 7);
   // A navegacao reservada nao e uma credencial: o backend e a unica autoridade.
   const ownerRoute = '#/acesso-proprietario';
@@ -282,6 +299,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
           )}
         </section>
 
+        {backendProfile.mobile && (
+          <section aria-label="Diagnóstico do servidor móvel" className="mt-4 rounded-xl border border-amber-500/40 bg-[#123d2b] p-3 text-xs text-emerald-50">
+            <p className="font-semibold">{backendProfile.label}</p>
+            <p className="mt-1">{backendProfile.description}</p>
+            <button type="button" disabled={backendCheckBusy}
+              onClick={() => {void verifyBackend();}}
+              className="mt-3 min-h-10 rounded-lg border border-[#d4b56a] px-3 font-semibold text-[#fff0be] disabled:opacity-50">
+              {backendCheckBusy ? 'Consultando servidor...' : 'Verificar conexão com a API'}
+            </button>
+            {backendCheckMessage && <p role="status" className="mt-2">{backendCheckMessage}</p>}
+          </section>
+        )}
         <p className="mt-4 text-center text-[11px] text-emerald-100/60">
           Homologação · build {build} · sem operações financeiras reais
         </p>
