@@ -76,6 +76,13 @@ def test_roles_digest_scope_minimal_privilege(marker):
     assert marker in SQL
 
 
+def test_plpgsql_session_record_does_not_shadow_table_alias():
+    assert "v_session record;" in SQL
+    assert "INTO v_session" in SQL
+    assert "FOR UPDATE OF s" in SQL
+    assert " s record;" not in SQL
+
+
 def test_no_raw_bearer_or_payment_authorization_in_security_definer():
     lower=SQL.lower()
     for s in (
