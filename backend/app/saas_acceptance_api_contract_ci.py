@@ -120,24 +120,32 @@ def evaluate_api_contract_ci(
         or not _trusted_uuid(challenge_id_server)
         or not _trusted_uuid(request_id_server)):
         return denied(400,"INVALID_TYPED_REQUEST")
-    if not body.keys() <= _ALLOWED_FIELDS or set(body) != _ALLOWED_FIELDS:
+    if not body.keys() <= _ALLOWED_FIELDS or type(body.get("action")) is not str:
         return denied(400,"UNEXPECTED_OR_MISSING_CLIENT_FIELD")
     action = body["action"]
-    if type(action) is not str or action not in _ALLOWED_ACTIONS:
+    if action not in _ALLOWED_ACTIONS:
         return denied(400,"INVALID_ACTION")
+    # ISSUE never accepts a client-generated challenge or identity; that ID
+    # is derived by the server and included in later ACCEPT/PREPARE calls.
+    expected_fields = {
+        "ISSUE": frozenset(("action","request_id")),
+        "ACCEPT": frozenset(("action","request_id","challenge_id","confirmation")),
+        "PREPARE": frozenset(("action","request_id","challenge_id")),
+    }[action]
+    if set(body) != expected_fields:
+        return denied(400,"UNEXPECTED_OR_MISSING_CLIENT_FIELD")
     request_id = _uuid(body["request_id"])
-    challenge_id = _uuid(body["challenge_id"])
+    challenge_id = (_uuid(body["challenge_id"]) if action != "ISSUE"
+                    else challenge_id_server)
     if request_id is None or challenge_id is None:
         return denied(400,"INVALID_CLIENT_IDENTIFIERS")
     # CI-only application callback compares IDs to server generated values.
     if request_id != request_id_server or challenge_id != challenge_id_server:
         return denied(403,"SERVER_CHALLENGE_OR_REQUEST_MISMATCH")
-    confirmation = body["confirmation"]
-    if action == "ACCEPT":
-        if type(confirmation) is not str or confirmation != _CONFIRM:
-            return denied(422,"EXPLICIT_CONTRACT_CONFIRMATION_REQUIRED")
-    elif confirmation is not None:
-        return denied(400,"CONFIRMATION_NOT_ALLOWED_FOR_ACTION")
+    confirmation = body.get("confirmation")
+    if action == "ACCEPT" and (
+            type(confirmation) is not str or confirmation != _CONFIRM):
+        return denied(422,"EXPLICIT_CONTRACT_CONFIRMATION_REQUIRED")
 
     if (principal.source != "CI_SYNTHETIC_SERVER_AUTH_READBACK"
         or offer.source != "CI_SYNTHETIC_SERVER_OFFER_READBACK"):
