@@ -844,6 +844,22 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
 echo "M36300_RECONCILIATION_EVIDENCE_CI=PASS"
 echo "M36300_PRODUCTION_RECONCILIATION_AND_PIX=OFF"
 
+echo "=== M37462: verificar token hash, sessao e revogacao, CI isolada ==="
+if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_token_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37462_disposable_bearer_session_ci.sql >/dev/null 2>&1; then
+  echo "BLOCKED=M37462_WRONG_DATABASE_ACCEPTED"
+  exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_token_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37462_disposable_bearer_session_ci.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_token_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37462_verified_token_session_ci.py
+echo "M37462_PRODUCTION_SAAS_IDENTITY=NOT_ATTESTED"
+
 echo "STAGING_034_039_DISPOSABLE_POSTGRES=PASS"
 echo "LOCAL_MIGRATIONS=NOT_TOUCHED"
 echo "OCI_APPLY=NOT_EXECUTED"
