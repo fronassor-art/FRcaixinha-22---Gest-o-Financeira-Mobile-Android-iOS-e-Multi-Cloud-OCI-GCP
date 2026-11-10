@@ -5,7 +5,6 @@ DECLARE
  u uuid:=gen_random_uuid();t uuid:=gen_random_uuid();
  cyc uuid:=gen_random_uuid();p uuid:=gen_random_uuid();
  ma uuid:=gen_random_uuid();mm uuid:=gen_random_uuid();
- n int;
 BEGIN
  IF current_database()<>'frcaixinha_ci' OR session_user<>'postgres'
   OR inet_server_port()<>5432
