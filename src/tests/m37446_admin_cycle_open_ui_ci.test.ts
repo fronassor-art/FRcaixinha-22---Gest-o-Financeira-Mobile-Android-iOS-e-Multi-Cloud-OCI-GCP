@@ -19,7 +19,7 @@ const preview={
  blocked_reasons:[],preconditions_satisfied:true,cycle_creation_enabled:false,
  financial_effect:false,reason_recorded:false,
 };
-for(const [raw,cents] of [['150',15000],['200,00',20000],['325.00',32500]])
+for(const [raw,cents] of ([['150',15000],['200,00',20000],['325.00',32500]] as const))
  assert.equal(parseCyclePriceInput(raw),cents);
 for(const raw of ['100','149,99','0','10000,01'])
  assert.throws(()=>parseCyclePriceInput(raw));
