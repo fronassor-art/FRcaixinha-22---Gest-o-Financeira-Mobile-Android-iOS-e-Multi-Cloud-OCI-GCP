@@ -858,7 +858,7 @@ async def test_quotas_contributions_real_postgresql_api_roles_without_payment(is
             await admin.execute(
                 "INSERT INTO public.contributions(id,tenant_id,cycle_id,membership_id,"
                 "competence,due_date,amount_due,amount_paid,payment_status,due_status) "
-                "VALUES($1,$2,$3,$4,'2027-01',$5,100.00,0.00,'PENDENTE','NO_PRAZO')",
+                "VALUES($1,$2,$3,$4,'2027-01',$5,150.00,0.00,'PENDENTE','NO_PRAZO')",
                 record_id,tenant,cycle,membership,date(2027,1,10))
 
         async def read(user,tenant,role,active_tenant=None):
@@ -891,7 +891,7 @@ async def test_quotas_contributions_real_postgresql_api_roles_without_payment(is
             quotas,contributions=await read(ids[actor],tenant,"TENANT_MEMBER")
             assert [x.id for x in quotas]==[str(ids[expected_quota])]
             assert [x.id for x in contributions]==[str(expected_contribution)]
-            assert contributions[0].amount_due==Decimal("100.00")
+            assert contributions[0].amount_due==Decimal("150.00")
             assert contributions[0].amount_paid==Decimal("0.00")
             assert contributions[0].payment_status=="PENDENTE"
         with pytest.raises(HTTPException) as other:
@@ -956,7 +956,7 @@ async def test_member_annual_preview_real_rows_no_profit_or_write(isolated_rows)
                 await admin.execute(
                   "INSERT INTO public.contributions(tenant_id,cycle_id,membership_id,"
                   "competence,due_date,amount_due,amount_paid,payment_status,due_status) "
-                  "VALUES($1,$2,$3,$4,$5,100,0,'PENDENTE','NO_PRAZO')",
+                  "VALUES($1,$2,$3,$4,$5,150,0,'PENDENTE','NO_PRAZO')",
                   tenant,cycle,member,f"2027-{month:02}",date(2027,month,10))
         async def preview(user,active_tenant,requested_tenant,role):
             session=AuthenticatedSession(
@@ -976,14 +976,14 @@ async def test_member_annual_preview_real_rows_no_profit_or_write(isolated_rows)
                              ids["tenant_a"],"TENANT_MEMBER")
         assert result.contribution_count==12
         assert result.pending_count==12
-        assert result.total_due==Decimal("1200.00")
+        assert result.total_due==Decimal("1800.00")
         assert result.amount_paid_recorded==Decimal("0.00")
-        assert result.remaining_due==Decimal("1200.00")
+        assert result.remaining_due==Decimal("1800.00")
         assert result.profit_amount is None
         other=await preview(ids["member_a2"],ids["tenant_a"],
                             ids["tenant_a"],"TENANT_MEMBER")
         assert other.contribution_count==1
-        assert other.total_due==Decimal("100.00")
+        assert other.total_due==Decimal("150.00")
         with pytest.raises(HTTPException) as cross:
             await preview(ids["member_b"],ids["tenant_b"],
                           ids["tenant_a"],"TENANT_MEMBER")
@@ -1035,7 +1035,7 @@ async def test_admin_annual_preview_aggregates_real_postgres_and_denies_other_ro
                 await admin.execute(
                   "INSERT INTO public.contributions(tenant_id,cycle_id,membership_id,"
                   "competence,due_date,amount_due,amount_paid,payment_status,due_status)"
-                  " VALUES($1,$2,$3,$4,$5,100,0,'PENDENTE','NO_PRAZO')",
+                  " VALUES($1,$2,$3,$4,$5,150,0,'PENDENTE','NO_PRAZO')",
                   tenant,cycle,member,f"2027-{month:02d}",date(2027,month,10))
         async def read(user,active_tenant,target_tenant,role):
             session=AuthenticatedSession(
@@ -1052,12 +1052,12 @@ async def test_admin_annual_preview_aggregates_real_postgres_and_denies_other_ro
         got=await read(ids["admin_a"],ids["tenant_a"],ids["tenant_a"],"TENANT_ADMIN")
         assert got.contribution_count==13
         assert got.pending_count==13
-        assert got.total_due==Decimal("1300.00")
+        assert got.total_due==Decimal("1950.00")
         assert got.amount_paid_recorded==Decimal("0.00")
-        assert got.remaining_due==Decimal("1300.00")
+        assert got.remaining_due==Decimal("1950.00")
         assert got.profit_amount is None
         other=await read(ids["admin_b"],ids["tenant_b"],ids["tenant_b"],"TENANT_ADMIN")
-        assert other.contribution_count==1 and other.total_due==Decimal("100.00")
+        assert other.contribution_count==1 and other.total_due==Decimal("150.00")
         for user,scope,target,role in (
           (ids["member_a"],ids["tenant_a"],ids["tenant_a"],"TENANT_MEMBER"),
           (ids["master"],None,ids["tenant_a"],"MASTER"),

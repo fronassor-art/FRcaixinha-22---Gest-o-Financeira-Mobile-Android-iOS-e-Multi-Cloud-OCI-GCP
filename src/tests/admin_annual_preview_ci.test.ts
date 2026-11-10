@@ -4,11 +4,11 @@ import {parseMemberAnnualPreview} from '../services/memberAnnualPreview';
 
 const T='00000000-0000-4000-8000-000000000001';
 const normal={source:'POSTGRESQL_RLS',tenant_id:T,year:2027,
- contribution_count:12,pending_count:12,total_due:'1200.00',
- amount_paid_recorded:'0.00',remaining_due:'1200.00',
+ contribution_count:12,pending_count:12,total_due:'1800.00',
+ amount_paid_recorded:'0.00',remaining_due:'1800.00',
  result_status:'PREVIA_NAO_E_LIQUIDACAO',profit_amount:null};
 const parsed=parseMemberAnnualPreview(normal,T,2027);
-assert.equal(parsed.remaining_due,1200);
+assert.equal(parsed.remaining_due,1800);
 assert.equal(parsed.profit_amount,null);
 for(const corrupt of [
  {...normal,tenant_id:'00000000-0000-4000-8000-000000000002'},
