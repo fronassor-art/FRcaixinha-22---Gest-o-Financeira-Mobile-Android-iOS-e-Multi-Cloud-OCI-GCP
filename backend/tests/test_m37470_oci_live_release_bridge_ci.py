@@ -220,10 +220,27 @@ def test_merge_does_not_mutate_original_matrix():
     {"provider_gates_verified":1},
     {"provider_gate_count":6},
     {"release_approval_decision":"APPROVED"},
+    {"writes_performed":True},
+    {"financial_tables_written":True},
+    {"sql_migrations_applied":True},
+    {"network_calls_performed":True},
+    {"ci_proof_is_live_attestation":True},
+    {"ci_only_code_cannot_activate_users":False},
+    {"all_live_actions_disabled_by_this_tool":{"real_admins":True}},
+    {"blockers":[]},
 ])
+
 def test_existing_release_guard_can_never_be_overridden(bad):
     with pytest.raises(OCIRealEvidenceBlocked):
         attach_oci_observation_to_release({**baseline(),**bad},observe())
+
+
+def test_forged_individual_live_gate_rejected():
+    from copy import deepcopy
+    b=deepcopy(baseline())
+    b["blockers"][0]["verified_live"]=True
+    with pytest.raises(OCIRealEvidenceBlocked):
+        attach_oci_observation_to_release(b,observe())
 
 
 @pytest.mark.parametrize("bad",[
