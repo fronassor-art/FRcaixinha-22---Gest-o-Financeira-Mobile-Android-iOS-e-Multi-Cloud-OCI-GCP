@@ -856,6 +856,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37459_saas_api_contract_ci.py backend/tests/test_m37459_saas_api_transaction_ci.py
       - name: M37460 — fronteira HTTP SaaS autenticada so em CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37460_saas_authenticated_boundary_ci.py
+      - name: M37461 — sessao e oferta do PostgreSQL descartavel, leitura somente
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37461_saas_server_context_readback_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
