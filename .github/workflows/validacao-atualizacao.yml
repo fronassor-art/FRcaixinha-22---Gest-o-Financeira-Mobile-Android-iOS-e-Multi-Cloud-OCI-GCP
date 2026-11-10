@@ -850,6 +850,8 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37456_saas_consent_preparation_link_ci.py
       - name: M37457 — bloquear preparo antes do aceite e atestacao CI isolada
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37457_preparation_chronology_ci.py backend/tests/test_m37457_chronology_readback_ci.py
+      - name: M37458 — consentimento ANTES do preparo em PG descartavel sem pagamento real
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37458_saas_consent_before_preparation_ci.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
