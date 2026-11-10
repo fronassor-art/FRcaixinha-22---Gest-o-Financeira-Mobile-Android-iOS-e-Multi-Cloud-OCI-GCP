@@ -30,6 +30,7 @@ for(const broken of [
  [{...item,due_date:'2027-02-30'}],
  [{...item,competence:'2027-13'}],
  [{...item,amount_due:'3.005'}],
+ [{...item,amount_due:'100.00'}],
  [{...item,amount_due:1.005}],
  [{...item,amount_due:NaN}],
  [{...item,amount_paid:151}],

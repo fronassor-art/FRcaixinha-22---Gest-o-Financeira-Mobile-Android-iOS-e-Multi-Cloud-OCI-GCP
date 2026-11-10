@@ -15,11 +15,12 @@ const source={
  source:'POSTGRESQL_VERIFIED_SESSION',
  tenant_id:tenant,cycle_id:cycle,cycle_year:2027,
  start_date:'2027-01-01',end_date:'2027-12-31',
- amount_cents:10000,policy_version:1,registered_contributions:1,
+ amount_cents:20000,policy_version:1,registered_contributions:1,
  can_edit:false,blocked_reason:'COMPETENCIAS_JA_REGISTRADAS',
  pending_requested_cents:15000,real_payments_enabled:false,
 };
-assert.equal(parseCycleContributionPolicy(source,tenant).amount_cents,10000);
+assert.equal(parseCycleContributionPolicy(source,tenant).amount_cents,20000);
+assert.throws(()=>parseCycleContributionPolicy({...source,amount_cents:10000},tenant));
 assert.throws(()=>parseCycleContributionPolicy({...source,tenant_id:cycle},tenant));
 assert.throws(()=>parseCycleContributionPolicy({...source,real_payments_enabled:true},tenant));
 const request_id='00000000-0000-4000-8000-000000000004';

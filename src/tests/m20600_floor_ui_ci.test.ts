@@ -7,9 +7,10 @@ const tenant='00000000-0000-4000-8000-000000000001';
 const p={contract:'AI_STUDIO_M20400_CYCLE_PRICE_REVIEW_V1',source:'POSTGRESQL_VERIFIED_SESSION',
  tenant_id:tenant,cycle_id:'00000000-0000-4000-8000-000000000002',
  cycle_year:2027,start_date:'2027-01-01',end_date:'2027-12-31',
- amount_cents:10000,policy_version:1,registered_contributions:12,
+ amount_cents:20000,policy_version:1,registered_contributions:12,
  can_edit:false,blocked_reason:'COMPETENCIAS_JA_REGISTRADAS',
  pending_requested_cents:15000,real_payments_enabled:false};
-assert.equal(parseCycleContributionPolicy(p,tenant).amount_cents,10000);
+assert.equal(parseCycleContributionPolicy(p,tenant).amount_cents,20000);
+assert.throws(()=>parseCycleContributionPolicy({...p,amount_cents:10000},tenant));
 assert.equal(parseCycleContributionPolicy(p,tenant).pending_requested_cents,15000);
 console.log('M20600_CONTRACT_MINIMUM_150_UI_PASS');

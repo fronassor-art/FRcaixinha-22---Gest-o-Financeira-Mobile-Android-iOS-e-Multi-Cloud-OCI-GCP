@@ -71,6 +71,7 @@ const malformed=[
  {...record,loan_now_principal_cents:'8000'},
  {...record,loan_future_interest_cents:1.5},
  {...record,contribution_due_cents:-1},
+ {...record,contribution_due_cents:120000,contribution_open_cents:97500},
  {...record,registered_now_open_cents:9999999999999},
  {...record,unknown_token:'secret'},
  {...record,cpf:'00000000000'},
