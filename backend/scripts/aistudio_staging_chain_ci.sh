@@ -694,6 +694,13 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   python backend/scripts/aistudio_m37464_atomic_consent_ci.py
 echo "M37464_REAL_PAYMENTS_LICENSE_AND_PIX=OFF"
 
+echo "=== M37466: readback pos-commit revogado, historico imutavel CI ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37466_post_commit_readback_ci.py
+echo "M37466_ORIGINAL_POSTGRES_AND_REAL_SAAS=UNTOUCHED_OFF"
+
 echo "=== M37461: servidor PostgreSQL descartavel, sessao/contrato/preco SELECT-only ==="
 GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
