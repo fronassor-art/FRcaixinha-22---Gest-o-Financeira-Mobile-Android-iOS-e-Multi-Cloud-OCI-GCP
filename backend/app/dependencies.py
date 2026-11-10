@@ -111,7 +111,12 @@ async def get_current_session(request: Request) -> AuthenticatedSession:
                     raise HTTPException(status_code=401, detail='Vínculo ativo não encontrado.')
                 renewed_until = await conn.fetchval(
                     "SELECT public.auth_refresh_session($1::text)", raw_token)
-                if renewed_until is None:
+                if (not isinstance(renewed_until, datetime.datetime)
+                        or renewed_until.tzinfo is None
+                        or renewed_until.utcoffset() is None
+                        or renewed_until <= now):
+                    # Malformed or stale renewal must also revoke access to
+                    # older routes, not only the M37462 SaaS boundary.
                     raise HTTPException(status_code=401, detail='Sessão expirada ou revogada.')
             # M37462: the verified ID is selected from the very same
             # token-hash session row whose refresh/revocation was checked.
