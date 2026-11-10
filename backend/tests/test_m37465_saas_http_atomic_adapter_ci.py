@@ -158,11 +158,8 @@ def test_binding_is_derived_from_actual_server_verified_session():
 @pytest.mark.parametrize("field,value",[
     ("verification_source","CLIENT_ASSERTED"),
     ("verification_source","LEGACY_NO_SESSION_BINDING"),
-    ("verified_session_id",str(X)),
     ("verified_session_id","not-a-uuid"),
     ("verified_session_id",None),
-    ("user_id",str(X)),
-    ("tenant_id",str(X)),
     ("is_master",True),
     ("role","MASTER"),
     ("role","TENANT_MEMBER"),
@@ -174,6 +171,19 @@ def test_binding_is_derived_from_actual_server_verified_session():
 ])
 def test_unverified_or_expired_principal_cannot_create_binding(field,value):
     assert derive_server_binding_ci(auth(**{field:value}),BEARER,now=N) is None
+
+
+@pytest.mark.parametrize("field",[
+    "verified_session_id","user_id","tenant_id",
+])
+def test_valid_foreign_session_can_bind_only_its_own_scope(field):
+    foreign=auth(**{field:str(X)})
+    own=derive_server_binding_ci(foreign,BEARER,now=N)
+    assert own is not None
+    # Another account/session may authenticate in its own scope but cannot
+    # impersonate the requested tenant + server-offer via the adapter.
+    with pytest.raises(ValueError):
+        worker(session=foreign,claim=binding())
 
 
 @pytest.mark.parametrize("bad",[
