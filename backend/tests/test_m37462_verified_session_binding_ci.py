@@ -35,10 +35,10 @@ class Tx:
     async def __aexit__(self,*args):return False
 
 class FakeDB:
-    def __init__(self, row=None, links=None, expires=None):
+    def __init__(self, row=None, links=None, expires="DEFAULT"):
         self.row=row if row is not None else session_row()
         self.links=[{"tenant_id":T,"role":"TENANT_ADMIN"}] if links is None else links
-        self.expires=expires if expires is not None else NOW()+timedelta(minutes=10)
+        self.expires=NOW()+timedelta(minutes=10) if expires=="DEFAULT" else expires
         self.queries=[]
         self.closed=False
     def transaction(self):return Tx()
@@ -245,7 +245,7 @@ async def test_lost_membership_denied_before_refresh(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_revocation_during_refresh_is_denied(monkeypatch):
-    db=FakeDB(expires=False)
+    db=FakeDB(expires=None)
     with pytest.raises(HTTPException) as exc:
         await run_auth(monkeypatch,db)
     assert exc.value.status_code==401
