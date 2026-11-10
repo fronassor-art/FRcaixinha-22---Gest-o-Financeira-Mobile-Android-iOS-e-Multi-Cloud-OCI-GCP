@@ -701,6 +701,23 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   python backend/scripts/aistudio_m37466_post_commit_readback_ci.py
 echo "M37466_ORIGINAL_POSTGRES_AND_REAL_SAAS=UNTOUCHED_OFF"
 
+echo "=== M37467: congelar hash e valor, idempotencia e lock da oferta no CI ==="
+if PGDATABASE=frcaixinha_ci \
+  PGOPTIONS='-c frcaixinha.saas_frozen_ci=1 -c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37467_frozen_offer_idempotence_ci.sql >/dev/null 2>&1; then
+  echo "BLOCKED=M37467_WRONG_DATABASE_ACCEPTED"
+  exit 1
+fi
+PGOPTIONS='-c frcaixinha.saas_frozen_ci=1 -c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  psql -X -v ON_ERROR_STOP=1 \
+  -f backend/tests/sql/m37467_frozen_offer_idempotence_ci.sql >/dev/null
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_frozen_ci=1 -c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37467_frozen_offer_ci.py
+echo "M37467_REAL_PAYMENT_LICENSE_PIX_ACTIVATION=OFF"
+
 echo "=== M37461: servidor PostgreSQL descartavel, sessao/contrato/preco SELECT-only ==="
 GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
