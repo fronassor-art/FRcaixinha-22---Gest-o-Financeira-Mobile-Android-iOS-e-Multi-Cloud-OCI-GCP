@@ -69,7 +69,7 @@ CREATE FUNCTION public.m37464_atomic_consent_ci(
 ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,public,pg_temp AS $atomic$
 DECLARE
- s record;
+ v_session record;
  v_result text;
 BEGIN
  IF current_database()<>'frcaixinha_staging'
@@ -97,14 +97,15 @@ BEGIN
  -- waits for the whole consent transaction to commit/rollback first.
  SELECT s.id,s.user_id,s.active_role,s.active_tenant_id,s.expires_at,
         s.revoked_at
- INTO s
+ INTO v_session
  FROM public.sessions s
  WHERE s.id=p_session AND s.token_hash=p_token_hash
    AND s.user_id=p_admin AND s.active_tenant_id=p_tenant
    AND s.active_role='TENANT_ADMIN'
    AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp()
  FOR UPDATE OF s;
- IF NOT FOUND OR s.revoked_at IS NOT NULL OR s.expires_at<=clock_timestamp()
+ IF NOT FOUND OR v_session.revoked_at IS NOT NULL
+ OR v_session.expires_at<=clock_timestamp()
  OR NOT EXISTS(
    SELECT 1 FROM public.users u
    WHERE u.id=p_admin AND u.status='ACTIVE' AND u.is_master=false
