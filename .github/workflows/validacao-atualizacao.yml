@@ -880,6 +880,16 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37470_oci_live_release_bridge_ci.py
       - name: M37470 — baseline OCI sem rede e sem credenciais
         run: PYTHONPATH=backend python backend/scripts/aistudio_m37470_oci_live_release_readonly.py offline
+      - name: M37500 — revisoes adversariais de membro email Pix OCI e 15 85
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37500_release_safety_ci.py
+      - name: M37500 — 192 etapas imutaveis sem aprovacao automatica
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37500_release_workplan_ci.py backend/tests/test_m37500_offline_cli_ci.py
+      - name: M37500 — SQL 066-068 catalogado com hashes e guardas CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37500_migration_guard_ci.py
+      - name: M37500 — relatorio offline das 192 tarefas
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37500_megapack_offline.py summary
+      - name: M37500 — preflight de migracoes staging CI sem aplicar SQL
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37500_migration_preflight.py
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
