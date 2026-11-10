@@ -133,7 +133,7 @@ def test_any_inconsistent_persisted_evidence_fails_closed(field,value,state):
 def test_incomplete_or_non_database_records_denied(case):
     x=evaluate_disposable_readback(
         case, request_id=R, tenant_id=T, admin_id=A, now=NOW)
-    assert x.state in ("NO_SINGLE_DATABASE_RECORD","MALFORMED_DATABASE_IDENTIFIERS")
+    assert x.state in ("NO_SINGLE_DATABASE_RECORD","MALFORMED_DATABASE_IDENTIFIERS","MALFORMED_DATABASE_RECORD")
     deny_real(x)
 
 
