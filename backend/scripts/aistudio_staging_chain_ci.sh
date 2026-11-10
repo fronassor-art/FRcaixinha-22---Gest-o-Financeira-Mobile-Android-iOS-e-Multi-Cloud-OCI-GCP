@@ -646,6 +646,13 @@ PGOPTIONS='-c frcaixinha.saas_consent_ci=1' PYTHONPATH=backend \
   python backend/scripts/aistudio_m37456_saas_preparation_link_ci.py
 echo "M37456_REAL_SAAS_BILLING=OFF"
 
+echo "=== M37457: bloquear aceite posterior a preparacao no PostgreSQL descartavel ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_consent_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37457_chronology_readback_ci.py
+echo "M37457_REAL_SAAS_ACTIVATION=OFF"
+
 echo "=== M31400-M31800: SaaS capacity disposable CI ==="
 if PGDATABASE=frcaixinha_ci PGOPTIONS='-c frcaixinha.saas_capacity_ci=1' \
   psql -X -v ON_ERROR_STOP=1 \
