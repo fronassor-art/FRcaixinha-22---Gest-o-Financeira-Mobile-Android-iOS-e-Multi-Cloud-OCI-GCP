@@ -7,7 +7,7 @@ persist consent, create a payment, issue a license, or mutate original DB.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 import os
 
@@ -88,6 +88,10 @@ def main() -> int:
             synthetic=AuthenticatedSession(
                 user_id=str(A),role="TENANT_ADMIN",tenant_id=str(T),
                 email="ci@example.invalid",name="CI fixture",is_master=False,
+                verified_session_id=str(S),
+                verified_session_at=now-timedelta(seconds=1),
+                verified_session_expires_at=context.session_expires_at,
+                verification_source="POSTGRES_TOKEN_HASH_REFRESH",
             )
             principal=check_server_identity_binding(synthetic,context,now=now)
             if (principal is None or principal.user_id!=A
