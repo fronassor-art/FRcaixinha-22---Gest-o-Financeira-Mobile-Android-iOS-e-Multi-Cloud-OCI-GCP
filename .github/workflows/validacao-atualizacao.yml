@@ -872,6 +872,10 @@ jobs:
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37467_frozen_offer_idempotence_ci.py
       - name: M37468 — contrato congelado vs recibo e auditoria pos-revogacao CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37468_frozen_receipt_audit_ci.py
+      - name: M37469 — bloqueios operacionais reais e zero autorizacao por CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37469_release_blockers_readonly.py
+      - name: M37469 — relatorio de prioridades operacionais somente leitura
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37469_release_blockers_readonly.py plan
       - name: M37450 — inventario de licencas PG18 original, sem escrita CI
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
       - name: M37446 — API de previa administrativa, sem banco e sem escrita
