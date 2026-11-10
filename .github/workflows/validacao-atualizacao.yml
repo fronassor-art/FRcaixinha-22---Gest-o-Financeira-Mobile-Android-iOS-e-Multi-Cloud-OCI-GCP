@@ -755,6 +755,23 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frcaixinha_pg18_auth"
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_verifier LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO frcaixinha_pg18_verifier"
+      - name: M37445 — abertura autenticada de tres valores em PG18 descartavel
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          PGOPTIONS='-c frfinance.m37445_disposable_ci=1' \
+            psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m37445_cycle_opening_e2e_disposable_ci.sql
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.users')" = 0
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.cycles')" = 0
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.cycle_opening_audit')" = 0
+          echo M37445_POST_TRANSACTION_BASELINE=PASS
       - name: M37438 — ensaio transacional e rollback no PostgreSQL 18 descartavel do CI
         env:
           GITHUB_ACTIONS: 'true'
@@ -813,6 +830,8 @@ jobs:
 
       - name: M37427 — autorização explicita de abertura M044 com flag fechada
         run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37445 — verificacao estatica de E2E SQL em CI descartavel
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37445_cycle_opening_disposable_ci.py
       - name: M37444 — prontidao da abertura de ciclo no PG18 original, read only
         run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37444_cycle_readiness_ci.py
       - name: M37443 — auditoria pos-saneamento PG18 somente leitura
