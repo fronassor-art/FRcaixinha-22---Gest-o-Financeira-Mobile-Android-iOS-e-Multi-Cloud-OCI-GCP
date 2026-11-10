@@ -718,6 +718,13 @@ GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   python backend/scripts/aistudio_m37467_frozen_offer_ci.py
 echo "M37467_REAL_PAYMENT_LICENSE_PIX_ACTIVATION=OFF"
 
+echo "=== M37468: auditar oferta congelada vs recibo apos revogacao, READ ONLY CI ==="
+GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
+  PGOPTIONS='-c frcaixinha.saas_frozen_ci=1 -c frcaixinha.saas_atomic_ci=1 -c frcaixinha.saas_preprep_ci=1' \
+  PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 \
+  python backend/scripts/aistudio_m37468_frozen_receipt_readback_ci.py
+echo "M37468_REAL_PAYMENT_LICENSE_PIX_ACTIVATION=OFF"
+
 echo "=== M37461: servidor PostgreSQL descartavel, sessao/contrato/preco SELECT-only ==="
 GITHUB_ACTIONS=true FRCAIXINHA_CI_ISOLATED=1 \
   PGOPTIONS='-c frcaixinha.saas_preprep_ci=1' \
