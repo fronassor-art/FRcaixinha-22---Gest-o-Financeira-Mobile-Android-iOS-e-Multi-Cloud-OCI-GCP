@@ -78,6 +78,8 @@ def correlate_readonly_oci(
             or inventory.root_subnet!="AVAILABLE"
             or network.vcn!="AVAILABLE"
             or network.subnet!="AVAILABLE"
+            or network.vcn_private_ipv4 is not True
+            or network.subnet_private_ipv4 is not True
             or iam.staging_compartment!="ACTIVE"
             or iam.inspection_only is not True):
         raise OCIRealEvidenceBlocked("M37470_OCI_LIVE_TYPED_INPUT_REQUIRED")
