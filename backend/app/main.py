@@ -150,6 +150,43 @@ if _saas_authenticated_contract_ci.ci_endpoint_allowed(os.environ):
     app.include_router(_saas_authenticated_contract_ci.router, prefix=settings.API_V1_STR)
 
 
+# M38990: the existing FastAPI can host a single, strictly opt-in email
+# outbox consumer. Without operator review and M047 schema verification,
+# startup performs NO email, token or database queue work.
+@app.on_event("startup")
+async def _original_frfinance_access_delivery_startup():
+    from .access_delivery_pg18 import (
+        AccessQueueBlocked, install_existing_access_delivery,
+    )
+    installed = await install_existing_access_delivery(app, os.environ)
+    if os.environ.get("FR_FINANCE_ACCESS_MAIL_WORKER") == "EXPLICITLY_APPROVED":
+        if not installed or not hasattr(app.state, "access_delivery_worker"):
+            raise AccessQueueBlocked("OUTBOX_WORKER_WITHOUT_APPROVED_SCHEMA")
+        async def _single_existing_api_worker():
+            while True:
+                try:
+                    await app.state.access_delivery_worker.dispatch_one()
+                except AccessQueueBlocked:
+                    # Never log SMTP credentials, recipient or access tokens.
+                    # Unknown submission states remain QUARANTINED, no retries.
+                    pass
+                await asyncio.sleep(15)
+        app.state.access_delivery_worker_task = asyncio.create_task(
+            _single_existing_api_worker()
+        )
+
+
+@app.on_event("shutdown")
+async def _original_frfinance_access_delivery_shutdown():
+    task = getattr(app.state, "access_delivery_worker_task", None)
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
 @app.get("/api/health")
 def health_check():
     return {
