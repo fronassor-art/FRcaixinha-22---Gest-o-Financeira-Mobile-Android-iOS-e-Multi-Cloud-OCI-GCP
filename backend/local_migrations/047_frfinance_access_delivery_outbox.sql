@@ -48,7 +48,8 @@ CREATE TABLE public.frfinance_access_delivery_outbox (
  CHECK(expires_at>created_at),
  CHECK(kind<>'RESET_NOOP' OR (sealed_message IS NULL AND state='NO_ACCOUNT')),
  CHECK(kind='RESET_NOOP' OR
-       (octet_length(sealed_message) BETWEEN 44 AND 8192 AND object_id IS NOT NULL)),
+       (sealed_message IS NOT NULL AND
+        octet_length(sealed_message) BETWEEN 44 AND 8192 AND object_id IS NOT NULL)),
  CHECK(state<>'SMTP_ACCEPTED' OR smtp_accepted_at IS NOT NULL)
 );
 CREATE INDEX frfinance_delivery_claim_idx
@@ -84,7 +85,7 @@ BEGIN
    OR p_token_digest !~ '^[0-9a-f]{64}$'
    OR p_recipient_digest !~ '^[0-9a-f]{64}$'
    OR p_source_digest !~ '^[0-9a-f]{64}$'
-   OR octet_length(p_cipher) NOT BETWEEN 44 AND 8192
+   OR p_cipher IS NULL OR octet_length(p_cipher) NOT BETWEEN 44 AND 8192
  THEN RAISE EXCEPTION 'M38990_INVITE_DENIED' USING ERRCODE='42501'; END IF;
 
  SELECT s.user_id INTO actor FROM public.sessions s
@@ -142,7 +143,7 @@ BEGIN
    OR p_token_digest !~ '^[0-9a-f]{64}$'
    OR p_recipient_digest !~ '^[0-9a-f]{64}$'
    OR p_source_digest !~ '^[0-9a-f]{64}$'
-   OR octet_length(p_cipher) NOT BETWEEN 44 AND 8192
+   OR p_cipher IS NULL OR octet_length(p_cipher) NOT BETWEEN 44 AND 8192
  THEN RAISE EXCEPTION 'M38990_RESET_DENIED' USING ERRCODE='42501'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('FR38990R|'||p_recipient_digest,0));
  IF (SELECT count(*) FROM public.frfinance_access_delivery_outbox
