@@ -28,6 +28,9 @@ def check() -> int:
                 and parsed.path == f"/{PROJECT_DB}"
                 and parsed.username == expected_user
                 and bool(parsed.password)
+                # No PGOPTIONS/sslmode/service override via URL query.
+                # The original localhost DB and its segregated roles are fixed.
+                and parsed.query == ""
                 and parsed.fragment == ""
             )
         except ValueError:
