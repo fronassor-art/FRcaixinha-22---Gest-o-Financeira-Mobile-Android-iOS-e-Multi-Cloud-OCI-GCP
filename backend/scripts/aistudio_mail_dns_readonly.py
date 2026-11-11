@@ -73,12 +73,32 @@ def _local_preflight() -> str:
     return "READY_FOR_EXPLICIT_PUBLIC_DNS_READ"
 
 
-def _collect_public_dns(domain: str, selectors: tuple[str,...]) -> PublicMailDnsSnapshot:
+_APPROVED_DNS_IPS = {"cloudflare": "1.1.1.1", "google": "8.8.8.8"}
+
+
+def _collect_public_dns(
+    domain: str, selectors: tuple[str, ...], *, resolver_mode: str = "system",
+) -> PublicMailDnsSnapshot:
+    """Authorized public-only DNS. Public resolvers are NEVER auto-selected.
+
+    The system resolver remains the default. A third-party resolver requires
+    a different explicit authorization in main(), not an automatic fallback.
+    This function does not change any OS, PRoot or Android DNS settings.
+    """
+    if (domain != SENDER_DOMAIN or type(selectors) is not tuple
+            or len(selectors) > 2 or len(set(selectors)) != len(selectors)
+            or any(type(x) is not str or SELECTOR.fullmatch(x) is None
+                   for x in selectors)
+            or resolver_mode not in ("system", "cloudflare", "google")):
+        raise _failure()
     # Import only inside explicit LIVE, never in CI or offline.
     try:
         import dns.exception
         import dns.resolver
-        resolver = dns.resolver.Resolver(configure=True)
+        resolver = dns.resolver.Resolver(configure=(resolver_mode=="system"))
+        if resolver_mode!="system":
+            # Fixed public IPs only; no operator-entered DNS IP/hostname.
+            resolver.nameservers=[_APPROVED_DNS_IPS[resolver_mode]]
         resolver.timeout = 2.0
         resolver.lifetime = 5.0
     except Exception:
@@ -156,9 +176,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("action",choices=("offline","diagnose","live"),nargs="?",default="offline")
     parser.add_argument("approval",nargs="?",default=None)
     parser.add_argument("--selector",action="append",default=[])
+    parser.add_argument(
+        "--resolver", choices=("system","cloudflare","google"), default="system",
+        help="DNS system by default; external public provider only with separate approval",
+    )
     args=parser.parse_args(argv)
     if args.action=="offline":
-        if args.approval is not None or args.selector:
+        if args.approval is not None or args.selector or args.resolver!="system":
             print("M38289_MAIL_DNS=BLOCKED_INVALID_OFFLINE_ARGUMENTS")
             return 2
         print("=== FR FINANCE M38250-M38289 MAIL DNS ===")
@@ -172,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.action=="diagnose":
-        if args.approval is not None or args.selector:
+        if args.approval is not None or args.selector or args.resolver!="system":
             print("M38409_DIAGNOSE=BLOCKED_INVALID_ARGUMENTS")
             return 2
         result = _local_preflight()
@@ -186,8 +210,12 @@ def main(argv: list[str] | None = None) -> int:
         print("M38409_PRODUCTION=BLOCKED")
         return 0 if result=="READY_FOR_EXPLICIT_PUBLIC_DNS_READ" else 2
 
+    expected_approval=(
+        "AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY" if args.resolver=="system"
+        else "AUTHORIZE_THIRD_PARTY_PUBLIC_DNS_READ_ONLY"
+    )
     if (
-        args.approval!="AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY"
+        args.approval!=expected_approval
         or len(args.selector)>2 or len(set(args.selector))!=len(args.selector)
         or any(type(s) is not str or SELECTOR.fullmatch(s) is None
                for s in args.selector)
@@ -201,12 +229,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         domain=_read_source_domain()
         phase = "DNS_RESOLVER"
-        snapshot=_collect_public_dns(domain,tuple(args.selector))
+        if args.resolver=="system":
+            # Preserve the existing two-argument system-resolver contract.
+            snapshot=_collect_public_dns(domain,tuple(args.selector))
+        else:
+            snapshot=_collect_public_dns(
+                domain,tuple(args.selector),resolver_mode=args.resolver,
+            )
         phase = "DNS_RESPONSE_POLICY"
         report=assess_public_mail_dns(snapshot)
         brevo=assess_brevo_public_dns(snapshot)
     except Exception:
         print("M38289_MAIL_DNS=BLOCKED_INPUT_OR_DNS_QUERY")
+        print("M38529_RESOLVER_MODE=" + args.resolver.upper())
         print("M38409_FAILURE_STAGE=" + phase)
         if phase=="PUBLIC_INTAKE":
             print("M38409_PREFLIGHT=" + _local_preflight())
@@ -218,6 +253,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     print("=== FR FINANCE M38289 MAIL DNS PUBLIC READ ONLY ===")
+    print("M38529_RESOLVER_MODE=" + args.resolver.upper())
+    print("M38529_THIRD_PARTY_PUBLIC_DNS=" + str(
+        args.resolver!="system"
+    ).upper())
     print("M38409_DIAGNOSIS=PUBLIC_DNS_POLICY_OBSERVED")
     print("M38409_BREVO_PROVIDER_CONTROL=NOT_ATTESTED")
     print("M38289_MAIL_DNS=READ_ONLY_OBSERVATION")
