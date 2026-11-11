@@ -50,6 +50,8 @@ _STATEMENTS = {
     ),
     "claim": "SELECT * FROM public.frfinance_claim_access_mail()",
     "ack": "SELECT public.frfinance_ack_access_mail($1::uuid,$2::boolean)",
+    "verify_invite": "SELECT public.frfinance_verify_invite_email($1::char(64))",
+    "consume_reset": "SELECT public.frfinance_redeem_reset_token($1::char(64),$2::varchar(255))",
 }
 
 
@@ -215,6 +217,40 @@ async def verify_existing_schema(config: AccessQueueConfig) -> None:
         await db.close()
 
 
+
+def _verified_access_token(raw: str) -> str:
+    """Validate only opaque URL-safe access tokens; never print or persist raw."""
+    if type(raw) is not str or not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", raw):
+        raise AccessQueueBlocked("ACCESS_TOKEN_INVALID")
+    return hashlib.sha256(raw.encode("ascii")).hexdigest()
+
+
+async def verify_existing_redemption_schema(config: AccessQueueConfig) -> None:
+    """Ensure M048 was applied to SAME database before installing public ports."""
+    db = await _connect(config)
+    try:
+        row = await db.fetchrow(
+            "SELECT current_database() AS db,session_user AS role,"
+            "inet_server_port() AS port,"
+            "current_setting('data_directory') AS pgdata,"
+            "to_regprocedure('public.frfinance_verify_invite_email(char)') "
+            "IS NOT NULL AS invite,"
+            "to_regprocedure('public.frfinance_redeem_reset_token(char,varchar)') "
+            "IS NOT NULL AS reset"
+        )
+        if (not row or row["db"] != _ORIGINAL_DB
+                or row["role"] != "frc_ai_auth"
+                or row["port"] != _ORIGINAL_PORT
+                or row["pgdata"] !=
+                    "/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18"
+                or row["invite"] is not True or row["reset"] is not True):
+            raise AccessQueueBlocked("M048_REDEMPTION_NOT_ATTESTED")
+    except asyncpg.PostgresError:
+        raise AccessQueueBlocked("M048_REDEMPTION_NOT_ATTESTED") from None
+    finally:
+        await db.close()
+
+
 class Pg18AccessDelivery:
     def __init__(self, config: AccessQueueConfig):
         self.config = config
@@ -287,6 +323,54 @@ class Pg18AccessDelivery:
         return AccessDeliveryReceipt(event_id=event, persisted=True,
                                      durable_outbox_queued=True)
 
+    async def verify_invitation_email(self, *, token: str) -> bool:
+        try:
+            token_digest = _verified_access_token(token)
+        except AccessQueueBlocked:
+            raise HTTPException(400, "Convite inválido ou expirado.") from None
+        db = await _connect(self.config)
+        try:
+            async with db.transaction():
+                return await db.fetchval(_STATEMENTS["verify_invite"], token_digest) is True
+        except asyncpg.PostgresError:
+            raise HTTPException(503, "Verificação de e-mail indisponível.") from None
+        finally:
+            await db.close()
+
+    async def complete_password_reset(self, *, token: str, new_password: str) -> bool:
+        try:
+            token_digest = _verified_access_token(token)
+        except AccessQueueBlocked:
+            raise HTTPException(400, "Link de recuperação inválido ou expirado.") from None
+        if (type(new_password) is not str
+                or not 12 <= len(new_password) <= 128
+                or any(ord(ch) < 32 or ord(ch) == 127 for ch in new_password)
+                or new_password != new_password.strip()):
+            raise HTTPException(422, "Escolha uma senha de 12 a 128 caracteres.")
+        from .security import hash_password_secure
+        try:
+            encrypted_password = await asyncio.to_thread(
+                hash_password_secure, new_password,
+            )
+        except (RuntimeError, ValueError):
+            raise HTTPException(503, "Proteção de senhas indisponível.") from None
+        # No bcrypt fallback for new recovery passwords; enforce Argon2id.
+        if not (type(encrypted_password) is str
+                and encrypted_password.startswith("$argon2id$")
+                and 80 <= len(encrypted_password) <= 255):
+            raise HTTPException(503, "Proteção Argon2id indisponível.")
+        db = await _connect(self.config)
+        try:
+            async with db.transaction():
+                return (await db.fetchval(
+                    _STATEMENTS["consume_reset"],
+                    token_digest, encrypted_password,
+                )) is True
+        except asyncpg.PostgresError:
+            raise HTTPException(503, "Recuperação de senha indisponível.") from None
+        finally:
+            await db.close()
+
     async def dispatch_one(self) -> str:
         """Post-commit Brevo SMTP submission. Unknown result -> QUARANTINE, no
         blind retries; a worker never activates accounts or credits money.
@@ -336,9 +420,14 @@ async def install_existing_access_delivery(app, env: Mapping[str, str]) -> bool:
     config = require_reviewed_config(env)
     await verify_existing_schema(config)
     service = Pg18AccessDelivery(config)
+    redemption_approved = env.get("FR_FINANCE_ACCESS_REDEMPTION_048_VERIFIED") == "YES"
+    if redemption_approved:
+        await verify_existing_redemption_schema(config)
     app.state.access_delivery_runtime = AccessDeliveryBinding(
         invite=service.invite,
         reset=service.reset,
+        verify_invitation_email=service.verify_invitation_email if redemption_approved else None,
+        complete_password_reset=service.complete_password_reset if redemption_approved else None,
         original_db_verified=True,
         segregated_worker_verified=True,
         durable_outbox_verified=True,
