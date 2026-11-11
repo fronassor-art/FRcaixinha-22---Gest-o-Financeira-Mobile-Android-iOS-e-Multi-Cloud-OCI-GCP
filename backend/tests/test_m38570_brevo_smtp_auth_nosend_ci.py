@@ -119,7 +119,6 @@ def test_excess_arguments_rejected_before_network(monkeypatch):
 def test_non_interactive_tty_rejected_before_password_prompt(monkeypatch):
     mod = _load()
     monkeypatch.setattr(mod.sys, "stdin", types.SimpleNamespace(isatty=lambda: False))
-    monkeypatch.setattr(mod.sys, "stdout", types.SimpleNamespace(isatty=lambda: True))
     monkeypatch.setattr(mod.getpass, "getpass", lambda *_: pytest.fail("prompt"))
     with pytest.raises(mod.SmtpPreflightBlocked, match="TTY_REQUIRED"):
         mod._prompt_credentials()
