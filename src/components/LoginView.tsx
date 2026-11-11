@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users, BriefcaseBusiness, AlertCircle } from 'lucide-react';
 import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform } from '../services/authService';
 import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
+import {probeMobileBackendHealth} from '../services/mobileBackendProbe';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthenticatedUser) => void;
@@ -30,8 +31,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     setBackendCheckBusy(true);
     setBackendCheckMessage(null);
     try {
+      const health = await probeMobileBackendHealth(isNativeMobilePlatform(),getApiBaseUrl());
+      if (!health.ok || !health.databaseConfigured) {
+        setBackendCheckMessage(health.message);
+        return;
+      }
       const result = await authService.checkAuthStatus();
-      setBackendCheckMessage(interpretAuthenticationStatus(result));
+      setBackendCheckMessage(health.message + ' ' + interpretAuthenticationStatus(result));
     } catch {
       setBackendCheckMessage('Não foi possível confirmar a API. Nenhuma sessão foi iniciada.');
     } finally {

@@ -56,7 +56,7 @@ async def security_headers_middleware(request: Request, call_next):
     # Tokens de sessão, convites e dados SaaS nunca devem ser guardados por
     # proxies, navegadores compartilhados ou previews externos.
     response.headers["Referrer-Policy"] = "no-referrer"
-    if request.url.path.startswith(("/api/v1/", "/api/health/ready", "/api/health/runtime", "/api/health/features")):
+    if request.url.path.startswith(("/api/v1/", "/api/health")):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     return response
