@@ -56,3 +56,33 @@ A auditoria não registra stdout ou stderr brutos do psql; falhas retornam somen
 O teste do GitHub usa psql falso (mock) e nenhuma conexão PostgreSQL real. Não há migração SQL nova, mutação do banco original, uso de OCI, SMTP, Brevo, Mercado Pago, Pix, pagamentos ou ativação.
 
 Antes de qualquer aplicação futura de migrações 043/044, exigir separadamente inventário do estado, backup restaurável, verificação de dependências, aprovação de operação, transação e prova pós-aplicação. Esta etapa não concede essa autorização.
+
+## M38792 — Falha de consulta PostgreSQL classificada com segurança
+
+O checkpoint M38791 teve 12.602 testes PASS, 130 SKIP, 1 aviso e 0 falhas,
+mas a consulta local retornou `M38790_LOCAL_PG_QUERY_FAILED`. Esse código
+abrangia erro de senha no servidor, conexão, papéis, objetos ausentes ou
+SQL de auditoria; não informa qual caso aconteceu.
+
+Após a correção M38792, a própria consulta local informa exclusivamente uma
+classe predeterminada `M38792_FAILURE_CLASS`, sem revelar a mensagem bruta
+do PostgreSQL, dados de conexão sensíveis, senha ou texto SQL dinâmico.
+A leitura continua estritamente sob modo somente leitura, com autorização
+interativa; a execução automática de CI usa apenas retornos falsos do psql.
+
+Categorias comuns: `AUTH_REJECTED` (autenticação do PostgreSQL rejeitada),
+`CONNECTION_REFUSED` (porta/serviço indisponível),
+`DATABASE_UNAVAILABLE`, `ROLE_UNAVAILABLE`,
+`PERMISSION_DENIED`, `SQL_SYNTAX_ERROR`,
+`SQL_FUNCTION_UNAVAILABLE`, `SQL_RELATION_UNAVAILABLE`,
+`QUERY_EXECUTION_ERROR` ou `UNCLASSIFIED`.
+Os códigos são uma pista preliminar; não representam autorização para alterar
+credenciais, configurar servidores, editar funções ou migrar bancos.
+
+Executar após sincronização, em sessão local confiável, sem enviar senha ao chat:
+
+    python backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py local AUTHORIZE_PG18_043_044_CATALOG_READ_ONLY
+
+Caso `M38792_FAILURE_CLASS` apareça, compartilhar apenas o código e os estados
+de segurança. Nenhuma aplicação SQL, correção de senha nem mutação de dados
+é realizada por esse comando.
