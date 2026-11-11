@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bell, BellOff, Mail, MessageCircle, RefreshCw, Smartphone, ShieldCheck } from 'lucide-react';
 import type { UserRole } from '../types';
-import { authService } from '../services/authService';
+import { authService, type AuthSessionSnapshot } from '../services/authService';
+import { createNotificationReplyFence } from '../services/notificationReplyFence';
 import {
   InboxNotification, InboxPage, inboxCapabilities, fetchInbox,
   createSelfTest, acknowledgeInbox,
@@ -17,65 +18,113 @@ export const NotificationsView: React.FC<{role: UserRole}> = ({ role }) => {
   const [page,setPage]=useState<InboxPage | null>(null);
   const [rows,setRows]=useState<InboxNotification[]>([]);
   const [saving,setSaving]=useState<string | null>(null);
+  const [loadedContext,setLoadedContext]=useState<string | null>(null);
+  const replies=useRef(createNotificationReplyFence());
+  const roleRef=useRef(role);
+  roleRef.current=role;
+  const contextKey=()=>{
+    const user=authService.getUser();
+    return user ? [user.role,user.id,user.tenantId||''].join(':') : null;
+  };
+  const isCurrent=(ticket:number,session:AuthSessionSnapshot,expectedContext:string)=>
+    replies.current.isCurrent(ticket) && roleRef.current===role &&
+    authService.isSessionSnapshotCurrent(session) &&
+    authService.getUser()?.role===role && contextKey()===expectedContext;
   const context=role==='MASTER'?'Plataforma':
     role==='TENANT_ADMIN'?'Administração da caixinha':'Minhas notificações';
 
   const refresh=async(cursor: string | null=null,append=false)=>{
-    setBusy(true);
-    setError(null);
+    const ticket=replies.current.issue();
+    const session=authService.captureSession();
+    const scope=contextKey();
+    if(!session.token || !scope || authService.getUser()?.role!==role) {
+      setRows([]);setPage(null);setReady(false);setLoadedContext(null);
+      setBusy(false);setError('Sessão ou perfil inválido. Faça login novamente.');
+      return;
+    }
+    setBusy(true);setError(null);
     try {
-      if (!cursor) {
+      if(!cursor) {
         const available=await inboxCapabilities();
+        if(!isCurrent(ticket,session,scope))return;
         setReady(available);
-        if (!available) {
-          setRows([]);setPage(null);
+        if(!available) {
+          setRows([]);setPage(null);setLoadedContext(null);
           setError('Caixa de entrada local ainda não habilitada. Confira o banco e a FastAPI.');
           return;
         }
       }
       const incoming=await fetchInbox(cursor);
+      if(!isCurrent(ticket,session,scope))return;
       setPage(incoming);
+      setLoadedContext(scope);
       setRows(previous=>append
         ? [...previous,...incoming.items.filter(item=>!previous.some(old=>old.id===item.id))]
         : incoming.items);
     } catch(exc) {
+      if(!isCurrent(ticket,session,scope))return;
       setError(exc instanceof Error?exc.message:'Não foi possível consultar notificações.');
-      if (!append) {setRows([]);setPage(null);}
-    } finally {setBusy(false);}
+      if(!append) {setRows([]);setPage(null);setLoadedContext(null);}
+    } finally {
+      if(isCurrent(ticket,session,scope))setBusy(false);
+    }
   };
 
   useEffect(()=>{
-    let current=true;
-    const token=authService.captureSession();
-    void (async()=>{
-      await refresh();
-      if(!current || !authService.isSessionSnapshotCurrent(token)){
-        setRows([]);setPage(null);setReady(false);
-      }
-    })();
-    return ()=>{current=false;};
+    const unsubscribe=authService.subscribe(()=>{
+      replies.current.invalidate();
+      setRows([]);setPage(null);setReady(false);setLoadedContext(null);
+      setBusy(false);setSaving(null);setError(null);
+    });
+    replies.current.invalidate();
+    setRows([]);setPage(null);setReady(false);setLoadedContext(null);
+    setBusy(false);setSaving(null);setError(null);
+    void refresh();
+    return ()=>{
+      replies.current.invalidate();
+      unsubscribe();
+    };
   },[role]);
 
   const selfTest=async()=>{
-    setSaving('test');
-    setError(null);
+    const session=authService.captureSession();
+    const scope=contextKey();
+    const same=()=>authService.isSessionSnapshotCurrent(session) &&
+      roleRef.current===role && contextKey()===scope;
+    setSaving('test');setError(null);
     try {
       await createSelfTest();
-      await refresh();
+      if(same())await refresh();
     } catch(exc) {
-      setError(exc instanceof Error?exc.message:'Teste interno indisponível.');
-    } finally {setSaving(null);}
+      if(same())setError(exc instanceof Error?exc.message:'Teste interno indisponível.');
+    } finally {
+      if(same())setSaving(null);
+    }
   };
 
   const markRead=async(id:string)=>{
+    const session=authService.captureSession();
+    const scope=contextKey();
+    const same=()=>authService.isSessionSnapshotCurrent(session) &&
+      roleRef.current===role && contextKey()===scope;
     setSaving(id);setError(null);
     try {
       await acknowledgeInbox(id);
-      await refresh();
+      if(same())await refresh();
     } catch(exc) {
-      setError(exc instanceof Error?exc.message:'Leitura não confirmada.');
-    } finally {setSaving(null);}
+      if(same())setError(exc instanceof Error?exc.message:'Leitura não confirmada.');
+    } finally {
+      if(same())setSaving(null);
+    }
   };
+
+  // Hide the previous account's result on the very first render after a
+  // role, user or tenant transition, before the effect clears old state.
+  const visible=loadedContext!==null && loadedContext===contextKey() &&
+    authService.getUser()?.role===role;
+  const visibleReady=visible && ready;
+  const visiblePage=visible ? page : null;
+  const visibleRows=visible ? rows : [];
 
   return (
     <section aria-labelledby="notification-title" className="mx-auto max-w-3xl space-y-5">
@@ -88,7 +137,7 @@ export const NotificationsView: React.FC<{role: UserRole}> = ({ role }) => {
           </div>
         </div>
         <p className="mt-3 text-sm text-[#3d5748]">
-          {ready?'Avisos internos salvos na sua conta e nesta caixinha.':
+          {visibleReady?'Avisos internos salvos na sua conta e nesta caixinha.':
             'Estamos preparando a central de avisos do FR Finance no banco local.'}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -96,7 +145,7 @@ export const NotificationsView: React.FC<{role: UserRole}> = ({ role }) => {
             className="rounded-lg bg-[#195c3c] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
             <RefreshCw className="mr-1 inline h-4 w-4"/> Atualizar
           </button>
-          {ready&&<button type="button" disabled={busy || saving!==null} onClick={()=>void selfTest()}
+          {visibleReady&&<button type="button" disabled={busy || saving!==null} onClick={()=>void selfTest()}
             className="rounded-lg border border-[#195c3c] px-4 py-2 text-sm font-semibold text-[#195c3c] disabled:opacity-50">
             Enviar aviso interno de teste
           </button>}
@@ -104,23 +153,23 @@ export const NotificationsView: React.FC<{role: UserRole}> = ({ role }) => {
       </header>
 
       {error&&<div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">{error}</div>}
-      {!ready&&<div role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
+      {!visibleReady&&<div role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
         <div className="flex items-center gap-2"><BellOff className="h-5 w-5"/>
           <strong>Recebimento de notificações ainda não ativado</strong>
         </div>
         <p className="mt-2 text-sm">A caixa interna exige migração 031, login válido e FastAPI local. Nenhuma mensagem simulada será apresentada como recebida.</p>
       </div>}
-      {ready&&<section aria-label="Caixa de entrada" className="space-y-3">
+      {visibleReady&&<section aria-label="Caixa de entrada" className="space-y-3">
         <h2 className="font-bold text-[#073d2b]">Caixa de entrada
-          {page&&<span className="ml-2 rounded-full bg-[#e5f2e8] px-2 py-1 text-xs text-[#195c3c]">
-            {page.unread_count} não lidas
+          {visiblePage&&<span className="ml-2 rounded-full bg-[#e5f2e8] px-2 py-1 text-xs text-[#195c3c]">
+            {visiblePage.unread_count} não lidas
           </span>}
         </h2>
         {busy&&<p role="status" className="text-sm">Consultando mensagens...</p>}
-        {!busy&&rows.length===0&&!error&&<p role="status" className="rounded-xl bg-white p-5 text-sm">
+        {!busy&&visibleRows.length===0&&!error&&<p role="status" className="rounded-xl bg-white p-5 text-sm">
           Nenhum aviso encontrado nesta conta.
         </p>}
-        {rows.map(item=><article key={item.id}
+        {visibleRows.map(item=><article key={item.id}
           className="rounded-xl border border-[#d1dfd1] bg-white p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -137,8 +186,8 @@ export const NotificationsView: React.FC<{role: UserRole}> = ({ role }) => {
             </button>:<span className="text-xs text-[#64806e]">Lida</span>}
           </div>
         </article>)}
-        {page?.has_more&&page.next_cursor&&<button type="button"
-          disabled={busy||saving!==null} onClick={()=>void refresh(page.next_cursor,true)}
+        {visiblePage?.has_more&&visiblePage.next_cursor&&<button type="button"
+          disabled={busy||saving!==null} onClick={()=>void refresh(visiblePage.next_cursor,true)}
           className="w-full rounded-lg border border-[#cadacb] bg-white px-4 py-3 text-sm font-semibold disabled:opacity-50">
           Carregar mais
         </button>}

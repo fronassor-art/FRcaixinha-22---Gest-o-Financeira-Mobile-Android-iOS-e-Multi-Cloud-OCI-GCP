@@ -22,6 +22,7 @@ jobs:
           npx tsx src/tests/m37974_api_origin_notification_guard_ci.test.ts
           npx tsx src/tests/m37447_mobile_backend_diagnostic_ci.test.ts
           npx tsx src/tests/m19000_notifications_functional_ui.test.ts
+          npx tsx src/tests/m37977_notification_race_ci.test.ts
           npx tsx src/tests/auth_context_security.test.ts
       - run: |
           echo "M37974_REAL_PIX=OFF"
