@@ -50,7 +50,7 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
-          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44,45,46) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44,45,46,47) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"
@@ -87,7 +87,7 @@ def repo_check():
     return manifest
 
 def local_readonly():
-    if ROOT!=Path.home()/"frcaixinha-aistudio-mobile":
+    if ROOT!=Path.home()/"fr-finance":
         return deny("wrong Termux project directory")
     if git("branch","--show-current")!=BRANCH or git("rev-parse","HEAD")!=os.getenv("AI_STUDIO_APPROVED_SHA",""):
         return deny("Git branch/SHA not approved")
@@ -145,8 +145,8 @@ def local_readonly():
                 print("M19200_CI_031_037=DISPOSABLE_ONLY")
                 # M20200: report the runtime DB, not a generic source-code state.
                 # Both the precise table count and all core contracts are required.
-                if n not in (44,45,46):
-                    return deny("M20200 expected 44 or 45 public tables, found "+str(n))
+                if n not in (44,45,46,47):
+                    return deny("M20200 unexpected local schema table count: "+str(n))
                 lifecycle=("public.member_lifecycle_requests","public.member_lifecycle_review_events")
                 if not all(exists(t) for t in lifecycle) or not has030:
                     return deny("M20200 lifecycle 028-030 objects missing")
@@ -267,7 +267,7 @@ def local_readonly():
                         print("M20700_LOCAL_043=NOT_APPLIED")
                     else:
                         return deny("M20700 partial migration 043")
-                if n==46:
+                if n>=46:
                     obj="public.cycle_opening_audit"
                     if not exists(obj):return deny("M21000 audit table missing")
                     secure=conn.execute(
@@ -289,6 +289,31 @@ def local_readonly():
                     print("M21000_LOCAL_044=OBJECTS_AND_ROLE_BOUNDARY_VERIFIED")
                 else:
                     print("M21000_LOCAL_044=NOT_APPLIED")
+                if n>=47:
+                    obj="public.frfinance_access_delivery_outbox"
+                    if not exists(obj):
+                        return deny("M38990 local outbox table missing")
+                    secure=conn.execute(
+                      "SELECT relrowsecurity AND relforcerowsecurity "
+                      "FROM pg_class WHERE oid=to_regclass(%s)",(obj,)
+                    ).fetchone()[0]
+                    app_access=conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',%s,'INSERT') "
+                      "OR has_table_privilege('frc_ai_app',%s,'SELECT') "
+                      "OR has_table_privilege('frc_ai_auth',%s,'SELECT')",
+                      (obj,obj,obj)
+                    ).fetchone()[0]
+                    funcs=all(routine(f) for f in (
+                      "public.frfinance_enqueue_member_invite(uuid,uuid,uuid,uuid,varchar,char,char,char,bytea)",
+                      "public.frfinance_enqueue_password_reset(uuid,varchar,char,char,char,bytea)",
+                      "public.frfinance_claim_access_mail()",
+                      "public.frfinance_ack_access_mail(uuid,boolean)",
+                    ))
+                    if not secure or app_access or not funcs:
+                        return deny("M38990 local outbox RLS, privileges or functions invalid")
+                    print("M38990_LOCAL_047=STRUCTURAL_PRESENT_NO_DELIVERY_ATTESTATION")
+                else:
+                    print("M38990_LOCAL_047=NOT_APPLIED")
                 print("M20200_MIGRATIONS="+str(n)+"_TABLES_VERIFIED_NO_REAPPLY")
                 print("M19200_READ_ONLY=PASS")
                 return 0
