@@ -3,13 +3,14 @@
 As rotas de criação real permanecem bloqueadas até existirem entrega,
 verificação de titularidade, aceite contratual, RLS e auditoria aprovados.
 """
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from ..models import (
     InvitationCreateRequest, InvitationContractReadinessRequest,
     InvitationContractCatalogRequest, InvitationContractTextIntegrityRequest,
 )
 from ..dependencies import get_current_session, AuthenticatedSession
 from ..config import settings
+from ..access_delivery_binding import require_access_delivery, invitation_accepted_response
 from ..database import get_rls_db_connection
 from ..contract_text_integrity import verify_contract_body_digest
 from ..canonical_contract_store import load_published_contract_body
@@ -101,7 +102,6 @@ async def preview_saas_member_capacity(
     return await member_admission_readiness(session=session,payload=payload,conn=conn)
 
 
-@router.post("")
 def create_invitation(
     payload: InvitationCreateRequest,
     session: AuthenticatedSession = Depends(get_current_session),
@@ -117,3 +117,30 @@ def create_invitation(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Convites ainda não implementados. Nenhum convite foi criado ou enviado.",
     )
+
+
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
+async def submit_invitation_to_existing_outbox(
+    payload: InvitationCreateRequest,
+    request: Request,
+    session: AuthenticatedSession = Depends(get_current_session),
+):
+    """Connect the existing API route to an injected same-database outbox worker.
+
+    No worker installed in the Termux/dev default: the endpoint remains 503.
+    Master invites additionally require MFA/dual-control at worker level.
+    """
+    authorize_invitation_intent(session=session, payload=payload)
+    if payload.required_document_id is None or not payload.tenant_id:
+        raise HTTPException(422, "Caixinha e contrato publicado são obrigatórios.")
+    if not settings.is_database_configured:
+        raise HTTPException(503, "Banco PostgreSQL original indisponível.")
+    runtime = require_access_delivery(request)
+    # This port must atomically recheck RLS, contract, identity, outbox and
+    # idempotency on the original database; intent-level checks are not proof.
+    if session.role == "MASTER":
+        raise HTTPException(
+            503, "Convite administrativo aguarda prova real de MFA e dupla aprovação."
+        )
+    receipt = await runtime.invite(session=session, payload=payload)
+    return invitation_accepted_response(receipt)
