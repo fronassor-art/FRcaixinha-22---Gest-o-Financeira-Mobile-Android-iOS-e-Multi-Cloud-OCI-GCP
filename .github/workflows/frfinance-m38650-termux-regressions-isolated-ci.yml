@@ -1,0 +1,49 @@
+name: FR Finance M38650 Termux regression clock and isolated DB safety
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  termux-regression-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: "1"
+      # No real or disposable database is started in this workflow.
+      FRCAIXINHA_CI_ISOLATED: "0"
+      FR_FINANCE_PIX_REAL: "OFF"
+      FR_FINANCE_EMAIL_REAL: "OFF"
+      FR_FINANCE_REAL_USER_ACTIVATION: "OFF"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install backend test-only dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: M37462 — validated bearer session negative cases with runtime clock
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m37462_verified_session_binding_ci.py
+      - name: Termux PostgreSQL readiness test must skip without disposable DB
+        run: |
+          python -m pytest -q -rs -p no:cacheprovider \
+            backend/tests/test_termux_readiness_ci.py
+      - name: Never activate production or migrate the original DB
+        run: |
+          echo "M38650_CI_CLOCK_REGRESSION=EXECUTED"
+          echo "M38650_CI_REAL_POSTGRES=NONE"
+          echo "M38650_TERMUX_ORIGINAL_DB_MUTATIONS=NONE"
+          echo "M38650_LOCAL_DB_5433=UNTOUCHED"
+          echo "M38650_EMAIL_REAL=OFF"
+          echo "M38650_PIX_REAL=OFF"
+          echo "M38650_REAL_ACTIVATION=OFF"
+          echo "M38650_PRODUCTION=BLOCKED"
