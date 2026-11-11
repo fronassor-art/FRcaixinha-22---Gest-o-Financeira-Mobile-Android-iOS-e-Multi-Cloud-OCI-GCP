@@ -1,0 +1,32 @@
+name: FR Finance M38250 sender DNS SPF DMARC DKIM offline CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-mail-dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Validação sintética sem DNS SMTP OCI ou banco
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38250_mail_dns_readonly_ci.py \
+            backend/tests/test_m27700_public_provider_intake_ci.py \
+            backend/tests/test_m28200_public_tls_probe_ci.py
+          echo "M38289_DNS_LIVE_QUERY=NONE"
+          echo "M38289_SMTP_SUBMISSION=NONE"
+          echo "M38289_EMAIL_REAL=OFF"
+          echo "M38289_PIX_REAL=OFF"
+          echo "M38289_ACTIVATION_REAL=OFF"
+          echo "M38289_PRODUCTION=BLOCKED"
