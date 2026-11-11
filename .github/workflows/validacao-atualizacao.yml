@@ -308,6 +308,8 @@ jobs:
         env:
           PYTHONPATH: backend
         run: python -c "from app.main import app; print('FastAPI importado')"
+      - name: M38992 — sintaxe do instalador aditivo original (sem executar)
+        run: bash -n backend/scripts/frfinance_m38992_apply_m047_original_pg18.sh
       - name: M38990 — outbox do banco original, convite e recuperação (sem envio)
         env:
           PYTHONPATH: backend
