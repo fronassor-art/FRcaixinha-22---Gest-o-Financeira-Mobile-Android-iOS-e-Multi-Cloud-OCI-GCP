@@ -36,7 +36,22 @@ def test_m5600_health_reports_code_but_no_financial_operation():
         assert data[field] is True,field
 
 
-def test_order_webhook_still_not_public_after_new_modules():
-    paths={r.path for r in app.routes}
-    assert "/integrations/mercadopago/orders" not in paths
+def test_order_webhook_mounted_but_remains_fail_closed_without_runtime():
+    # M38970 mounted the existing signed Orders route; unlike a live payment
+    # endpoint it refuses unauthenticated or unconfigured delivery.
+    paths = [r.path for r in app.routes]
+    assert paths.count("/integrations/mercadopago/orders") == 1
     assert "/integrations/mercadopago/webhook" not in paths
+    assert "/integrations/mercadopago/orders" not in app.openapi()["paths"]
+    if hasattr(app.state, "mp_orders_ingress_runtime"):
+        delattr(app.state, "mp_orders_ingress_runtime")
+    # Missing HTTPS HMAC headers are rejected before any provider work.
+    with TestClient(app,base_url="https://testserver") as client:
+        response=client.post(
+            "/integrations/mercadopago/orders",
+            params={"data.id":"ORD123456789012","type":"order"},
+            headers={"content-type":"application/json"},
+            json={"type":"order","data":{"id":"ORD123456789012"}},
+        )
+    assert response.status_code == 400
+    assert "bank_reconciled" not in response.text
