@@ -78,7 +78,8 @@ def _get_local_json(url: str) -> tuple[str, dict | None]:
 def probe() -> dict[str, str]:
     # First ensure the filesystem/worktree is this original project.
     inspected = identity.inspect_local(Path.home())
-    if inspected.get("M38794_PROJECT_SEPARATION") == "BLOCKED":
+    if (inspected.get("M38794_GIT_IDENTITY") != "FR_FINANCE_AI_STUDIO"
+            or inspected.get("M38794_PGDATA_IDENTITY") != "FR_FINANCE_AI_STUDIO_PG18"):
         raise ExistingServiceBlocked("WRONG_PROJECT")
     pg = _pg_ready()
     api_status, api_payload = _get_local_json(API_HEALTH_URL)
