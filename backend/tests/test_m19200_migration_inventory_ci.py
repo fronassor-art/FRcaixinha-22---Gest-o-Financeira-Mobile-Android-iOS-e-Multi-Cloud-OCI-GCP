@@ -18,7 +18,7 @@ def test_full_migration_catalog():
     assert c("CI_ONLY_NEEDS_PORT")==3
     assert c("STAGING_ONLY_NEEDS_PORT")>=16
     assert c("CI_ONLY_TEST_OR_FIXTURE")>=21
-    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==17
+    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==18
     assert all(x["do_not_apply_source_to_termux"]
                for x in entries if x["source_path"].startswith("backend/staging_migrations/"))
 
@@ -56,6 +56,7 @@ def test_inventory_local_runtime_verifies_core_structures_and_m21000_extension()
         "if n not in (44,45,46,47):",
         "M21000_LOCAL_044=OBJECTS_AND_ROLE_BOUNDARY_VERIFIED",
         "M38990_LOCAL_047=STRUCTURAL_PRESENT_NO_DELIVERY_ATTESTATION",
+        "M38993_LOCAL_048=FUNCTIONS_AND_ROLE_BOUNDARY_PRESENT",
         "local_m041_notification_outbox",
         "local_m040_immutable_truncate",
         "has_table_privilege('frc_ai_auth'",
