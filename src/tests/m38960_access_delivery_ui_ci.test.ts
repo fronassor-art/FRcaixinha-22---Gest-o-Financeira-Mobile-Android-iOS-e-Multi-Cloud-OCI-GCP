@@ -6,6 +6,8 @@ const ui = readFileSync('src/components/LoginView.tsx', 'utf8');
 const svc = readFileSync('src/services/authService.ts', 'utf8');
 const api = readFileSync('backend/app/routers/auth.py', 'utf8');
 const invite = readFileSync('backend/app/routers/invitations.py', 'utf8');
+const members = readFileSync('src/components/MembersView.tsx', 'utf8');
+const finance = readFileSync('src/services/financialApiService.ts', 'utf8');
 
 assert.match(ui, /authService\.requestPasswordReset\(email\.trim\(\)\)/);
 assert.match(ui, /Enviar instruções de recuperação/);
@@ -20,6 +22,13 @@ assert.match(svc, /Recuperação ainda indisponível\. Nenhuma mensagem foi envi
 
 assert.match(api, /submit_password_recovery_to_existing_outbox/);
 assert.match(invite, /submit_invitation_to_existing_outbox/);
+assert.match(members, /Solicitar convite/);
+assert.match(members, /financialApi\.issueMemberInvitation/);
+assert.match(members, /UUID do contrato publicado/);
+assert.match(finance, /public async issueMemberInvitation/);
+assert.match(finance, /\/api\/v1\/invitations/);
+assert.match(finance, /r\.status !== 'QUEUED_FOR_DELIVERY'/);
+assert.match(finance, /r\.activation_authorized !== false/);
 assert.doesNotMatch(api, /submit_access_message\(/);
 assert.doesNotMatch(invite, /submit_access_message\(/);
 assert.doesNotMatch(ui, /localStorage\.setItem/);
