@@ -27,6 +27,23 @@ Opcional, após sincronizar e somente com decisão consciente de consultar o Pos
 
 O prompt pede a senha do banco de forma oculta no próprio Termux. A senha não é gravada em arquivos ou argumentos de shell e não deve ser enviada ao chat ou GitHub. O programa passa a senha temporariamente ao processo psql por variável de ambiente: executar somente em telefone e sessão confiáveis, pois processos autorizados do mesmo usuário podem conseguir observar o ambiente do processo.
 
+### Correção M38791 — entrada de senha no Termux
+
+O checkpoint M38790 demonstrou que a versão original rejeitava caracteres
+não ASCII e espaços na senha antes mesmo de tentar conexão, gerando
+M38790_PASSWORD_INVALID. A correção aceita caracteres Unicode imprimíveis,
+acentuação, símbolos e espaços sem alterar seu conteúdo. A senha continua
+oculta, não é registrada no log e é rejeitada se estiver vazia, exceder 512
+caracteres ou contiver controles invisíveis como NUL e quebra de linha.
+Não há alteração na autenticação do PostgreSQL e não foi realizada
+conexão real pelo CI. A senha correta continua exigida.
+
+Caso o aviso PASSWORD_INVALID permaneça, conferir somente no próprio
+Termux se foi digitada uma senha não vazia e sem quebras de linha. Caso
+surja LOCAL_PG_QUERY_FAILED, a validação preliminar da senha já passou,
+mas a causa poderá ser credencial incorreta, conexão ou consulta SQL.
+Não enviar a senha nem outros segredos ao chat.
+
 A auditoria não registra stdout ou stderr brutos do psql; falhas retornam somente causas codificadas. Não é destinada a cron nem CI com credenciais reais.
 
 ## Separação de evidências
