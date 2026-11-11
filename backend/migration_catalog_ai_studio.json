@@ -1054,6 +1054,16 @@
       "source_blob_sha": "6dab10eec22118bbe18b5c30d4612a185eedfb61"
     },
     {
+      "id": "local_migrations:047",
+      "source_path": "backend/local_migrations/047_frfinance_access_delivery_outbox.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.frfinance_access_delivery_outbox: encrypted original-PG18 invitation/reset queue, narrow security-definer auth functions",
+      "local_evidence": null,
+      "source_blob_sha": "bcd59eb2c5a8cbfc433547d26179621392132ed1"
+    },
+    {
       "id": "staging_migrations:064",
       "source_path": "backend/staging_migrations/064_saas_member_admission_intent_staging_only.sql",
       "classification": "STAGING_ONLY_NEEDS_PORT",
