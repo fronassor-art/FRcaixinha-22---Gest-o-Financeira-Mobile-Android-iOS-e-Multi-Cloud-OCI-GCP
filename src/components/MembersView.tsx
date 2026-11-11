@@ -11,6 +11,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ state }) => {
   const key = [state.currentUserId, state.currentRole, state.currentTenantId].join(':');
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<LoadState>({ key: '', status: 'loading', members: [] });
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteDocument, setInviteDocument] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -30,6 +34,26 @@ export const MembersView: React.FC<MembersViewProps> = ({ state }) => {
     return () => { active = false; };
   }, [key, revision]);
 
+  const submitMemberInvite = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setInviteMessage(null);
+    if (inviteBusy || state.currentRole !== 'TENANT_ADMIN' || !state.currentTenantId) return;
+    setInviteBusy(true);
+    try {
+      const result = await financialApi.issueMemberInvitation(
+        state.currentTenantId, inviteEmail, inviteDocument,
+      );
+      if (!result.delivered) {
+        setInviteMessage('Solicitação registrada na fila segura. O e-mail e a ativação do membro ainda não foram confirmados.');
+        setInviteEmail('');
+      }
+    } catch {
+      setInviteMessage('Convite não emitido. Verifique o contrato publicado e a disponibilidade da API de convites.');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
   const current = result.key === key ? result : { key, status: 'loading' as const, members: [] };
   return (
     <section className="space-y-4" aria-labelledby="members-heading">
@@ -46,9 +70,38 @@ export const MembersView: React.FC<MembersViewProps> = ({ state }) => {
         </button>
       </div>
       <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-        Convites e aceite de novas contas ainda estão bloqueados até a integração de cadastro,
-        verificação de identidade e autorização contratual. Nenhum membro fictício é exibido como real.
+        Convites só serão aceitos quando a API confirmar o registro em fila segura.
+        E-mail recebido, identidade validada e admissão são etapas distintas.
+        Nenhum membro fictício é exibido como real.
       </p>
+      {state.currentRole === 'TENANT_ADMIN' && state.currentTenantId && state.currentUserId && (
+        <form onSubmit={(event) => { void submitMemberInvite(event); }}
+          className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
+          aria-label="Solicitar convite de membro">
+          <h3 className="text-base font-semibold text-[#143d29]">Convidar membro</h3>
+          <p className="text-xs text-slate-600">Confirme a versão do contrato publicada abaixo. O servidor valida o vínculo e autoriza ou recusa o convite.</p>
+          <label htmlFor="member-invite-email" className="block text-sm font-medium text-slate-900">
+            E-mail do futuro membro
+          </label>
+          <input id="member-invite-email" type="email" required autoComplete="off"
+            value={inviteEmail} onChange={event => setInviteEmail(event.target.value)}
+            maxLength={254} className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="membro@exemplo.com.br" />
+          <label htmlFor="member-invite-document" className="block text-sm font-medium text-slate-900">
+            UUID do contrato publicado
+          </label>
+          <input id="member-invite-document" type="text" required autoComplete="off"
+            spellCheck={false} value={inviteDocument}
+            onChange={event => setInviteDocument(event.target.value)}
+            maxLength={36} className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Versão publicada no painel de contratos" />
+          <button type="submit" disabled={inviteBusy}
+            className="rounded-lg bg-[#143d29] px-4 py-2 font-semibold text-white disabled:opacity-50">
+            {inviteBusy ? 'Verificando convite...' : 'Solicitar convite'}
+          </button>
+          {inviteMessage && <p role="status" aria-live="polite" className="text-sm text-slate-700">{inviteMessage}</p>}
+        </form>
+      )}
       {state.currentRole === 'TENANT_ADMIN' && state.currentTenantId && state.currentUserId && (
         <details className="rounded-xl border border-slate-200 bg-white p-4">
           <summary className="cursor-pointer text-sm font-semibold text-[#143d29]">
