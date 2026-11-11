@@ -21,6 +21,7 @@ from app.mail_dns_readiness_readonly import (
     DkimDnsObservation, MailDnsObservationBlocked, PublicMailDnsSnapshot,
     assess_public_mail_dns,
 )
+from app.brevo_sender_dns_policy import assess_brevo_public_dns
 from aistudio_provider_intake import _default_file, read_file
 
 SENDER_DOMAIN = "frfinance.com.br"
@@ -148,9 +149,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         domain=_read_source_domain()
-        report=assess_public_mail_dns(
-            _collect_public_dns(domain,tuple(args.selector))
-        )
+        snapshot=_collect_public_dns(domain,tuple(args.selector))
+        report=assess_public_mail_dns(snapshot)
+        brevo=assess_brevo_public_dns(snapshot)
     except Exception:
         # No DNS, intake or provider exception text; fixed reason only.
         print("M38289_MAIL_DNS=BLOCKED_INPUT_OR_DNS_QUERY")
@@ -166,8 +167,19 @@ def main(argv: list[str] | None = None) -> int:
     print("M38289_DMARC_POLICY="+report.dmarc_policy)
     print("M38289_DKIM_SELECTORS="+str(report.dkim_selectors_observed))
     print("M38289_DKIM_RECORDS="+str(report.dkim_records_present))
-    for blocker in report.blockers:
-        print("M38289_BLOCKER="+blocker)
+    # The generic legacy policy may flag an absent SPF, p=none or one
+    # DKIM TXT even though all are compatible with the Brevo account
+    # authentication flow. Print only the provider-specific diagnosis.
+    print("M38329_BREVO_CODE_RECORD="+str(brevo.brevo_code_record_observed).upper())
+    print("M38329_SPF_OPTIONAL_FOR_SHARED_BREVO=TRUE")
+    print("M38329_SPF_STATUS="+brevo.spf_status)
+    print("M38329_DMARC_STATUS="+brevo.dmarc_status)
+    print("M38329_DMARC_RUA="+str(brevo.dmarc_rua_observed).upper())
+    print("M38329_DKIM_MODE="+brevo.dkim_mode)
+    print("M38329_DNS_SHAPE_COMPLETE="+str(brevo.public_dns_candidates_complete).upper())
+    for blocker in brevo.blockers:
+        print("M38329_BLOCKER="+blocker)
+    print("M38329_PROVIDER_AUTHENTICATED=NOT_VERIFIED")
     print("M38289_PROVIDER_SENDER=NOT_VERIFIED")
     print("M38289_SMTP_AUTH=NOT_TESTED")
     print("M38289_EMAIL_DELIVERY=NOT_ATTESTED")
