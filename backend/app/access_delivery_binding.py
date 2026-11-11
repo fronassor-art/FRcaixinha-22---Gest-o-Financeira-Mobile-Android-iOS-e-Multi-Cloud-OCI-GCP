@@ -33,6 +33,8 @@ class AccessDeliveryBinding:
     """
     invite: Callable[..., Awaitable[AccessDeliveryReceipt]]
     reset: Callable[..., Awaitable[AccessDeliveryReceipt]]
+    verify_invitation_email: Callable[..., Awaitable[bool]] | None = None
+    complete_password_reset: Callable[..., Awaitable[bool]] | None = None
     original_db_verified: bool = False
     segregated_worker_verified: bool = False
     durable_outbox_verified: bool = False
