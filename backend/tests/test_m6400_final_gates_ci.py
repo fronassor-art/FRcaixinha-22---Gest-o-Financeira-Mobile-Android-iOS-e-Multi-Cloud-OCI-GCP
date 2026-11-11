@@ -35,6 +35,19 @@ def test_backend_m6400_fails_closed_even_after_code_present():
         assert d[key] is False,key
 
 
-def test_orders_webhook_is_still_not_exposed_to_termux():
-    paths={r.path for r in app.routes}
-    assert "/integrations/mercadopago/orders" not in paths
+def test_orders_webhook_mounted_but_not_live_without_verified_runtime():
+    # Route is now present on the ONE FastAPI, but live financial processing is
+    # still forbidden and unsigned webhooks must never reach the inbox.
+    paths=[r.path for r in app.routes]
+    assert paths.count("/integrations/mercadopago/orders") == 1
+    assert "/integrations/mercadopago/orders" not in app.openapi()["paths"]
+    if hasattr(app.state, "mp_orders_ingress_runtime"):
+        delattr(app.state, "mp_orders_ingress_runtime")
+    with TestClient(app,base_url="https://testserver") as client:
+        denied=client.post(
+            "/integrations/mercadopago/orders",
+            params={"data.id":"ORD123456789012","type":"order"},
+            headers={"content-type":"application/json"},
+            json={"data":{"id":"ORD123456789012"},"type":"order"},
+        )
+    assert denied.status_code == 400
