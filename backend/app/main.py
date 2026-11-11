@@ -10,6 +10,8 @@ from .cookie_origin_guard import allow_cookie_request
 from .config import settings
 from .dependencies import auth_database_url, auth_verifier_database_url
 from .security import auth_rate_limit_key
+from .mp_orders_webhook import OrdersIngressBinding, create_orders_staging_router
+from time import time as _epoch_seconds
 import asyncio
 import asyncpg
 import hashlib
@@ -89,6 +91,44 @@ app.include_router(closings.router, prefix=settings.API_V1_STR)
 app.include_router(audit.router, prefix=settings.API_V1_STR)
 app.include_router(pix_automation.router, prefix=settings.API_V1_STR)
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
+
+# M38970: reuse the EXISTING main FastAPI for signed Mercado Pago Orders.
+# No second ASGI service, no second PostgreSQL, and no live processing here.
+# The existing HMAC verifier remains the sole request validator. Durable
+# tenant/seller inbox + secret-store callbacks must be injected by a reviewed
+# deployment; absent binding means 503, not a fabricated bank settlement.
+def _existing_mp_ingress_binding() -> OrdersIngressBinding:
+    binding = getattr(app.state, "mp_orders_ingress_runtime", None)
+    if (type(binding) is not OrdersIngressBinding
+            or binding.seller_registry_verified is not True
+            or binding.secret_store_verified is not True
+            or binding.durable_inbox_verified is not True
+            or binding.ingress_https_verified is not True
+            or binding.sandbox_only is not True):
+        raise RuntimeError("FR Finance Orders inbox unavailable")
+    return binding
+
+
+async def _resolve_mp_order_seller(seller_id: str):
+    return await _existing_mp_ingress_binding().resolve_account(seller_id)
+
+
+async def _load_mp_order_secret(account):
+    return await _existing_mp_ingress_binding().load_signing_secret(account)
+
+
+async def _persist_mp_signed_order(event):
+    return await _existing_mp_ingress_binding().persist_event(event)
+
+
+app.include_router(create_orders_staging_router(
+    resolve_account=_resolve_mp_order_seller,
+    load_signing_secret=_load_mp_order_secret,
+    persist_event=_persist_mp_signed_order,
+    now_ms=lambda: int(_epoch_seconds() * 1000),
+    allow_live_ingest=False,  # Real payments remain OFF until commercial E2E.
+))
+
 
 # M2040: endpoints de evidencias SINTETICAS apenas na CI efemera com opt-in.
 # Nao registrar no Termux ou em producao mesmo que a flag esteja ligada.
