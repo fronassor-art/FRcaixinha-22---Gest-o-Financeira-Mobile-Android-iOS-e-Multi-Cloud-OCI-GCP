@@ -26,6 +26,7 @@ class NoticeKind(str, Enum):
     LICENSE_REVERSED_REVIEW = "LICENSE_REVERSED_REVIEW"
     SUPPORT_ACCESS_ALERT = "SUPPORT_ACCESS_ALERT"
     INVITATION_ACCEPTANCE_PENDING = "INVITATION_ACCEPTANCE_PENDING"
+    ADMIN_INVITATION_REVIEW_PENDING = "ADMIN_INVITATION_REVIEW_PENDING"
     CONTRIBUTION_DUE_INFO = "CONTRIBUTION_DUE_INFO"
     CONTRIBUTION_OVERDUE_INFO = "CONTRIBUTION_OVERDUE_INFO"
     LOAN_REVIEW_PENDING = "LOAN_REVIEW_PENDING"
@@ -55,6 +56,7 @@ _ROLES = {
     NoticeKind.LICENSE_REVERSED_REVIEW: frozenset((NoticeRole.TENANT_ADMIN,)),
     NoticeKind.SUPPORT_ACCESS_ALERT: frozenset((NoticeRole.TENANT_ADMIN,)),
     NoticeKind.INVITATION_ACCEPTANCE_PENDING: frozenset((NoticeRole.TENANT_MEMBER,)),
+    NoticeKind.ADMIN_INVITATION_REVIEW_PENDING: frozenset((NoticeRole.TENANT_ADMIN,)),
     NoticeKind.CONTRIBUTION_DUE_INFO: frozenset((NoticeRole.TENANT_MEMBER,)),
     NoticeKind.CONTRIBUTION_OVERDUE_INFO: frozenset((NoticeRole.TENANT_MEMBER,)),
     NoticeKind.LOAN_REVIEW_PENDING: frozenset((NoticeRole.TENANT_ADMIN,NoticeRole.TENANT_MEMBER)),
@@ -80,6 +82,11 @@ _TEMPLATES = {
     NoticeKind.INVITATION_ACCEPTANCE_PENDING: (
         "Convite para caixinha",
         "Há um convite ou aceite pendente. A participação depende de confirmação."
+    ),
+    NoticeKind.ADMIN_INVITATION_REVIEW_PENDING: (
+        "Convite administrativo em análise",
+        "A indicação para administrar uma caixinha depende de revisão independente, "
+        "verificação de identidade e aceite contratual. Nenhum acesso foi liberado."
     ),
     NoticeKind.CONTRIBUTION_DUE_INFO: (
         "Contribuição a conferir",

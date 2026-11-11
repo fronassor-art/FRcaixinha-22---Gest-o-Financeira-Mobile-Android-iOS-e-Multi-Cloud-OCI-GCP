@@ -39,6 +39,7 @@ def test_all_notice_types_have_careful_templates_and_no_money_authority():
             NoticeKind.LICENSE_REGULARIZATION:NoticeRole.TENANT_ADMIN,
             NoticeKind.LICENSE_REVERSED_REVIEW:NoticeRole.TENANT_ADMIN,
             NoticeKind.SUPPORT_ACCESS_ALERT:NoticeRole.TENANT_ADMIN,
+            NoticeKind.ADMIN_INVITATION_REVIEW_PENDING:NoticeRole.TENANT_ADMIN,
             NoticeKind.CLOSING_REVIEW_PENDING:NoticeRole.TENANT_ADMIN,
             NoticeKind.SECURITY_SESSION_ALERT:NoticeRole.MASTER,
         }.get(kind,NoticeRole.TENANT_MEMBER)

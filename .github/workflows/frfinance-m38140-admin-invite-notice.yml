@@ -1,0 +1,32 @@
+name: FR Finance M38140 administrative invite notice correlation CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admin-invitation-notice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Inspecionar escopo Master e revisor sem registrar convites
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38140_admin_invitation_notice_ci.py \
+            backend/tests/test_m38110_invitation_notice_binding_ci.py \
+            backend/tests/test_m15000_notifications_ci.py \
+            backend/tests/test_m29100_m29400_onboarding_chain_ci.py
+          echo "M38169_ADMIN_NOTICE=CI_ONLY"
+          echo "M38169_CONSENT_REAL=OFF"
+          echo "M38169_EMAIL_REAL=OFF"
+          echo "M38169_ACTIVATION_REAL=OFF"
+          echo "M38169_PRODUCTION=BLOCKED"
