@@ -118,12 +118,15 @@ async function main(){
     assert.equal(authService.getExpiresAt(),expiry,
       'Consultar /me não pode ampliar validade da sessão no cliente');
 
+    // M38995: no approved backend URL means no network call, even when
+    // the real one-time recovery route has been developed on FastAPI.
+    const beforeRecoveryCalls = routeCalls.length;
     await assert.rejects(
       authService.requestPasswordReset('ci@example.com'),
-      /Recuperação por e-mail ainda não implementada/
+      /Servidor FR Finance indisponível/
     );
-    assert(routeCalls.includes('/api/v1/auth/forgot-password'),
-      'Rota de recuperação precisa coincidir com FastAPI');
+    assert.equal(routeCalls.length, beforeRecoveryCalls,
+      'Recuperação não deve fazer HTTP sem origem de API aprovada');
 
     await authService.logout();
     assert.equal(authService.getUser(),null);
