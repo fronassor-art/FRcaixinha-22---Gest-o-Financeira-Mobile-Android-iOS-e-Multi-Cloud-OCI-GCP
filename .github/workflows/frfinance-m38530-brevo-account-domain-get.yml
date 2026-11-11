@@ -1,0 +1,35 @@
+name: FR Finance M38530 Brevo account domain GET-only attestation CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  brevo-account-domain-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Validar conta Brevo com servidor HTTP simulado e sem API key real
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38530_brevo_account_domain_get_ci.py \
+            backend/tests/test_m38490_brevo_explicit_dns_resolver_ci.py \
+            backend/tests/test_m38450_mail_dns_transport_ci.py \
+            backend/tests/test_m38410_brevo_code_variants_ci.py \
+            backend/tests/test_m38370_public_mail_dns_failure_diagnosis_ci.py \
+            backend/tests/test_m38290_brevo_dns_policy_ci.py
+          echo "M38569_PROVIDER_REAL_HTTP=NONE"
+          echo "M38569_BREVO_API_KEY_IN_CI=NONE"
+          echo "M38569_REAL_EMAIL_SEND=NONE"
+          echo "M38569_PIX_REAL=OFF"
+          echo "M38569_REAL_USERS=OFF"
+          echo "M38569_PRODUCTION=BLOCKED"
