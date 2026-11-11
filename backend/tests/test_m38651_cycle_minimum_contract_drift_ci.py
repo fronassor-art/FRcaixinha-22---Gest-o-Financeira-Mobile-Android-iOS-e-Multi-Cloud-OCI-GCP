@@ -143,6 +143,6 @@ def test_contract_floor_static_proof_is_not_production_authorization():
     assert "GRANT EXECUTE ON FUNCTION" in text
     assert "INSERT INTO public.contributions" not in text
     assert "INSERT INTO public.ledger" not in text
-    assert "INSERT INTO public.pix" not in text.lower()
+    assert "insert into public.pix" not in text.lower()
     assert "sendmail(" not in text
     assert "smtplib" not in text
