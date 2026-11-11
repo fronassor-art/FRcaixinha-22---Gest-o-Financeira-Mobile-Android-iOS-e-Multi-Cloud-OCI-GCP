@@ -216,6 +216,17 @@ def parse_report(raw: object) -> dict[str, bool]:
     return parsed
 
 
+def _validate_password(password: object) -> str:
+    # PostgreSQL passwords are not restricted to printable ASCII. Spaces,
+    # accents and Unicode must be passed verbatim (never strip/normalize).
+    # Reject empty, NUL and terminal-control characters before subprocess.
+    if (type(password) is not str
+            or not 1 <= len(password) <= 512
+            or not password.isprintable()):
+        raise CatalogAuditBlocked("M38790_PASSWORD_INVALID")
+    return password
+
+
 def _prompt_password() -> str:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         raise CatalogAuditBlocked("M38790_INTERACTIVE_TTY_REQUIRED")
@@ -223,18 +234,11 @@ def _prompt_password() -> str:
         password = getpass.getpass("Senha local PostgreSQL (oculta): ")
     except Exception:
         raise CatalogAuditBlocked("M38790_PASSWORD_PROMPT_UNAVAILABLE") from None
-    if type(password) is not str or not 1 <= len(password) <= 512:
-        raise CatalogAuditBlocked("M38790_PASSWORD_INVALID")
-    if any(ord(ch) < 33 or ord(ch) > 126 for ch in password):
-        raise CatalogAuditBlocked("M38790_PASSWORD_INVALID")
-    return password
+    return _validate_password(password)
 
 
 def fetch_catalog(password: str) -> dict[str, bool]:
-    if type(password) is not str or not 1 <= len(password) <= 512:
-        raise CatalogAuditBlocked("M38790_PASSWORD_INVALID")
-    if any(ord(ch) < 33 or ord(ch) > 126 for ch in password):
-        raise CatalogAuditBlocked("M38790_PASSWORD_INVALID")
+    password = _validate_password(password)
     # Controlled child environment: no inherited PGHOST, PGSERVICE or PGOPTIONS
     # that could silently redirect the audit to an unapproved database.
     env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
