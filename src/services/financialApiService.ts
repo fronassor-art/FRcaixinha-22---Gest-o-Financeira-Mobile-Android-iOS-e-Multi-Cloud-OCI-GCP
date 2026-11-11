@@ -336,6 +336,40 @@ class FinancialApiService {
     return parseTenantDashboard(raw, tenantId, role);
   }
 
+  /** M38961: send a real authenticated member invitation intent to the
+   * existing FastAPI. A queued receipt is NOT e-mail delivery or admission.
+   */
+  public async issueMemberInvitation(
+    tenantId: string, recipientEmail: string, documentId: string,
+  ): Promise<{ eventId: string; delivered: false }> {
+    assertTenantReadScope(this.currentTenantReader(), tenantId, 'MEMBERS');
+    validateReviewInput('TENANT_ADMIN', tenantId, documentId);
+    const email = recipientEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new Error('Informe o e-mail válido do convidado.');
+    }
+    const result: unknown = await this.request('/api/v1/invitations', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_email: email, target_role: 'TENANT_MEMBER',
+        tenant_id: tenantId, required_document_id: documentId,
+      }),
+    });
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      throw new Error('Convite não foi confirmado pelo servidor.');
+    }
+    const r = result as Record<string, unknown>;
+    const eventId = r.event_id;
+    if (r.status !== 'QUEUED_FOR_DELIVERY' ||
+        typeof eventId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId) ||
+        r.email_sent !== false || r.recipient_verified !== false ||
+        r.activation_authorized !== false || r.user_created !== false) {
+      throw new Error('Convite ainda não foi registrado na fila segura.');
+    }
+    return { eventId, delivered: false };
+  }
+
   public async fetchTenantMembers(tenantId: string): Promise<TenantMembersPage> {
     assertTenantReadScope(this.currentTenantReader(), tenantId, 'MEMBERS');
     const raw: unknown = await this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/members`);
