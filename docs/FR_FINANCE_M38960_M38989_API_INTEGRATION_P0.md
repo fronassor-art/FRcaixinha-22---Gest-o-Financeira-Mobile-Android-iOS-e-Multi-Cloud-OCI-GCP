@@ -39,3 +39,17 @@ Se PostgreSQL estiver ligado em 5433 e a FastAPI desligada em 8000, iniciar apen
 - Não ativar emissão real de convites ou reset enquanto o outbox transacional e autenticação de e-mail não tiverem teste operacional com conta consentida.
 - Não habilitar Pix real sem prova de pagamento, recebimento webhook, conciliação bancária e ledger atômico.
 - Prioridade de implantação: concluir links de código e homologação com serviços de teste existentes; Oracle VM fica para a última fase segundo o plano do proprietário, com possível opção paga apenas a partir de **30/11/2026**.
+
+
+## M38990 — execução efetiva no mesmo banco existente (ainda NÃO aplicada)
+
+No código da MESMA FastAPI foram adicionados:
+- \`backend/app/access_delivery_pg18.py\`: emissão de tokens de uso único e envelopes AES-256-GCM, transação asyncpg de criação de convite e recuperação, recibo pós-commit, fila cifrada, consumidor de Brevo com captura de aceite SMTP e quarentena de resultados incertos, **sem confirmação falsa de entrega**.
+- \`backend/local_migrations/047_frfinance_access_delivery_outbox.sql\`: **migração candidata, aditiva**, uma tabela de fila e quatro funções restritas ao papel existente \`frc_ai_auth\`; não cria banco, PostgreSQL, FastAPI, diretório, usuário final ou role nova. Guarda pelo DB \`frcaixinha_aistudio_dev\`, porta 5433, PGDATA exato, versão 18, proprietário \`frc_ai_owner\` e aprovação específica \`frfinance.migration_047_approved=1\`.
+- A instalação só ocorre no startup da FastAPI existente quando \`FR_FINANCE_ACCESS_MAIL_ENABLE=REVIEWED_SINGLE_DB\`, \`FR_FINANCE_OUTBOX_047_VERIFIED=YES\`, \`FR_FINANCE_SMTP_OPERATOR_APPROVED=YES\`, \`ENVIRONMENT=homologation\`, \`FRCAIXINHA_TERMUX_LOCAL_API=1\` e o domínio/SMTP/DSN originais estiverem configurados. O consumidor só é iniciado no mesmo processo após \`FR_FINANCE_ACCESS_MAIL_WORKER=EXPLICITLY_APPROVED\`. **Nenhuma dessas flags deve ser ligada apenas porque os testes sintéticos passaram.**
+
+**Estado neste commit:** migração 047 versionada, **não aplicada ao PostgreSQL do celular**; autenticação, SMTP e Pix reais não são automaticamente habilitados. Não copiar migrações de staging 050/051; são exclusivas da CI. Antes de aplicar M047, conferir que o objeto ainda não existe no banco original, que a FastAPI usa as roles existentes, e executar testes direcionados. A aplicação da migração é outra operação, sujeita a controle do banco real, não parte do \`git merge --ff-only\`.
+
+**Ainda necessário para ativar contas:** implementar o consumo autenticado dos tokens de convite/recuperação (aceite contratual comprovado, mudança de senha Argon2id e revogação de sessões); confirmar o envio end-to-end em uma caixa postal consentida; obter HTTPS público definitivo. Uma fila SMTP funcional sozinha não equivale a cadastro/recuperação completos.
+
+**Ainda necessário para Pix:** persistência operacional do seller OAuth/PKCE e callback, inbox assinada, conciliação bancária e autorização de Payouts/Money Out. Nenhuma operação financeira real é autorizada pelo M38990.
