@@ -141,8 +141,11 @@ def report() -> dict[str, str]:
 
 def main() -> int:
     print("=== FR FINANCE M38995 - EXISTING ACCESS RUNTIME READ ONLY ===")
-    for key, value in report().items():
+    state = report()
+    for key, value in state.items():
         print(f"{key}={value}")
+    if state.get("M38995_PROJECT") != "ORIGINAL_FR_FINANCE_BRANCH":
+        return 2
     return 0
 
 
