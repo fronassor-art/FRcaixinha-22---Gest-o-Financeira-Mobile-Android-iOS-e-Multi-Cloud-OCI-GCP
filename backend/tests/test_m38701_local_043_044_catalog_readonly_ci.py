@@ -133,7 +133,9 @@ def test_command_uses_loopback_and_readonly_transaction(monkeypatch):
     mod = _load()
     called = []
     def fake_run(argv, **kwargs):
-        called.append((argv, kwargs))
+        # subprocess.run consumes env at invocation; production code later
+        # clears its temporary PGPASSWORD reference from that dictionary.
+        called.append((list(argv), {**kwargs, "env": dict(kwargs["env"])}))
         return types.SimpleNamespace(
             returncode=0, stdout=_report(mod), stderr=SENSITIVE)
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
