@@ -186,13 +186,34 @@ def test_timeout_and_client_missing_fail_closed(monkeypatch):
 
 
 @pytest.mark.parametrize("secret", [
-    "", None, "x\nBAD_LINE", "abc\rxyz", "x" * 513,
+    "", None, "x\nBAD_LINE", "abc\rxyz", "x\tTAB",
+    "x\x00NUL", "x\x1bESC", "x" * 513,
 ])
 def test_malformed_password_blocked_before_process(monkeypatch, secret):
     mod = _load()
     monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: pytest.fail("psql"))
     with pytest.raises(mod.CatalogAuditBlocked):
         mod.fetch_catalog(secret)
+
+
+@pytest.mark.parametrize("secret", [
+    "Senha com espaço e çãõ",
+    "  espaços preservados  ",
+    "🔐Senha-UTF8#2026",
+    "pão de açúcar",
+])
+def test_printable_unicode_password_is_passed_verbatim_without_echo(
+        monkeypatch, secret, capsys):
+    mod = _load()
+    calls = []
+    def fake_psql(argv, **kwargs):
+        calls.append(kwargs["env"]["PGPASSWORD"])
+        return types.SimpleNamespace(
+            returncode=0, stdout=_report(mod), stderr="")
+    monkeypatch.setattr(mod.subprocess, "run", fake_psql)
+    assert mod.fetch_catalog(secret)["DB_TARGET_OK"] is True
+    assert calls == [secret]
+    assert secret not in capsys.readouterr().out
 
 
 def test_no_tty_cannot_prompt(monkeypatch):
