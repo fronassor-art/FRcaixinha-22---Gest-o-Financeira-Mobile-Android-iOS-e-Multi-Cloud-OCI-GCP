@@ -101,23 +101,8 @@ def test_max_file_count_limit_blocks_without_copying(monkeypatch, tmp_path):
 
 def test_special_file_blocks_no_backup_approval(monkeypatch, tmp_path):
     mod = load(monkeypatch)
-    (tmp_path / "socket_or_fifo").write_text("dummy")
-    original = mod.os.scandir
-    class FakeEntry:
-        def __init__(self, entry):
-            self.entry = entry
-            self.name = entry.name
-            self.path = entry.path
-        def stat(self, *, follow_symlinks):
-            s = self.entry.stat(follow_symlinks=follow_symlinks)
-            return types.SimpleNamespace(st_mode=stat.S_IFIFO, st_size=s.st_size)
-    # simpler unit-test the scanner by substituting the iterator
-    class FakeScanner:
-        def __enter__(self):
-            return iter([FakeEntry(next(iter(original(tmp_path))))])
-        def __exit__(self, exc_type, exc, tb):
-            return False
-    monkeypatch.setattr(mod.os, "scandir", lambda *_: FakeScanner())
+    fifo = tmp_path / "socket_or_fifo"
+    mod.os.mkfifo(fifo)
     with pytest.raises(mod.SnapshotBlocked, match="SPECIAL_FILE_REQUIRES_REVIEW"):
         mod.snapshot_manifest(tmp_path)
 
