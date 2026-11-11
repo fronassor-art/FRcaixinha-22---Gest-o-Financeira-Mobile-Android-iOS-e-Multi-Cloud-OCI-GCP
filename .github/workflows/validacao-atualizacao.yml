@@ -55,6 +55,8 @@ jobs:
         run: npx tsx src/tests/login_first_access_ui.test.ts
       - name: M38960 — convites e recuperação no Android
         run: npx tsx src/tests/m38960_access_delivery_ui_ci.test.ts
+      - name: M38993 — links seguros de convite e nova senha Android
+        run: npx tsx src/tests/m38993_access_token_redeem_ui_ci.test.ts
       - name: Validar entrada reservada e confirmacao Master
         run: npx tsx src/tests/owner_private_access_ui.test.ts
       - name: Validar governanca Master e segregacao da interface
@@ -310,6 +312,14 @@ jobs:
         run: python -c "from app.main import app; print('FastAPI importado')"
       - name: M38992 — sintaxe do instalador aditivo original (sem executar)
         run: bash -n backend/scripts/frfinance_m38992_apply_m047_original_pg18.sh
+      - name: M38994 — validar sintaxe M048, sem aplicar no banco
+        run: bash -n backend/scripts/frfinance_m38994_apply_m048_original_pg18.sh
+      - name: M38993 — tokens de acesso de uso único no PG18 original
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38993_token_redemption_ci.py
       - name: M38990 — outbox do banco original, convite e recuperação (sem envio)
         env:
           PYTHONPATH: backend
