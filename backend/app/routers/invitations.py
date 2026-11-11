@@ -133,8 +133,8 @@ async def submit_invitation_to_existing_outbox(
     authorize_invitation_intent(session=session, payload=payload)
     if payload.required_document_id is None or not payload.tenant_id:
         raise HTTPException(422, "Caixinha e contrato publicado são obrigatórios.")
-    if not settings.is_database_configured:
-        raise HTTPException(503, "Banco PostgreSQL original indisponível.")
+    # Same original PG18 auth role and durable outbox were verified at startup.
+    # Do not require unrelated financial DATABASE_URL for invite issuance.
     runtime = require_access_delivery(request)
     # This port must atomically recheck RLS, contract, identity, outbox and
     # idempotency on the original database; intent-level checks are not proof.
@@ -151,8 +151,7 @@ async def verify_original_pg18_invitation_email(
     payload: InvitationEmailProofRequest, request: Request,
 ):
     """Verify inbox possession using M048, never create/activate membership."""
-    if not settings.is_database_configured:
-        raise HTTPException(503, "Verificação de convite indisponível.")
+    # Token consumption is provided by verified M048 in the original auth DB.
     runtime = require_access_delivery(request)
     if runtime.verify_invitation_email is None:
         raise HTTPException(503, "Verificação de convite ainda não habilitada.")
