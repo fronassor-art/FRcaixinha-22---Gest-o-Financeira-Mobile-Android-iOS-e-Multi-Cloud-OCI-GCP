@@ -148,6 +148,7 @@ def test_command_uses_loopback_and_readonly_transaction(monkeypatch):
     argv, opts = called[0]
     assert argv == ["psql", "-X", "-w", "-q", "-A", "-t",
                     "-v", "ON_ERROR_STOP=1",
+                    "-v", "VERBOSITY=sqlstate",
                     "-h", "127.0.0.1", "-p", "5433",
                     "-U", "frc_ai_owner", "-d", "frcaixinha_aistudio_dev"]
     assert opts["input"] == mod.QUERY
@@ -172,6 +173,36 @@ def test_query_errors_never_echo_sensitive_error_details(monkeypatch, returned, 
     out = capsys.readouterr().out
     assert "M38790_AUDIT=BLOCKED" in out
     assert SENSITIVE not in out
+    assert DUMMY not in out
+    assert "M38790_PRODUCTION=BLOCKED" in out
+
+
+@pytest.mark.parametrize("stderr,returncode,expected", [
+    ("psql:<stdin>:14: ERROR:  42601", 3, "SQL_SYNTAX_ERROR"),
+    ("psql:<stdin>:19: ERROR:  42883", 3, "SQL_FUNCTION_UNAVAILABLE"),
+    ("psql:<stdin>:19: ERROR:  42P01", 3, "SQL_RELATION_UNAVAILABLE"),
+    ("psql:<stdin>:21: ERROR:  42501", 3, "PERMISSION_DENIED"),
+    ("psql: error: connection to server at 127.0.0.1:5433 failed: "
+     "FATAL: password authentication failed for user frc_ai_owner",
+     2, "AUTH_REJECTED"),
+    ("psql: error: connection to server refused; is the server running?",
+     2, "CONNECTION_REFUSED"),
+    ("psql: error: connection timed out", 2, "CONNECTION_TIMEOUT"),
+    ("psql: unknown failure SECRET=DO_NOT_PRINT", 3, "QUERY_EXECUTION_ERROR"),
+])
+def test_safe_psql_failure_categories_without_raw_diagnostics(
+        monkeypatch, capsys, stderr, returncode, expected):
+    mod = _load()
+    monkeypatch.setattr(mod, "_prompt_password", lambda: DUMMY)
+    def fake_psql(*args, **kwargs):
+        return types.SimpleNamespace(returncode=returncode,
+                                     stdout="", stderr=stderr)
+    monkeypatch.setattr(mod.subprocess, "run", fake_psql)
+    assert mod.main(["local", mod.AUTHORIZE]) == 2
+    out = capsys.readouterr().out
+    assert "M38790_CAUSE=M38790_LOCAL_PG_QUERY_FAILED" in out
+    assert "M38792_FAILURE_CLASS=" + expected in out
+    assert stderr not in out
     assert DUMMY not in out
     assert "M38790_PRODUCTION=BLOCKED" in out
 
