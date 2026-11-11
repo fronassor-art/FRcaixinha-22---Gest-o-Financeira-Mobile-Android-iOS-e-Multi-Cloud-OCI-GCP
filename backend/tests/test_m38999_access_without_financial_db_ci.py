@@ -60,16 +60,42 @@ def isolate(monkeypatch):
 
 
 def test_all_four_access_routes_remain_503_without_reviewed_original_runtime():
+    # Use syntactically valid email domains so validation reaches the runtime
+    # guard instead of returning 422 at Pydantic EmailStr.
+    app.dependency_overrides[get_current_session] = lambda: AuthenticatedSession(
+        str(uuid4()), "TENANT_ADMIN", TENANT,
+        "ci-admin@example.com", "Admin", False,
+    )
     with TestClient(app) as client:
         responses = [
             client.post("/api/v1/auth/forgot-password",
-                        json={"email": "test@example.invalid"}),
+                        json={"email": "test@example.com"}),
             client.post("/api/v1/auth/reset-password",
                         json={"token": TOKEN, "new_password": "safe-password-1234"}),
             client.post("/api/v1/invitations/verify-email",
                         json={"token": TOKEN}),
+            client.post("/api/v1/invitations", json={
+                "target_email": "invitee@example.com",
+                "target_role": "TENANT_MEMBER",
+                "tenant_id": TENANT,
+                "required_document_id": DOCUMENT,
+            }),
         ]
-        assert all(r.status_code == 503 for r in responses)
+    assert [r.status_code for r in responses] == [503, 503, 503, 503]
+
+
+def test_invalid_recipient_is_rejected_before_any_outbox_callback():
+    called = []
+    async def refuse(**kwargs):
+        called.append(kwargs)
+        return await _reset(**kwargs)
+    app.state.access_delivery_runtime = _binding(reset=refuse)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/forgot-password", json={"email": "not-an-email"},
+        )
+    assert response.status_code == 422
+    assert called == []
 
 
 def test_original_verified_runtime_accepts_enqueuing_without_financial_db():
@@ -123,11 +149,11 @@ def test_original_verified_runtime_accepts_scoped_invite_without_financial_db():
     app.state.access_delivery_runtime = _binding(invite=invite)
     app.dependency_overrides[get_current_session] = lambda: AuthenticatedSession(
         str(uuid4()), "TENANT_ADMIN", TENANT,
-        "ci-admin@example.invalid", "Admin", False,
+        "ci-admin@example.com", "Admin", False,
     )
     with TestClient(app) as c:
         r = c.post("/api/v1/invitations", json={
-            "target_email": "invitee@example.invalid",
+            "target_email": "invitee@example.com",
             "target_role": "TENANT_MEMBER",
             "tenant_id": TENANT, "required_document_id": DOCUMENT,
         })
@@ -152,7 +178,7 @@ def test_missing_original_attestation_never_enqueues_without_financial_db(flag):
     )
     with TestClient(app) as c:
         r = c.post("/api/v1/auth/forgot-password",
-                   json={"email": "ci-denied@example.invalid"})
+                   json={"email": "ci-denied@example.com"})
     assert r.status_code == 503
     assert calls == []
 
