@@ -144,6 +144,7 @@ SELECT
       AND to_regprocedure(
         'public.cycle_open_create(text,uuid,integer,bigint,text,uuid)'
       ) IS NOT NULL
+      AND to_regclass('public.cycle_opening_audit') IS NOT NULL
     THEN
       has_function_privilege(
         'frcaixinha_app_role',
@@ -156,7 +157,7 @@ SELECT
         'EXECUTE'
       )
       AND NOT has_table_privilege(
-        'frcaixinha_app_role', 'public.cycle_opening_audit', 'INSERT'
+        'frcaixinha_app_role', to_regclass('public.cycle_opening_audit'), 'INSERT'
       )
     ELSE FALSE END AS role_boundary,
   (
