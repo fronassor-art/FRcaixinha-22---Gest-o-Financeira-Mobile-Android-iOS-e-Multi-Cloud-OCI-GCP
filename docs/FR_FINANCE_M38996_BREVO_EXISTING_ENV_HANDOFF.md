@@ -29,3 +29,14 @@ O campo `APP_URL` já cadastrado representa a **URL HTTPS planejada**, não a pr
 A chave SMTP, se solicitada, deve ser introduzida **somente no Termux**, sem chat, GitHub, capturas ou logs. O arquivo local 0600 serve exclusivamente à homologação controlada; na Oracle, secrets devem ficar em solução de cofre/IAM apropriada. O teste real da fila deve usar uma caixa de e-mail consentida, envio explicitamente autorizado e credenciais de homologação. Provar conexão SMTP isolada não equivale a envio pelo outbox.
 
 Depois da sincronização execute `PYTHONPATH=backend python backend/scripts/frfinance_m38996_stage_existing_mail_config.py inspect`; em seguida use `stage-private` para preparar o arquivo e execute `inspect` novamente. Ainda não reinicie a FastAPI para ativar worker: o script não altera flags nem a API já executando. A Oracle permanece na última fase.
+
+
+## Checkpoint M39000 e diagnostico M39001 (11/11/2026)
+
+A execução M39000 no Termux confirmou o fast-forward para `e5bccae`, **13 testes direcionados PASS** em `backend/tests/test_m38999_access_without_financial_db_ci.py`; zero migrações executadas, DB original preservado, e-mails reais OFF e Pix real OFF. O GitHub Actions `Validação da atualização AI Studio` do mesmo commit também terminou com sucesso.
+
+A execução anterior M38998 comprovou 19 testes PASS e consulta efetiva, restrita, às funções M048 por `frc_ai_auth` na única base original (5433). As migrações **047/048 foram aplicadas em M38992/M38994 e NÃO DEVEM SER REEXECUTADAS**. M38996 já incorporou as cinco configurações públicas anteriores, a chave SMTP existente e duas chaves criptográficas ao `api.env` privado original, com flags de envio/worker AUSENTES/OFF.
+
+A etapa `backend/scripts/frfinance_m39001_mail_readiness_nosend.py` tem a finalidade limitada de provar **sem enviar mensagens** que: (1) a configuração privada corresponde ao intake público já registrado, (2) as flags de envio automático continuam OFF, (3) o PostgreSQL original permite ler as assinaturas e concessões de M047/M048, (4) as quatro rotas POST carregaram no OpenAPI da mesma FastAPI e (5) o HTTPS do `APP_URL` responde com conteúdo FR Finance, se publicado. Um HTTP 200 ou marcador HTML observado **não comprova distribuição de aplicativo, TLS end-to-end, recebimento de mensagem ou aceite contratual**.
+
+O M39001 não gera tokens, não chama SMTP, não cria usuário, não altera PostgreSQL, não grava `api.env`, não mexe na Oracle e não habilita worker. Se o HTTPS ainda não estiver implantado, **não ativar** `FR_FINANCE_ACCESS_MAIL_WORKER` nem `FR_FINANCE_ACCESS_MAIL_ENABLE`; avançar nas demais pendências de código/Android com os serviços originais preservados.
