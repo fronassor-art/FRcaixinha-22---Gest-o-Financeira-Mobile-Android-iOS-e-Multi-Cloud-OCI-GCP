@@ -78,7 +78,9 @@ async function call(path: string, method:'GET'|'POST'='GET'): Promise<any> {
       cache:'no-store',credentials:'include',
     });
   } catch {
-    throw new Error('Não foi possível conectar à FastAPI local. Confira o Termux.');
+    if(!authService.isSessionSnapshotCurrent(snapshot))
+      throw new Error('A sessão mudou. Reabra as notificações.');
+    throw new Error('Não foi possível conectar à API. Verifique a conexão e o servidor.');
   }
   if (!authService.isSessionSnapshotCurrent(snapshot)) {
     throw new Error('A sessão mudou. Reabra as notificações.');
@@ -92,7 +94,14 @@ async function call(path: string, method:'GET'|'POST'='GET'): Promise<any> {
     if (response.status === 429) throw new Error('Limite de avisos de teste atingido. Tente depois.');
     throw new Error('Servidor recusou a operação de notificações ('+response.status+').');
   }
-  const result = await response.json();
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    if(!authService.isSessionSnapshotCurrent(snapshot))
+      throw new Error('A sessão mudou durante a leitura.');
+    throw new Error('Resposta inválida do servidor de notificações.');
+  }
   if (!authService.isSessionSnapshotCurrent(snapshot)) {
     throw new Error('A sessão mudou durante a leitura.');
   }

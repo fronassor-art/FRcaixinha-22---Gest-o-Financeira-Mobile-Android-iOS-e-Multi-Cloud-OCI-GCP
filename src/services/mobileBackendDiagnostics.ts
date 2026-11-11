@@ -1,3 +1,5 @@
+import {classifyApiOrigin} from './apiOriginPolicy';
+
 /** M37447: distinguishes an installable APK from a remotely usable backend.
  * No network requests here and never echoes a URL, token or credential.
  */
@@ -12,38 +14,21 @@ export function inspectMobileBackend(native:boolean,baseUrl:string):MobileBacken
   mobile:false,kind:'WEB',label:'Ambiente web',
   description:'O ambiente web exige autenticação no servidor.'
  };
- if(typeof baseUrl!=='string'||!baseUrl.trim())return {
-  mobile:true,kind:'BLOCKED',label:'API móvel não configurada',
-  description:'Este APK não possui endereço de API válido. Não é possível autenticar.'
+ const decision=classifyApiOrigin(baseUrl);
+ if(decision.kind==='LOCAL_DEBUG')return {
+  mobile:true,kind:'LOCAL_DEBUG',label:'APK de homologação local',
+  description:'Esta compilação procura a API no próprio celular. Não representa a hospedagem OCI. O login só pode funcionar com uma API local acessível.'
  };
- let url:URL;
- try{url=new URL(baseUrl);}catch{return {
-  mobile:true,kind:'BLOCKED',label:'Endereço da API inválido',
-  description:'É necessário configurar um endereço de API seguro antes do login.'
- }}
- if(url.username||url.password||url.search||url.hash ||
-    !['','/'].includes(url.pathname))return {
-  mobile:true,kind:'BLOCKED',label:'Configuração de API rejeitada',
-  description:'O endereço do servidor contém parâmetros não permitidos.'
+ if(decision.kind==='REMOTE_HTTPS')return {
+  mobile:true,kind:'REMOTE_HTTPS',label:'APK com API HTTPS remota',
+  description:'Há um endereço HTTPS configurado. A conexão e a autenticação ainda precisam ser verificadas.'
  };
- if(url.protocol==='http:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname))
-  return {
-   mobile:true,kind:'LOCAL_DEBUG',label:'APK de homologação local',
-   description:'Esta compilação procura a API no próprio celular. Não representa a hospedagem OCI. O login só pode funcionar com uma API local acessível.'
-  };
- if(url.protocol==='https:' && url.hostname.includes('.') &&
-    !['localhost','127.0.0.1','[::1]'].includes(url.hostname) &&
-    !url.hostname.endsWith('.local')&&!url.hostname.endsWith('.invalid') &&
-    !url.hostname.endsWith('.internal')&&!url.hostname.endsWith('.example'))
-  return {
-   mobile:true,kind:'REMOTE_HTTPS',label:'APK com API HTTPS remota',
-   description:'Há um endereço HTTPS configurado. A conexão e a autenticação ainda precisam ser verificadas.'
-  };
  return {
   mobile:true,kind:'BLOCKED',label:'Servidor móvel não autorizado',
-  description:'Este endereço não é permitido para um APK de homologação segura.'
+  description:'O endereço da API não atende à política de segurança do APK.'
  };
 }
+
 export function interpretAuthenticationStatus(raw:unknown):string{
  if(!raw || typeof raw!=='object'||Array.isArray(raw))
   return 'Resposta do servidor inválida. Não foi iniciada uma sessão.';

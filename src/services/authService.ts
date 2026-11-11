@@ -19,6 +19,7 @@ export interface AuthSessionSnapshot {
 }
 
 import {parseServerSessionInventory} from './sessionInventory';
+import {classifyApiOrigin} from './apiOriginPolicy';
 
 export interface AuthContext {
   role: AuthenticatedUser['role'];
@@ -106,19 +107,8 @@ function serverUser(user: any): AuthenticatedUser {
  * Se VITE_API_URL não for informada em builds nativos móveis, avisa explicitamente.
  */
 export function getApiBaseUrl(): string {
-  const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    const candidate = envUrl.trim().replace(/\/$/, '');
-    try {
-      const parsed = new URL(candidate);
-      // HTTP somente no loopback; acesso remoto exige HTTPS.
-      if (parsed.protocol === 'https:' ||
-          (parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname))) {
-        return candidate;
-      }
-    } catch { /* URL inválida: bloqueio seguro. */ }
-  }
-  return '';
+  const declared = (import.meta as any).env?.VITE_API_URL;
+  return classifyApiOrigin(declared).origin;
 }
 
 export function isNativeMobilePlatform(): boolean {
