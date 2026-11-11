@@ -35,13 +35,26 @@ def test_m7200_capabilities_are_readonly_and_honest():
         assert d[key] is False,key
 
 
-def test_no_webhook_or_real_settlement_exposed_publicly():
-    paths={r.path for r in app.routes}
+def test_signed_orders_ingress_exists_but_no_real_settlement_exposed():
+    # One existing API now carries the signed webhook; the route is hidden
+    # from the public schema and cannot accept unsigned messages.
+    paths=[r.path for r in app.routes]
+    assert paths.count("/integrations/mercadopago/orders") == 1
+    assert "/integrations/mercadopago/orders" not in app.openapi()["paths"]
     for forbidden in (
-        "/integrations/mercadopago/orders",
         "/integrations/mercadopago/webhook",
         "/api/v1/staging/ledger/post",
         "/api/v1/financial/settle",
         "/api/v1/financial/money-out",
     ):
         assert forbidden not in paths
+    if hasattr(app.state, "mp_orders_ingress_runtime"):
+        delattr(app.state, "mp_orders_ingress_runtime")
+    with TestClient(app, base_url="https://testserver") as cli:
+        unsigned=cli.post(
+            "/integrations/mercadopago/orders",
+            params={"data.id":"ORD123456789012","type":"order"},
+            headers={"content-type":"application/json"},
+            json={"type":"order","data":{"id":"ORD123456789012"}},
+        )
+    assert unsigned.status_code == 400
