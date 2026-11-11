@@ -368,7 +368,10 @@ async def submit_password_recovery_to_existing_outbox(
         raise HTTPException(429, "Muitas solicitações. Tente novamente mais tarde.")
     # Real worker must enforce persistent per-IP/per-email abuse protection,
     # account enumeration resistance, one-use hashed token and post-commit send.
-    receipt = await runtime.reset(email=identifier)
+    receipt = await runtime.reset(
+        email=identifier,
+        source_ip=request.client.host if request.client else "unknown",
+    )
     return password_recovery_accepted_response(receipt)
 
 @router.post("/switch-context")
