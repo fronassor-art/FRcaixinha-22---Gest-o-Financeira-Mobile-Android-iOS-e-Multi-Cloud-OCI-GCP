@@ -297,6 +297,8 @@ def test_sql_is_only_one_original_postgresql_database_and_approved_migration():
     assert "frfinance_enqueue_password_reset" in sql
     assert "frfinance_claim_access_mail" in sql
     assert "frfinance_ack_access_mail" in sql
+    assert sql.count("OR p_cipher IS NULL") == 2
+    assert "sealed_message IS NOT NULL AND" in sql
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "ENABLE ROW LEVEL SECURITY" in sql
     assert "FORCE ROW LEVEL SECURITY" in sql
