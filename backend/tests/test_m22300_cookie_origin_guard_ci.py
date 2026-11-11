@@ -41,10 +41,12 @@ def test_safe_reads_and_options_do_not_require_origin():
 
 def test_integration_fails_before_post_route_for_cookie_cross_origin():
     with TestClient(app) as c:
+        # Persist the synthetic session on the client rather than passing
+        # deprecated per-request cookies (httpx / Starlette compatibility).
+        c.cookies.set("frcaixinha_session", "synthetic")
         response=c.post(
             "/api/v1/auth/forgot-password",
             json={"email":"synthetic@example.com"},
-            cookies={"frcaixinha_session":"synthetic"},
         )
         assert response.status_code==403
         assert response.headers["cache-control"]=="no-store"
@@ -54,9 +56,9 @@ def test_integration_fails_before_post_route_for_cookie_cross_origin():
 
 def test_integration_cookie_allowed_origin_uses_ordinary_route_policy():
     with TestClient(app) as c:
+        c.cookies.set("frcaixinha_session", "synthetic")
         r=c.post("/api/v1/auth/forgot-password",
                  json={"email":"synthetic@example.com"},
-                 cookies={"frcaixinha_session":"synthetic"},
                  headers={"Origin":"http://localhost:3000"})
         # The missing email provider/backend is correctly still unavailable.
         assert r.status_code==503
