@@ -30,6 +30,7 @@ from .dependencies import auth_database_url
 from .onboarding_mail_transport import (
     MailConfigurationBlocked, MailSubmissionFailed,
     SmtpSubmissionConfig, submit_access_message, verify_smtp_configuration,
+    _mailbox,
 )
 
 _ORIGINAL_DB = "frcaixinha_aistudio_dev"
@@ -68,14 +69,17 @@ class AccessQueueConfig:
 
 
 def _email(raw: str) -> str:
-    if not isinstance(raw, str) or len(raw) > 254:
+    if (type(raw) is not str or raw != raw.strip()
+            or not 5 <= len(raw) <= 254
+            or any(ord(c) > 127 for c in raw)):
         raise AccessQueueBlocked("MAILBOX_INVALID")
-    result = raw.strip().lower()
-    if result != raw.strip().lower() or not 5 <= len(result) <= 254:
+    result = raw.lower()
+    if not _EMAIL.fullmatch(result):
         raise AccessQueueBlocked("MAILBOX_INVALID")
-    if not _EMAIL.fullmatch(result) or any(ord(c) > 127 for c in result):
-        raise AccessQueueBlocked("MAILBOX_INVALID")
-    return result
+    try:
+        return _mailbox(result)  # identical syntax gate as existing Brevo adapter
+    except MailConfigurationBlocked:
+        raise AccessQueueBlocked("MAILBOX_INVALID") from None
 
 
 def _key(value: str, *, raw: bool = False) -> bytes:
