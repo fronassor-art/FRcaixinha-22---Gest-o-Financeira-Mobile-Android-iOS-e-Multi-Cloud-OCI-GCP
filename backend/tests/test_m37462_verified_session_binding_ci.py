@@ -188,7 +188,10 @@ async def test_legacy_constructor_retains_old_endpoints_but_not_saas():
 ])
 def test_verified_token_binding_mismatch_or_age_denied(change):
     p=principal()
-    # Temporal fixtures are evaluated when the test RUNS, not on module import.\n    # Security still rejects a timestamp that is in the future.\n    for k,v in change.items():setattr(p,k,v() if callable(v) else v)\n    assert check_server_identity_binding(p,make_context(),now=NOW()) is None
+    # Temporal fixtures are evaluated when the test RUNS, not on module import.
+    # Security still rejects a timestamp that is in the future.
+    for k,v in change.items():setattr(p,k,v() if callable(v) else v)
+    assert check_server_identity_binding(p,make_context(),now=NOW()) is None
 
 
 @pytest.mark.parametrize("change",[
@@ -204,7 +207,10 @@ def test_verified_token_binding_mismatch_or_age_denied(change):
     {"source":"CLIENT"},
 ])
 def test_postgres_session_does_not_authorize_mismatched_server_context(change):
-    # Avoid stale time-relative data after large Termux test collections.\n    runtime_change={k:(v() if callable(v) else v) for k,v in change.items()}\n    c=replace(make_context(),**runtime_change)\n    assert check_server_identity_binding(principal(),c,now=NOW()) is None
+    # Avoid stale time-relative data after large Termux test collections.
+    runtime_change={k:(v() if callable(v) else v) for k,v in change.items()}
+    c=replace(make_context(),**runtime_change)
+    assert check_server_identity_binding(principal(),c,now=NOW()) is None
 
 
 @pytest.mark.parametrize("change",[
