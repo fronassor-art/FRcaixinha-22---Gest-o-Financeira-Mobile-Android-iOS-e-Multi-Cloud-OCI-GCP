@@ -21,11 +21,20 @@ def catalog():
     return json.loads(CATALOG.read_text(encoding="utf-8"))
 
 
-def test_catalog_109_namespaces_and_no_unregistered_new_sql(catalog):
-    assert len(catalog["entries"]) == 109
-    assert len({entry["id"] for entry in catalog["entries"]}) == 109
-    assert len({entry["source_path"] for entry in catalog["entries"]}) == 109
+def test_catalog_contains_original_staging_066_068_and_no_unregistered_sql(catalog):
+    # Later M047/048 are additive local work; the staging-only guarantee of
+    # 066-068 must remain intact without freezing the full SQL inventory.
+    paths = [entry["source_path"] for entry in catalog["entries"]]
+    ids = [entry["id"] for entry in catalog["entries"]]
+    assert len(paths) >= 109
+    assert len(set(paths)) == len(paths)
+    assert len(set(ids)) == len(ids)
     assert all(path.is_file() for path in FILES.values())
+    registered = set(paths)
+    for family in ("migrations", "local_migrations", "ci_migrations", "staging_migrations"):
+        actual = {str(p.relative_to(ROOT)) for p in
+                  (ROOT / "backend" / family).glob("*.sql")}
+        assert actual <= registered, family
 
 
 @pytest.mark.parametrize("number", ["066", "067", "068"])
