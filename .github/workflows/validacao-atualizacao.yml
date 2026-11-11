@@ -53,6 +53,8 @@ jobs:
         run: npx tsx src/tests/ledger_menu_visibility_ci.test.ts
       - name: Validar caminhos de primeiro acesso sem auto-cadastro
         run: npx tsx src/tests/login_first_access_ui.test.ts
+      - name: M38960 — convites e recuperação no Android
+        run: npx tsx src/tests/m38960_access_delivery_ui_ci.test.ts
       - name: Validar entrada reservada e confirmacao Master
         run: npx tsx src/tests/owner_private_access_ui.test.ts
       - name: Validar governanca Master e segregacao da interface
@@ -306,6 +308,14 @@ jobs:
         env:
           PYTHONPATH: backend
         run: python -c "from app.main import app; print('FastAPI importado')"
+      - name: M38990 — outbox do banco original, convite e recuperação (sem envio)
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+          FR_FINANCE_ACCESS_MAIL_WORKER: "OFF"
+        run: |
+          python -m pytest -q -p no:cacheprovider             backend/tests/test_m38990_pg18_access_delivery_ci.py             backend/tests/test_m38960_access_delivery_api_integration_ci.py             backend/tests/test_m38980_oauth_callback_on_main_ci.py             backend/tests/test_m4400_orders_webhook_ci.py
       - name: Executar testes de API
         env:
           PYTHONPATH: backend
