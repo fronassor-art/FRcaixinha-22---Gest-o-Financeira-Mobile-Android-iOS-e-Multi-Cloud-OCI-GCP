@@ -226,26 +226,52 @@ def _verified_access_token(raw: str) -> str:
 
 
 async def verify_existing_redemption_schema(config: AccessQueueConfig) -> None:
-    """Ensure M048 was applied to SAME database before installing public ports."""
+    """M048: attest original DB/version and exact least-privilege function grants.
+
+    A non-superuser auth connection cannot reliably read the restricted
+    PostgreSQL data_directory setting. The original PGDATA was already
+    verified under frc_ai_owner when M048 was applied (M38994); here we
+    verify its ORIGINAL TCP endpoint, database, role and installed functions
+    without acquiring extra privileges or touching schema/data.
+    """
     db = await _connect(config)
     try:
         row = await db.fetchrow(
-            "SELECT current_database() AS db,session_user AS role,"
+            "SELECT current_database() AS db,"
+            "session_user AS login_role,current_user AS active_role,"
             "inet_server_port() AS port,"
-            "current_setting('data_directory') AS pgdata,"
-            "to_regprocedure('public.frfinance_verify_invite_email(char)') "
+            "current_setting('server_version_num')::integer AS ver,"
+            "to_regprocedure('public.frfinance_verify_invite_email(character)') "
             "IS NOT NULL AS invite,"
-            "to_regprocedure('public.frfinance_redeem_reset_token(char,varchar)') "
-            "IS NOT NULL AS reset"
+            "to_regprocedure('public.frfinance_redeem_reset_token("
+            "character,character varying)') IS NOT NULL AS reset,"
+            "has_function_privilege('frc_ai_auth',"
+            "'public.frfinance_verify_invite_email(character)','EXECUTE') "
+            "AS auth_invite,"
+            "has_function_privilege('frc_ai_auth',"
+            "'public.frfinance_redeem_reset_token(character,character varying)',"
+            "'EXECUTE') AS auth_reset,"
+            "has_function_privilege('frc_ai_app',"
+            "'public.frfinance_verify_invite_email(character)','EXECUTE') "
+            "AS app_invite,"
+            "has_function_privilege('frc_ai_app',"
+            "'public.frfinance_redeem_reset_token(character,character varying)',"
+            "'EXECUTE') AS app_reset"
         )
         if (not row or row["db"] != _ORIGINAL_DB
-                or row["role"] != "frc_ai_auth"
+                or row["login_role"] != "frc_ai_auth"
+                or row["active_role"] != "frc_ai_auth"
                 or row["port"] != _ORIGINAL_PORT
-                or row["pgdata"] !=
-                    "/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18"
-                or row["invite"] is not True or row["reset"] is not True):
+                or not 180000 <= row["ver"] < 190000
+                or row["invite"] is not True
+                or row["reset"] is not True
+                or row["auth_invite"] is not True
+                or row["auth_reset"] is not True
+                or row["app_invite"] is not False
+                or row["app_reset"] is not False):
             raise AccessQueueBlocked("M048_REDEMPTION_NOT_ATTESTED")
     except asyncpg.PostgresError:
+        # Do not put SQL details or credentials into app/user logs.
         raise AccessQueueBlocked("M048_REDEMPTION_NOT_ATTESTED") from None
     finally:
         await db.close()
