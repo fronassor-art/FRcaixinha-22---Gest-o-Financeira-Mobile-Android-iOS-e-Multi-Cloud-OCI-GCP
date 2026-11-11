@@ -21,7 +21,9 @@ from app.mail_dns_readiness_readonly import (
     DkimDnsObservation, MailDnsObservationBlocked, PublicMailDnsSnapshot,
     assess_public_mail_dns,
 )
-from app.brevo_sender_dns_policy import assess_brevo_public_dns
+from app.brevo_sender_dns_policy import (
+    assess_brevo_public_dns, looks_like_brevo_dkim_txt,
+)
 from aistudio_provider_intake import _default_file, read_file
 
 SENDER_DOMAIN = "frfinance.com.br"
@@ -99,7 +101,9 @@ def _collect_public_dns(domain: str, selectors: tuple[str,...]) -> PublicMailDns
                 selector=selector,record_kind="CNAME",record_value=target,
             ))
         else:
-            dkim_txt=[r for r in txt(owner) if r.lower().startswith("v=dkim1;")]
+            # Brevo TXT may start with k=rsa;p=... (documented API format)
+            # instead of the optional v=DKIM1; prefix.
+            dkim_txt=[r for r in txt(owner) if looks_like_brevo_dkim_txt(r)]
             if len(dkim_txt)>1:
                 raise _failure()
             records.append(DkimDnsObservation(
@@ -166,7 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     print("M38289_DMARC_RECORD="+str(report.dmarc_record_present).upper())
     print("M38289_DMARC_POLICY="+report.dmarc_policy)
     print("M38289_DKIM_SELECTORS="+str(report.dkim_selectors_observed))
-    print("M38289_DKIM_RECORDS="+str(report.dkim_records_present))
+    print("M38289_DKIM_RECORDS="+str(sum(
+        item.record_kind!="MISSING" for item in snapshot.dkim
+    )))
     # The generic legacy policy may flag an absent SPF, p=none or one
     # DKIM TXT even though all are compatible with the Brevo account
     # authentication flow. Print only the provider-specific diagnosis.

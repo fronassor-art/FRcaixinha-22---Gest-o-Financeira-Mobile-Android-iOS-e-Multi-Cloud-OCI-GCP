@@ -21,9 +21,42 @@ from .mail_dns_readiness_readonly import (
 
 _TARGET = "frfinance.com.br"
 _CODE = re.compile(r"(?i)^brevo-code:[a-z0-9_-]{8,128}$")
-_DKIM_KEY = re.compile(
-    r"(?:^|;)\s*p=([A-Za-z0-9+/]{24,4096}={0,2})\s*(?:;|$)"
-)
+_DKIM_KEY = re.compile(r"[A-Za-z0-9+/]{24,4096}={0,2}\Z")
+_DKIM_START = re.compile(r"(?i)^(?:v\s*=\s*dkim1\s*;|k\s*=\s*rsa\s*;)")
+
+
+def looks_like_brevo_dkim_txt(value: object) -> bool:
+    """Classify public TXT records; no DNS and no provider authentication."""
+    return (
+        type(value) is str and len(value) <= 4096
+        and _DKIM_START.match(value.strip()) is not None
+    )
+
+
+def _valid_brevo_dkim_txt(value: object) -> bool:
+    """Brevo supports TXT 'k=rsa;p=...' as well as 'v=DKIM1; ...'.
+
+    Do not mistake a DKIM-looking string for a real cryptographic signature.
+    """
+    if not looks_like_brevo_dkim_txt(value):
+        return False
+    tags: dict[str, str] = {}
+    for item in value.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            return False
+        key, raw = item.split("=", 1)
+        key = key.strip().lower()
+        if key not in {"v", "k", "p", "t", "h", "s", "n", "g"} or key in tags:
+            return False
+        tags[key] = raw.strip()
+    return (
+        (tags.get("v", "dkim1").lower() == "dkim1")
+        and tags.get("k", "rsa").lower() == "rsa"
+        and _DKIM_KEY.fullmatch(tags.get("p", "")) is not None
+    )
 _RUA = re.compile(
     r"(?:^|;)\s*rua=mailto:[a-z0-9_.+-]+@[a-z0-9.-]+\s*(?:;|$)",
     re.IGNORECASE,
@@ -115,9 +148,7 @@ def assess_brevo_public_dns(snapshot: PublicMailDnsSnapshot) -> BrevoPublicDnsRe
         blockers.append("BREVO_DKIM_SELECTORS_NOT_QUERIED")
     elif (
         len(selectors) == 1 and selectors[0].record_kind == "TXT"
-        and type(selectors[0].record_value) is str
-        and selectors[0].record_value.lower().startswith("v=dkim1;")
-        and _DKIM_KEY.search(selectors[0].record_value)
+        and _valid_brevo_dkim_txt(selectors[0].record_value)
     ):
         dkim_mode = "ONE_TXT_PUBLISHED_CANDIDATE"
     elif (
