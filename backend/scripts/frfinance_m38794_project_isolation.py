@@ -86,9 +86,12 @@ def _repository_of_origin(origin: str) -> str | None:
         return None
     match = re.fullmatch(
         r"(?:https://github[.]com/|git@github[.]com:)"
-        r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:[.]git)?/?", origin,
+        r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/?", origin,
     )
-    return match.group(1) if match else None
+    if match is None:
+        return None
+    repository = match.group(1)
+    return repository[:-4] if repository.endswith(".git") else repository
 
 
 def _assert_finance_worktree(home: Path) -> None:
