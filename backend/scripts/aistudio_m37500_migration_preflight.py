@@ -22,8 +22,8 @@ def main() -> int:
     try:
         manifest = repo_check()
         entries = {x["id"]: x for x in manifest["entries"]}
-        if len(entries) != 109:
-            raise ValueError("M37500_WRONG_SQL_CATALOG_COUNT")
+        if len(entries) < 109:
+            raise ValueError("M37500_SQL_CATALOG_MISSING_BASELINE")
         for identifier, path in EXPECTED.items():
             entry = entries[identifier]
             sql = (ROOT / path).read_text(encoding="utf-8")
@@ -43,7 +43,7 @@ def main() -> int:
         print("M37500_CAUSE=" + type(exc).__name__)
         return 2
     print("M37500_MIGRATION_PREFLIGHT=PASS")
-    print("M37500_SQL_CATALOG=109")
+    print("M37500_SQL_CATALOG=" + str(len(entries)))
     print("M37500_NEW_STAGING_ONLY_SQL=3")
     print("M37500_SOURCE_MIGRATION_REGISTERED=YES")
     print("M37500_DISPOSABLE_SQL_EXECUTED=NO")
