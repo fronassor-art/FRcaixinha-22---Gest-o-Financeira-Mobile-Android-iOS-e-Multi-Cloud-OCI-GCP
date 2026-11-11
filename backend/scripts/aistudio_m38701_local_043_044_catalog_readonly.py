@@ -193,7 +193,55 @@ COMMIT;
 """
 
 class CatalogAuditBlocked(Exception):
-    """Constant failures only. Never expose PostgreSQL diagnostics or secrets."""
+    """Constant failure codes only; never print raw PostgreSQL stderr."""
+
+    def __init__(self, message: str, *, diagnostic: str = "UNCLASSIFIED"):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
+def _safe_psql_failure_class(stderr: object, returncode: object) -> str:
+    """Map untrusted stderr to allowlisted diagnostic codes, never echo it."""
+    if type(stderr) is not str:
+        return "UNCLASSIFIED"
+    # VERBOSITY=sqlstate asks psql to omit SQL text/arguments for SQL errors.
+    match = re.search(r"(?im)\\b(?:ERROR|FATAL):\\s*([0-9A-Z]{5})\\b", stderr)
+    if match is not None:
+        categories = {
+            "28P01": "AUTH_REJECTED",
+            "28000": "AUTH_REJECTED",
+            "3D000": "DATABASE_UNAVAILABLE",
+            "42501": "PERMISSION_DENIED",
+            "42601": "SQL_SYNTAX_ERROR",
+            "42883": "SQL_FUNCTION_UNAVAILABLE",
+            "42703": "SQL_COLUMN_UNAVAILABLE",
+            "42P01": "SQL_RELATION_UNAVAILABLE",
+            "42804": "SQL_TYPE_MISMATCH",
+            "25006": "READ_ONLY_VIOLATION",
+            "57014": "QUERY_TIMEOUT",
+        }
+        return categories.get(match.group(1), "SQLSTATE_UNCLASSIFIED")
+    lower = stderr.lower()
+    # Connection failures happen before psql VERBOSITY is fully initialized.
+    if "password authentication failed" in lower or "no password supplied" in lower:
+        return "AUTH_REJECTED"
+    if "no pg_hba.conf entry" in lower:
+        return "PG_HBA_REJECTED"
+    if "connection refused" in lower or "is the server running" in lower:
+        return "CONNECTION_REFUSED"
+    if "timeout expired" in lower or "connection timed out" in lower:
+        return "CONNECTION_TIMEOUT"
+    if "database" in lower and "does not exist" in lower:
+        return "DATABASE_UNAVAILABLE"
+    if "role" in lower and "does not exist" in lower:
+        return "ROLE_UNAVAILABLE"
+    if "could not translate host name" in lower:
+        return "CONNECTION_UNREACHABLE"
+    if returncode == 2:
+        return "CONNECTION_OR_CLIENT_ERROR"
+    if returncode == 3:
+        return "QUERY_EXECUTION_ERROR"
+    return "UNCLASSIFIED"
 
 
 def parse_report(raw: object) -> dict[str, bool]:
@@ -251,6 +299,7 @@ def fetch_catalog(password: str) -> dict[str, bool]:
     argv = [
         "psql", "-X", "-w", "-q", "-A", "-t",
         "-v", "ON_ERROR_STOP=1",
+        "-v", "VERBOSITY=sqlstate",
         "-h", HOST, "-p", PORT, "-U", USER, "-d", DATABASE,
     ]
     try:
@@ -263,7 +312,10 @@ def fetch_catalog(password: str) -> dict[str, bool]:
     finally:
         env.pop("PGPASSWORD", None)
     if completed.returncode != 0:
-        raise CatalogAuditBlocked("M38790_LOCAL_PG_QUERY_FAILED")
+        raise CatalogAuditBlocked(
+            "M38790_LOCAL_PG_QUERY_FAILED",
+            diagnostic=_safe_psql_failure_class(completed.stderr, completed.returncode),
+        )
     return parse_report(completed.stdout)
 
 
@@ -311,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
     except CatalogAuditBlocked as exc:
         print("M38790_AUDIT=BLOCKED")
         print("M38790_CAUSE=" + str(exc))
+        if str(exc) == "M38790_LOCAL_PG_QUERY_FAILED":
+            print("M38792_FAILURE_CLASS=" + exc.diagnostic)
         print("M38790_MIGRATION_PROVENANCE=NOT_ATTESTED")
         _closed()
         return 2
