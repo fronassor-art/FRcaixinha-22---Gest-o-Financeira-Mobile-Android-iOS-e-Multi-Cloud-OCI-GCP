@@ -25,7 +25,7 @@ EXPECTED_BRANCH = "atualizacao-ai-studio-9b46a63187"
 ROUTES = {
     "RESET_PASSWORD": "/api/v1/auth/reset-password",
     "VERIFY_INVITATION": "/api/v1/invitations/verify-email",
-    "ISSUE_INVITATION": "/api/v1/invitations/submit",
+    "ISSUE_INVITATION": "/api/v1/invitations",
 }
 PUBLIC_KEYS = ("APP_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "FR_FINANCE_EMAIL_FROM")
 PRIVATE_KEYS = (
