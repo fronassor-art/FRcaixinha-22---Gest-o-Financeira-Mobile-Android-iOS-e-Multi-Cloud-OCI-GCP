@@ -39,6 +39,7 @@ jobs:
           python -m pytest -q -p no:cacheprovider \
             backend/tests/test_m38800_existing_services_probe_ci.py \
             backend/tests/test_m38801_existing_fastapi_and_db_url_ci.py \
+            backend/tests/test_m38804_single_financial_contract_notif_pix_ci.py \
             backend/tests/test_m38798_cold_snapshot_capacity_readonly_ci.py \
             backend/tests/test_m38797_wal_storage_preflight_ci.py \
             backend/tests/test_m38796_pg18_control_preflight_ci.py \
