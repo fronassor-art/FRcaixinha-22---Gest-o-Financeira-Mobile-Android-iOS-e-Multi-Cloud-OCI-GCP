@@ -175,7 +175,10 @@ def test_cli_keeps_explicit_live_approval_and_does_not_print_legacy_false_blocke
     root=Path(__file__).resolve().parents[2]
     src=(root/"backend/scripts/aistudio_mail_dns_readonly.py").read_text()
     assert "assess_brevo_public_dns(snapshot)" in src
-    assert 'args.approval!="AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY"' in src
+    assert 'expected_approval=(' in src
+    assert '"AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY" if args.resolver=="system"' in src
+    assert '"AUTHORIZE_THIRD_PARTY_PUBLIC_DNS_READ_ONLY"' in src
+    assert 'args.approval!=expected_approval' in src
     assert 'print("M38329_SPF_OPTIONAL_FOR_SHARED_BREVO=TRUE")' in src
     assert 'print("M38329_DKIM_MODE="+brevo.dkim_mode)' in src
     assert "for blocker in brevo.blockers:" in src

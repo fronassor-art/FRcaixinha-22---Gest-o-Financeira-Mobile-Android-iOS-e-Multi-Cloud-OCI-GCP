@@ -222,7 +222,10 @@ def test_live_requires_existing_sender_metadata_without_network(tmp_path):
 def test_script_requires_explicit_command_and_only_standard_public_dns():
     root=Path(__file__).resolve().parents[2]
     script=(root/"backend/scripts/aistudio_mail_dns_readonly.py").read_text()
-    assert 'args.approval!="AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY"' in script
+    assert 'expected_approval=(' in script
+    assert '"AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY" if args.resolver=="system"' in script
+    assert '"AUTHORIZE_THIRD_PARTY_PUBLIC_DNS_READ_ONLY"' in script
+    assert 'args.approval!=expected_approval' in script
     assert 'SENDER_DOMAIN = "frfinance.com.br"' in script
     assert 'resolver.resolve(name, record_type, raise_on_no_answer=False)' in script
     for forbidden in (

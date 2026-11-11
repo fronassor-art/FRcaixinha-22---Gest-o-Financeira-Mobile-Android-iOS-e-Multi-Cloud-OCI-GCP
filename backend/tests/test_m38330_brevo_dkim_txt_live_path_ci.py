@@ -181,7 +181,10 @@ def test_real_dns_reader_uses_new_candidate_recognition():
     src=(ROOT/"backend/scripts/aistudio_mail_dns_readonly.py").read_text()
     assert "looks_like_brevo_dkim_txt(r)" in src
     assert "assess_brevo_public_dns(snapshot)" in src
-    assert 'args.approval!="AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY"' in src
+    assert 'expected_approval=(' in src
+    assert '"AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY" if args.resolver=="system"' in src
+    assert '"AUTHORIZE_THIRD_PARTY_PUBLIC_DNS_READ_ONLY"' in src
+    assert 'args.approval!=expected_approval' in src
     assert "send_message(" not in src
     assert "smtplib.SMTP" not in src
 
