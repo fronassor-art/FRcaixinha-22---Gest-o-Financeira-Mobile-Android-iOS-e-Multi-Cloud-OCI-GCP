@@ -541,6 +541,59 @@ class AuthService {
     return {success: true, message: reply.message};
   }
 
+  /** M38993: original FastAPI one-time token redemption, never persist token. */
+  public async verifyInvitationEmail(token: string): Promise<void> {
+    if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
+      throw new Error('Link de convite inválido.');
+    }
+    const base = getApiBaseUrl();
+    if (!base) throw new Error('Servidor FR Finance indisponível.');
+    const response = await fetch(`${base}/api/v1/invitations/verify-email`, {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    let result: unknown;
+    try { result = await response.json(); } catch { result = null; }
+    if (!response.ok) throw new Error('Link inválido, expirado ou serviço indisponível.');
+    const data = result && typeof result === 'object' && !Array.isArray(result)
+      ? result as Record<string, unknown> : {};
+    if (data.status !== 'EMAIL_OWNERSHIP_VERIFIED' ||
+        data.membership_created !== false ||
+        data.account_activated !== false ||
+        data.invitation_accepted !== false) {
+      throw new Error('Verificação do convite não comprovada.');
+    }
+  }
+
+  public async completePasswordReset(token: string, newPassword: string): Promise<void> {
+    if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
+      throw new Error('Link de recuperação inválido.');
+    }
+    if (newPassword.length < 12 || newPassword.length > 128) {
+      throw new Error('A senha deve ter de 12 a 128 caracteres.');
+    }
+    const base = getApiBaseUrl();
+    if (!base) throw new Error('Servidor FR Finance indisponível.');
+    const response = await fetch(`${base}/api/v1/auth/reset-password`, {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+    let result: unknown;
+    try { result = await response.json(); } catch { result = null; }
+    if (!response.ok) throw new Error('Link inválido, expirado ou serviço indisponível.');
+    const data = result && typeof result === 'object' && !Array.isArray(result)
+      ? result as Record<string, unknown> : {};
+    if (data.status !== 'PASSWORD_UPDATED' || data.sessions_revoked !== true ||
+        data.next_step !== 'LOGIN_AGAIN' || data.real_user_activation !== false) {
+      throw new Error('Troca de senha não comprovada.');
+    }
+    // A password reset invalidates prior server sessions; forget local state.
+    this.clearSession();
+    this.notify();
+  }
+
   private armExpirationTimer(expiresAt: number) {
     if (this.expirationTimer) {
       clearTimeout(this.expirationTimer);
