@@ -35,9 +35,18 @@ def test_explicit_tenant_roles_do_not_promote_to_master():
 
 
 def test_nonmaster_legacy_fallback_never_grants_platform_access():
+    # M38013: the old test expected links[0] on two different roles.
+    # That behavior is unsafe for a single identity in multiple contexts.
+    with pytest.raises(HTTPException) as ambiguous:
+        select_login_role(requested_role=None, is_master=False, links=LINKS)
+    assert ambiguous.value.status_code == 409
+    # Legacy clients remain compatible only when precisely one link exists.
     assert select_login_role(
-        requested_role=None, is_master=False, links=LINKS
+        requested_role=None, is_master=False, links=LINKS[:1]
     ) == ("TENANT_ADMIN", TENANT)
+    assert select_login_role(
+        requested_role=None, is_master=False, links=LINKS[1:]
+    ) == ("TENANT_MEMBER", TENANT)
     for role, links in [
         (None, []), ("MASTER", LINKS), ("TENANT_MEMBER", []),
         ("INVALID", LINKS), (None, [{"role": "MASTER", "tenant_id": TENANT}])
