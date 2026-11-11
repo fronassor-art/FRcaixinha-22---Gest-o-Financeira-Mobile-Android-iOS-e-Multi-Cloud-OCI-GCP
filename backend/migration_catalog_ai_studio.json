@@ -1061,7 +1061,7 @@
       "do_not_apply_source_to_termux": false,
       "inspect_object": "public.frfinance_access_delivery_outbox: encrypted original-PG18 invitation/reset queue, narrow security-definer auth functions",
       "local_evidence": null,
-      "source_blob_sha": "bcd59eb2c5a8cbfc433547d26179621392132ed1"
+      "source_blob_sha": "04ff94c3fe779b044b771063855249cca838fb6a"
     },
     {
       "id": "staging_migrations:064",
