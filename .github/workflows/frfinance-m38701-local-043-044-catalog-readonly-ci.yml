@@ -35,7 +35,10 @@ jobs:
           python backend/scripts/frfinance_m38796_pg18_control_preflight.py offline
           python backend/scripts/frfinance_m38797_wal_storage_preflight.py offline
           python backend/scripts/frfinance_m38798_cold_snapshot_capacity_readonly.py offline
+          python backend/scripts/frfinance_m38800_existing_services_probe.py offline
           python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38800_existing_services_probe_ci.py \
+            backend/tests/test_m38801_existing_fastapi_and_db_url_ci.py \
             backend/tests/test_m38798_cold_snapshot_capacity_readonly_ci.py \
             backend/tests/test_m38797_wal_storage_preflight_ci.py \
             backend/tests/test_m38796_pg18_control_preflight_ci.py \
@@ -58,6 +61,13 @@ jobs:
           echo "M38798_REAL_PGDATA_METADATA=NOT_READ_IN_CI"
           echo "M38798_BACKUP_CREATED=NO"
           echo "M38798_RECOVERY_PERMISSION=NOT_GRANTED"
+          echo "M38800_LOCAL_POSTGRES=NOT_CONTACTED_IN_CI"
+          echo "M38800_LOCAL_FASTAPI=NOT_CONTACTED_IN_CI"
+          echo "M38800_SECOND_POSTGRESQL=NONE"
+          echo "M38800_SECOND_FASTAPI=NONE"
+          echo "M38800_NEW_DATABASE=NONE"
+          echo "M38800_NEW_REPOSITORY=NONE"
+          echo "M38800_LOCAL_043_044=COMPATIBLE_OBSERVED_NOT_EXECUTION_PROOF"
           echo "M38790_LOCAL_PG_CONNECTIONS=NONE"
           echo "M38790_DB_MUTATIONS=NONE"
           echo "M38790_PG_043_044_MIGRATION_PROVENANCE=NOT_ATTESTED"
