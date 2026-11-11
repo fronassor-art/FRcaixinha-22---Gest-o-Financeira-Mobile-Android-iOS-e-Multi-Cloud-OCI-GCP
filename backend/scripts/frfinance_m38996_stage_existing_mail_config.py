@@ -106,9 +106,10 @@ def _load_env() -> tuple[list[str], dict[str, str]]:
             values = shlex.split(raw, comments=False, posix=True)
         except ValueError:
             raise StageBlocked("EXISTING_API_ENV_QUOTING_INVALID") from None
-        if len(values) != 1:
+        if len(values) > 1:
             raise StageBlocked("EXISTING_API_ENV_VALUE_FORMAT_INVALID")
-        known[key] = values[0]
+        # Preserve legacy blank optional fields instead of recreating api.env.
+        known[key] = values[0] if values else ""
     return lines, known
 
 
