@@ -1,4 +1,6 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
+import {authService} from '../services/authService';
+import {createMasterOnboardingFence,type MasterOnboardingTicket} from '../services/masterOnboardingRequestFence';
 import {CheckCircle2,ShieldAlert,ShieldCheck,RefreshCw} from 'lucide-react';
 import {financialApi} from '../services/financialApiService';
 import {
@@ -32,58 +34,102 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
   const [tenantId,setTenantId]=useState('');
   const [candidateUserId,setCandidateUserId]=useState('');
   const [purpose,setPurpose]=useState('');
-  const [preflight,setPreflight]=useState<MasterOnboardingPreflight|null>(null);
+  const [preflight,setPreflight]=useState<{
+    ticket:MasterOnboardingTicket;
+    data:MasterOnboardingPreflight;
+  }|null>(null);
   const [error,setError]=useState('');
   const [pending,setPending]=useState(false);
-  const [revision,setRevision]=useState(0);
-  const key=scope+'|'+reload;
+  const [authRevision,setAuthRevision]=useState(0);
+  const fence=useRef(createMasterOnboardingFence());
+  const scopeRef=useRef(scope);
+  scopeRef.current=scope;
+  const key=scope+'|'+reload+'|'+authRevision;
+
+  // Changing the account or reloading cancels pending preflight promises.
+  // A logout/login for the same scope also cancels through the auth listener.
+  useEffect(()=>{
+    const clear=()=>{
+      fence.current.cancel();
+      setPreflight(null);setError('');setPending(false);
+      setPurpose('');setCandidateUserId('');setTenantId('');
+    };
+    clear();
+    const unsubscribe=authService.subscribe(()=>{
+      clear();
+      setSnapshot({scope:'',status:'loading'});
+      setAuthRevision(value=>value+1);
+    });
+    return ()=>{fence.current.cancel();unsubscribe();};
+  },[scope,reload]);
+
   useEffect(()=>{
     if(state.currentRole!=='MASTER')return;
     let alive=true;
+    const session=authService.captureSession();
+    const current=()=>alive&&scopeRef.current===scope&&
+      authService.isSessionSnapshotCurrent(session);
     setSnapshot({scope:key,status:'loading'});
-    financialApi.fetchMasterOnboardingCapabilities()
-      .then(data=>{if(alive)setSnapshot({scope:key,status:'ready',data});})
-      .catch(()=>{if(alive)setSnapshot({scope:key,status:'error'});});
+    if(!session.token){
+      setSnapshot({scope:key,status:'error'});
+    }else{
+      financialApi.fetchMasterOnboardingCapabilities()
+        .then(data=>{if(current())setSnapshot({scope:key,status:'ready',data});})
+        .catch(()=>{if(current())setSnapshot({scope:key,status:'error'});});
+    }
     return ()=>{alive=false;};
   },[key,state.currentRole]);
-  useEffect(()=>{
-    setPreflight(null);
-    setError('');
-    setPurpose('');
-    setCandidateUserId('');
-    setTenantId('');
-    setRevision(n=>n+1);
-  },[scope]);
 
   if(state.currentRole!=='MASTER'){
     return <section role="alert">Acesso restrito à governança Master.</section>;
   }
   const current=snapshot.scope===key?snapshot:{scope:key,status:'loading' as const};
   const data=current.status==='ready'?current.data:undefined;
+  const invalidatePreflight=()=>{
+    fence.current.cancel();
+    setPreflight(null);setError('');setPending(false);
+  };
   const submit=async(e:React.FormEvent)=>{
     e.preventDefault();
     if(pending||!data)return;
-    setError('');
-    setPreflight(null);
+    setError('');setPreflight(null);
+    const session=authService.captureSession();
+    if(!session.token){
+      setError('Sessão indisponível para a pré-análise.');
+      return;
+    }
+    const requestTenant=tenantId.trim();
+    let ticket:MasterOnboardingTicket|null=null;
+    const current=()=>ticket!==null&&scopeRef.current===scope&&
+      fence.current.isCurrent(ticket,scope,requestTenant,session.generation)&&
+      authService.isSessionSnapshotCurrent(session);
     try{
       validatePreflightInput({
-        tenantId:tenantId.trim(),
+        tenantId:requestTenant,
         candidateUserId:candidateUserId.trim()||undefined,
         purpose,
       });
+      ticket=fence.current.issue(scope,requestTenant,session.generation);
       setPending(true);
       const check=await financialApi.simulateMasterOnboarding({
-        tenantId:tenantId.trim(),
+        tenantId:requestTenant,
         candidateUserId:candidateUserId.trim()||undefined,
         purpose:purpose.trim(),
       });
-      setPreflight(check);
+      if(current())setPreflight({ticket,data:check});
     }catch{
-      setError('Não foi possível concluir a pré-análise. Confira os identificadores, a justificativa e a conexão.');
+      if(ticket===null||current()){
+        setError('Não foi possível concluir a pré-análise. Confira os identificadores, a justificativa e a conexão.');
+      }
     }finally{
-      setPending(false);
+      if(ticket===null||current())setPending(false);
     }
   };
+  const activeSession=authService.captureSession();
+  const visiblePreflight=preflight&&activeSession.token&&
+    authService.isSessionSnapshotCurrent(activeSession)&&
+    fence.current.isCurrent(preflight.ticket,scope,tenantId.trim(),activeSession.generation)
+    ?preflight.data:null;
   return <section className="space-y-4" aria-label="Preparação de acessos administrativos">
     <header className="fr-green-card rounded-[24px] p-5 text-white">
       <div className="flex items-start gap-3">
@@ -134,21 +180,21 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
           UUID da caixinha
         </label>
         <input id="onboarding-tenant" value={tenantId} maxLength={36}
-          onChange={e=>setTenantId(e.target.value)}
+          onChange={e=>{invalidatePreflight();setTenantId(e.target.value);}}
           placeholder="00000000-0000-0000-0000-000000000000"
           className="min-h-11 w-full rounded-lg border border-[#9cb8a8] bg-white px-3 text-base"/>
         <label htmlFor="onboarding-candidate" className="block text-sm font-semibold">
           UUID de candidato (opcional)
         </label>
         <input id="onboarding-candidate" value={candidateUserId} maxLength={36}
-          onChange={e=>setCandidateUserId(e.target.value)}
+          onChange={e=>{invalidatePreflight();setCandidateUserId(e.target.value);}}
           placeholder="Somente para pré-análise de conflito"
           className="min-h-11 w-full rounded-lg border border-[#9cb8a8] bg-white px-3 text-base"/>
         <label htmlFor="onboarding-purpose" className="block text-sm font-semibold">
           Justificativa técnica (não informe dados pessoais)
         </label>
         <textarea id="onboarding-purpose" value={purpose} maxLength={240}
-          rows={3} onChange={e=>setPurpose(e.target.value)}
+          rows={3} onChange={e=>{invalidatePreflight();setPurpose(e.target.value);}}
           placeholder="Ex.: Avaliar futuro responsável pela administração da caixinha"
           className="w-full rounded-lg border border-[#9cb8a8] bg-white p-3 text-base"/>
         <button type="submit" disabled={pending}
@@ -174,21 +220,21 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
     <MasterPermissionMatrixView state={state}/>
     <MasterWorkflowAuditView state={state}/>
 
-    {preflight&&<div role="status" className="fr-light-card rounded-2xl p-4">
+    {visiblePreflight&&<div role="status" className="fr-light-card rounded-2xl p-4">
       <div className="flex items-start gap-2">
         <ShieldAlert className="h-5 w-5 shrink-0 text-[#a66f19]"/>
         <div>
           <h3 className="font-bold text-[#143d29]">Pré-análise concluída · execução bloqueada</h3>
           <p className="mt-1 text-sm text-[#52685a]">
-            {preflight.tenant.display_name} · {preflight.tenant.status}
+            {visiblePreflight.tenant.display_name} · {visiblePreflight.tenant.status}
           </p>
         </div>
       </div>
       <p className="mt-3 text-sm text-[#52685a]">
-        Caixinha ativa: {preflight.tenant_active?'Sim':'Não'}.
+        Caixinha ativa: {visiblePreflight.tenant_active?'Sim':'Não'}.
         Identidade confirmada do candidato: Não.
       </p>
-      {preflight.self_approval_blocked&&
+      {visiblePreflight.self_approval_blocked&&
         <p className="mt-2 text-sm font-semibold text-[#8a3828]">
           Conflito identificado: tentativa de autoaprovação.
         </p>}
