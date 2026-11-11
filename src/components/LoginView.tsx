@@ -292,6 +292,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                       : 'A administração da plataforma precisa autorizar seu acesso.'}
                   </p>
                   <p className="mt-2 text-xs text-[#f7dc99]">
+                    Uma única identidade pode participar de mais de uma caixinha e
+                    exercer perfis diferentes quando autorizada. Não crie outra
+                    identidade para cada vínculo.
+                  </p>
+                  <p className="mt-2 text-xs text-[#f7dc99]">
                     Os convites eletrônicos e a ativação por e-mail ainda não foram habilitados.
                     Não é possível criar a conta diretamente neste aplicativo.
                   </p>

@@ -20,11 +20,11 @@ def select_login_role(*, requested_role, is_master: bool, links, requested_tenan
         if requested_tenant_id is not None:
             eligible = [row for row in eligible
                         if str(row["tenant_id"]) == str(requested_tenant_id)]
-        if not eligible:
+        if not eligible or any(row['tenant_id'] is None for row in eligible):
             deny()
         # Nunca escolher silenciosamente o primeiro tenant deste papel.
         # A resposta 409 ocorre somente apos a verificacao da senha.
-        if requested_tenant_id is None and len({str(row['tenant_id']) for row in eligible}) > 1:
+        if len(eligible) > 1:
             raise HTTPException(
                 status_code=409,
                 detail='Mais de uma caixinha vinculada. Informe o ID da caixinha para entrar.',
@@ -35,10 +35,17 @@ def select_login_role(*, requested_role, is_master: bool, links, requested_tenan
     if requested_tenant_id is not None:
         deny()
 
-    # Fallback antigo limitado a usuários que NÃO são Master.
+    # Fallback de cliente legado SOMENTE para exatamente um vínculo.
+    # Dois papéis, duas caixinhas ou linhas duplicadas: nunca usar links[0].
+    # A senha já foi verificada antes desta seleção no endpoint /login.
     if requested_role is None and not is_master and links:
+        if len(links) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Mais de um vínculo cadastrado. Escolha perfil e caixinha.",
+            )
         row = links[0]
-        if row["role"] in ("TENANT_ADMIN", "TENANT_MEMBER"):
+        if row["role"] in ("TENANT_ADMIN", "TENANT_MEMBER") and row["tenant_id"] is not None:
             return row["role"], row["tenant_id"]
 
     deny()
