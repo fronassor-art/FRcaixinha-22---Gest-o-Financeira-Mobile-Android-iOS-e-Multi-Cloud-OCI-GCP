@@ -155,6 +155,12 @@ if _saas_authenticated_contract_ci.ci_endpoint_allowed(os.environ):
 # startup performs NO email, token or database queue work.
 @app.on_event("startup")
 async def _original_frfinance_access_delivery_startup():
+    # Keep existing Termux server fully functional when the optional queue
+    # is disabled, even if the optional AES dependency is unavailable.
+    if os.environ.get("FR_FINANCE_ACCESS_MAIL_ENABLE") != "REVIEWED_SINGLE_DB":
+        if os.environ.get("FR_FINANCE_ACCESS_MAIL_WORKER") == "EXPLICITLY_APPROVED":
+            raise RuntimeError("OUTBOX_WORKER_WITHOUT_APPROVED_SCHEMA")
+        return
     from .access_delivery_pg18 import (
         AccessQueueBlocked, install_existing_access_delivery,
     )
