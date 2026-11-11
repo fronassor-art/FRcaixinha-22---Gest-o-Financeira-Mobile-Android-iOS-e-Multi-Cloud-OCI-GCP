@@ -199,7 +199,9 @@ def test_provisioned_faux_worker_routes_only_intent_not_smtp(monkeypatch):
     assert password.json()["user_exists"] is None
     assert calls[0][0] == "INVITATION"
     assert calls[0][1]["payload"].tenant_id == T
-    assert calls[1] == ("RESET", {"email": "ci-reset-m38960@example.com"})
+    assert calls[1][0] == "RESET"
+    assert calls[1][1]["email"] == "ci-reset-m38960@example.com"
+    assert calls[1][1]["source_ip"] == "testclient"
 
 
 def test_master_not_allowed_without_mfa_even_if_worker_injected(monkeypatch):
