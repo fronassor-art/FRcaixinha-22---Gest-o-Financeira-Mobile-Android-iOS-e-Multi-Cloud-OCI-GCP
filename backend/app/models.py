@@ -154,6 +154,9 @@ class MemberCycleRiskPreviewResponse(BaseModel):
     longest_registered_overdue_days: int
     currently_unpaid_consecutive_months: int
     potential_three_unpaid_trigger_date: Optional[date] = None
+    registered_ninety_day_review_candidate: bool
+    registered_three_competence_review_candidate: bool
+    requires_independent_review: bool
     membership_profit_eligible: Optional[bool] = None
     reconciled_principal_cents: Optional[int] = None
     capital_days_weight: Optional[Decimal] = None

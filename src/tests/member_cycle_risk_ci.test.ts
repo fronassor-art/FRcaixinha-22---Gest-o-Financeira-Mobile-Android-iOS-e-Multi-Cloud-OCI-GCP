@@ -21,6 +21,9 @@ const record={
   longest_registered_overdue_days:294,
   currently_unpaid_consecutive_months:10,
   potential_three_unpaid_trigger_date:'2027-04-11',
+  registered_ninety_day_review_candidate:true,
+  registered_three_competence_review_candidate:true,
+  requires_independent_review:true,
   membership_profit_eligible:null,
   reconciled_principal_cents:null,
   capital_days_weight:null,
@@ -39,6 +42,26 @@ const admin=parseMemberCycleRiskPreview({
   ...record,scope:'TENANT_ADMIN_READ_ONLY'
 },T,2027,'TENANT_ADMIN',M);
 assert.equal(admin.membership_id,M);
+const ninetyOnly=parseMemberCycleRiskPreview({
+  ...record,longest_registered_overdue_days:90,
+  currently_unpaid_consecutive_months:1,
+  potential_three_unpaid_trigger_date:null,
+  registered_ninety_day_review_candidate:true,
+  registered_three_competence_review_candidate:false,
+  requires_independent_review:true,
+},T,2027,'TENANT_MEMBER');
+assert(ninetyOnly.registered_ninety_day_review_candidate);
+assert(!ninetyOnly.registered_three_competence_review_candidate);
+assert.equal(ninetyOnly.membership_profit_eligible,null);
+const threeOnly=parseMemberCycleRiskPreview({
+  ...record,longest_registered_overdue_days:60,
+  currently_unpaid_consecutive_months:3,
+  registered_ninety_day_review_candidate:false,
+  registered_three_competence_review_candidate:true,
+  requires_independent_review:true,
+},T,2027,'TENANT_MEMBER');
+assert(!threeOnly.registered_ninety_day_review_candidate);
+assert(threeOnly.registered_three_competence_review_candidate);
 
 const invalid=[
   {...record,tenant_id:B},
@@ -59,6 +82,10 @@ const invalid=[
   {...record,longest_registered_overdue_days:-1},
   {...record,currently_unpaid_consecutive_months:13},
   {...record,potential_three_unpaid_trigger_date:'2028-01-01'},
+  {...record,registered_ninety_day_review_candidate:false},
+  {...record,registered_ninety_day_review_candidate:1},
+  {...record,registered_three_competence_review_candidate:false},
+  {...record,requires_independent_review:false},
   {...record,potential_three_unpaid_trigger_date:'2027-02-30'},
   {...record,as_of:'2027-02-30'},
   {...record,source:'LOCAL_TEST_DATA'},
@@ -89,6 +116,9 @@ assert.match(panel,/authService\.isSessionSnapshotCurrent/);
 assert.match(panel,/Esta consulta não bloqueia direitos/);
 assert.match(panel,/membership_profit_eligible/);
 assert.match(panel,/financial_closing_authorized/);
+assert.match(panel,/Critérios distintos de revisão cadastral/);
+assert.match(panel,/registered_ninety_day_review_candidate/);
+assert.match(panel,/registered_three_competence_review_candidate/);
 assert.match(app,/<MemberCycleRiskPanel state=\{state\}\/>/);
 assert.doesNotMatch(panel,/localStorage|closeCycle|payContribution|releaseLoan|settleCycle/);
 

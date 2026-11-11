@@ -14,6 +14,9 @@ export interface MemberCycleRiskPreview {
   longest_registered_overdue_days:number;
   currently_unpaid_consecutive_months:number;
   potential_three_unpaid_trigger_date:string|null;
+  registered_ninety_day_review_candidate:boolean;
+  registered_three_competence_review_candidate:boolean;
+  requires_independent_review:boolean;
   membership_profit_eligible:null;
   reconciled_principal_cents:null;
   capital_days_weight:null;
@@ -48,6 +51,8 @@ const KEYS=new Set([
   'registered_paid_cents','registered_open_cents',
   'longest_registered_overdue_days','currently_unpaid_consecutive_months',
   'potential_three_unpaid_trigger_date','membership_profit_eligible',
+  'registered_ninety_day_review_candidate','registered_three_competence_review_candidate',
+  'requires_independent_review',
   'reconciled_principal_cents','capital_days_weight',
   'contractual_effect_applied','real_financial_operations_enabled',
   'financial_closing_authorized','bank_reconciled','result_status'
@@ -68,6 +73,9 @@ export function parseMemberCycleRiskPreview(
     (raw.potential_three_unpaid_trigger_date!==null&&
       !dateString(raw.potential_three_unpaid_trigger_date))||
     raw.membership_profit_eligible!==null||
+    typeof raw.registered_ninety_day_review_candidate!=='boolean'||
+    typeof raw.registered_three_competence_review_candidate!=='boolean'||
+    typeof raw.requires_independent_review!=='boolean'||
     raw.reconciled_principal_cents!==null||raw.capital_days_weight!==null||
     raw.contractual_effect_applied!==false||
     raw.real_financial_operations_enabled!==false||
@@ -84,6 +92,12 @@ export function parseMemberCycleRiskPreview(
   const streak=count(raw.currently_unpaid_consecutive_months);
   const age=count(raw.longest_registered_overdue_days,36500);
   if(paid>due||open!==due-paid||streak>countRows||
+      raw.registered_ninety_day_review_candidate!==(age>=90)||
+      raw.registered_three_competence_review_candidate!==(
+        raw.potential_three_unpaid_trigger_date!==null)||
+      raw.requires_independent_review!==(
+        raw.registered_ninety_day_review_candidate||
+        raw.registered_three_competence_review_candidate)||
       (countRows===0&&(due!==0||paid!==0||streak!==0||age!==0))||
       (raw.potential_three_unpaid_trigger_date!==null&&
        (raw.potential_three_unpaid_trigger_date as string) > (raw.as_of as string)))
@@ -98,6 +112,9 @@ export function parseMemberCycleRiskPreview(
     longest_registered_overdue_days:age,
     currently_unpaid_consecutive_months:streak,
     potential_three_unpaid_trigger_date:raw.potential_three_unpaid_trigger_date as string|null,
+    registered_ninety_day_review_candidate:raw.registered_ninety_day_review_candidate as boolean,
+    registered_three_competence_review_candidate:raw.registered_three_competence_review_candidate as boolean,
+    requires_independent_review:raw.requires_independent_review as boolean,
     membership_profit_eligible:null,reconciled_principal_cents:null,
     capital_days_weight:null,contractual_effect_applied:false,
     real_financial_operations_enabled:false,

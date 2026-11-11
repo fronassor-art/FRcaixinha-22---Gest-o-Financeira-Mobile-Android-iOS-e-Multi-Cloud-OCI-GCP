@@ -130,6 +130,25 @@ export const MemberCycleRiskPanel:React.FC<{state:AppState}>=({state})=>{
             <dd className="font-bold">{formatBRL(current.preview.registered_open_cents/100)}</dd></div>
         </dl>
         <p>Maior atraso registrado: {current.preview.longest_registered_overdue_days} dias.</p>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1"
+          aria-label="Critérios distintos de revisão cadastral">
+          <p className="font-semibold">Sinais de revisão: critérios independentes</p>
+          <p>
+            90 dias: {current.preview.registered_ninety_day_review_candidate
+              ? 'Limite atingido no cadastro; revisão necessária.'
+              : 'Limite não atingido no cadastro.'}
+          </p>
+          <p>
+            Três competências consecutivas: {current.preview.registered_three_competence_review_candidate
+              ? 'Sequência potencial registrada; revisão necessária.'
+              : 'Nenhuma sequência potencial registrada.'}
+          </p>
+          <p>
+            {current.preview.requires_independent_review
+              ? 'Solicitar comprovação independente, sem aplicar penalidade.'
+              : 'Nenhum sinal encontrado; isso não comprova adimplência bancária.'}
+          </p>
+        </div>
         <p>
           {current.preview.potential_three_unpaid_trigger_date
             ?'Sequência potencial de três competências: '+

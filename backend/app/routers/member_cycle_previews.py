@@ -18,6 +18,7 @@ from ..dependencies import (
 )
 from ..database import get_rls_db_connection
 from ..member_cycle_rules import MonthlyDueProof, first_three_unpaid_trigger
+from ..member_risk_review_signals import registered_review_signals
 from ..models import MemberCycleRiskPreviewResponse
 
 router = APIRouter(
@@ -145,6 +146,14 @@ async def _load_preview(
             break
         streak += 1
         last_index = idx
+    try:
+        signals = registered_review_signals(
+            oldest_days=oldest_overdue,
+            three_competence_trigger=potential,
+            as_of=as_of,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="Sinais de revisão inconsistentes.") from exc
     return MemberCycleRiskPreviewResponse(
         tenant_id=str(tenant_id), cycle_year=year,
         membership_id=str(member_id), as_of=as_of,
@@ -158,6 +167,9 @@ async def _load_preview(
         longest_registered_overdue_days=oldest_overdue,
         currently_unpaid_consecutive_months=streak,
         potential_three_unpaid_trigger_date=potential,
+        registered_ninety_day_review_candidate=signals.registered_ninety_day_review_candidate,
+        registered_three_competence_review_candidate=signals.registered_three_competence_review_candidate,
+        requires_independent_review=signals.requires_independent_review,
         membership_profit_eligible=None,
         reconciled_principal_cents=None,
         capital_days_weight=None,

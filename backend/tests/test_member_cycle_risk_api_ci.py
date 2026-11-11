@@ -75,6 +75,8 @@ async def test_member_reads_only_own_unverified_cycle_without_closing():
     assert out.registered_open_cents==37500
     assert out.currently_unpaid_consecutive_months==3
     assert out.longest_registered_overdue_days>0
+    assert out.registered_three_competence_review_candidate is True
+    assert out.requires_independent_review is True
     assert out.membership_profit_eligible is None
     assert out.reconciled_principal_cents is None
     assert out.capital_days_weight is None
@@ -153,6 +155,9 @@ async def test_unpaid_over_90_days_not_replaced_by_three_month_rule():
         T,2027,M,date(2027,4,11),actor("TENANT_ADMIN"),db)
     assert r.longest_registered_overdue_days==91
     assert r.potential_three_unpaid_trigger_date is None
+    assert r.registered_ninety_day_review_candidate is True
+    assert r.registered_three_competence_review_candidate is False
+    assert r.requires_independent_review is True
 
 
 @pytest.mark.asyncio
