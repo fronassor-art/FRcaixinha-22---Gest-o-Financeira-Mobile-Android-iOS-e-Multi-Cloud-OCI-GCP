@@ -96,9 +96,23 @@ def test_ascii_lowercase_signed_manifest_accepted_but_only_matching_order():
     assert record.order_id==ORD
 
 
-def test_order_route_not_mounted_to_default_fastapi():
-    assert all(r.path!="/integrations/mercadopago/orders"
-               for r in main_app.routes)
+def test_order_route_mounted_on_original_fastapi_but_inert_without_binding():
+    paths = [r.path for r in main_app.routes]
+    assert paths.count("/integrations/mercadopago/orders") == 1
+    # The real HTTP route uses the existing HMAC validator, but has no
+    # approved seller/Vault/inbox worker on the developer's Termux.
+    if hasattr(main_app.state, "mp_orders_ingress_runtime"):
+        delattr(main_app.state, "mp_orders_ingress_runtime")
+    with TestClient(main_app, base_url="https://testserver") as client:
+        response = client.post(
+            "/integrations/mercadopago/orders",
+            params={"data.id":ORD, "type":"order"},
+            headers={"x-signature":signature(), "x-request-id":REQ,
+                     "content-type":"application/json"},
+            json=event_body(),
+        )
+    assert response.status_code == 503
+    assert "Orders webhook verifier unavailable" in response.json()["detail"]
 
 
 def test_signed_router_persists_once_and_replays_without_money():
