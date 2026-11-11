@@ -1,6 +1,7 @@
 """
-FRcaixinha 2.2 — Rotas de Fechamento de Ciclo Anual (Capital-Dias V2)
-Contrato Técnico Mestre (Cláusulas 6.5, 6.6, 10.3, 10.4, 16.2 e 16.4)
+FR Finance — rota legada de consulta de fechamento anual (Capital-Dias V2)
+Apenas frente AI Studio deste repositório; FR Caixinha 2.2 é projeto independente.
+O POST de liquidação permanece bloqueado (503); não executa pagamentos nem rateio.
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP e Método dos Maiores Restos (Hamilton/Hare-Niemeyer).
 """
 
