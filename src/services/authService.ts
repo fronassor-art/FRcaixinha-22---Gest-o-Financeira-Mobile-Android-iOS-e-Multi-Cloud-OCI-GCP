@@ -511,18 +511,34 @@ class AuthService {
   }
 
   public async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/forgot-password`, {
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) || normalized.length > 254) {
+      throw new Error('Informe um e-mail válido.');
+    }
+    const baseUrl = getApiBaseUrl();
+    if (!baseUrl) throw new Error('Servidor FR Finance indisponível.');
+    const res = await fetch(`${baseUrl}/api/v1/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      cache: 'no-store',
+      body: JSON.stringify({ email: normalized }),
     });
-
-    const data = await res.json();
+    let data: unknown;
+    try { data = await res.json(); } catch { data = null; }
+    const reply = (data && typeof data === 'object' && !Array.isArray(data))
+      ? data as Record<string, unknown> : {};
     if (!res.ok) {
-      throw new Error(data.detail || data.message || data.error || 'Recuperação de senha indisponível.');
+      // Do not surface raw backend error bodies or returned emails/tokens.
+      if (res.status === 429) throw new Error('Muitas solicitações. Tente mais tarde.');
+      throw new Error('Recuperação ainda indisponível. Nenhuma mensagem foi enviada.');
     }
-
-    return data;
+    if (res.status !== 202 ||
+        reply.status !== 'REQUEST_ACCEPTED_IF_ELIGIBLE' ||
+        reply.user_exists !== null || reply.email_sent !== false ||
+        typeof reply.message !== 'string') {
+      throw new Error('Servidor não comprovou o registro da solicitação.');
+    }
+    return {success: true, message: reply.message};
   }
 
   private armExpirationTimer(expiresAt: number) {
