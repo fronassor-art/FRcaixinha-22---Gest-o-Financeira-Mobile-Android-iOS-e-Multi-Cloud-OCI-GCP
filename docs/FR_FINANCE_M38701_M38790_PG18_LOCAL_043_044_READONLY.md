@@ -1,0 +1,41 @@
+# FR Finance AI Studio — M38701–M38790 | Auditoria local PG18 043/044
+
+## Evidência de entrada
+
+- Checkpoint M38700: commit d51b354, 12.562 testes aprovados, 130 ignorados, 1 aviso e zero falhas.
+- Os arquivos SQL 043 e 044 estão versionados, mas não existe atestado de aplicação no banco original.
+- Não executar migração, backup, rollback, ativação ou liberação por causa deste relatório.
+
+## Escopo implementado
+
+O comando backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py tem modo OFFLINE sem acesso ao banco e modo LOCAL opcional, explícito e interativo. A conexão LOCAL usa somente 127.0.0.1:5433, frcaixinha_aistudio_dev, frc_ai_owner, PostgreSQL 18 e data_directory do Termux. Faz BEGIN TRANSACTION ... READ ONLY, timeout, consultas apenas aos metadados do pg_catalog e COMMIT, sem consultar linhas financeiras.
+
+As observações cobrem as duas constraints de piso R$150 e a ausência de defaults da migração 043; a função de preço protegida e a execução restrita do legado; a auditoria de abertura de caixinha da 044, incluindo RLS, triggers imutáveis, idempotência, função de preço explícito e papéis de execução.
+
+Os resultados COMPATIBLE_OBSERVED significam somente que os metadados consultados satisfizeram os controles previstos. Isso não prova que a migração específica foi aplicada, que os dados históricos foram validados ou que há condições para uso real. INCOMPLETE_OR_MISSING significa que a estrutura está ausente, parcial ou distinta; nunca reexecutar SQL automaticamente.
+
+## Comandos Termux
+
+Sem rede ou credenciais, na raiz do repositório:
+
+    python backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py offline
+    python -m pytest -q -p no:cacheprovider backend/tests/test_m38701_local_043_044_catalog_readonly_ci.py
+
+Opcional, após sincronizar e somente com decisão consciente de consultar o PostgreSQL local:
+
+    python backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py local AUTHORIZE_PG18_043_044_CATALOG_READ_ONLY
+
+O prompt pede a senha do banco de forma oculta no próprio Termux. A senha não é gravada em arquivos ou argumentos de shell e não deve ser enviada ao chat ou GitHub. O programa passa a senha temporariamente ao processo psql por variável de ambiente: executar somente em telefone e sessão confiáveis, pois processos autorizados do mesmo usuário podem conseguir observar o ambiente do processo.
+
+A auditoria não registra stdout ou stderr brutos do psql; falhas retornam somente causas codificadas. Não é destinada a cron nem CI com credenciais reais.
+
+## Separação de evidências
+
+- M38790_LOCAL_043_SCHEMA=COMPATIBLE_OBSERVED: estruturas mínimas esperadas para 043 presentes.
+- M38790_LOCAL_044_SCHEMA=COMPATIBLE_OBSERVED: estruturas mínimas esperadas para 044 presentes.
+- M38790_MIGRATION_PROVENANCE=NOT_ATTESTED: constante, mesmo se as estruturas forem compatíveis.
+- M38790_PRODUCTION=BLOCKED: constante, mesmo com ambos os esquemas compatíveis.
+
+O teste do GitHub usa psql falso (mock) e nenhuma conexão PostgreSQL real. Não há migração SQL nova, mutação do banco original, uso de OCI, SMTP, Brevo, Mercado Pago, Pix, pagamentos ou ativação.
+
+Antes de qualquer aplicação futura de migrações 043/044, exigir separadamente inventário do estado, backup restaurável, verificação de dependências, aprovação de operação, transação e prova pós-aplicação. Esta etapa não concede essa autorização.
