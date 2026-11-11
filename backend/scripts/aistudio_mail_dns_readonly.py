@@ -45,6 +45,34 @@ def _read_source_domain() -> str:
     return domain
 
 
+def _local_preflight() -> str:
+    """Offline only; never echo the intake filename, sender or credentials."""
+    try:
+        from app.provider_intake_schema import _mailbox
+        # read_file independently checks strict private-file permissions.
+        public = read_file(_default_file())["public_inputs"]
+    except Exception:
+        return "PUBLIC_INTAKE_MISSING_OR_INVALID"
+    sender = public.get("FR_FINANCE_EMAIL_FROM")
+    if sender is None:
+        return "EMAIL_FROM_NOT_CONFIGURED"
+    if type(sender) is not str:
+        return "EMAIL_FROM_INVALID"
+    try:
+        _mailbox(sender)
+    except Exception:
+        return "EMAIL_FROM_INVALID"
+    if sender.rsplit("@", 1)[-1] != SENDER_DOMAIN:
+        return "EMAIL_FROM_DOMAIN_MISMATCH"
+    try:
+        import dns.resolver
+    except ImportError:
+        return "DNSPYTHON_NOT_INSTALLED"
+    except Exception:
+        return "DNSPYTHON_IMPORT_FAILED"
+    return "READY_FOR_EXPLICIT_PUBLIC_DNS_READ"
+
+
 def _collect_public_dns(domain: str, selectors: tuple[str,...]) -> PublicMailDnsSnapshot:
     # Import only inside explicit LIVE, never in CI or offline.
     try:
@@ -125,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     parser=argparse.ArgumentParser(
         description="FR Finance e-mail DNS público, somente leitura; sem SMTP.",
     )
-    parser.add_argument("action",choices=("offline","live"),nargs="?",default="offline")
+    parser.add_argument("action",choices=("offline","diagnose","live"),nargs="?",default="offline")
     parser.add_argument("approval",nargs="?",default=None)
     parser.add_argument("--selector",action="append",default=[])
     args=parser.parse_args(argv)
@@ -143,6 +171,21 @@ def main(argv: list[str] | None = None) -> int:
         print("M38289_PRODUCTION=BLOCKED")
         return 0
 
+    if args.action=="diagnose":
+        if args.approval is not None or args.selector:
+            print("M38409_DIAGNOSE=BLOCKED_INVALID_ARGUMENTS")
+            return 2
+        result = _local_preflight()
+        print("=== FR FINANCE M38370-M38409 — DNS LOCAL PREFLIGHT ===")
+        print("M38409_PREFLIGHT=" + result)
+        print("M38409_NETWORK_QUERIES=NONE")
+        print("M38409_SMTP_SEND=NONE")
+        print("M38409_BANK_ORIGINAL=UNTOUCHED")
+        print("M38409_PIX_REAL=OFF")
+        print("M38409_EMAIL_REAL=OFF")
+        print("M38409_PRODUCTION=BLOCKED")
+        return 0 if result=="READY_FOR_EXPLICIT_PUBLIC_DNS_READ" else 2
+
     if (
         args.approval!="AUTHORIZE_PUBLIC_MAIL_DNS_READ_ONLY"
         or len(args.selector)>2 or len(set(args.selector))!=len(args.selector)
@@ -151,19 +194,32 @@ def main(argv: list[str] | None = None) -> int:
     ):
         print("M38289_MAIL_DNS=BLOCKED_OPERATOR_APPROVAL_OR_SELECTOR")
         return 2
+    # Keep the legacy denial label for backwards-compatible dashboards, but
+    # add a sanitised *phase* so a missing intake does not masquerade as
+    # missing domain TXT or an outage at an external DNS provider.
+    phase = "PUBLIC_INTAKE"
     try:
         domain=_read_source_domain()
+        phase = "DNS_RESOLVER"
         snapshot=_collect_public_dns(domain,tuple(args.selector))
+        phase = "DNS_RESPONSE_POLICY"
         report=assess_public_mail_dns(snapshot)
         brevo=assess_brevo_public_dns(snapshot)
     except Exception:
-        # No DNS, intake or provider exception text; fixed reason only.
         print("M38289_MAIL_DNS=BLOCKED_INPUT_OR_DNS_QUERY")
+        print("M38409_FAILURE_STAGE=" + phase)
+        if phase=="PUBLIC_INTAKE":
+            print("M38409_PREFLIGHT=" + _local_preflight())
+        else:
+            print("M38409_PREFLIGHT=PUBLIC_INTAKE_ACCEPTED")
+        print("M38409_PROVIDER_STATUS=NOT_ATTESTED")
         print("M38289_REAL_EMAIL=OFF")
         print("M38289_PRODUCTION=BLOCKED")
         return 2
 
     print("=== FR FINANCE M38289 MAIL DNS PUBLIC READ ONLY ===")
+    print("M38409_DIAGNOSIS=PUBLIC_DNS_POLICY_OBSERVED")
+    print("M38409_BREVO_PROVIDER_CONTROL=NOT_ATTESTED")
     print("M38289_MAIL_DNS=READ_ONLY_OBSERVATION")
     print("M38289_SPF_RECORD="+str(report.spf_record_present).upper())
     print("M38289_SPF_LIMITED="+str(report.spf_policy_limited).upper())
