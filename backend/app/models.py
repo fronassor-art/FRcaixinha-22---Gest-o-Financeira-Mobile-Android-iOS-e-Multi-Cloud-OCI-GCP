@@ -8,7 +8,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, AliasChoices, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, AliasChoices, ConfigDict, SecretStr
 
 # --- Schemas de Entrada / Saída para Autenticação ---
 
@@ -55,6 +55,19 @@ class AuthStatusResponse(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+
+class PasswordResetCompleteRequest(BaseModel):
+    """Opaque one-use link + new password; never echo or log either."""
+    model_config = ConfigDict(extra="forbid")
+    token: SecretStr
+    new_password: SecretStr
+
+
+class InvitationEmailProofRequest(BaseModel):
+    """Mailbox ownership only. This does not create or activate members."""
+    model_config = ConfigDict(extra="forbid")
+    token: SecretStr
 
 class InvitationCreateRequest(BaseModel):
     target_email: EmailStr
