@@ -314,6 +314,11 @@ jobs:
         run: bash -n backend/scripts/frfinance_m38992_apply_m047_original_pg18.sh
       - name: M38994 — validar sintaxe M048, sem aplicar no banco
         run: bash -n backend/scripts/frfinance_m38994_apply_m048_original_pg18.sh
+      - name: M38996 — preparar somente api.env original, sem SMTP real ou novo banco
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38996_stage_existing_mail_config_ci.py
       - name: M38995 — localizar configuracoes Brevo previamente homologadas sem ler segredos
         env:
           PYTHONPATH: backend
