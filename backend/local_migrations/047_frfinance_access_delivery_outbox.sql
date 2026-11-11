@@ -213,7 +213,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp
 AS $fn$
 BEGIN
  IF session_user<>'frc_ai_auth' OR current_database()<>'frcaixinha_aistudio_dev'
-   OR p_event IS NULL OR type(p_accepted::text) IS NULL
+   OR p_event IS NULL OR p_accepted IS NULL
  THEN RAISE EXCEPTION 'M38990_WORKER_DENIED' USING ERRCODE='42501'; END IF;
  UPDATE public.frfinance_access_delivery_outbox SET
   state=CASE WHEN p_accepted IS TRUE THEN 'SMTP_ACCEPTED' ELSE 'QUARANTINED' END,
