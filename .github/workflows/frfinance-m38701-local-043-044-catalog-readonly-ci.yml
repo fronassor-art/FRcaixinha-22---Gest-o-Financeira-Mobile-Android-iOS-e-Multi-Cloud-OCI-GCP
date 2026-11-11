@@ -31,13 +31,17 @@ jobs:
         run: |
           python backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py offline
           python backend/scripts/frfinance_m38794_project_isolation.py reference
+          python backend/scripts/frfinance_m38795_pg18_runtime_probe.py offline
           python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38795_pg18_runtime_probe_ci.py \
             backend/tests/test_m38794_project_isolation_ci.py \
             backend/tests/test_m38701_local_043_044_catalog_readonly_ci.py \
             backend/tests/test_m38651_cycle_minimum_contract_drift_ci.py
           echo "M38794_PROJECT_ISOLATION=TESTED_OFFLINE"
           echo "M38794_FR22_ACCESS=NONE"
           echo "M38794_RUNNING_CLUSTER=NOT_ATTESTED"
+          echo "M38795_LOCAL_PROCESS_PROBE=NOT_EXECUTED_ON_GITHUB"
+          echo "M38795_PG_SERVER_START_STOP=NONE"
           echo "M38790_LOCAL_PG_CONNECTIONS=NONE"
           echo "M38790_DB_MUTATIONS=NONE"
           echo "M38790_PG_043_044_MIGRATION_PROVENANCE=NOT_ATTESTED"
