@@ -112,7 +112,6 @@ def fake_local(monkeypatch, tmp_path, *, pg_version="18", remote=None, branch=No
 def test_valid_project_structure_does_not_assert_server_running(monkeypatch, tmp_path):
     mod, home, _, _ = fake_local(monkeypatch, tmp_path)
     data = mod.inspect_local(home)
-    assert data["M38794_PROJECT_SEPARATION"] if False else True
     assert data["M38794_GIT_IDENTITY"] == "FR_FINANCE_AI_STUDIO"
     assert data["M38794_PGDATA_VERSION"] == "18"
     assert data["M38794_PGDATA_2_2"] == "SEPARATE_DIRECTORY_PRESENT"
