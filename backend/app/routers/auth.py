@@ -10,7 +10,7 @@ import asyncio
 import asyncpg
 import uuid
 import hashlib
-from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPasswordRequest, ContextSwitchRequest, UserResponse
+from ..models import LoginRequest, SessionResponse, AuthStatusResponse, ForgotPasswordRequest, PasswordResetCompleteRequest, ContextSwitchRequest, UserResponse
 from ..config import settings
 from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure, auth_rate_limit_key
 from ..dependencies import get_current_session, AuthenticatedSession, auth_database_url, auth_verifier_database_url, bearer_token
@@ -373,6 +373,34 @@ async def submit_password_recovery_to_existing_outbox(
         source_ip=request.client.host if request.client else "unknown",
     )
     return password_recovery_accepted_response(receipt)
+
+@router.post("/reset-password")
+async def complete_original_pg18_password_reset(
+    payload: PasswordResetCompleteRequest, request: Request,
+):
+    """Single-use Argon2id reset on the original PG18; revoke old sessions.
+
+    The M048 function must be verified before the runtime installs this port.
+    Tokens and passwords are never included in responses, URLs or logs.
+    """
+    if not settings.is_database_configured:
+        raise HTTPException(503, "Recuperação de senha ainda não disponível.")
+    runtime = require_access_delivery(request)
+    if runtime.complete_password_reset is None:
+        raise HTTPException(503, "Conclusão da recuperação ainda não habilitada.")
+    accepted = await runtime.complete_password_reset(
+        token=payload.token.get_secret_value(),
+        new_password=payload.new_password.get_secret_value(),
+    )
+    if accepted is not True:
+        raise HTTPException(400, "Link inválido, expirado ou já utilizado.")
+    return {
+        "status": "PASSWORD_UPDATED",
+        "sessions_revoked": True,
+        "next_step": "LOGIN_AGAIN",
+        "real_user_activation": False,
+    }
+
 
 @router.post("/switch-context")
 async def switch_context_disabled(
