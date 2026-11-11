@@ -5,7 +5,7 @@ verificação de titularidade, aceite contratual, RLS e auditoria aprovados.
 """
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from ..models import (
-    InvitationCreateRequest, InvitationContractReadinessRequest,
+    InvitationCreateRequest, InvitationEmailProofRequest, InvitationContractReadinessRequest,
     InvitationContractCatalogRequest, InvitationContractTextIntegrityRequest,
 )
 from ..dependencies import get_current_session, AuthenticatedSession
@@ -144,3 +144,27 @@ async def submit_invitation_to_existing_outbox(
         )
     receipt = await runtime.invite(session=session, payload=payload)
     return invitation_accepted_response(receipt)
+
+
+@router.post("/verify-email")
+async def verify_original_pg18_invitation_email(
+    payload: InvitationEmailProofRequest, request: Request,
+):
+    """Verify inbox possession using M048, never create/activate membership."""
+    if not settings.is_database_configured:
+        raise HTTPException(503, "Verificação de convite indisponível.")
+    runtime = require_access_delivery(request)
+    if runtime.verify_invitation_email is None:
+        raise HTTPException(503, "Verificação de convite ainda não habilitada.")
+    accepted = await runtime.verify_invitation_email(
+        token=payload.token.get_secret_value(),
+    )
+    if accepted is not True:
+        raise HTTPException(400, "Link inválido, expirado ou já utilizado.")
+    return {
+        "status": "EMAIL_OWNERSHIP_VERIFIED",
+        "invitation_accepted": False,
+        "membership_created": False,
+        "account_activated": False,
+        "next_step": "CONTRACT_ACCEPTANCE_AND_IDENTITY",
+    }
