@@ -21,6 +21,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   const [tenantChoice, setTenantChoice] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [resetHelp, setResetHelp] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backendCheckBusy, setBackendCheckBusy] = useState(false);
@@ -109,6 +111,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
       setError(cause instanceof Error ? cause.message : 'Não foi possível entrar.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requestRecovery = async () => {
+    if (resetBusy) return;
+    setResetNotice(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 254) {
+      setResetNotice('Informe seu e-mail antes de solicitar a recuperação.');
+      return;
+    }
+    setResetBusy(true);
+    try {
+      const response = await authService.requestPasswordReset(email.trim());
+      setResetNotice(response.message);
+    } catch (cause) {
+      // When the existing backend/outbox is not ready, never claim delivery.
+      setResetNotice(cause instanceof Error ? cause.message : 'Recuperação indisponível.');
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -228,9 +249,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
-                  {resetHelp && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-900/20 p-3 text-xs text-amber-100">
-                    Recuperação automática ainda indisponível. Consulte quem autorizou seu acesso.
-                  </p>}
+                  {resetHelp && (
+                    <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-900/20 p-3 text-xs text-amber-100">
+                      <p>Informe o e-mail da conta e solicite a recuperação. Se o serviço ainda não estiver habilitado, nenhuma mensagem será enviada.</p>
+                      <button type="button" disabled={resetBusy}
+                        onClick={() => { void requestRecovery(); }}
+                        className="mt-3 min-h-10 rounded-lg border border-amber-300/60 px-3 font-semibold disabled:opacity-50">
+                        {resetBusy ? 'Solicitando...' : 'Enviar instruções de recuperação'}
+                      </button>
+                      {resetNotice && <p role="status" className="mt-2" aria-live="polite">{resetNotice}</p>}
+                    </div>
+                  )}
                 </div>
                 {selectedRole !== 'MASTER' && (
                   <div>
