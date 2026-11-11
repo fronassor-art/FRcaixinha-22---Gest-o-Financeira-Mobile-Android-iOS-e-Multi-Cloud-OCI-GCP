@@ -20,7 +20,7 @@ from .mail_dns_readiness_readonly import (
 )
 
 _TARGET = "frfinance.com.br"
-_CODE = re.compile(r"(?i)^brevo-code:[a-z0-9_-]{8,128}$")
+_CODE = re.compile(r"(?i)^brevo-code[:=][a-z0-9_-]{8,128}$")
 _DKIM_KEY = re.compile(r"[A-Za-z0-9+/]{24,4096}={0,2}\Z")
 _DKIM_START = re.compile(r"(?i)^(?:v\s*=\s*dkim1\s*;|k\s*=\s*rsa\s*;)")
 
@@ -99,7 +99,8 @@ def assess_brevo_public_dns(snapshot: PublicMailDnsSnapshot) -> BrevoPublicDnsRe
 
     blockers: list[str] = []
     root_txt = snapshot.spf_txt
-    codes = [item for item in root_txt if item.lower().startswith("brevo-code:")]
+    codes = [item for item in root_txt
+             if re.match(r"(?i)^brevo-code[:=]", item)]
     code_observed = len(codes) == 1 and _CODE.fullmatch(codes[0]) is not None
     if len(codes) > 1:
         blockers.append("BREVO_CODE_DUPLICATE")
