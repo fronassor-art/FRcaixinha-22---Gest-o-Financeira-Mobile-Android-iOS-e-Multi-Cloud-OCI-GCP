@@ -1,9 +1,8 @@
-"""M4400: signed Mercado Pago Orders webhook ingress factory (OCI staging only).
+"""M4400: signed Mercado Pago Orders webhook ingress factory.
 
-No router mounted on the public FastAPI. HMAC + durable inbox are **not**
-proof of bank settlement; Order GET + independent settlement + journal
-are separately required. The Orders resource identifier is ORD..., not
-a legacy numeric payment ID.
+The existing FR Finance FastAPI mounts this route with an inert, fail-closed
+runtime until the original durable inbox, seller binding and Vault are proven.
+HMAC is NOT bank settlement, and the API never pays or posts a ledger entry.
 """
 from __future__ import annotations
 
@@ -44,6 +43,22 @@ class SignedOrderEvent:
     bank_reconciled: bool=False
     ledger_written: bool=False
     payment_marked_paid: bool=False
+
+
+@dataclass(frozen=True, slots=True)
+class OrdersIngressBinding:
+    """Only the reviewed deployment may inject callbacks for the one FastAPI.
+
+    These are explicit operational attestations, not live provider evidence.
+    """
+    resolve_account: Callable[[str], Awaitable[SellerContext | None]]
+    load_signing_secret: Callable[[SellerContext], Awaitable[bytes]]
+    persist_event: Callable[[SignedOrderEvent], Awaitable[str]]
+    seller_registry_verified: bool = False
+    secret_store_verified: bool = False
+    durable_inbox_verified: bool = False
+    ingress_https_verified: bool = False
+    sandbox_only: bool = True
 
 
 def _unique(pairs):
@@ -137,7 +152,7 @@ def create_orders_staging_router(
     now_ms:Callable[[],int],
     allow_live_ingest:bool=False,
 )->APIRouter:
-    """Not mounted in main.py; deploy only behind trusted TLS and OCI Vault."""
+    """Mounted in existing FastAPI only with fail-closed runtime callbacks."""
     router=APIRouter(tags=["MP Orders signed webhook staging"])
 
     @router.post("/integrations/mercadopago/orders",include_in_schema=False)
