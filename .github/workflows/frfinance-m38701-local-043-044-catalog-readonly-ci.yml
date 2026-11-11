@@ -1,0 +1,42 @@
+name: FR Finance M38701 local 043-044 catalog read-only synthetic CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg-catalog-only-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: backend
+      FR_FINANCE_EMAIL_REAL: "OFF"
+      FR_FINANCE_PIX_REAL: "OFF"
+      FR_FINANCE_REAL_USER_ACTIVATION: "OFF"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install synthetic-only pytest dependency
+        run: python -m pip install pytest==8.3.4
+      - name: Run offline reporter and synthetic no-IO tests
+        run: |
+          python backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py offline
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38701_local_043_044_catalog_readonly_ci.py \
+            backend/tests/test_m38651_cycle_minimum_contract_drift_ci.py
+          echo "M38790_LOCAL_PG_CONNECTIONS=NONE"
+          echo "M38790_DB_MUTATIONS=NONE"
+          echo "M38790_PG_043_044_MIGRATION_PROVENANCE=NOT_ATTESTED"
+          echo "M38790_EMAIL_REAL=OFF"
+          echo "M38790_PIX_REAL=OFF"
+          echo "M38790_REAL_USERS=OFF"
+          echo "M38790_PRODUCTION=BLOCKED"
