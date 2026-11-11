@@ -97,3 +97,76 @@ def decide_delivery(
             raise DecisionBlocked("M26500_INCONSISTENT_EVIDENCE")
         return DeliveryDecision(DeliveryDisposition.BOUNCED_REVIEW_NO_RETRY)
     raise DecisionBlocked("M26500_INVALID_EVIDENCE")
+
+
+# M38070-M38089: supplemental *read-only* durable receipt snapshot check.
+# The caller must fetch this from independently authenticated, tenant-scoped
+# PostgreSQL (not an HTTP/client-supplied object). This module cannot attest
+# its provenance, grant a lease, access a database or send an email.
+@dataclass(frozen=True)
+class PersistedOutboxEvidence:
+    event_id: UUID
+    lease_id: UUID
+    recorded_receipt_kinds: tuple[str, ...]
+    terminal_state: str | None
+
+
+_RECEIPT_STATES = frozenset(("CI_SMTP_ACCEPTED", "CI_BOUNCE"))
+_TERMINAL_STATES = frozenset((
+    "CI_UNKNOWN_TIMEOUT_QUARANTINE",
+    "CI_SMTP_ACCEPTED_UNVERIFIED",
+    "CI_BOUNCED_REQUIRES_REVIEW",
+))
+
+
+def decide_delivery_with_outbox_evidence(
+    *, context: AttemptContext,
+    evidence: SubmissionEvidence,
+    persisted: PersistedOutboxEvidence,
+) -> DeliveryDecision:
+    """Never request another lease when any prior receipt or terminal exists.
+
+    The snapshot must cover the complete outbox history, including previous
+    leases, and be loaded under a trusted transaction lock. Receipt presence
+    is never treated as inbox-delivery, consent, or account-activation proof.
+    """
+    # Preserve all original malformed attempt / inconsistent SMTP evidence
+    # errors before considering any external persisted snapshot.
+    baseline = decide_delivery(context=context, evidence=evidence)
+    if (
+        type(persisted) is not PersistedOutboxEvidence
+        or type(persisted.event_id) is not UUID or persisted.event_id.int == 0
+        or type(persisted.lease_id) is not UUID or persisted.lease_id.int == 0
+        or persisted.event_id != context.event_id
+        or persisted.lease_id != context.lease_id
+        or type(persisted.recorded_receipt_kinds) is not tuple
+        or len(persisted.recorded_receipt_kinds) > 16
+        or any(type(kind) is not str or kind not in _RECEIPT_STATES
+               for kind in persisted.recorded_receipt_kinds)
+        or (persisted.terminal_state is not None and (
+            type(persisted.terminal_state) is not str
+            or persisted.terminal_state not in _TERMINAL_STATES
+        ))
+    ):
+        raise DecisionBlocked("M38070_INVALID_PERSISTED_OUTBOX_EVIDENCE")
+    kinds = frozenset(persisted.recorded_receipt_kinds)
+    terminal = persisted.terminal_state
+    if len(kinds) > 1:
+        return DeliveryDecision(DeliveryDisposition.QUARANTINED_UNKNOWN_NO_RETRY)
+    if terminal == "CI_UNKNOWN_TIMEOUT_QUARANTINE":
+        return DeliveryDecision(DeliveryDisposition.QUARANTINED_UNKNOWN_NO_RETRY)
+    if terminal == "CI_SMTP_ACCEPTED_UNVERIFIED":
+        if kinds != {"CI_SMTP_ACCEPTED"}:
+            return DeliveryDecision(DeliveryDisposition.QUARANTINED_UNKNOWN_NO_RETRY)
+        return DeliveryDecision(DeliveryDisposition.SMTP_ACCEPTED_NO_DELIVERY_PROOF)
+    if terminal == "CI_BOUNCED_REQUIRES_REVIEW":
+        if kinds != {"CI_BOUNCE"}:
+            return DeliveryDecision(DeliveryDisposition.QUARANTINED_UNKNOWN_NO_RETRY)
+        return DeliveryDecision(DeliveryDisposition.BOUNCED_REVIEW_NO_RETRY)
+    if "CI_SMTP_ACCEPTED" in kinds:
+        return DeliveryDecision(DeliveryDisposition.SMTP_ACCEPTED_NO_DELIVERY_PROOF)
+    if "CI_BOUNCE" in kinds:
+        return DeliveryDecision(DeliveryDisposition.BOUNCED_REVIEW_NO_RETRY)
+    # No receipt or terminal was found in a trusted ledger snapshot.
+    # Baseline still only grants *consideration* for another guarded lease.
+    return baseline
