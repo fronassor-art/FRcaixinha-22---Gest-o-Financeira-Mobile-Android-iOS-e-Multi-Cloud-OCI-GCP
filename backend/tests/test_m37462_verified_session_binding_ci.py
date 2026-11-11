@@ -179,34 +179,32 @@ async def test_legacy_constructor_retains_old_endpoints_but_not_saas():
     {"verified_session_id":"not-a-uuid"},
     {"verified_session_id":None},
     {"verified_session_at":None},
-    {"verified_session_at":NOW()+timedelta(seconds=4)},
-    {"verified_session_at":NOW()-timedelta(minutes=6)},
-    {"verified_session_at":NOW().replace(tzinfo=None)},
+    {"verified_session_at":lambda: NOW()+timedelta(seconds=4)},
+    {"verified_session_at":lambda: NOW()-timedelta(minutes=6)},
+    {"verified_session_at":lambda: NOW().replace(tzinfo=None)},
     {"verified_session_expires_at":None},
-    {"verified_session_expires_at":NOW()-timedelta(seconds=1)},
-    {"verified_session_expires_at":NOW().replace(tzinfo=None)},
+    {"verified_session_expires_at":lambda: NOW()-timedelta(seconds=1)},
+    {"verified_session_expires_at":lambda: NOW().replace(tzinfo=None)},
 ])
 def test_verified_token_binding_mismatch_or_age_denied(change):
     p=principal()
-    for k,v in change.items():setattr(p,k,v)
-    assert check_server_identity_binding(p,make_context(),now=NOW()) is None
+    # Temporal fixtures are evaluated when the test RUNS, not on module import.\n    # Security still rejects a timestamp that is in the future.\n    for k,v in change.items():setattr(p,k,v() if callable(v) else v)\n    assert check_server_identity_binding(p,make_context(),now=NOW()) is None
 
 
 @pytest.mark.parametrize("change",[
     {"session_id":S2},
     {"tenant_id":OTHER},
     {"administrator_id":OTHER},
-    {"session_checked_at":NOW()-timedelta(minutes=2)},
-    {"session_checked_at":NOW()+timedelta(seconds=1)},
-    {"session_expires_at":NOW()+timedelta(hours=2)},
+    {"session_checked_at":lambda: NOW()-timedelta(minutes=2)},
+    {"session_checked_at":lambda: NOW()+timedelta(seconds=1)},
+    {"session_expires_at":lambda: NOW()+timedelta(hours=2)},
     {"session_role":"TENANT_MEMBER"},
     {"session_active":False},
     {"email_verified":False},
     {"source":"CLIENT"},
 ])
 def test_postgres_session_does_not_authorize_mismatched_server_context(change):
-    c=replace(make_context(),**change)
-    assert check_server_identity_binding(principal(),c,now=NOW()) is None
+    # Avoid stale time-relative data after large Termux test collections.\n    runtime_change={k:(v() if callable(v) else v) for k,v in change.items()}\n    c=replace(make_context(),**runtime_change)\n    assert check_server_identity_binding(principal(),c,now=NOW()) is None
 
 
 @pytest.mark.parametrize("change",[
