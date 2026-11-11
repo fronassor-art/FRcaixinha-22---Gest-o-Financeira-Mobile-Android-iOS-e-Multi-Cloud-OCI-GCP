@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Rotas Oficiais de Autenticação e Sessão
+FR Finance AI Studio — Rotas Oficiais de Autenticação e Sessão
 Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 14.1 e 16.4)
 """
 
@@ -15,6 +15,7 @@ from ..config import settings
 from ..security import check_rate_limit, record_failed_attempt, clear_rate_limit, generate_session_token, hash_token, verify_password_secure, auth_rate_limit_key
 from ..dependencies import get_current_session, AuthenticatedSession, auth_database_url, auth_verifier_database_url, bearer_token
 from ..login_role_policy import select_login_role
+from ..access_delivery_binding import require_access_delivery, password_recovery_accepted_response
 
 router = APIRouter(prefix="/auth", tags=["Autenticação e Sessões"])
 
@@ -332,7 +333,6 @@ async def revoke_my_session(
     }
 
 
-@router.post("/forgot-password")
 def forgot_password(payload: ForgotPasswordRequest):
     """
     Recuperação de senha segura:
@@ -343,6 +343,33 @@ def forgot_password(payload: ForgotPasswordRequest):
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Recuperação de senha por e-mail ainda não implementada."
     )
+
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+async def submit_password_recovery_to_existing_outbox(
+    payload: ForgotPasswordRequest, request: Request,
+):
+    """Use existing PostgreSQL outbox/auth service, never send SMTP inline.
+
+    HTTP 202 is returned only when a verified worker confirms a committed
+    durable queue record. A non-existent account must not be distinguishable.
+    No worker configured means HTTP 503, never a fake success.
+    """
+    if not settings.is_database_configured:
+        raise HTTPException(503, "Recuperação de senha por e-mail ainda não implementada no banco ativo.")
+    runtime = require_access_delivery(request)
+    try:
+        identifier = str(payload.email).strip().lower()
+        blocked, _retry = check_rate_limit(identifier)
+    except (ValueError, TypeError):
+        raise HTTPException(503, "Proteção de recuperação indisponível.") from None
+    if blocked:
+        raise HTTPException(429, "Muitas solicitações. Tente novamente mais tarde.")
+    # Real worker must enforce persistent per-IP/per-email abuse protection,
+    # account enumeration resistance, one-use hashed token and post-commit send.
+    receipt = await runtime.reset(email=identifier)
+    return password_recovery_accepted_response(receipt)
 
 @router.post("/switch-context")
 async def switch_context_disabled(
