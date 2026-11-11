@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import subprocess
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 
@@ -101,8 +102,17 @@ def report() -> dict[str, str]:
     statuses: dict[str, str] = {}
     if not PROJECT.is_dir() or PROJECT.is_symlink():
         return {"M38995_PROJECT": "BLOCKED_WRONG_OR_MISSING_ORIGINAL"}
-    # This operation does NOT run git or touch other worktrees.
-    statuses["M38995_PROJECT"] = "ORIGINAL_FR_FINANCE_PATH"
+    # Read only the branch name of the ORIGINAL worktree; never git reset.
+    try:
+        branch = subprocess.run(
+            ("git", "-C", str(PROJECT), "branch", "--show-current"),
+            capture_output=True, text=True, timeout=5, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        branch = ""
+    if branch != EXPECTED_BRANCH:
+        return {"M38995_PROJECT": "BLOCKED_WRONG_BRANCH_OR_WORKTREE"}
+    statuses["M38995_PROJECT"] = "ORIGINAL_FR_FINANCE_BRANCH"
     config_status, declared = _declared(CONFIG)
     public_status, public_fields = _public_intake(PUBLIC)
     statuses["M38995_API_ENV"] = config_status
