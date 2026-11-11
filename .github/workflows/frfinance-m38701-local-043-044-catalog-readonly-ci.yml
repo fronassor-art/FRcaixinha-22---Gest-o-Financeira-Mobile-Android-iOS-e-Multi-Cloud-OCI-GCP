@@ -33,7 +33,9 @@ jobs:
           python backend/scripts/frfinance_m38794_project_isolation.py reference
           python backend/scripts/frfinance_m38795_pg18_runtime_probe.py offline
           python backend/scripts/frfinance_m38796_pg18_control_preflight.py offline
+          python backend/scripts/frfinance_m38797_wal_storage_preflight.py offline
           python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38797_wal_storage_preflight_ci.py \
             backend/tests/test_m38796_pg18_control_preflight_ci.py \
             backend/tests/test_m38795_pg18_runtime_probe_ci.py \
             backend/tests/test_m38794_project_isolation_ci.py \
@@ -47,6 +49,10 @@ jobs:
           echo "M38796_PG_CONTROLDATA_LIVE=NOT_EXECUTED_IN_CI"
           echo "M38796_POSTMASTER_PID_DELETE=NONE"
           echo "M38796_PG_CONTROL_MUTATIONS=NONE"
+          echo "M38797_LOCAL_WAL_INSPECTION=NOT_EXECUTED_IN_CI"
+          echo "M38797_WAL_INTEGRITY=NOT_ATTESTED"
+          echo "M38797_RECOVERY_PERMISSION=NOT_GRANTED"
+          echo "M38797_POSTMASTER_PID_DELETE=NONE"
           echo "M38790_LOCAL_PG_CONNECTIONS=NONE"
           echo "M38790_DB_MUTATIONS=NONE"
           echo "M38790_PG_043_044_MIGRATION_PROVENANCE=NOT_ATTESTED"
