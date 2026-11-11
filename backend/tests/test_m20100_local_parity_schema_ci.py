@@ -5,7 +5,7 @@ import pytest
 ROOT=Path(__file__).resolve().parents[2]
 TABLES=["webhook_evidence","pix_dryrun","orders_inbox","order_evidence",
         "order_reservation","reconciliation_hold","incident_audit","notification_outbox"]
-@pytest.mark.parametrize("n,suffix",zip(range(34,42),TABLES))
+@pytest.mark.parametrize("n,suffix",list(zip(range(34,42),TABLES)))
 def test_local_ddl_is_guarded(n,suffix):
     files=list((ROOT/"backend/local_migrations").glob(f"{n:03d}_*.sql"))
     assert len(files)==1
