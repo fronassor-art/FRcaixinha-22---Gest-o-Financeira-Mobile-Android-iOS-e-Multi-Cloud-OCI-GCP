@@ -13,6 +13,7 @@ import re
 import secrets
 
 from .account_lifecycle import _ci_only, LifecycleDenied
+from .invite_challenge_guard_ci import check_challenge_budget, ChallengeGuardError
 from .security import hash_password_secure, hash_token
 
 
@@ -36,9 +37,26 @@ def prepare_invite_email_verification_ci(conn, *, invitation_id: UUID) -> str:
             "SELECT target_email,expires_at,revoked_at,accepted_at,delivery_status "
             "FROM public.invitations WHERE id=%s FOR UPDATE", (invitation_id,),
         ).fetchone()
-        if (not inv or inv[1]<=datetime.now(timezone.utc) or inv[2] or inv[3]
+        now=datetime.now(timezone.utc)
+        if (not inv or inv[1]<=now or inv[2] or inv[3]
                 or inv[4]!='DELIVERED'):
             raise LifecycleDenied("Convite indisponível para verificação do e-mail.")
+        # The locked invitation serializes issuers. Historical challenges
+        # count even if revoked or consumed. Refusal must not revoke the
+        # currently active challenge.
+        history=conn.execute(
+            "SELECT count(*)::int,max(created_at) "
+            "FROM public.invite_email_verification WHERE invitation_id=%s",
+            (invitation_id,),
+        ).fetchone()
+        try:
+            check_challenge_budget(
+                issued_count=history[0] if history else -1,
+                last_created_at=history[1] if history else None,
+                now=now,
+            )
+        except ChallengeGuardError as exc:
+            raise LifecycleDenied("Verificação indisponível para nova emissão.") from exc
         conn.execute(
             "UPDATE public.invite_email_verification SET revoked_at=now() "
             "WHERE invitation_id=%s AND consumed_at IS NULL AND revoked_at IS NULL",

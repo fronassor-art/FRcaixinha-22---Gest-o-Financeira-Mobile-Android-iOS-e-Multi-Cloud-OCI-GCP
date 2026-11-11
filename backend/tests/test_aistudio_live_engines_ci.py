@@ -140,6 +140,53 @@ def test_registration_validates_cpf_and_requires_delivery(base_ci):
     ).fetchone()[0]==1
 
 
+def test_challenge_rate_limit_preserves_active_token(base_ci):
+    """PostgreSQL descartável: cooldown, quota e nenhuma revogação na falha."""
+    from app.security import hash_token
+    db,u=base_ci
+    doc=_document(db,"TENANT_MEMBERSHIP","ci-quota-"+str(uuid4()))
+    inv,_=prepare_invitation_ci(
+        db,tenant_id=u["tenant"],inviter_id=u["admin"],
+        recipient_email="rate-limited@example.invalid",
+        target_role="TENANT_MEMBER",required_document_id=doc)
+    assert simulate_invitation_delivery_ci(db,inv)
+    first=prepare_invite_email_verification_ci(db,invitation_id=inv)
+    with pytest.raises(LifecycleDenied):
+        prepare_invite_email_verification_ci(db,invitation_id=inv)
+    assert db.execute(
+        "SELECT token_hash,revoked_at FROM public.invite_email_verification "
+        "WHERE invitation_id=%s",(inv,),
+    ).fetchall()==[(hash_token(first),None)]
+
+    db.execute(
+        "UPDATE public.invite_email_verification "
+        "SET created_at=now()-interval '2 minutes' WHERE invitation_id=%s",(inv,))
+    second=prepare_invite_email_verification_ci(db,invitation_id=inv)
+    assert second!=first
+    assert db.execute(
+        "SELECT revoked_at FROM public.invite_email_verification WHERE token_hash=%s",
+        (hash_token(first),),
+    ).fetchone()[0] is not None
+
+    db.execute(
+        "UPDATE public.invite_email_verification "
+        "SET created_at=now()-interval '2 minutes' WHERE token_hash=%s",
+        (hash_token(second),))
+    third=prepare_invite_email_verification_ci(db,invitation_id=inv)
+    assert third not in (first,second)
+    with pytest.raises(LifecycleDenied):
+        prepare_invite_email_verification_ci(db,invitation_id=inv)
+    rows=db.execute(
+        "SELECT token_hash,revoked_at FROM public.invite_email_verification "
+        "WHERE invitation_id=%s",(inv,),
+    ).fetchall()
+    assert len(rows)==3
+    assert [r for r in rows if r[1] is None]==[(hash_token(third),None)]
+    assert db.execute(
+        "SELECT accepted_at FROM public.invitations WHERE id=%s",(inv,),
+    ).fetchone()==(None,)
+
+
 def test_registration_disallows_contract_mismatch_and_revoked_sender(base_ci):
     db,u=base_ci
     required=_document(db,"TENANT_MEMBERSHIP","ci-required-"+str(uuid4()))
