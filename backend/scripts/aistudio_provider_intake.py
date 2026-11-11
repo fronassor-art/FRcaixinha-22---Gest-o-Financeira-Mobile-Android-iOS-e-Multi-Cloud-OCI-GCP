@@ -23,6 +23,7 @@ import sys
 from app.operator_release_worklist import release_worklist
 from app.provider_setup_sequence import prioritized_public_steps
 from app.public_https_attestation import probe_public_https_origin, PublicTlsProbeBlocked
+from app.public_api_health_attestation import probe_public_api_health, PublicApiHealthBlocked
 from app.provider_secret_inventory import secret_names_and_access_plan
 from app.provider_intake_schema import (
     FIELDS, FIELD_BY_KEY, IntakeBlocked, intake_audit,
@@ -154,7 +155,7 @@ def main(argv=None) -> int:
     parser=argparse.ArgumentParser(
         description="FR Finance AI Studio — somente identificadores públicos; NUNCA insira senhas, tokens, secrets ou DSNs."
     )
-    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next","probe-https","secrets-plan"))
+    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next","probe-https","probe-api-health","secrets-plan"))
     parser.add_argument("key",nargs="?")
     parser.add_argument("value",nargs="?")
     args=parser.parse_args(argv)
@@ -228,6 +229,33 @@ def main(argv=None) -> int:
             print("M28200_HTTP_REQUESTS=0")
             print("M28200_SMTP_MESSAGES=0")
             print("M28200_REAL_PROVIDERS=NOT_ATTESTED")
+        elif args.action=="probe-api-health":
+            # Explicit opt-in, only the allowlisted public APP_URL.
+            # Executes one GET /api/health per pinned public DNS IP, no
+            # redirects, credentials, secret values, database, or cloud writes.
+            if args.key!="APP_URL" or args.value!="AUTHORIZE_PUBLIC_HEALTH_READ_ONLY":
+                raise _deny()
+            public=read_file(path)["public_inputs"]
+            origin=public.get("APP_URL")
+            if type(origin) is not str:
+                raise _deny()
+            report=probe_public_api_health(origin)
+            if (not report.public_dns_and_tls_observed
+                    or not report.health_contract_observed
+                    or report.production_authorized or report.real_pix_authorized
+                    or report.real_user_activation_authorized):
+                raise _deny()
+            print("M38209_PUBLIC_HEALTH_GET=PASS_READ_ONLY")
+            print("M38209_SANDBOX_CONTRACT=OBSERVED")
+            print("M38209_DATABASE_CONFIG_CLAIM=" + (
+                "DECLARED" if report.database_configured_claim else "NOT_DECLARED"))
+            print("M38209_REAL_DATABASE_RLS=NOT_ATTESTED")
+            print("M38209_OCI_VM_IDENTITY=NOT_ATTESTED")
+            print("M38209_PRODUCTION_AUTH=NOT_ATTESTED")
+            print("M38209_EMAIL_REAL=OFF")
+            print("M38209_PIX_REAL=OFF")
+            print("M38209_ACTIVATION_REAL=OFF")
+            print("M38209_PRODUCTION=BLOCKED")
         elif args.action=="secrets-plan":
             if args.key is not None or args.value is not None:
                 raise _deny()
@@ -240,7 +268,7 @@ def main(argv=None) -> int:
             print("FR_FINANCE_SECRETS_STATUS=NOT_ATTESTED")
             print("FR_FINANCE_LIVE_SERVICES=OFF")
         return 0
-    except (IntakeBlocked,PublicTlsProbeBlocked,OSError):
+    except (IntakeBlocked,PublicTlsProbeBlocked,PublicApiHealthBlocked,OSError):
         print("FR_FINANCE_PUBLIC_INTAKE=BLOCKED_INVALID_OR_MISSING_INPUT",file=sys.stderr)
         return 2
 
