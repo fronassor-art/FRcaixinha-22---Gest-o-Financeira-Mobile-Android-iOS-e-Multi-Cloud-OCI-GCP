@@ -41,6 +41,9 @@ def _local_enabled() -> bool:
             and db.hostname == "127.0.0.1"
             and db.port == 5433
             and db.path == "/frcaixinha_aistudio_dev"
+            # Do not accept service/PGOPTIONS overrides or URL fragments.
+            and db.query == ""
+            and db.fragment == ""
             and len(secret.encode("utf-8")) >= 32
         )
     except (ValueError, TypeError):
