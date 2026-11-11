@@ -113,7 +113,29 @@ def test_invitation_requires_delivery_correct_identity_and_single_use(synthetic_
     ) is None
     db.execute("UPDATE public.users SET email_verified_at=now() WHERE id=%s",
                (users["member"],))
-    membership_id = accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True,accepted_document_sha256=doc_digest)
+    # M38030: e-mail de convite nao substitui prova da senha da conta.
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,
+        consent=True,accepted_document_sha256=doc_digest
+    ) is None
+    assert accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,
+        consent=True,accepted_document_sha256=doc_digest,
+        account_password="senha-errada-sintetica"
+    ) is None
+    assert db.execute(
+        "SELECT count(*) FROM public.memberships WHERE user_id=%s AND tenant_id=%s",
+        (users["member"],tenant),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM public.contract_acceptances WHERE user_id=%s AND tenant_id=%s",
+        (users["member"],tenant),
+    ).fetchone()[0] == 0
+    membership_id = accept_existing_identity_ci(
+        db,token=token,user_id=users["member"],document_id=doc,
+        consent=True,accepted_document_sha256=doc_digest,
+        account_password="senha-sintetica-inicial",
+    )
     assert membership_id is not None
     assert accept_existing_identity_ci(db, token=token, user_id=users["member"], document_id=doc, consent=True,accepted_document_sha256=doc_digest) is None
     assert not revoke_invitation_ci(db, invitation_id)

@@ -18,6 +18,7 @@ def test_default_denies_unacknowledged_or_unversioned_consent():
     sig=inspect.signature(accept_existing_identity_ci)
     assert sig.parameters["consent"].default is False
     assert sig.parameters["accepted_document_sha256"].default is None
+    assert sig.parameters["account_password"].default is None
     src=_function_source()
     assert "consent is not True" in src
     assert "type(accepted_document_sha256) is not str" in src

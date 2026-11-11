@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import os
 import secrets
 
-from .security import hash_password_secure, hash_token
+from .security import hash_password_secure, hash_token, verify_password_secure
 
 
 class LifecycleDenied(ValueError):
@@ -123,8 +123,9 @@ def revoke_invitation_ci(conn, invitation_id: UUID) -> bool:
 def accept_existing_identity_ci(
     conn, *, token: str, user_id: UUID, document_id: UUID,
     consent: bool = False, accepted_document_sha256: str | None = None,
+    account_password: str | None = None,
 ) -> UUID | None:
-    """Aceite de CONTA EXISTENTE só com documento publicado e consentimento.
+    """Aceite de CONTA EXISTENTE só com senha, documento e consentimento.
 
     O link sozinho não autoriza vínculo. Contrato versionado, membership,
     token e auditoria são confirmados na MESMA transação descartável.
@@ -135,7 +136,8 @@ def accept_existing_identity_ci(
     # A boolean alone does not prove what was displayed to the invitee.
     if (consent is not True or type(accepted_document_sha256) is not str
             or len(accepted_document_sha256) != 64
-            or any(ch not in '0123456789abcdef' for ch in accepted_document_sha256)):
+            or any(ch not in '0123456789abcdef' for ch in accepted_document_sha256)
+            or type(account_password) is not str or not account_password):
         return None
     with conn.transaction():
         invitation = conn.execute(
@@ -165,6 +167,16 @@ def accept_existing_identity_ci(
         ).fetchone()
         if (not user or user[1] != "ACTIVE" or user[2] is None
                 or user[0].casefold() != invitation[2]):
+            return None
+        # O link entregue ao e-mail nao prova a posse da conta existente.
+        # O hash de senha e bloqueado na mesma transacao de vinculacao:
+        # reset concorrente nao usa credencial ja substituida.
+        credential = conn.execute(
+            "SELECT password_hash FROM public.credentials WHERE user_id=%s FOR UPDATE",
+            (user_id,),
+        ).fetchone()
+        if (not credential
+                or not verify_password_secure(account_password, credential[0])):
             return None
         tenant = conn.execute(
             "SELECT status FROM public.tenants WHERE id=%s", (invitation[1],)
