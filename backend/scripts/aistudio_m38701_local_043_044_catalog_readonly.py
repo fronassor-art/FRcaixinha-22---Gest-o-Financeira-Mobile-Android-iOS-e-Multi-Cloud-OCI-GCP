@@ -205,7 +205,7 @@ def _safe_psql_failure_class(stderr: object, returncode: object) -> str:
     if type(stderr) is not str:
         return "UNCLASSIFIED"
     # VERBOSITY=sqlstate asks psql to omit SQL text/arguments for SQL errors.
-    match = re.search(r"(?im)\\b(?:ERROR|FATAL):\\s*([0-9A-Z]{5})\\b", stderr)
+    match = re.search(r"(?im)\b(?:ERROR|FATAL):\s*([0-9A-Z]{5})\b", stderr)
     if match is not None:
         categories = {
             "28P01": "AUTH_REJECTED",
