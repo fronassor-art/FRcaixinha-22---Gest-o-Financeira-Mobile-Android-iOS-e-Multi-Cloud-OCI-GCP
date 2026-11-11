@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users,
 import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform } from '../services/authService';
 import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
 import {probeMobileBackendHealth} from '../services/mobileBackendProbe';
+import { AccessLinkView, parseAccessLink, type AccessLink } from './AccessLinkView';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthenticatedUser) => void;
@@ -23,6 +24,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   const [resetHelp, setResetHelp] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
   const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [accessLink, setAccessLink] = useState<AccessLink | null>(() =>
+    typeof window === 'undefined' ? null : parseAccessLink(window.location.hash));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backendCheckBusy, setBackendCheckBusy] = useState(false);
@@ -64,6 +67,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     window.addEventListener('hashchange', syncReservedRoute);
     return () => window.removeEventListener('hashchange', syncReservedRoute);
   }, []);
+  useEffect(() => {
+    // The existing Brevo deep link arrives as a URL fragment. Discard it
+    // from visible browser history before sending anything to the API.
+    const receiveAccessLink = () => {
+      const parsed = parseAccessLink(window.location.hash);
+      if (parsed) {
+        setAccessLink(parsed);
+        window.history.replaceState(
+          null, '', window.location.pathname + window.location.search,
+        );
+      }
+    };
+    receiveAccessLink();
+    window.addEventListener('hashchange', receiveAccessLink);
+    return () => window.removeEventListener('hashchange', receiveAccessLink);
+  }, []);
+
   const openReservedAccess = () => {
     if (mode !== 'login' || selectedRole !== null) return;
     const now = Date.now();
@@ -132,6 +152,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
       setResetBusy(false);
     }
   };
+
+  if (accessLink) {
+    return <AccessLinkView link={accessLink} onBack={() => setAccessLink(null)} />;
+  }
 
   return (
     <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-8 sm:py-10 flex flex-col items-center justify-center">
