@@ -356,8 +356,9 @@ async def submit_password_recovery_to_existing_outbox(
     durable queue record. A non-existent account must not be distinguishable.
     No worker configured means HTTP 503, never a fake success.
     """
-    if not settings.is_database_configured:
-        raise HTTPException(503, "Recuperação de senha por e-mail ainda não implementada no banco ativo.")
+    # Access uses the original, separately verified AUTH_DATABASE_URL.
+    # DATABASE_URL is the financial-app connection and must not be required
+    # for an already attested one-time email queue on the same original DB.
     runtime = require_access_delivery(request)
     try:
         identifier = str(payload.email).strip().lower()
@@ -383,8 +384,8 @@ async def complete_original_pg18_password_reset(
     The M048 function must be verified before the runtime installs this port.
     Tokens and passwords are never included in responses, URLs or logs.
     """
-    if not settings.is_database_configured:
-        raise HTTPException(503, "Recuperação de senha ainda não disponível.")
+    # Fail closed at the verified M047/M048 runtime, not on an unrelated
+    # financial DATABASE_URL setting.
     runtime = require_access_delivery(request)
     if runtime.complete_password_reset is None:
         raise HTTPException(503, "Conclusão da recuperação ainda não habilitada.")
