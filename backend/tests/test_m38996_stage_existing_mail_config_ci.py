@@ -140,6 +140,16 @@ def test_env_duplicate_and_unsafe_line_fail_closed(tmp_path, monkeypatch):
         module._load_env()
 
 
+def test_legacy_empty_optional_value_preserved_without_recreation(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    env = tmp_path / "api.env"
+    env.write_text("AUTH_DATABASE_URL='postgresql://frc_ai_auth:x@127.0.0.1:5433/frcaixinha_aistudio_dev'\nOPTIONAL_FEATURE=\n")
+    env.chmod(0o600)
+    monkeypatch.setattr(module, "ENV", env)
+    _lines, values = module._load_env()
+    assert values["OPTIONAL_FEATURE"] == ""
+
+
 def test_only_original_infrastructure_and_protected_file_may_be_used():
     source = SCRIPT.read_text()
     assert '"fr-finance"' in source
