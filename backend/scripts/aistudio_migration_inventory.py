@@ -50,7 +50,7 @@ def repo_check():
           "BASELINE_LOCAL" if family=="migrations" and number<=27 else
           "APPLIED_LOCAL_EVIDENCE" if family=="migrations" and number==31 else
           "CI_ONLY_NEEDS_PORT" if family=="migrations" and number in (28,29,30) else
-          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44,45,46,47) else
+          "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="local_migrations" and number in (28,29,30,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48) else
           "LOCAL_CANDIDATE_REQUIRES_PROOF" if family=="migrations" else
           "CI_ONLY_TEST_OR_FIXTURE" if family=="ci_migrations" else
           "STAGING_ONLY_NEEDS_PORT"
@@ -314,6 +314,30 @@ def local_readonly():
                     print("M38990_LOCAL_047=STRUCTURAL_PRESENT_NO_DELIVERY_ATTESTATION")
                 else:
                     print("M38990_LOCAL_047=NOT_APPLIED")
+                # M048 adds two protected functions only; table count stays
+                # unchanged at 47. Partial installation must fail closed.
+                invite048=routine("public.frfinance_verify_invite_email(char)")
+                reset048=routine("public.frfinance_redeem_reset_token(char,varchar)")
+                if invite048!=reset048:
+                    return deny("M38993 partial M048 token redemption detected")
+                if invite048 and reset048:
+                    app_exec=conn.execute(
+                      "SELECT has_function_privilege('frc_ai_app',"
+                      "'public.frfinance_verify_invite_email(char)','EXECUTE') "
+                      "OR has_function_privilege('frc_ai_app',"
+                      "'public.frfinance_redeem_reset_token(char,varchar)','EXECUTE')"
+                    ).fetchone()[0]
+                    auth_exec=conn.execute(
+                      "SELECT has_function_privilege('frc_ai_auth',"
+                      "'public.frfinance_verify_invite_email(char)','EXECUTE') "
+                      "AND has_function_privilege('frc_ai_auth',"
+                      "'public.frfinance_redeem_reset_token(char,varchar)','EXECUTE')"
+                    ).fetchone()[0]
+                    if app_exec or not auth_exec:
+                        return deny("M38993 incorrect M048 function grants")
+                    print("M38993_LOCAL_048=FUNCTIONS_AND_ROLE_BOUNDARY_PRESENT")
+                else:
+                    print("M38993_LOCAL_048=NOT_APPLIED")
                 print("M20200_MIGRATIONS="+str(n)+"_TABLES_VERIFIED_NO_REAPPLY")
                 print("M19200_READ_ONLY=PASS")
                 return 0
