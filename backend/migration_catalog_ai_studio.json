@@ -1064,6 +1064,16 @@
       "source_blob_sha": "04ff94c3fe779b044b771063855249cca838fb6a"
     },
     {
+      "id": "local_migrations:048",
+      "source_path": "backend/local_migrations/048_frfinance_access_token_redemption.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.frfinance_verify_invite_email(char), public.frfinance_redeem_reset_token(char,varchar): original PG18 one-time token redemption, no activation",
+      "local_evidence": null,
+      "source_blob_sha": "e59657cd88e3ebd246e57918684aaf28ffc63046"
+    },
+    {
       "id": "staging_migrations:064",
       "source_path": "backend/staging_migrations/064_saas_member_admission_intent_staging_only.sql",
       "classification": "STAGING_ONLY_NEEDS_PORT",
