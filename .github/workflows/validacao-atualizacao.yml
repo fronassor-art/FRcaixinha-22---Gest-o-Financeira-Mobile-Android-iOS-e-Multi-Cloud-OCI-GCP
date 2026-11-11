@@ -315,7 +315,8 @@ jobs:
           FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
           FR_FINANCE_ACCESS_MAIL_WORKER: "OFF"
         run: |
-          python -m pytest -q -p no:cacheprovider             backend/tests/test_m38990_pg18_access_delivery_ci.py             backend/tests/test_m38960_access_delivery_api_integration_ci.py             backend/tests/test_m38980_oauth_callback_on_main_ci.py             backend/tests/test_m4400_orders_webhook_ci.py
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m38990_pg18_access_delivery_ci.py
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m38960_access_delivery_api_integration_ci.py backend/tests/test_m38980_oauth_callback_on_main_ci.py backend/tests/test_m4400_orders_webhook_ci.py
       - name: Executar testes de API
         env:
           PYTHONPATH: backend
