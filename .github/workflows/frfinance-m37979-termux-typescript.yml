@@ -26,3 +26,28 @@ jobs:
           python -m pytest -q -p no:cacheprovider backend/tests/test_m37979_termux_compiler_guard_ci.py
           echo "M37979_PRODUCTION=BLOCKED"
           echo "M37979_DATABASE=NOT_ACCESSED"
+
+  ts6-compatibility-isolated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar dependencias oficiais TypeScript 7
+        run: npm ci
+      - name: Instalar TypeScript 6 isolado sem alterar o repositorio
+        run: |
+          npm install --prefix "$RUNNER_TEMP/frfinance-m37979-typescript6" \
+            --no-save --no-package-lock --ignore-scripts --no-audit --no-fund \
+            @typescript/typescript6@6.0.2
+      - name: Executar typecheck de compatibilidade TS6
+        run: |
+          "$RUNNER_TEMP/frfinance-m37979-typescript6/node_modules/.bin/tsc6" --version
+          "$RUNNER_TEMP/frfinance-m37979-typescript6/node_modules/.bin/tsc6" --noEmit --project tsconfig.json
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+          echo "M37979_TS6_COMPATIBILITY=PASS"
+          echo "M37979_OFFICIAL_TYPESCRIPT7=UNCHANGED"
