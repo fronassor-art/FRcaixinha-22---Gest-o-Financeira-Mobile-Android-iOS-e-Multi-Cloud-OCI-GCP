@@ -68,3 +68,29 @@ def test_reconciliation_document_preserves_postgres_and_backups():
                    "SQL 110/111 JÁ EXECUTADAS", "frfinance-backups",
                    "/root/fr-finance", "M39034", "M39031"):
         assert phrase in doc
+
+
+
+def test_duplicate_delete_requires_exact_head_clean_backup_and_interactive_approval():
+    src=(SCRIPTS/"frfinance_m39037_delete_verified_duplicate_debian.sh").read_text()
+    assert f'CANON="{CANONICAL}"' in src
+    assert 'EXTRA="/root/fr-finance"' in src
+    assert "M39037_SECONDARY_CLONE_DELETED=PASS" in src
+    assert '[[ -t 0 ]]' in src
+    assert 'FR_FINANCE_APPROVED_SHA' in src
+    assert 'status --porcelain --untracked-files=all' in src
+    assert 'ls-files --others --ignored --exclude-standard' in src
+    assert 'rev-list --count --all --not --remotes' in src
+    assert 'stash list' in src
+    assert 'sha256sum --check --status' in src
+    assert 'stat -Lc' in src
+    assert 'realpath -e' in src
+    assert 'EXCLUIR_SOMENTE_CLONE_DEBIAN' in src
+    assert 'rm --one-file-system -rf -- /root/fr-finance' in src
+    assert 'rm --one-file-system -rf -- "$CANON"' not in src
+    assert 'rm -rf "$HOME/fr-finance"' not in src
+    assert "pg_dump" not in src
+    assert "dropdb" not in src
+    assert "git reset" not in src
+    subprocess.run(["bash","-n",str(SCRIPTS/"frfinance_m39037_delete_verified_duplicate_debian.sh")],
+                   check=True,capture_output=True,text=True)
