@@ -4,7 +4,7 @@
 -- No Pix, no loans, no email, no mobile-push dispatch.
 -- M39020: SQL110+111 MUST run together with psql --single-transaction.
 -- Standalone -f without explicit session gate is intentionally forbidden.
-DO $
+DO $$
 DECLARE mode text := current_setting('frfinance.m39020_migration_mode',true);
 BEGIN
  IF mode='CI_DISPOSABLE' THEN
@@ -20,7 +20,7 @@ BEGIN
  ELSE
    RAISE EXCEPTION 'M39020 migration requires explicit atomic session gate';
  END IF;
-END $;
+END $$;
 
 
 CREATE TABLE IF NOT EXISTS public.special_credit_grants (
