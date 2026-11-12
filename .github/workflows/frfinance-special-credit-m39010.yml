@@ -1,0 +1,141 @@
+name: FR Finance M39010 - Credito Especial e Canais (CI offline)
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fr-finance-special-credit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-contract:
+    name: Regras de credito especial e quatro adaptadores sem envio
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias da API
+        run: python -m pip install -r backend/requirements.txt
+      - name: Compilar codigo Python
+        run: |
+          python -m py_compile backend/app/special_credit_contract.py
+          python -m py_compile backend/app/special_credit_channels.py
+          python -m py_compile backend/app/routers/special_credit.py
+      - name: Testar valores, seguranca, consentimento e envelopes
+        env:
+          FR_FINANCE_SPECIAL_CREDIT_SANDBOX: "NO"
+          FR_FINANCE_PIX_REAL: "OFF"
+        run: python -m pytest -q backend/tests/test_special_credit_contract_ci.py
+
+  frontend:
+    name: React, tipos e build android-web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: TypeScript sem erros
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build
+
+  sql-disposable:
+    name: Candidato SQL 110 - PostgreSQL descartavel, RLS FORCE
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_ci_disposable
+          POSTGRES_DB: frfinance_ci_credit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: only_ci_disposable
+      PGDATABASE: frfinance_ci_credit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar esquema minimo descartavel
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE frc_ai_app NOLOGIN;
+          CREATE TABLE public.users (id uuid PRIMARY KEY);
+          CREATE TABLE public.tenants (
+            id uuid PRIMARY KEY,
+            admin_user_id uuid NOT NULL REFERENCES public.users(id),
+            status text NOT NULL DEFAULT 'ATIVO'
+          );
+          CREATE TABLE public.cycles (
+            id uuid PRIMARY KEY,
+            tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            status text NOT NULL DEFAULT 'ABERTO'
+          );
+          CREATE TABLE public.memberships (
+            id uuid PRIMARY KEY,
+            tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            user_id uuid NOT NULL REFERENCES public.users(id),
+            role text NOT NULL DEFAULT 'TENANT_MEMBER',
+            status text NOT NULL DEFAULT 'ATIVA'
+          );
+          GRANT SELECT ON public.users,public.tenants,
+            public.cycles,public.memberships TO frc_ai_app;
+          SQL
+      - name: Executar migracao somente neste banco descartavel
+        run: psql -v ON_ERROR_STOP=1 -f backend/migrations/110_fr_finance_special_credit_offline.sql
+      - name: Verificar tabelas e RLS obrigatorios
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE count_ready integer;
+          BEGIN
+           SELECT count(*) INTO count_ready FROM pg_class
+            WHERE oid IN (
+             'public.special_credit_grants'::regclass,
+             'public.special_credit_campaigns'::regclass,
+             'public.special_credit_recipients'::regclass,
+             'public.special_credit_preferences'::regclass,
+             'public.special_credit_outbox'::regclass,
+             'public.special_credit_audit'::regclass)
+             AND relrowsecurity AND relforcerowsecurity;
+           IF count_ready<>6 THEN
+             RAISE EXCEPTION 'RLS FORCE ausente em % de 6 tabelas',count_ready;
+           END IF;
+           IF has_table_privilege('frc_ai_app',
+             'public.special_credit_outbox','UPDATE')
+             OR has_table_privilege('frc_ai_app',
+             'public.special_credit_outbox','DELETE') THEN
+             RAISE EXCEPTION 'Outbox permite mutacoes financeiras de canais';
+           END IF;
+          END $$;
+          SQL
+      - name: Confirmar isolacao do Termux e ausencia de Pix
+        run: |
+          test "$PGDATABASE" = "frfinance_ci_credit"
+          test "$PGPORT" = "5432"
+          ! grep -Ei '\b(insert into loans|update loans|pix_transfer|money_out)\b' backend/migrations/110_fr_finance_special_credit_offline.sql
