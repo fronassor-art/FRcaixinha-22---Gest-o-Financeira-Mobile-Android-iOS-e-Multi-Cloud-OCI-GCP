@@ -65,7 +65,10 @@ def test_release_keeps_identical_package_and_requires_private_signing():
     build = (ROOT / "android/app/build.gradle").read_text(encoding="utf-8")
     config = (ROOT / "capacitor.config.ts").read_text(encoding="utf-8")
     assert 'applicationId "com.frcaixinha.app"' in build
-    assert 'applicationIdSuffix ".aistudio"' in build
+    assert 'applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"' in build
+    assert 'System.getenv("FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC") == "1"' in build
+    assert 'if (releaseRequested && diagnosticParallel)' in build
+    assert 'throw new GradleException("M39052: pacote diagnostico nao permite release.")' in build
     assert "FR_FINANCE_ANDROID_RELEASE_KEYSTORE_FILE" in build
     assert "FR_FINANCE_ANDROID_RELEASE_KEY_PASSWORD" in build
     assert "FR_FINANCE_ANDROID_RELEASE_STORE_PASSWORD" in build
