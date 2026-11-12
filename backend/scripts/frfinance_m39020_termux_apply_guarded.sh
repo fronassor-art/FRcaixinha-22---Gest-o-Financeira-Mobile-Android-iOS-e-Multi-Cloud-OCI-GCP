@@ -27,6 +27,19 @@ SQL110="backend/migrations/110_fr_finance_special_credit_offline.sql"
 SQL111="backend/migrations/111_frfinance_special_credit_integrity_guards.sql"
 [[ -r "$SQL110" && -r "$SQL111" ]] || die "Migrations não encontradas"
 
+# Clientes PostgreSQL 18 do Termux (Debian traz pg_dump/restore 17.11).
+# Funcoes escolhem explicitamente os binarios sem alterar o PATH inteiro.
+PG18_BIN="/data/data/com.termux/files/usr/bin"
+for pgtool in pg_dump pg_restore createdb dropdb; do
+  [[ -x "$PG18_BIN/$pgtool" ]] || die "Cliente PG18 Termux ausente: $pgtool"
+  [[ "$("$PG18_BIN/$pgtool" --version)" == *"(PostgreSQL) 18."* ]] ||
+    die "Cliente Termux com versao nao 18: $pgtool"
+done
+pg_dump() { "$PG18_BIN/pg_dump" "$@"; }
+pg_restore() { "$PG18_BIN/pg_restore" "$@"; }
+createdb() { "$PG18_BIN/createdb" "$@"; }
+dropdb() { "$PG18_BIN/dropdb" "$@"; }
+
 for prog in psql pg_dump pg_restore createdb dropdb sha256sum; do
   command -v "$prog" >/dev/null || die "Dependência ausente: $prog"
 done
@@ -54,12 +67,20 @@ PGPORT=5433
 PGUSER=frc_ai_owner
 PGDATABASE=frcaixinha_aistudio_dev
 export PGHOST PGPORT PGUSER PGDATABASE
-# A conexão deve identificar o PostgreSQL 18 original, via TCP em 5433.
+# A conexão deve identificar o PostgreSQL 18 original, via TCP em 5433,
+# incluindo PGDATA e endereço do servidor sem a mascara CIDR do tipo inet.
 IDENTITY="$(psql -X -v ON_ERROR_STOP=1 -Atc \
-  "SELECT current_database()||'|'||current_user||'|'||inet_server_port()||'|'||current_setting('server_version_num')")" ||
-  die "Identidade PostgreSQL não verificável"
-[[ "$IDENTITY" =~ ^frcaixinha_aistudio_dev\|frc_ai_owner\|5433\|18[0-9]{4}$ ]] ||
-  die "Banco/usuário/porta/versão divergentes"
+  "SELECT current_database()='frcaixinha_aistudio_dev'
+    AND current_user='frc_ai_owner'
+    AND session_user='frc_ai_owner'
+    AND inet_server_port()=5433
+    AND host(inet_server_addr())='127.0.0.1'
+    AND current_setting('data_directory')=
+      '/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18'
+    AND current_setting('server_version_num')::int BETWEEN 180000 AND 189999")" ||
+  die "Identidade PostgreSQL nao verificavel"
+[[ "$IDENTITY" == "t" ]] ||
+  die "Banco, usuario, endereco, PGDATA ou versao divergente"
 
 # Só iniciar quando as duas migrations estiverem AUSENTES.
 existing="$(psql -X -v ON_ERROR_STOP=1 -Atc \
@@ -98,7 +119,7 @@ RESTORE_CREATED=1
 pg_restore --exit-on-error --no-owner --no-acl -d "$RESTORE_DB" "$BACKUP" ||
   die "Restauro em banco descartável falhou; original intocado"
 [[ "$(psql -d "$RESTORE_DB" -X -Atc \
-  "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")" -ge 27 ]] ||
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")" -eq 47 ]] ||
   die "Restauro não apresentou estrutura básica"
 dropdb "$RESTORE_DB" || die "Falha ao limpar banco de restauro; parar"
 RESTORE_CREATED=0
