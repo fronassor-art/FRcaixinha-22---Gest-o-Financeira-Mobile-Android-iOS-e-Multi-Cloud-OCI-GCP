@@ -56,3 +56,41 @@ def test_atomic_apply_requires_specific_consent_backup_restore_and_sha():
                   "frfinance_m39020_termux_apply_guarded.sh"):
         subprocess.run(["bash","-n",str(BACKEND/"scripts"/shell)],
                        check=True,capture_output=True,text=True)
+
+
+
+def test_m39030_backup_restore_uses_termux_postgresql18_without_migration():
+    """Only the already installed Termux PG18 binaries may backup the official DB."""
+    script=(BACKEND/"scripts/frfinance_m39030_pg18_backup_restore_only.sh").read_text()
+    assert 'PG18="/data/data/com.termux/files/usr/bin"' in script
+    for tool in ('pg_dump','pg_restore','createdb','dropdb'):
+        assert tool in script
+    for required in (
+        'M39030_BACKUP=PASS',
+        'M39030_RESTORE_TEST=PASS',
+        'M39030_ORIGINAL_DB=UNCHANGED',
+        'M39030_SQL110_111=NOT_APPLIED',
+        'M39030_BACKUP_PRIVATE_UNENCRYPTED=TRUE',
+        'current_setting(\'data_directory\')',
+        'host(inet_server_addr())',
+        '--exit-on-error',
+        '--template=template0',
+        'sha256sum --check --status',
+    ):
+        assert required in script
+    for forbidden in ('--single-transaction', 'LOCAL_AUTHORIZED', 'SET frfinance.m39020_migration_mode'):
+        assert forbidden not in script
+    subprocess.run(['bash','-n',str(BACKEND/'scripts/frfinance_m39030_pg18_backup_restore_only.sh')],
+                   check=True,capture_output=True,text=True)
+
+
+def test_m39020_apply_uses_pg18_termux_clients_and_exact_original_identity():
+    script=(BACKEND/"scripts/frfinance_m39020_termux_apply_guarded.sh").read_text()
+    assert 'PG18_BIN="/data/data/com.termux/files/usr/bin"' in script
+    for tool in ('pg_dump','pg_restore','createdb','dropdb'):
+        assert f'"$PG18_BIN/{tool}"' in script
+    assert 'host(inet_server_addr())' in script
+    assert 'frcaixinha_aistudio_pg18' in script
+    assert 'WHERE table_schema=\'public\'")" -eq 47' in script
+    assert 'FR_FINANCE_M39020_APPLY_APPROVED' in script
+    assert 'FR_FINANCE_M39020_RESTORE_TEST' in script
