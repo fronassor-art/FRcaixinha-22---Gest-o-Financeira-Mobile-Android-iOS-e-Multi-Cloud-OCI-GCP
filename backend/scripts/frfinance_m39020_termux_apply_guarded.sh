@@ -5,6 +5,9 @@ set -euo pipefail
 umask 077
 
 die(){ printf 'M39020_APPLY=BLOCKED %s\n' "$*" >&2; exit 2; }
+# M39031/M39032 atestaram SQL110+111 no banco ORIGINAL. Desativar instalador
+# legada impede acidental repetição sob qualquer clone ou pasta.
+die "LEGACY_INSTALLER_DISABLED_SQL110_111_ALREADY_APPLIED_DO_NOT_REPEAT"
 [[ "${FR_FINANCE_M39020_APPLY_APPROVED:-}" == "YES_AFTER_INDEPENDENT_REVIEW" ]] ||
   die "Falta autorização expressa independente para migrar o banco original"
 [[ "${FR_FINANCE_M39020_RESTORE_TEST:-}" == "YES" ]] ||
@@ -13,7 +16,7 @@ die(){ printf 'M39020_APPLY=BLOCKED %s\n' "$*" >&2; exit 2; }
 [[ "${AI_STUDIO_APPROVED_SHA:-}" =~ ^[0-9a-f]{40}$ ]] ||
   die "SHA do commit GitHub aprovado ausente"
 
-cd "$HOME/fr-finance" || die "Diretório canônico ausente"
+cd "/data/data/com.termux/files/home/fr-finance" || die "Repositório original Termux ausente"
 [[ "$(git branch --show-current)" == "atualizacao-ai-studio-9b46a63187" ]] ||
   die "Branch de trabalho errada"
 [[ "$(git rev-parse HEAD)" == "$AI_STUDIO_APPROVED_SHA" ]] ||
