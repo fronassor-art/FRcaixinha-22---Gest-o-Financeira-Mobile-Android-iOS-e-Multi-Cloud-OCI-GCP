@@ -45,3 +45,13 @@
 - Alterações contratuais requerem avaliação específica; esta edição de identidade **não** transfere autorização financeira, legal ou de ativação.
 
 **Estado de execução:** `PRODUCTION_NOT_AUTHORIZED` · `REAL_USERS=OFF` · `REAL_PIX=OFF` · `LOCAL_MIGRATIONS_APPLIED=NO`.
+
+## H. Crédito Especial/Extraordinário — CTM-CRED-EX-01 a CTM-CRED-EX-06 (desenvolvimento autorizado; operação real bloqueada)
+- **Origem histórica:** cláusula 4.2 do Documento Mestre 14/09/2026, consolidação 6.2 de 26/09/2026 e cláusula 12 da minuta de adesão 12/10/2026. Trata-se de recuperar os princípios da exceção contratual para a frente **FR Finance AI Studio**, sem transplantar bancos/contratos do FRcaixinha 2.2.
+- **CTM-CRED-EX-01:** somente TENANT_ADMIN titular poderá registrar autorizações excepcionais por membro ativo da própria caixinha, ciclo, limite positivo em BRL, justificativa de risco e validade. Autorização de solicitação ≠ aprovação/garantia/contrato/reserva/desembolso. Limites extraordinários por membro; a avaliação financeira, garantia quando exigida, liquidez, concentração e contratos permanecem obrigatórios.
+- **CTM-CRED-EX-02:** campanhas com destinatários individuais ou selecionados em lote, rascunho, publicação na caixa interna, resposta INTERESTED/DECLINED, revogação e expiração; não criar empréstimos automaticamente.
+- **CTM-CRED-EX-03:** entrega prioritária **push Android**, com e-mail Brevo, WhatsApp Cloud e SMS Brevo concebidos no mesmo macropacote, mas **sem ativação por associação**: cada canal tem preferências, credenciais, permissões e homologação próprias.
+- **CTM-CRED-EX-04:** consentimento granular para marketing, opt-out independente e tratamento LGPD; mensagem de tela bloqueada sem dados financeiros. Ausência de preferência equivale a não autorização do canal.
+- **CTM-CRED-EX-05:** rastreabilidade, RLS FORCE, separação rigorosa por tenant/membro, idempotência, sanidade de valores e expiração. Master não gerencia nem visualiza empréstimos de outras caixinhas. Nenhuma rota do pacote libera Pix, altera ledger ou movimenta dinheiro.
+- **CTM-CRED-EX-06:** executar somente em sandbox com dados fictícios até aprovação de migração local, homologação de Android/FCM e aprovação jurídica-operacional de provedores e crédito real. CI e-mails/FCM/WhatsApp/SMS devem indicar NÃO HOMOLOGADO até envio autorizado verificável.
+- **Contrato detalhado e matriz operacional:** [FR_FINANCE_CREDITO_ESPECIAL_EXTRAORDINARIO_M39010.md](FR_FINANCE_CREDITO_ESPECIAL_EXTRAORDINARIO_M39010.md). Esta aprovação autoriza desenvolvimento de código e documentação, **não** migração Termux, comunicação externa ou operações financeiras reais.
