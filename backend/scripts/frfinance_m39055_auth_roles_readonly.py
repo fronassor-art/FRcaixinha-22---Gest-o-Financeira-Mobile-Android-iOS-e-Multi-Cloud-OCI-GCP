@@ -20,10 +20,27 @@ from backend.scripts.frfinance_m39026_credit_only_preflight import (
 )
 
 ROLES = ("frc_ai_app", "frc_ai_auth", "frc_ai_verifier")
+# A role financeira usa SELECT de tabela apenas onde ja homologado.
+# Auth e verifier usam apenas colunas de SQL efetivamente consultado pelas
+# rotas oficiais auth.py/dependencies.py; exigir SELECT geral e indevido.
 TABLE_GRANTS = {
     "frc_ai_app": ("public.tenants", "public.memberships"),
-    "frc_ai_auth": ("public.users", "public.sessions"),
-    "frc_ai_verifier": ("public.users", "public.credentials"),
+    "frc_ai_auth": (),
+    "frc_ai_verifier": (),
+}
+COLUMN_SELECT = {
+    "frc_ai_app": {},
+    "frc_ai_auth": {
+        "public.users": ("id", "status", "is_master", "email", "full_name"),
+        "public.sessions": (
+            "id", "user_id", "token_hash", "active_role",
+            "active_tenant_id", "expires_at", "revoked_at", "created_at",
+        ),
+    },
+    "frc_ai_verifier": {
+        "public.users": ("id", "email", "full_name", "status", "is_master"),
+        "public.credentials": ("user_id", "password_hash"),
+    },
 }
 AUTH_FUNCTIONS = (
     "auth_login_rate_check",
@@ -67,6 +84,30 @@ def role_connection_audit(conn, role: str) -> dict:
             if table_grant != (True,):
                 raise RuntimeError("MISSING_ROLE_TABLE_GRANT_" + relation.removeprefix("public."))
             granted.append(relation)
+
+        granted_columns = 0
+        for relation, columns in COLUMN_SELECT[role].items():
+            # Papel pode ler colunas contratuais, mas nao a tabela toda.
+            table_wide = conn.execute(
+                "SELECT has_table_privilege(current_user,%s,'SELECT')",
+                (relation,),
+            ).fetchone()
+            if table_wide != (False,):
+                raise RuntimeError(
+                    "UNEXPECTED_ROLE_TABLE_WIDE_SELECT_" + relation.removeprefix("public.")
+                )
+            for column in columns:
+                permitted = conn.execute(
+                    "SELECT has_column_privilege(current_user,%s,%s,'SELECT')",
+                    (relation, column),
+                ).fetchone()
+                if permitted != (True,):
+                    raise RuntimeError(
+                        "MISSING_ROLE_COLUMN_SELECT_"
+                        + relation.removeprefix("public.") + "_" + column
+                    )
+                granted_columns += 1
+
         allowed_funcs = None
         if role == "frc_ai_auth":
             permission = conn.execute(
@@ -80,7 +121,7 @@ def role_connection_audit(conn, role: str) -> dict:
             if allowed_funcs != set(AUTH_FUNCTIONS):
                 raise RuntimeError("AUTH_FUNCTION_EXECUTE_GRANTS_INCOMPLETE")
 
-    return {"role": role, "tables": len(granted), "auth_functions": len(allowed_funcs or ())}
+    return {"role": role, "tables": len(granted), "columns": granted_columns, "auth_functions": len(allowed_funcs or ())}
 
 
 def main() -> int:
@@ -115,6 +156,7 @@ def main() -> int:
                 result = role_connection_audit(conn,role)
             print("M39055_" + role.upper() + "=PASS")
             print("M39055_" + role.upper() + "_TABLE_GRANTS=" + str(result["tables"]))
+            print("M39055_" + role.upper() + "_COLUMN_GRANTS=" + str(result["columns"]))
             if role == "frc_ai_auth":
                 print("M39055_AUTH_FUNCTIONS_EXECUTABLE=" + str(result["auth_functions"]))
         except RuntimeError as exc:
