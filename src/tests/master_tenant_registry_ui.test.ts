@@ -28,7 +28,8 @@ const master=renderToStaticMarkup(React.createElement(MasterTenantRegistryView,{
 }));
 assert.match(master,/Gestão de caixinhas/);
 assert.match(master,/Localizar caixinha/);
-assert.match(master,/Convites e alterações de acesso aguardam implementação/);
+assert.match(master,/Convites e alterações de acesso exigem verificação de identidade/);
+assert.match(master,/nenhuma conta é criada, ativada ou suspensa aqui/);
 assert.doesNotMatch(master,/Suspender conta|Aprovar administrador/);
 
 assert.equal(registryQuery({search:'A&B',status:'ATIVO',page:2,pageSize:5}),
