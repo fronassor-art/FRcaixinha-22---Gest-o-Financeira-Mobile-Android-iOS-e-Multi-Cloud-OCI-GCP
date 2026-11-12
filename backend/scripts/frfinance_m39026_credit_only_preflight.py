@@ -93,7 +93,7 @@ def audit(conn) -> None:
         conn.execute("SET TRANSACTION READ ONLY")
         identity = conn.execute(
             "SELECT current_database(),current_user,session_user,"
-            "inet_server_addr()::text,inet_server_port(),"
+            "host(inet_server_addr()),inet_server_port(),"
             "current_setting('data_directory'),"
             "current_setting('server_version_num')::integer"
         ).fetchone()
