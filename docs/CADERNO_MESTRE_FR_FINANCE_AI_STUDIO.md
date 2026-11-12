@@ -46,3 +46,13 @@
 - Documento sujeito a atualização versionada na branch AI Studio. Não faz merge à `main`, não aplica SQL e não ativa usuários ou pagamentos.
 
 **Prontidão de produção: NÃO AUTORIZADA.**
+
+## 7. Crédito Especial/Extraordinário e Comunicação Multicanal — CM-CRED-EX-01 (implantação controlada)
+- **CM-EX-01 a 03:** autorização individual/seleção múltipla, teto excepcional específico, validade e justificativa por membro, ciclo e tenant; análise de risco e política vigente permanecem exigidas.
+- **CM-EX-04 a 05:** registrar avaliação reforçada, preparar/publicar/cancelar campanhas auditáveis; resposta individual, sem autoempréstimo ou pré-aprovação financeira.
+- **CM-EX-06 a 08:** push prioritário, inbox interna, e-mail, WhatsApp e SMS independentes; interesse, recusa, simulação Price e preferências de marketing sem disparos reais.
+- **CM-EX-09 a 11:** revalidar limite, ciclo, adesão, contrato e liquidez; impedir vazamento entre tenants e alteração de ledger/reserva/Pix por campanha.
+- **CM-EX-12:** testes de CI, migration candidata RLS em PostgreSQL descartável e APK debug físico; **sem** alegar homologação de transporte externo antes de provas.
+- **Entradas de engenharia:** `backend/app/special_credit_contract.py`, `backend/app/special_credit_channels.py`, `backend/app/routers/special_credit.py`, `src/components/SpecialCreditView.tsx` e `backend/migrations/110_fr_finance_special_credit_offline.sql`. SQL está apenas versionado, não aplicado ao banco original.
+- **Configuração sandbox:** `FR_FINANCE_SPECIAL_CREDIT_SANDBOX=YES` exige `FRCAIXINHA_TEST_AUTH=1` e ambiente não produtivo; nunca ativar em produção por CI. Push Android nativo/FCM, Brevo, WhatsApp Business e SMS reais requerem integração, credenciais, permissões e autorização operacional separadas.
+- **Matriz detalhada:** [FR_FINANCE_CREDITO_ESPECIAL_EXTRAORDINARIO_M39010.md](FR_FINANCE_CREDITO_ESPECIAL_EXTRAORDINARIO_M39010.md). Preservar `$HOME/fr-finance` e PostgreSQL 5433 `frcaixinha_aistudio_dev`; backup/revisão/autorização expressa antes de migrations locais.
