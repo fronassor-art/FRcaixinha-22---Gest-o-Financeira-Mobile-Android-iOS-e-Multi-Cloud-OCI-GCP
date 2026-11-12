@@ -85,9 +85,6 @@ def test_readonly_pg_plan_proofs_two_synthetic_roles(capsys):
     assert "M39045_PG18_ORIGINAL=PASS" in out
     assert "M39045_DATABASE_WRITES=NONE" in out
     assert f"M39045_PLANS={len(queries)*2}" in out
-    assert [q for q, _ in conn.queries if q.startswith("EXPLAIN")] == [
-        m.explain_query(sql) for _, _, sql in queries for _ in []  # see count below
-    ] if not queries else True
     planned = [q for q, _ in conn.queries if q.startswith("EXPLAIN")]
     assert len(planned) == 2 * len(queries)
     assert "EXPLAIN (ANALYZE" not in " ".join(planned)
