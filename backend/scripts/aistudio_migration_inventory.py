@@ -179,6 +179,20 @@ def local_readonly():
                       "'public.special_credit_outbox','DELETE')"
                     ).fetchone()[0]:
                         return deny("M39010 external outbox mutable by app")
+                    # SQL 110 without SQL 111 is a PARTIAL installation and
+                    # cannot be offered as ready for mobile functional testing.
+                    guards=("sc_m39020_grant_transition",
+                      "sc_m39020_campaign_transition",
+                      "sc_m39020_recipient_insert",
+                      "sc_m39020_reply_transition",
+                      "sc_m39020_outbox_insert")
+                    guard_count=conn.execute(
+                      "SELECT count(*) FROM pg_trigger WHERE tgname = ANY(%s) "
+                      "AND tgenabled='O' AND NOT tgisinternal",
+                      (list(guards),)).fetchone()[0]
+                    if guard_count!=len(guards):
+                        return deny("M39020 local SQL 111 integrity guards missing")
+                    print("M39020_LOCAL_111=FIVE_INTEGRITY_TRIGGERS_PRESENT")
                     print("M39010_LOCAL_110=STRUCTURAL_PRESENT_NO_EXTERNAL_DISPATCH")
                 else:
                     print("M39010_LOCAL_110=NOT_APPLIED")
