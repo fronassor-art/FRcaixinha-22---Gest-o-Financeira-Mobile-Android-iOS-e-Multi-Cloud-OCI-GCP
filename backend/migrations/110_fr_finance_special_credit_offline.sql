@@ -2,7 +2,26 @@
 -- MIGRATION CANDIDATE ONLY. GitHub CI with disposable PostgreSQL first.
 -- NEVER apply on 127.0.0.1:5433/frcaixinha_aistudio_dev without explicit approval and backup.
 -- No Pix, no loans, no email, no mobile-push dispatch.
-BEGIN;
+-- M39020: SQL110+111 MUST run together with psql --single-transaction.
+-- Standalone -f without explicit session gate is intentionally forbidden.
+DO $
+DECLARE mode text := current_setting('frfinance.m39020_migration_mode',true);
+BEGIN
+ IF mode='CI_DISPOSABLE' THEN
+   IF current_database()<>'frfinance_ci_credit' OR inet_server_port()<>5432
+      OR session_user<>'postgres' THEN
+     RAISE EXCEPTION 'M39020 CI must use disposable database';
+   END IF;
+ ELSIF mode='LOCAL_AUTHORIZED' THEN
+   IF current_database()<>'frcaixinha_aistudio_dev'
+      OR inet_server_port()<>5433 OR session_user<>'frc_ai_owner' THEN
+     RAISE EXCEPTION 'M39020 local identity mismatch';
+   END IF;
+ ELSE
+   RAISE EXCEPTION 'M39020 migration requires explicit atomic session gate';
+ END IF;
+END $;
+
 
 CREATE TABLE IF NOT EXISTS public.special_credit_grants (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -271,4 +290,3 @@ CREATE POLICY sc_audit_insert ON public.special_credit_audit
  AND current_setting('app.current_role',true) IN ('TENANT_ADMIN','TENANT_MEMBER')
 );
 
-COMMIT;
