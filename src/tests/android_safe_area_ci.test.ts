@@ -40,7 +40,9 @@ assert.match(app,/whitespace-normal break-words leading-4/);
 assert.doesNotMatch(app,/className="truncate">\s*\{state.currentRole === 'MASTER'/);
 assert.doesNotMatch(app,/fr-mobile-nav fixed/);
 assert.doesNotMatch(app,/min-h-dvh min-w-0/);
-assert.match(android,/applicationIdSuffix "\.aistudio"/);
+assert.match(android,/applicationIdSuffix diagnosticParallel \? "\.aistudio\.diag" : "\.aistudio"/);
+assert.match(android,/FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC/);
+assert.match(android,/if \(releaseRequested && diagnosticParallel\)/);
 assert.match(workflow,/Validar barras de sistema e safe area Android/);
 assert.match(workflow,/SystemBars\?\.insetsHandling/);
 const login=renderToStaticMarkup(React.createElement(LoginView,{
