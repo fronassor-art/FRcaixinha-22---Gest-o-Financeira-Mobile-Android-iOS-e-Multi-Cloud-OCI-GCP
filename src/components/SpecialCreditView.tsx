@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import type {AppState} from '../services/store';
 import {authService} from '../services/authService';
+import {diagnoseAndroidPush} from '../services/specialCreditPushNative';
 import {
   specialCreditApi, type CreditCampaign, type CreditGrant,
   type CreditOpportunity, type EligibleMember, type MarketingChannel,
@@ -49,13 +50,16 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   const [body,setBody]=useState('Você pode consultar uma simulação de crédito especial no FR Finance. A oferta está sujeita à análise final.');
   const [months,setMonths]=useState(3);
   const [simulation,setSimulation]=useState('');
+  const [pushDiagnostic,setPushDiagnostic]=useState('');
+  const pushCleanup=useRef<(()=>Promise<void>)|null>(null);
 
   useEffect(()=>{
     let active=true;
     const snapshot=authService.captureSession();
     setLoading(true);setMessage('');setEnabled(false);
     setMembers([]);setSelectedMembers([]);setSelectedGrants([]);setGrants([]);setCampaigns([]);
-    setOpportunities([]);setPrefs(initialPrefs);setSimulation('');
+    setOpportunities([]);setPrefs(initialPrefs);setSimulation('');setPushDiagnostic('');
+    if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}
     if(!tenant || role==='MASTER' || !state.currentUserId){
       setMessage('Selecione uma caixinha e entre como administrador ou membro.');
       setLoading(false);return()=>{active=false;};
@@ -93,6 +97,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     void load();
     return()=>{active=false;};
   },[key,revision,tenant,role,state.currentUserId]);
+  useEffect(()=>()=>{if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}},[]);
 
   async function run(task:()=>Promise<unknown>,success:string,refresh=true){
     if(!tenant||busy)return;
@@ -115,6 +120,31 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     current.includes(id)?current.filter(x=>x!==id):[...current,id]);
   const toggleGrant=(id:string)=>setSelectedGrants(current=>
     current.includes(id)?current.filter(x=>x!==id):[...current,id]);
+
+  async function verifyPushRegistration(){
+    if(!prefs.PUSH){
+      setPushDiagnostic('Ative a preferência Push antes do diagnóstico.');
+      return;
+    }
+    const before=key;
+    try{
+      if(pushCleanup.current)await pushCleanup.current();
+      pushCleanup.current=null;
+      const session=authService.captureSession();
+      const diagnostic=await diagnoseAndroidPush(true,(_phase,detail)=>{
+        if(latest.current===before&&authService.isSessionSnapshotCurrent(session))
+          setPushDiagnostic(detail);
+      });
+      if(latest.current!==before||!authService.isSessionSnapshotCurrent(session)){
+        await diagnostic.stop();return;
+      }
+      pushCleanup.current=diagnostic.stop;
+      setPushDiagnostic(diagnostic.detail);
+    }catch{
+      if(latest.current===before)
+        setPushDiagnostic('Não foi possível consultar o plugin push neste aparelho.');
+    }
+  }
 
   if(role==='MASTER') return null;
   return <section aria-labelledby="special-credit-title"
@@ -292,6 +322,18 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
               ()=>specialCreditApi.changePreference(tenant,ch,e.target.checked),
               'Preferência '+ch+' atualizada. Nenhuma mensagem externa enviada.')}/>
         </label>)}
+        <div className="space-y-2 border-t pt-3">
+          <button type="button" disabled={!prefs.PUSH||busy}
+            onClick={()=>void verifyPushRegistration()}
+            className="rounded-lg border border-emerald-700 px-3 py-2 text-sm disabled:opacity-40">
+            Diagnosticar permissão push no Android
+          </button>
+          <p className="text-xs text-slate-600">
+            Diagnóstico apenas quando habilitado no APK local e iniciado por você.
+            Não salva tokens, não entrega campanhas e não comprova FCM de produção.
+          </p>
+          {pushDiagnostic&&<p role="status" className="text-sm text-amber-900">{pushDiagnostic}</p>}
+        </div>
       </div>
     </>}
   </section>;
