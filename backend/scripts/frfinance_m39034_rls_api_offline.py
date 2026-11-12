@@ -13,6 +13,12 @@ from pathlib import Path
 import sys
 from uuid import UUID
 
+# Script executável diretamente com "python backend/scripts/...py" no Termux.
+# Neste modo, sys.path[0] é backend/scripts, não a raiz do projeto.
+# As importações backend.app.* precisam do repositório ORIGINAL no sys.path.
+# Não criar clone, ambiente paralelo, nem mudar o banco.
+ORIGINAL_REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ORIGINAL_REPO))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from frfinance_m39026_credit_only_preflight import (  # noqa: E402
     verify_repo, SPECIAL, DATA_DIRECTORY, DB, OWNER,
