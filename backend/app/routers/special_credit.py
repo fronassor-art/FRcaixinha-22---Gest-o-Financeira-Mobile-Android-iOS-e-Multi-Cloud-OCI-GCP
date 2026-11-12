@@ -8,12 +8,14 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 import os
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..config import settings
 from ..database import get_rls_db_connection
 from ..dependencies import AuthenticatedSession, get_current_session, require_tenant_access
 from ..special_credit_contract import (
@@ -27,11 +29,22 @@ router = APIRouter(prefix="/tenants/{tenant_id}/special-credit",
 
 
 def _enabled() -> bool:
-    return (
-        os.getenv("ENVIRONMENT", "development").lower() != "production"
-        and os.getenv("FRCAIXINHA_TEST_AUTH") == "1"
-        and os.getenv("FR_FINANCE_SPECIAL_CREDIT_SANDBOX") == "YES"
-    )
+    """Explicit *original local sandbox only*; a staging DB cannot opt in by accident."""
+    try:
+        db = urlparse(settings.DATABASE_URL)
+        return (
+            os.getenv("ENVIRONMENT", "development").lower() != "production"
+            and os.getenv("FRCAIXINHA_TEST_AUTH") == "1"
+            and os.getenv("FR_FINANCE_SPECIAL_CREDIT_SANDBOX") == "YES"
+            and db.scheme in ("postgres", "postgresql")
+            and db.username == "frc_ai_app"
+            and db.hostname == "127.0.0.1"
+            and db.port == 5433
+            and db.path == "/frcaixinha_aistudio_dev"
+            and db.query == "" and db.fragment == ""
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def _authorize(tenant_id: UUID, session: AuthenticatedSession,
