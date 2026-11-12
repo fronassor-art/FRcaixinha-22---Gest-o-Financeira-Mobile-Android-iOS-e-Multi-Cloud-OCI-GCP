@@ -48,6 +48,10 @@ def test_atomic_apply_requires_specific_consent_backup_restore_and_sha():
     assert "backend/migrations/110_fr_finance_special_credit_offline.sql" in script
     assert "backend/migrations/111_frfinance_special_credit_integrity_guards.sql" in script
     assert "M39020_PIX_REAL=OFF" in script
+    # Impede o antigo pg_dump 17 do Debian de tentar backup de servidor PG18.
+    assert 'for prog in pg_dump pg_restore; do' in script
+    assert '"$prog (PostgreSQL) 18."*' in script
+    assert "pg_dump --format=custom" in script
     for shell in ("frfinance_m39020_termux_preflight.sh",
                   "frfinance_m39020_termux_apply_guarded.sh"):
         subprocess.run(["bash","-n",str(BACKEND/"scripts"/shell)],
