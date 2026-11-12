@@ -1,7 +1,26 @@
 -- FR Finance AI Studio M39020 / SQL 111
 -- ADITIVO DE SEGURANÇA À MIGRAÇÃO 110. CANDIDATO; NÃO EXECUTAR NO TERMUX.
 -- NENHUM ENVIO EXTERNO OU MOVIMENTAÇÃO FINANCEIRA.
-BEGIN;
+-- M39020: SQL110+111 MUST run together with psql --single-transaction.
+-- Standalone -f without explicit session gate is intentionally forbidden.
+DO $
+DECLARE mode text := current_setting('frfinance.m39020_migration_mode',true);
+BEGIN
+ IF mode='CI_DISPOSABLE' THEN
+   IF current_database()<>'frfinance_ci_credit' OR inet_server_port()<>5432
+      OR session_user<>'postgres' THEN
+     RAISE EXCEPTION 'M39020 CI must use disposable database';
+   END IF;
+ ELSIF mode='LOCAL_AUTHORIZED' THEN
+   IF current_database()<>'frcaixinha_aistudio_dev'
+      OR inet_server_port()<>5433 OR session_user<>'frc_ai_owner' THEN
+     RAISE EXCEPTION 'M39020 local identity mismatch';
+   END IF;
+ ELSE
+   RAISE EXCEPTION 'M39020 migration requires explicit atomic session gate';
+ END IF;
+END $;
+
 
 DO $$
 BEGIN
@@ -149,4 +168,3 @@ CREATE TRIGGER sc_m39020_outbox_insert
 -- Banco impede ressurreição/duplicação de concessão, mutação tardia
 -- de campanhas, injeção de destinatários e enfileiramento sem opt-in.
 -- O worker de delivery NÃO faz parte desta migração.
-COMMIT;
