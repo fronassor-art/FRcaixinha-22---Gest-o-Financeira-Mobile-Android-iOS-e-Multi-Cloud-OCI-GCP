@@ -29,7 +29,7 @@ function makeTestHarness() {
     isCurrent:()=>current,
     getUser:()=>user,
     invalidateIfCurrent:()=>{invalidations++;return true;},
-    send:async (url,options)=>{sent.push({url,options});return response;},
+    send:async (url,options)=>{sent.push({url,options});return response.clone();},
   };
   return {
     transport,sent,
