@@ -39,7 +39,7 @@ jobs:
           FR_FINANCE_PIX_REAL: "OFF"
         run: python -m pytest -q backend/tests/test_special_credit_contract_ci.py
       - name: FastAPI RBAC e handoff Termux gated
-        run: python -m pytest -q backend/tests/test_m39020_special_credit_api_ci.py backend/tests/test_m39020_termux_handoff_ci.py backend/tests/test_m39026_credit_only_preflight_ci.py backend/tests/test_m39032_post_migration_readonly_ci.py backend/tests/test_m39033_special_credit_route_flow_ci.py backend/tests/test_m39034_rls_api_offline_ci.py backend/tests/test_m39035_single_directory_ci.py backend/tests/test_m39044_credit_workflow_offline_ci.py backend/tests/test_m39045_query_plans_readonly_ci.py
+        run: python -m pytest -q backend/tests/test_m39020_special_credit_api_ci.py backend/tests/test_m39020_termux_handoff_ci.py backend/tests/test_m39026_credit_only_preflight_ci.py backend/tests/test_m39032_post_migration_readonly_ci.py backend/tests/test_m39033_special_credit_route_flow_ci.py backend/tests/test_m39034_rls_api_offline_ci.py backend/tests/test_m39035_single_directory_ci.py backend/tests/test_m39044_credit_workflow_offline_ci.py backend/tests/test_m39045_query_plans_readonly_ci.py backend/tests/test_m39046_execute_selects_readonly_ci.py
 
   frontend:
     name: React, tipos e build android-web
