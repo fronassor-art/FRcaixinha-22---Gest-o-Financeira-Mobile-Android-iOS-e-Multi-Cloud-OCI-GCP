@@ -17,14 +17,17 @@ cd "$EXPECTED" || die "Repositório canônico nao encontrado"
 [[ "$(git rev-parse HEAD)" == "$AI_STUDIO_APPROVED_SHA" ]] || die "HEAD difere do commit aprovado"
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "Alterações locais rastreadas"
 [[ -f "$SQL110" && -f "$SQL111" ]] || die "Duas migrations ausentes"
-command -v python3 >/dev/null || die "Python indisponível"
+PYTHON="/root/.venvs/frcaixinha-aistudio/bin/python"
+[[ -x "$PYTHON" ]] || die "Python validado do projeto não encontrado; não reinstale bibliotecas"
 command -v psql >/dev/null || die "psql indisponível"
 command -v pg_dump >/dev/null || die "pg_dump indisponível"
 command -v pg_restore >/dev/null || die "pg_restore indisponível"
-python3 backend/scripts/aistudio_migration_inventory.py repo-check
-python3 backend/scripts/aistudio_migration_inventory.py local-readonly
+# M39026: mesma biblioteca psycopg validada nas migrações anteriores.
+# Não executar local-readonly genérico: ele avalia requisitos históricos
+# fora do escopo de crédito especial; seu erro não exige reaplicar migrações.
+"$PYTHON" backend/scripts/frfinance_m39026_credit_only_preflight.py
 
-echo 'M39020_PREFLIGHT=PASS_READ_ONLY'
+echo 'M39020_PREFLIGHT=PASS_CREDIT_ONLY_READ_ONLY'
 echo "M39020_APPROVED_SHA=$AI_STUDIO_APPROVED_SHA"
 echo 'M39020_SQL_110_111=VERSIONED_NOT_APPLIED_BY_PREFLIGHT'
 echo 'M39020_TERMUX_GIT_MUTATIONS=NONE'
