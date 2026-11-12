@@ -151,12 +151,12 @@ CREATE POLICY sc_grant_read ON public.special_credit_grants
  tenant_id::text = current_setting('app.current_tenant_id',true)
  AND (
   (current_setting('app.current_role',true)='TENANT_ADMIN'
-   AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+   AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_grants.tenant_id
       AND t.admin_user_id::text=current_setting('app.current_user_id',true)))
   OR (current_setting('app.current_role',true)='TENANT_MEMBER'
-      AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.id=member_id
+      AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.id=special_credit_grants.member_id
         AND m.user_id::text=current_setting('app.current_user_id',true)
-        AND m.tenant_id=tenant_id AND m.status='ATIVA'))
+        AND m.tenant_id=special_credit_grants.tenant_id AND m.status='ATIVA'))
  )
 );
 CREATE POLICY sc_grant_admin_insert ON public.special_credit_grants
@@ -164,10 +164,10 @@ CREATE POLICY sc_grant_admin_insert ON public.special_credit_grants
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND created_by::text=current_setting('app.current_user_id',true)
  AND current_setting('app.current_role',true)='TENANT_ADMIN'
- AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id AND t.admin_user_id=created_by)
- AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.id=member_id
-     AND m.tenant_id=tenant_id AND m.status='ATIVA' AND m.role='TENANT_MEMBER')
- AND EXISTS (SELECT 1 FROM public.cycles c WHERE c.id=cycle_id AND c.tenant_id=tenant_id
+ AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_grants.tenant_id AND t.admin_user_id=special_credit_grants.created_by)
+ AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.id=special_credit_grants.member_id
+     AND m.tenant_id=special_credit_grants.tenant_id AND m.status='ATIVA' AND m.role='TENANT_MEMBER')
+ AND EXISTS (SELECT 1 FROM public.cycles c WHERE c.id=special_credit_grants.cycle_id AND c.tenant_id=special_credit_grants.tenant_id
      AND c.status='ABERTO')
 );
 CREATE POLICY sc_grant_admin_update ON public.special_credit_grants
@@ -188,7 +188,7 @@ CREATE POLICY sc_campaign_read ON public.special_credit_campaigns
   OR (current_setting('app.current_role',true)='TENANT_MEMBER'
       AND status='PUBLISHED'
       AND EXISTS (SELECT 1 FROM public.special_credit_recipients r
-        WHERE r.campaign_id=id AND r.tenant_id=tenant_id
+        WHERE r.campaign_id=special_credit_campaigns.id AND r.tenant_id=special_credit_campaigns.tenant_id
           AND r.user_id::text=current_setting('app.current_user_id',true)))
  ));
 CREATE POLICY sc_campaign_insert ON public.special_credit_campaigns
@@ -196,8 +196,8 @@ CREATE POLICY sc_campaign_insert ON public.special_credit_campaigns
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND created_by::text=current_setting('app.current_user_id',true)
  AND current_setting('app.current_role',true)='TENANT_ADMIN'
- AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id AND t.admin_user_id=created_by)
- AND EXISTS (SELECT 1 FROM public.cycles c WHERE c.id=cycle_id AND c.tenant_id=tenant_id AND c.status='ABERTO'));
+ AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_campaigns.tenant_id AND t.admin_user_id=special_credit_campaigns.created_by)
+ AND EXISTS (SELECT 1 FROM public.cycles c WHERE c.id=special_credit_campaigns.cycle_id AND c.tenant_id=special_credit_campaigns.tenant_id AND c.status='ABERTO'));
 CREATE POLICY sc_campaign_update ON public.special_credit_campaigns
  FOR UPDATE TO frc_ai_app
  USING (tenant_id::text=current_setting('app.current_tenant_id',true)
@@ -214,19 +214,19 @@ CREATE POLICY sc_recipient_read ON public.special_credit_recipients
   (current_setting('app.current_role',true)='TENANT_MEMBER'
    AND user_id::text=current_setting('app.current_user_id',true))
   OR (current_setting('app.current_role',true)='TENANT_ADMIN'
-   AND EXISTS(SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+   AND EXISTS(SELECT 1 FROM public.tenants t WHERE t.id=special_credit_recipients.tenant_id
      AND t.admin_user_id::text=current_setting('app.current_user_id',true)))
  ));
 CREATE POLICY sc_recipient_insert ON public.special_credit_recipients
  FOR INSERT TO frc_ai_app WITH CHECK (
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND current_setting('app.current_role',true)='TENANT_ADMIN'
- AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+ AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_recipients.tenant_id
   AND t.admin_user_id::text=current_setting('app.current_user_id',true))
- AND EXISTS (SELECT 1 FROM public.special_credit_grants g WHERE g.id=grant_id
-   AND g.tenant_id=tenant_id AND g.member_id=member_id)
- AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.id=member_id
-   AND m.tenant_id=tenant_id AND m.user_id=user_id AND m.status='ATIVA'));
+ AND EXISTS (SELECT 1 FROM public.special_credit_grants g WHERE g.id=special_credit_recipients.grant_id
+   AND g.tenant_id=special_credit_recipients.tenant_id AND g.member_id=special_credit_recipients.member_id)
+ AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.id=special_credit_recipients.member_id
+   AND m.tenant_id=special_credit_recipients.tenant_id AND m.user_id=special_credit_recipients.user_id AND m.status='ATIVA'));
 CREATE POLICY sc_recipient_reply ON public.special_credit_recipients
  FOR UPDATE TO frc_ai_app
  USING (tenant_id::text=current_setting('app.current_tenant_id',true)
@@ -241,7 +241,7 @@ CREATE POLICY sc_pref_read ON public.special_credit_preferences
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND (user_id::text=current_setting('app.current_user_id',true)
  OR (current_setting('app.current_role',true)='TENANT_ADMIN'
-  AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+  AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_preferences.tenant_id
        AND t.admin_user_id::text=current_setting('app.current_user_id',true))))
 );
 CREATE POLICY sc_pref_write ON public.special_credit_preferences
@@ -249,8 +249,8 @@ CREATE POLICY sc_pref_write ON public.special_credit_preferences
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND user_id::text=current_setting('app.current_user_id',true)
  AND current_setting('app.current_role',true)='TENANT_MEMBER'
- AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.tenant_id=tenant_id
-   AND m.user_id=user_id AND m.status='ATIVA' AND m.role='TENANT_MEMBER')
+ AND EXISTS (SELECT 1 FROM public.memberships m WHERE m.tenant_id=special_credit_preferences.tenant_id
+   AND m.user_id=special_credit_preferences.user_id AND m.status='ATIVA' AND m.role='TENANT_MEMBER')
 );
 CREATE POLICY sc_pref_update ON public.special_credit_preferences
  FOR UPDATE TO frc_ai_app
@@ -265,14 +265,14 @@ CREATE POLICY sc_outbox_read ON public.special_credit_outbox
  FOR SELECT TO frc_ai_app USING (
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND current_setting('app.current_role',true)='TENANT_ADMIN'
- AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+ AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_outbox.tenant_id
   AND t.admin_user_id::text=current_setting('app.current_user_id',true))
 );
 CREATE POLICY sc_outbox_insert ON public.special_credit_outbox
  FOR INSERT TO frc_ai_app WITH CHECK (
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND current_setting('app.current_role',true)='TENANT_ADMIN'
- AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+ AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_outbox.tenant_id
   AND t.admin_user_id::text=current_setting('app.current_user_id',true))
  AND state='BLOCKED_EXTERNAL');
 
@@ -280,7 +280,7 @@ CREATE POLICY sc_audit_read ON public.special_credit_audit
  FOR SELECT TO frc_ai_app USING (
  tenant_id::text=current_setting('app.current_tenant_id',true)
  AND current_setting('app.current_role',true)='TENANT_ADMIN'
- AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=tenant_id
+ AND EXISTS (SELECT 1 FROM public.tenants t WHERE t.id=special_credit_audit.tenant_id
   AND t.admin_user_id::text=current_setting('app.current_user_id',true))
 );
 CREATE POLICY sc_audit_insert ON public.special_credit_audit
