@@ -4,10 +4,13 @@
 set -euo pipefail
 umask 077
 die() { echo "M39030_STATUS=BLOCKED $*" >&2; exit 2; }
+# Backup pre-migração concluído em M39030; a base AGORA TEM 53 tabelas.
+# Esta versão exige 47 e NÃO deve ser usada após M39031.
+die "LEGACY_PRE_MIGRATION_BACKUP_OBSOLETE_USE_VERIFIED_POST_MIGRATION_BACKUP"
 
 BRANCH="atualizacao-ai-studio-9b46a63187"
 EXPECTED="${AI_STUDIO_APPROVED_SHA:-}"
-ROOT="$HOME/fr-finance"
+ROOT="/data/data/com.termux/files/home/fr-finance"
 PG18="/data/data/com.termux/files/usr/bin"
 DUMP="$PG18/pg_dump"
 RESTORE="$PG18/pg_restore"
