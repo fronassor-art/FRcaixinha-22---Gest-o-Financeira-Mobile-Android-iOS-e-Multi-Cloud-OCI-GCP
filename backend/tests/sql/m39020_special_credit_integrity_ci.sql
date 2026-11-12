@@ -140,7 +140,7 @@ $sql$);
 
 -- Member cannot cancel an admin campaign. A denied RLS update may
 -- legitimately affect ZERO rows instead of raising, so check row count.
-DO $
+DO $$
 DECLARE changed bigint;
 BEGIN
  UPDATE public.special_credit_campaigns SET status='CANCELLED'
@@ -149,7 +149,7 @@ BEGIN
  IF changed<>0 THEN
   RAISE EXCEPTION 'M39020 SECURITY REGRESSION: member changed campaign';
  END IF;
-END $;
+END $$;
 
 SELECT set_config('app.current_user_id','11111111-1111-4111-8111-111111111111',false);
 SELECT set_config('app.current_role','TENANT_ADMIN',false);
