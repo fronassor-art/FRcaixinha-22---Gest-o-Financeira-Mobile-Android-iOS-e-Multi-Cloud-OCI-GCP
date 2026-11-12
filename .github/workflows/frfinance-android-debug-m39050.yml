@@ -1,0 +1,130 @@
+name: FR Finance M39050 - APK Android debug Termux original
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - ".github/workflows/frfinance-android-debug-m39050.yml"
+      - "src/**"
+      - "android/**"
+      - "capacitor.config.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39050-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk-debug-local:
+    name: Compilar APK debug sem ativar Pix nem usuarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FRCAIXINHA_ANDROID_LOCAL_TEST: "1"
+      VITE_API_URL: "http://127.0.0.1:8000"
+      VITE_FR_FINANCE_PUSH_DIAGNOSTIC: "NO"
+      FR_FINANCE_ANDROID_RELEASE_PROFILE: "0"
+      FR_FINANCE_PIX_REAL: "OFF"
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: "NO"
+      FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+      FR_FINANCE_ACCESS_MAIL_WORKER: "OFF"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar Node somente no runner descartavel
+        run: npm ci
+
+      - name: TS + contratos de seguranca Android
+        run: |
+          npm run lint
+          npx tsx src/tests/m39020_credit_push_ui_ci.test.ts
+          npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
+
+      - name: Empacotar web e sincronizar Capacitor debug
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Verificar assinatura, rede local e protecoes de producao
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$FRCAIXINHA_ANDROID_LOCAL_TEST" = "1"
+          test "$VITE_API_URL" = "http://127.0.0.1:8000"
+          test "$FR_FINANCE_PIX_REAL" = "OFF"
+          test "$FR_FINANCE_SPECIAL_CREDIT_SANDBOX" = "NO"
+          test "$VITE_FR_FINANCE_PUSH_DIAGNOSTIC" = "NO"
+          test ! -e android/app/google-services.json
+          test -f android/app/src/debug/AndroidManifest.xml
+          test -f android/app/src/debug/res/xml/local_api_network_security.xml
+          grep -q 'android:networkSecurityConfig="@xml/local_api_network_security"' \
+            android/app/src/debug/AndroidManifest.xml
+          grep -q 'cleartextTrafficPermitted="false"' \
+            android/app/src/debug/res/xml/local_api_network_security.xml
+          grep -q 'applicationIdSuffix ".aistudio"' android/app/build.gradle
+          test -f android/app/src/main/assets/capacitor.config.json
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const config=JSON.parse(readFileSync('android/app/src/main/assets/capacitor.config.json','utf8'));
+          assert.equal(config.appId,'com.frcaixinha.app');
+          assert.equal(config.server?.androidScheme,'http');
+          assert.equal(config.server?.cleartext,false);
+          const debug=readFileSync('android/app/src/debug/res/xml/local_api_network_security.xml','utf8');
+          assert.match(debug,/<base-config cleartextTrafficPermitted="false"/);
+          assert.match(debug,/<domain includeSubdomains="false">127\.0\.0\.1<\/domain>/);
+          assert.match(debug,/<domain includeSubdomains="false">localhost<\/domain>/);
+          console.log('M39050_LOCAL_LOOPBACK_ONLY=PASS');
+          JS
+
+      - name: Montar APK debug da branch original
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Validar arquivo APK gerado
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          file "$apk"
+          sha256sum "$apk" > android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          echo "M39050_ANDROID_DEBUG_APK=BUILT" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39050_API_LOCAL_LOOPBACK_ONLY=TRUE" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39050_PIX_REAL=OFF" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39050_EXTERNAL_NOTIFICATIONS=OFF" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39050_SIGNING=RUNNER_DEBUG_KEY_NOT_STABLE" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39050_REAL_LOGIN_AND_DEVICE_E2E=NOT_ATTESTED" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Disponibilizar APK de homologacao no GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: FR-Finance-M39050-Android-Debug-Local
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
