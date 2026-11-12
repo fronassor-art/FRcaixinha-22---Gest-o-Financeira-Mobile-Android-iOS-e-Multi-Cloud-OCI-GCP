@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.special_credit_grants (
  request_id uuid NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(tenant_id,created_by,request_id)
+ UNIQUE(tenant_id,created_by,request_id,member_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_special_active_member_cycle
  ON public.special_credit_grants (tenant_id,cycle_id,member_id)
