@@ -17,11 +17,14 @@ class Response:
 
 
 class FakeDB:
-    def __init__(self, role, *, no_select=False, superuser=False, no_functions=False):
+    def __init__(self, role, *, no_select=False, superuser=False, no_functions=False,
+                 missing_column=None, broad_select=False):
         self.role=role
         self.no_select=no_select
         self.superuser=superuser
         self.no_functions=no_functions
+        self.missing_column=missing_column
+        self.broad_select=broad_select
         self.statements=[]
 
     def transaction(self):
@@ -37,7 +40,12 @@ class FakeDB:
         if "FROM pg_roles" in sql:
             return Response(one=(True,self.superuser,False))
         if "SELECT has_table_privilege" in sql:
-            return Response(one=(not self.no_select,))
+            return Response(one=(
+                self.broad_select if self.role in ("frc_ai_auth", "frc_ai_verifier")
+                else not self.no_select,
+            ))
+        if "SELECT has_column_privilege" in sql:
+            return Response(one=(args[1] != self.missing_column,))
         if "SELECT DISTINCT p.proname" in sql:
             names=[] if self.no_functions else m.AUTH_FUNCTIONS
             return Response(many=[(name,) for name in names])
@@ -49,16 +57,50 @@ def test_each_role_connects_to_original_pg_and_checks_privileges(role):
     db=FakeDB(role)
     result=m.role_connection_audit(db,role)
     assert result["role"]==role
-    assert result["tables"]==2
+    assert result["tables"]==(2 if role=="frc_ai_app" else 0)
+    assert result["columns"]==sum(len(cols) for cols in m.COLUMN_SELECT[role].values())
     assert result["auth_functions"]==(len(m.AUTH_FUNCTIONS) if role=="frc_ai_auth" else 0)
     assert db.statements[0][0]=="SET TRANSACTION READ ONLY"
     assert all(s=="SET TRANSACTION READ ONLY" or s.startswith("SELECT ")
                for s,_ in db.statements)
 
 
-def test_auth_role_missing_grant_fails_closed():
+def test_app_role_missing_table_select_fails_closed():
     with pytest.raises(RuntimeError,match="MISSING_ROLE_TABLE_GRANT"):
-        m.role_connection_audit(FakeDB("frc_ai_auth",no_select=True),"frc_ai_auth")
+        m.role_connection_audit(FakeDB("frc_ai_app",no_select=True),"frc_ai_app")
+
+
+def test_auth_role_without_table_select_with_valid_columns_passes():
+    audit = m.role_connection_audit(FakeDB("frc_ai_auth"), "frc_ai_auth")
+    assert audit["tables"] == 0
+    assert audit["columns"] == 13
+
+
+def test_verifier_role_without_table_select_with_valid_columns_passes():
+    audit = m.role_connection_audit(FakeDB("frc_ai_verifier"), "frc_ai_verifier")
+    assert audit["tables"] == 0
+    assert audit["columns"] == 7
+
+
+def test_missing_required_user_column_fails_closed():
+    with pytest.raises(RuntimeError,match="MISSING_ROLE_COLUMN_SELECT_users_status"):
+        m.role_connection_audit(
+            FakeDB("frc_ai_auth",missing_column="status"),"frc_ai_auth"
+        )
+
+
+def test_missing_required_session_column_fails_closed():
+    with pytest.raises(RuntimeError,match="MISSING_ROLE_COLUMN_SELECT_sessions_expires_at"):
+        m.role_connection_audit(
+            FakeDB("frc_ai_auth",missing_column="expires_at"),"frc_ai_auth"
+        )
+
+
+def test_auth_verifier_broad_table_select_is_not_accepted():
+    with pytest.raises(RuntimeError,match="UNEXPECTED_ROLE_TABLE_WIDE_SELECT_users"):
+        m.role_connection_audit(
+            FakeDB("frc_ai_verifier",broad_select=True),"frc_ai_verifier"
+        )
 
 
 def test_auth_role_missing_function_fails_closed():
