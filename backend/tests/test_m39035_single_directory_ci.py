@@ -85,6 +85,8 @@ def test_duplicate_delete_requires_exact_head_clean_backup_and_interactive_appro
     assert 'sha256sum --check --status' in src
     assert 'stat -Lc' in src
     assert 'realpath -e' in src
+    assert 'remote get-url origin' in src
+    assert 'readlink -e "$proc/cwd"' in src
     assert 'EXCLUIR_SOMENTE_CLONE_DEBIAN' in src
     assert 'rm --one-file-system -rf -- /root/fr-finance' in src
     assert 'rm --one-file-system -rf -- "$CANON"' not in src
