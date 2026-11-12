@@ -2,6 +2,9 @@
  * Sessão no backend + tenant explícito. Sem mocks, sem envio real, sem Pix.
  */
 import { authService, getApiBaseUrl } from './authService';
+import {
+  requestSpecialCredit, assertSandboxCreditCapabilities,
+} from './specialCreditRequestBoundary';
 
 export type MarketingChannel = 'PUSH'|'EMAIL'|'WHATSAPP'|'SMS';
 export type CreditReply = 'INTERESTED'|'DECLINED';
@@ -20,7 +23,7 @@ export interface CreditCampaign {
   id:string;title:string;status:string;expires_at:string;recipients:number;
 }
 export interface CreditCapabilities {
-  sandbox_enabled:boolean; real_credit_enabled:boolean;pix_real_enabled:boolean;
+  sandbox_enabled:boolean; grants_allow_request_only:boolean; real_credit_enabled:boolean;pix_real_enabled:boolean;
   channels:Record<MarketingChannel,{code_present:boolean;real_delivery_enabled:boolean}>;
 }
 export interface CreditPricePreview {
@@ -32,46 +35,20 @@ export interface CreditPricePreview {
   };
 }
 
-function scoped(tenantId: string): string {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) {
-    throw new Error('Contexto de caixinha inválido.');
-  }
-  return '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/special-credit';
-}
-
-async function call<T>(tenantId:string, path:string, body?:unknown):Promise<T> {
-  const base=getApiBaseUrl();
-  const snapshot=authService.captureSession();
-  if(!base || !snapshot.token) throw new Error('Entre novamente para acessar o crédito especial.');
-  const response=await fetch(base+scoped(tenantId)+path,{
-    method:body===undefined?'GET':'POST',
-    headers:{
-      Authorization:'Bearer '+snapshot.token,
-      'X-Requested-With':'XMLHttpRequest',
-      'Content-Type':'application/json',
-      'Cache-Control':'no-store',
-    },
-    body:body===undefined?undefined:JSON.stringify(body),
-    credentials:'include',cache:'no-store',
-  });
-  if(!authService.isSessionSnapshotCurrent(snapshot)){
-    throw new Error('A sessão mudou. Reabra as oportunidades.');
-  }
-  if(response.status===401){
-    authService.invalidateSession();
-    throw new Error('Sessão expirada. Entre novamente.');
-  }
-  if(response.status===503){
-    throw new Error('Módulo em preparação. Verifique migração e habilitação local antes do teste.');
-  }
-  if(!response.ok) throw new Error('Operação recusada pelo servidor ('+response.status+').');
-  const json:unknown=await response.json();
-  if(!authService.isSessionSnapshotCurrent(snapshot)) throw new Error('Sessão mudou durante a consulta.');
-  return json as T;
+async function call<T>(tenantId:string,path:string,body?:unknown):Promise<T> {
+  return requestSpecialCredit<T>({
+    origin:getApiBaseUrl,
+    captureSession:()=>authService.captureSession(),
+    isCurrent:snapshot=>authService.isSessionSnapshotCurrent(snapshot),
+    getUser:()=>authService.getUser(),
+    invalidateIfCurrent:snapshot=>authService.invalidateSessionIfCurrent(snapshot),
+    send:(url,options)=>fetch(url,options),
+  },tenantId,path,body);
 }
 
 export const specialCreditApi={
-  capabilities:(tenant:string)=>call<CreditCapabilities>(tenant,'/capabilities'),
+  capabilities:async (tenant:string)=>
+    assertSandboxCreditCapabilities(await call<CreditCapabilities>(tenant,'/capabilities')),
   members:(tenant:string)=>call<EligibleMember[]>(tenant,'/members'),
   grants:(tenant:string)=>call<CreditGrant[]>(tenant,'/grants'),
   grant:(tenant:string,memberIds:string[],ceiling:string,expiry:string,reason:string)=>
