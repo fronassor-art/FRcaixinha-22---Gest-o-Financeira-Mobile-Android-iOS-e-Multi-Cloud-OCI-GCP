@@ -26,6 +26,8 @@ from .routers import sandbox_evidence_ci as _sandbox_evidence_ci
 from .routers import mercado_pago_oauth as _mercado_pago_oauth
 from .routers import auth, tenants, invitations, master, contributions, loans, ledger, consents, closings, audit, member_cycle_previews, financial_integrity_previews, member_lifecycle_sandbox, member_lifecycle_reviews, member_obligations, pix_automation, notifications, cycle_contribution_price
 
+from .routers import special_credit as _special_credit
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
@@ -92,6 +94,7 @@ app.include_router(closings.router, prefix=settings.API_V1_STR)
 app.include_router(audit.router, prefix=settings.API_V1_STR)
 app.include_router(pix_automation.router, prefix=settings.API_V1_STR)
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
+app.include_router(_special_credit.router, prefix=settings.API_V1_STR)
 app.include_router(_mercado_pago_oauth.router, prefix=settings.API_V1_STR)
 
 # M38970: reuse the EXISTING main FastAPI for signed Mercado Pago Orders.
