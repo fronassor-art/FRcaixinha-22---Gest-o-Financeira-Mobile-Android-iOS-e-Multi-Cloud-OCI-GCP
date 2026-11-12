@@ -37,9 +37,9 @@ BEGIN
 END $$;
 
 SET ROLE frc_ai_app;
-SET app.current_tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-SET app.current_user_id='11111111-1111-4111-8111-111111111111';
-SET app.current_role='TENANT_ADMIN';
+SELECT set_config('app.current_tenant_id','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
+SELECT set_config('app.current_user_id','11111111-1111-4111-8111-111111111111',false);
+SELECT set_config('app.current_role','TENANT_ADMIN',false);
 
 INSERT INTO public.special_credit_grants(
  id,tenant_id,cycle_id,member_id,created_by,ceiling_brl,reason,
@@ -108,8 +108,8 @@ SELECT public.sc_ci_must_deny($sql$
 $sql$);
 
 -- A member explicitly opts in to PUSH; no external delivery yet.
-SET app.current_user_id='22222222-2222-4222-8222-222222222222';
-SET app.current_role='TENANT_MEMBER';
+SELECT set_config('app.current_user_id','22222222-2222-4222-8222-222222222222',false);
+SELECT set_config('app.current_role','TENANT_MEMBER',false);
 INSERT INTO public.special_credit_preferences(tenant_id,user_id,channel,opted_in)
 VALUES('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
  '22222222-2222-4222-8222-222222222222','PUSH',true);
@@ -134,8 +134,8 @@ BEGIN
  END IF;
 END $;
 
-SET app.current_user_id='11111111-1111-4111-8111-111111111111';
-SET app.current_role='TENANT_ADMIN';
+SELECT set_config('app.current_user_id','11111111-1111-4111-8111-111111111111',false);
+SELECT set_config('app.current_role','TENANT_ADMIN',false);
 INSERT INTO public.special_credit_outbox(
  tenant_id,campaign_id,recipient_id,channel)
 VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -177,7 +177,5 @@ BEGIN
 END $$;
 
 RESET ROLE;
-RESET app.current_tenant_id;
-RESET app.current_user_id;
-RESET app.current_role;
+RESET ALL;
 SELECT 'M39020_SQL_SECURITY_E2E=PASS' AS result;
