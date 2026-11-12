@@ -33,7 +33,7 @@ class FakeDB:
             return Response()
         if sql.startswith("SELECT current_database(),current_user"):
             return Response(one=(m.DB,self.role,self.role,"127.0.0.1",5433,
-                                 m.DATA_DIRECTORY,180006,"on"))
+                                 180006,"on"))
         if "FROM pg_roles" in sql:
             return Response(one=(True,self.superuser,False))
         if "SELECT has_table_privilege" in sql:
