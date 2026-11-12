@@ -511,17 +511,24 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
             <form onSubmit={handleSavePrice} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label htmlFor="master-license-monthly-price" className="block font-semibold text-slate-700 mb-1">
                   Novo Valor Mensal (R$) <span className="text-emerald-600 font-normal">(Único campo editável)</span>
                 </label>
                 <input
+                  id="master-license-monthly-price"
+                  aria-describedby="master-license-price-help"
                   type="number"
-                  step="0.10"
+                  inputMode="decimal"
+                  step="0.01"
                   min="1"
                   value={newMonthlyPrice}
                   onChange={e => setNewMonthlyPrice(Number(e.target.value))}
                   className="w-full text-lg font-bold px-3 py-2 border border-slate-300 rounded-lg text-slate-900"
                 />
+                <p id="master-license-price-help" className="mt-2 text-[11px] text-slate-600">
+                  Preço da assinatura da plataforma. Não é o valor da cota
+                  do membro, cujo mínimo é R$ 150,00 por ciclo.
+                </p>
               </div>
 
               <div>
@@ -551,7 +558,8 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
-                Cada alteração cria uma <code>LicensePriceVersion</code> imutável. Assinaturas já pagas e ofertas em andamento não sofrem reajuste retroativo.
+                Cada alteração registra uma nova versão de preço com histórico imutável.
+                Assinaturas já pagas e ofertas em andamento não sofrem reajuste retroativo.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
