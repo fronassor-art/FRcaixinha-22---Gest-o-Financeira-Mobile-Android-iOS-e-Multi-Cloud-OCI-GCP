@@ -118,6 +118,14 @@ jobs:
             -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
       - name: Teste E2E SQL de integridade, permissoes e revogacao
         run: psql -v ON_ERROR_STOP=1 -f backend/tests/sql/m39020_special_credit_integrity_ci.sql
+      - name: M39047 fluxo admin/membro real com rollback no PG18 descartavel
+        run: |
+          test "$PGDATABASE" = "frfinance_ci_credit"
+          test "$PGPORT" = "5432"
+          test "$GITHUB_ACTIONS" = "true"
+          psql -X -v ON_ERROR_STOP=1 \
+            -c "SET frfinance.m39047_test_mode='CI_DISPOSABLE'" \
+            -f backend/tests/sql/m39047_credit_transaction_rollback_ci.sql
       - name: Verificar tabelas e RLS obrigatorios
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
