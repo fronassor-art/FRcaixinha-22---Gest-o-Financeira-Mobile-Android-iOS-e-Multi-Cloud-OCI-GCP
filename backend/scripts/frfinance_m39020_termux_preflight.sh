@@ -5,6 +5,9 @@ set -euo pipefail
 umask 077
 
 die() { printf 'M39020_PREFLIGHT=BLOCKED %s\n' "$*" >&2; exit 2; }
+# Preflight pré-migração está obsoleto: SQL110/111 já aplicadas em M39031.
+die "PRE_MIGRATION_PREFLIGHT_OBSOLETE_USE_M39032_POST_MIGRATION"
+
 EXPECTED="/data/data/com.termux/files/home/fr-finance"
 BRANCH="atualizacao-ai-studio-9b46a63187"
 SQL110="backend/migrations/110_fr_finance_special_credit_offline.sql"
