@@ -27,3 +27,6 @@ backups/
 **/*.tfplan
 **/*tfplan.json
 **/*.plan.json
+
+# Firebase Android: configuração fornecida localmente no APK de homologação
+android/app/google-services.json
