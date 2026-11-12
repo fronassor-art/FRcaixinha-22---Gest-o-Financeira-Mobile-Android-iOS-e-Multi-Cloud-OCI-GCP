@@ -114,6 +114,23 @@ INSERT INTO public.special_credit_preferences(tenant_id,user_id,channel,opted_in
 VALUES('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
  '22222222-2222-4222-8222-222222222222','PUSH',true);
 
+-- Diagnostic E2E: verifies member can see published campaign and own grant
+-- before a reply. Any missing scope is a CI failure, not a fake success.
+DO $$
+BEGIN
+ IF NOT EXISTS (
+   SELECT 1 FROM public.special_credit_campaigns c
+    JOIN public.special_credit_grants g
+      ON g.id='a1111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+   WHERE c.id='a2222222-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+     AND c.status='PUBLISHED'
+     AND g.status='ACTIVE'
+     AND c.expires_at>now() AND g.expires_at>now()
+ ) THEN
+   RAISE EXCEPTION 'M39020 member RLS hid own published campaign or grant';
+ END IF;
+END $$;
+
 UPDATE public.special_credit_recipients SET response_status='INTERESTED',
  responded_at=now() WHERE id='a3333333-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 SELECT public.sc_ci_must_deny($sql$
