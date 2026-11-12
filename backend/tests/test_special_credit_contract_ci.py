@@ -114,3 +114,18 @@ def test_whatsapp_must_use_preapproved_template_name():
 def test_no_network_dispatch_function():
     with pytest.raises(SpecialCreditDenied):
         provider_dispatch()
+
+
+def test_master_contracts_have_new_annex_without_clobbering_history():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[2]
+    contract=(root/"docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md").read_text(encoding="utf-8")
+    notebook=(root/"docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md").read_text(encoding="utf-8")
+    annex=(root/"docs/FR_FINANCE_CREDITO_ESPECIAL_EXTRAORDINARIO_M39010.md").read_text(encoding="utf-8")
+    assert "CTM-CRED-EX-01" in contract and "CTM-CRED-EX-06" in contract
+    assert "CM-CRED-EX-01" in notebook and "CM-EX-12" in notebook
+    assert "Cláusula 4.2" not in contract or "Origem histórica" in contract
+    for channel in ("push", "e-mail", "WhatsApp", "SMS"):
+        assert channel.lower() in annex.lower()
+    assert "NÃO AUTORIZADOS" in annex
+    assert "FRcaixinha 2.2" in annex
