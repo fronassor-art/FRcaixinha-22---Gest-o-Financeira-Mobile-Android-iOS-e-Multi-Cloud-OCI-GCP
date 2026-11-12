@@ -26,9 +26,9 @@ REPO="fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi
 ORIGIN="$(git -C "$ROOT" remote get-url origin)" ||
   die "Git origin indisponivel"
 case "$ORIGIN" in
-  "https://github.com/$REPO"|"https://github.com/$REPO.git"|
-  "git@github.com:$REPO"|"git@github.com:$REPO.git"|
-  "ssh://git@github.com/$REPO"|"ssh://git@github.com/$REPO.git") ;;
+  "https://github.com/$REPO" | "https://github.com/$REPO.git" | \
+  "git@github.com:$REPO" | "git@github.com:$REPO.git" | \
+  "ssh://git@github.com/$REPO" | "ssh://git@github.com/$REPO.git") ;;
   *) die "Origin nao e o repositorio FR Finance autorizado" ;;
 esac
 [[ "$(git -C "$ROOT" branch --show-current)" == "$BRANCH" ]] ||
