@@ -61,6 +61,8 @@ jobs:
         run: npx tsx src/tests/owner_private_access_ui.test.ts
       - name: Validar governanca Master e segregacao da interface
         run: npx tsx src/tests/master_tenant_registry_ui.test.ts
+      - name: M39003 — revisar telas reais do APK e distinguir licença SaaS da cota
+        run: npx tsx src/tests/m39003_apk_ui_screenshot_regressions_ci.test.ts
       - name: Validar responsaveis cadastrais Master
         run: npx tsx src/tests/master_admin_registry_ui.test.ts
       - name: Validar Macropacote 120 — inventario SaaS Master
