@@ -18,7 +18,12 @@ def test_full_migration_catalog():
     assert c("CI_ONLY_NEEDS_PORT")==3
     assert c("STAGING_ONLY_NEEDS_PORT")>=16
     assert c("CI_ONLY_TEST_OR_FIXTURE")>=21
-    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==18
+    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==19
+    candidate = next(e for e in entries if e["id"]=="migrations:110")
+    assert candidate["source_path"]=="backend/migrations/110_fr_finance_special_credit_offline.sql"
+    assert candidate["local_evidence"] is None
+    assert candidate["classification"]=="LOCAL_CANDIDATE_REQUIRES_PROOF"
+    assert all("real" not in str(candidate["local_evidence"]).lower() for _ in [0])
     assert all(x["do_not_apply_source_to_termux"]
                for x in entries if x["source_path"].startswith("backend/staging_migrations/"))
 
@@ -53,7 +58,10 @@ def test_inventory_local_runtime_verifies_core_structures_and_m21000_extension()
         'M20200_LOCAL_031=OBJECTS_RLS_VERIFIED',
         'M20200_LOCAL_034_041=8_TABLES_RLS_VERIFIED',
         'M20200_MIGRATIONS=',
-        "if n not in (44,45,46,47):",
+        "if n not in (44,45,46,47,53):",
+        "M39010_LOCAL_110=STRUCTURAL_PRESENT_NO_EXTERNAL_DISPATCH",
+        "M39010_LOCAL_110=NOT_APPLIED",
+        "special_credit_outbox",
         "M21000_LOCAL_044=OBJECTS_AND_ROLE_BOUNDARY_VERIFIED",
         "M38990_LOCAL_047=STRUCTURAL_PRESENT_NO_DELIVERY_ATTESTATION",
         "M38993_LOCAL_048=FUNCTIONS_AND_ROLE_BOUNDARY_PRESENT",
