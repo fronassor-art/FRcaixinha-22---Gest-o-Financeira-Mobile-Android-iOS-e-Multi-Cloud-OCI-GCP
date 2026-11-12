@@ -56,6 +56,8 @@ jobs:
         run: npm run lint
       - name: Contrato UI campanhas e push Android sem envio
         run: npx tsx src/tests/m39020_credit_push_ui_ci.test.ts
+      - name: M39048 sessao e contexto de caixinha no cliente Android offline
+        run: npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
       - name: Build frontend
         run: npm run build
 
