@@ -161,7 +161,7 @@ jobs:
           ! grep -Ei '\b(insert into loans|update loans|pix_transfer|money_out)\b' backend/migrations/11{0,1}_*.sql
 
   apk-debug-local:
-    name: Compilar APK debug sem ativar Pix nem usuarios
+    name: M39052 APK diagnostico paralelo sem alterar instalacao existente
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -169,6 +169,7 @@ jobs:
       VITE_API_URL: "http://127.0.0.1:8000"
       VITE_FR_FINANCE_PUSH_DIAGNOSTIC: "NO"
       FR_FINANCE_ANDROID_RELEASE_PROFILE: "0"
+      FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC: "1"
       FR_FINANCE_PIX_REAL: "OFF"
       FR_FINANCE_SPECIAL_CREDIT_SANDBOX: "NO"
       FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
@@ -212,6 +213,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$FRCAIXINHA_ANDROID_LOCAL_TEST" = "1"
+          test "$FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC" = "1"
           test "$VITE_API_URL" = "http://127.0.0.1:8000"
           test "$FR_FINANCE_PIX_REAL" = "OFF"
           test "$FR_FINANCE_SPECIAL_CREDIT_SANDBOX" = "NO"
@@ -223,7 +225,7 @@ jobs:
             android/app/src/debug/AndroidManifest.xml
           grep -q 'cleartextTrafficPermitted="false"' \
             android/app/src/debug/res/xml/local_api_network_security.xml
-          grep -q 'applicationIdSuffix ".aistudio"' android/app/build.gradle
+          grep -Fq 'applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"' android/app/build.gradle
           test -f android/app/src/main/assets/capacitor.config.json
           node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
@@ -236,7 +238,7 @@ jobs:
           assert.match(debug,/<base-config cleartextTrafficPermitted="false"/);
           assert.match(debug,/<domain includeSubdomains="false">127\.0\.0\.1<\/domain>/);
           assert.match(debug,/<domain includeSubdomains="false">localhost<\/domain>/);
-          console.log('M39050_LOCAL_LOOPBACK_ONLY=PASS');
+          console.log('M39052_LOCAL_LOOPBACK_ONLY=PASS');
           JS
 
       - name: Montar APK debug da branch original
@@ -252,18 +254,28 @@ jobs:
           apk="android/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           file "$apk"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          package = json.loads(
+              Path("android/app/build/outputs/apk/debug/output-metadata.json").read_text()
+          )["applicationId"]
+          assert package == "com.frcaixinha.app.aistudio.diag", package
+          print("M39052_PACKAGE_PARALLEL=" + package)
+          print("M39052_EXISTING_APP=com.frcaixinha.app.aistudio_UNCHANGED")
+          PY
           sha256sum "$apk" > android/app/build/outputs/apk/debug/app-debug.apk.sha256
-          echo "M39050_ANDROID_DEBUG_APK=BUILT" >> "$GITHUB_STEP_SUMMARY"
-          echo "M39050_API_LOCAL_LOOPBACK_ONLY=TRUE" >> "$GITHUB_STEP_SUMMARY"
-          echo "M39050_PIX_REAL=OFF" >> "$GITHUB_STEP_SUMMARY"
-          echo "M39050_EXTERNAL_NOTIFICATIONS=OFF" >> "$GITHUB_STEP_SUMMARY"
-          echo "M39050_SIGNING=RUNNER_DEBUG_KEY_NOT_STABLE" >> "$GITHUB_STEP_SUMMARY"
-          echo "M39050_REAL_LOGIN_AND_DEVICE_E2E=NOT_ATTESTED" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39052_ANDROID_DEBUG_APK=BUILT" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39052_API_LOCAL_LOOPBACK_ONLY=TRUE" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39052_PIX_REAL=OFF" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39052_EXTERNAL_NOTIFICATIONS=OFF" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39052_SIGNING=RUNNER_DEBUG_KEY_NOT_STABLE" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39052_REAL_LOGIN_AND_DEVICE_E2E=NOT_ATTESTED" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Disponibilizar APK de homologacao no GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: FR-Finance-M39050-Android-Debug-Local
+          name: FR-Finance-M39052-Android-Diagnostic-Parallel
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/debug/app-debug.apk.sha256
