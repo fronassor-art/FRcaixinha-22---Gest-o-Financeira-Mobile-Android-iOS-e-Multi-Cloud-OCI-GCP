@@ -16,7 +16,7 @@ from pathlib import Path
 
 from backend.scripts.frfinance_m39054_auth_pg18_preflight import verify_original
 from backend.scripts.frfinance_m39026_credit_only_preflight import (
-    DB, DATA_DIRECTORY, SPECIAL
+    DB
 )
 
 ROLES = ("frc_ai_app", "frc_ai_auth", "frc_ai_verifier")
@@ -43,13 +43,14 @@ def role_connection_audit(conn, role: str) -> dict:
         info = conn.execute(
             "SELECT current_database(),current_user,session_user,"
             "host(inet_server_addr()),inet_server_port(),"
-            "current_setting('data_directory'),"
             "current_setting('server_version_num')::integer,"
             "current_setting('transaction_read_only')"
         ).fetchone()
-        if (info[:6] != (DB, role, role, "127.0.0.1", 5433, DATA_DIRECTORY)
-                or not 180000 <= info[6] < 190000
-                or info[7] != "on"):
+        # Original data_directory was already attested with owner in M39054.
+        # Limited app/auth/verifier roles must not need pg_read_all_settings.
+        if (info[:5] != (DB, role, role, "127.0.0.1", 5433)
+                or not 180000 <= info[5] < 190000
+                or info[6] != "on"):
             raise RuntimeError("ROLE_NOT_ON_ORIGINAL_PG18_READONLY")
         flags = conn.execute(
             "SELECT rolcanlogin,rolsuper,rolbypassrls FROM pg_roles "
