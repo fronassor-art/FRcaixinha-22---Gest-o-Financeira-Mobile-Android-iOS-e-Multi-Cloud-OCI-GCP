@@ -6,6 +6,7 @@ import type {LoanSimulation} from '../services/loanSimulationBoundary';
 import {loanSimulationFailureMessage} from '../services/loanSimulationFeedback';
 import {authService} from '../services/authService';
 import { LoansAutomationPanel } from './LoansAutomationPanel';
+import { SpecialCreditView } from './SpecialCreditView';
 
 interface Props { state: AppState }
 type State = { key: string; status: 'loading' | 'ready' | 'error'; loans: DisplayLoan[] };
@@ -157,6 +158,7 @@ export const ServerLoansView: React.FC<Props> = ({ state }) => {
         loans={current.status === 'ready' ? current.loans : []}
         simulation={simulation} principal={Number(amount)} months={Number(months)}
         onRefresh={() => setRevision(n => n + 1)} />
+      <SpecialCreditView state={state}/>
       <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-950">
         Solicitação, aprovação, liberação, recebimento e quitação reais permanecerão
         indisponíveis até completar as respectivas integrações e validações.
