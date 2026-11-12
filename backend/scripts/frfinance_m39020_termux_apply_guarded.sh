@@ -37,7 +37,7 @@ done
 for prog in pg_dump pg_restore; do
   detected="$("$prog" --version 2>/dev/null)" ||
     die "Não foi possível identificar a versão de $prog"
-  [[ "$detected" =~ ^(pg_dump|pg_restore)\\ \(PostgreSQL\)\ 18\. ]] ||
+  [[ "$detected" == "$prog (PostgreSQL) 18."* ]] ||
     die "$prog incompatível com servidor 18: $detected. Selecione cliente PostgreSQL 18 antes de aplicar SQL."
 done
 # Não permitir opções de libpq herdadas ou arquivos de serviço.
