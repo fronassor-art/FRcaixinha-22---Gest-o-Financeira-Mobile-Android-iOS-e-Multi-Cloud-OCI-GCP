@@ -1,6 +1,8 @@
 # FR Finance AI Studio — Passagem controlada GitHub → Termux → APK (M39020)
 
-**Estado:** guia versionado, NÃO autorização para executar Git/SQL/FCM/Pix. Produção financeira, campanhas externas e cadastro real continuam **OFF**. A release é identificada pelo SHA de commit cujos workflows de CI foram concluídos com sucesso; **não** confiar apenas no nome da branch.
+> **OBSOLETO APÓS M39031/M39032 — NÃO EXECUTAR OS COMANDOS DE MIGRAÇÃO ABAIXO.** No PostgreSQL ORIGINAL do FR Finance as SQLs 110 e 111 já foram aplicadas, homologadas e estão presentes. Este arquivo é histórico de handoff pré-migração, NÃO instrução atual. O repositório canônico é SOMENTE `/data/data/com.termux/files/home/fr-finance`. A recuperação de diretório único está em [M39035](FR_FINANCE_M39035_DIRETORIO_UNICO_RECUPERACAO.md). Não executar M39020_apply_guarded nem M39020_preflight novamente; ambos estão bloqueados no código.
+
+**Estado histórico (anterior à M39031):** guia versionado, NÃO autorização para executar Git/SQL/FCM/Pix. Produção financeira, campanhas externas e cadastro real continuam **OFF**. A release é identificada pelo SHA de commit cujos workflows de CI foram concluídos com sucesso; **não** confiar apenas no nome da branch.
 
 ## 1. O que está preparado
 - Contrato Técnico Mestre e Caderno Mestre atualizados: CTM-CRED-EX-01 a 06 / CM-CRED-EX-01.
@@ -19,7 +21,7 @@
 
 ### Comandos de sincronização futura (SOMENTE APÓS ACEITE)
 ```bash
-cd "$HOME/fr-finance"
+cd "/data/data/com.termux/files/home/fr-finance"
 git status --short
 git branch --show-current
 git fetch --no-tags origin atualizacao-ai-studio-9b46a63187
