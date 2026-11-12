@@ -23,7 +23,8 @@ def test_full_migration_catalog():
     assert candidate["source_path"]=="backend/migrations/110_fr_finance_special_credit_offline.sql"
     assert candidate["local_evidence"] is None
     assert candidate["classification"]=="LOCAL_CANDIDATE_REQUIRES_PROOF"
-    assert all("real" not in str(candidate["local_evidence"]).lower() for _ in [0])
+    assert candidate["do_not_apply_source_to_termux"] is False
+    assert candidate["requires_local_equivalent_before_use"] is False
     assert all(x["do_not_apply_source_to_termux"]
                for x in entries if x["source_path"].startswith("backend/staging_migrations/"))
 
