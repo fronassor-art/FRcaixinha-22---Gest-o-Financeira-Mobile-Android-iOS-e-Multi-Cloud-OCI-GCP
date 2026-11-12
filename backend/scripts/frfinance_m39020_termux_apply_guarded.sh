@@ -48,7 +48,7 @@ export PGHOST PGPORT PGUSER PGDATABASE
 IDENTITY="$(psql -X -v ON_ERROR_STOP=1 -Atc \
   "SELECT current_database()||'|'||current_user||'|'||inet_server_port()||'|'||current_setting('server_version_num')")" ||
   die "Identidade PostgreSQL não verificável"
-[[ "$IDENTITY" =~ ^frcaixinha_aistudio_dev\\|frc_ai_owner\\|5433\\|18[0-9]{4}$ ]] ||
+[[ "$IDENTITY" =~ ^frcaixinha_aistudio_dev\|frc_ai_owner\|5433\|18[0-9]{4}$ ]] ||
   die "Banco/usuário/porta/versão divergentes"
 
 # Só iniciar quando as duas migrations estiverem AUSENTES.
