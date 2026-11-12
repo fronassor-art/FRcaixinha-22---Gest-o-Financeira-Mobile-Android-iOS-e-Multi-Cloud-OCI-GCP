@@ -121,11 +121,18 @@ SELECT public.sc_ci_must_deny($sql$
  responded_at=now() WHERE id='a3333333-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 $sql$);
 
--- Member cannot cancel admin campaign or see admin draft.
-SELECT public.sc_ci_must_deny($sql$
+-- Member cannot cancel an admin campaign. A denied RLS update may
+-- legitimately affect ZERO rows instead of raising, so check row count.
+DO $
+DECLARE changed bigint;
+BEGIN
  UPDATE public.special_credit_campaigns SET status='CANCELLED'
- WHERE id='a2222222-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-$sql$);
+ WHERE id='a2222222-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ GET DIAGNOSTICS changed=ROW_COUNT;
+ IF changed<>0 THEN
+  RAISE EXCEPTION 'M39020 SECURITY REGRESSION: member changed campaign';
+ END IF;
+END $;
 
 SET app.current_user_id='11111111-1111-4111-8111-111111111111';
 SET app.current_role='TENANT_ADMIN';
