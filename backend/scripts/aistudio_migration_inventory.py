@@ -145,8 +145,43 @@ def local_readonly():
                 print("M19200_CI_031_037=DISPOSABLE_ONLY")
                 # M20200: report the runtime DB, not a generic source-code state.
                 # Both the precise table count and all core contracts are required.
-                if n not in (44,45,46,47):
+                if n not in (44,45,46,47,53):
                     return deny("M20200 unexpected local schema table count: "+str(n))
+                # M39010 installs exactly six new special-credit objects, only
+                # after a separate local authorization. A partial installation
+                # (48-52) is never accepted as ready.
+                if n==53:
+                    special_tables=(
+                      "special_credit_grants","special_credit_campaigns",
+                      "special_credit_recipients","special_credit_preferences",
+                      "special_credit_outbox","special_credit_audit",
+                    )
+                    for table in special_tables:
+                        obj="public."+table
+                        if not exists(obj):
+                            return deny("M39010 local incomplete "+table)
+                        secure=conn.execute(
+                          "SELECT relrowsecurity AND relforcerowsecurity "
+                          "FROM pg_class WHERE oid=to_regclass(%s)",(obj,)
+                        ).fetchone()[0]
+                        auth_access=conn.execute(
+                          "SELECT has_table_privilege('frc_ai_auth',%s,'SELECT') "
+                          "OR has_table_privilege('frc_ai_auth',%s,'INSERT') "
+                          "OR has_table_privilege('frc_ai_auth',%s,'UPDATE')",
+                          (obj,obj,obj)
+                        ).fetchone()[0]
+                        if not secure or auth_access:
+                            return deny("M39010 local RLS/privileges invalid "+table)
+                    if conn.execute(
+                      "SELECT has_table_privilege('frc_ai_app',"
+                      "'public.special_credit_outbox','UPDATE') "
+                      "OR has_table_privilege('frc_ai_app',"
+                      "'public.special_credit_outbox','DELETE')"
+                    ).fetchone()[0]:
+                        return deny("M39010 external outbox mutable by app")
+                    print("M39010_LOCAL_110=STRUCTURAL_PRESENT_NO_EXTERNAL_DISPATCH")
+                else:
+                    print("M39010_LOCAL_110=NOT_APPLIED")
                 lifecycle=("public.member_lifecycle_requests","public.member_lifecycle_review_events")
                 if not all(exists(t) for t in lifecycle) or not has030:
                     return deny("M20200 lifecycle 028-030 objects missing")
