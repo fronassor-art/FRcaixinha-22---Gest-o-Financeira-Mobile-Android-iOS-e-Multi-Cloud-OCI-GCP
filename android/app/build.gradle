@@ -9,6 +9,10 @@ android {
     def stableKeyAlias = System.getenv("FRCAIXINHA_ANDROID_KEY_ALIAS")
     def stableKeyPassword = System.getenv("FRCAIXINHA_ANDROID_KEY_PASSWORD")
     def androidCiBuildNumber = System.getenv("FRCAIXINHA_ANDROID_VERSION_CODE")
+    // Variant isolate a diagnostic APK without touching the already installed
+    // com.frcaixinha.app.aistudio data and signing identity.
+    // This is ONLY a debug variant; a permanent signing key is still needed.
+    def diagnosticParallel = System.getenv("FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC") == "1"
     // Separate production signing. Debug key is never reused.
     def releaseRequested = gradle.startParameter.taskNames.any {
         it.toLowerCase(java.util.Locale.ROOT).contains("release")
@@ -17,6 +21,9 @@ android {
     def releaseStorePassword = System.getenv("FR_FINANCE_ANDROID_RELEASE_STORE_PASSWORD")
     def releaseAlias = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEY_PASSWORD")
+    if (releaseRequested && diagnosticParallel) {
+        throw new GradleException("M39052: pacote diagnostico nao permite release.")
+    }
     if (releaseRequested) {
         if (!releaseKeyFile || !releaseStorePassword || !releaseAlias ||
                 !releaseKeyPassword || !(new File(releaseKeyFile).isFile())) {
@@ -80,7 +87,7 @@ android {
     buildTypes {
         // MESMO applicationId em todas as atualizacoes Android AI Studio.
         debug {
-            applicationIdSuffix ".aistudio"
+            applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"
             versionNameSuffix "-AI-STUDIO-TEST"
             if (stableSigningRequired) {
                 signingConfig signingConfigs.stableDebug
