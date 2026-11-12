@@ -30,6 +30,7 @@ jobs:
       VITE_API_URL: "http://127.0.0.1:8000"
       VITE_FR_FINANCE_PUSH_DIAGNOSTIC: "NO"
       FR_FINANCE_ANDROID_RELEASE_PROFILE: "0"
+      FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC: "0"
       FR_FINANCE_PIX_REAL: "OFF"
       FR_FINANCE_SPECIAL_CREDIT_SANDBOX: "NO"
       FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
@@ -73,6 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$FRCAIXINHA_ANDROID_LOCAL_TEST" = "1"
+          test "$FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC" = "0"
           test "$VITE_API_URL" = "http://127.0.0.1:8000"
           test "$FR_FINANCE_PIX_REAL" = "OFF"
           test "$FR_FINANCE_SPECIAL_CREDIT_SANDBOX" = "NO"
@@ -84,7 +86,7 @@ jobs:
             android/app/src/debug/AndroidManifest.xml
           grep -q 'cleartextTrafficPermitted="false"' \
             android/app/src/debug/res/xml/local_api_network_security.xml
-          grep -q 'applicationIdSuffix ".aistudio"' android/app/build.gradle
+          grep -Fq 'applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"' android/app/build.gradle
           test -f android/app/src/main/assets/capacitor.config.json
           node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
