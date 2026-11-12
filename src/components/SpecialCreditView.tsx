@@ -36,7 +36,8 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   const [busy,setBusy]=useState(false);
   const [enabled,setEnabled]=useState(false);
   const [members,setMembers]=useState<EligibleMember[]>([]);
-  const [selected,setSelected]=useState<string[]>([]);
+  const [selectedMembers,setSelectedMembers]=useState<string[]>([]);
+  const [selectedGrants,setSelectedGrants]=useState<string[]>([]);
   const [grants,setGrants]=useState<CreditGrant[]>([]);
   const [campaigns,setCampaigns]=useState<CreditCampaign[]>([]);
   const [opportunities,setOpportunities]=useState<CreditOpportunity[]>([]);
@@ -53,7 +54,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     let active=true;
     const snapshot=authService.captureSession();
     setLoading(true);setMessage('');setEnabled(false);
-    setMembers([]);setSelected([]);setGrants([]);setCampaigns([]);
+    setMembers([]);setSelectedMembers([]);setSelectedGrants([]);setGrants([]);setCampaigns([]);
     setOpportunities([]);setPrefs(initialPrefs);setSimulation('');
     if(!tenant || role==='MASTER' || !state.currentUserId){
       setMessage('Selecione uma caixinha e entre como administrador ou membro.');
@@ -93,14 +94,15 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     return()=>{active=false;};
   },[key,revision,tenant,role,state.currentUserId]);
 
-  async function run(task:()=>Promise<unknown>,success:string){
+  async function run(task:()=>Promise<unknown>,success:string,refresh=true){
     if(!tenant||busy)return;
     const before=key; const snapshot=authService.captureSession();
     setBusy(true);setMessage('');
     try{
       await task();
       if(latest.current!==before||!authService.isSessionSnapshotCurrent(snapshot))return;
-      setMessage(success);setRevision(n=>n+1);
+      setMessage(success);
+      if(refresh)setRevision(n=>n+1);
     }catch(error){
       if(latest.current===before&&authService.isSessionSnapshotCurrent(snapshot))
         setMessage(error instanceof Error?error.message:'Operação recusada.');
@@ -109,9 +111,10 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
         setBusy(false);
     }
   }
-  const toggle=(id:string)=>{
-    setSelected(current=>current.includes(id)?current.filter(x=>x!==id):[...current,id]);
-  };
+  const toggleMember=(id:string)=>setSelectedMembers(current=>
+    current.includes(id)?current.filter(x=>x!==id):[...current,id]);
+  const toggleGrant=(id:string)=>setSelectedGrants(current=>
+    current.includes(id)?current.filter(x=>x!==id):[...current,id]);
 
   if(role==='MASTER') return null;
   return <section aria-labelledby="special-credit-title"
@@ -145,7 +148,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
         <div className="max-h-48 space-y-2 overflow-y-auto" role="group" aria-label="Membros da caixinha">
           {members.length===0&&<p>Nenhum membro ativo encontrado.</p>}
           {members.map(m=><label key={m.id} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={selected.includes(m.id)} onChange={()=>toggle(m.id)}/>
+            <input type="checkbox" checked={selectedMembers.includes(m.id)} onChange={()=>toggleMember(m.id)}/>
             <span>{m.name}</span>
           </label>)}
         </div>
@@ -167,9 +170,9 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
             placeholder="Registrar análise financeira, exposição, disponibilidade e justificativa..."
             className="rounded-lg border p-2"/>
         </label>
-        <button disabled={busy||selected.length===0||justification.trim().length<20}
+        <button disabled={busy||selectedMembers.length===0||justification.trim().length<20}
           type="button" onClick={()=>void run(
-            ()=>specialCreditApi.grant(tenant,selected,limit,toUtc(validity),justification),
+            ()=>specialCreditApi.grant(tenant,selectedMembers,limit,toUtc(validity),justification),
             'Autorizações de solicitação extraordinária registradas.')}
           className="rounded-lg bg-emerald-800 px-4 py-2 font-semibold text-white disabled:opacity-40">
           Registrar autorização especial
@@ -184,8 +187,8 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
           {grants.filter(g=>g.status==='ACTIVE').map(g=><label key={g.id}
             className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-sm">
             <span>
-              <input type="checkbox" checked={selected.includes(g.id)}
-                onChange={()=>toggle(g.id)} className="mr-2"/>
+              <input type="checkbox" checked={selectedGrants.includes(g.id)}
+                onChange={()=>toggleGrant(g.id)} className="mr-2"/>
               {g.member_name} • {money(g.ceiling_brl)}
             </span>
             <button type="button" disabled={busy}
@@ -202,10 +205,10 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
           <textarea rows={3} maxLength={500} value={body}
             onChange={e=>setBody(e.target.value)} className="rounded-lg border p-2"/>
         </label>
-        <button disabled={busy||!grants.some(g=>selected.includes(g.id)&&g.status==='ACTIVE')}
+        <button disabled={busy||!grants.some(g=>selectedGrants.includes(g.id)&&g.status==='ACTIVE')}
           type="button" onClick={()=>void run(
             ()=>specialCreditApi.createCampaign(tenant,
-                grants.filter(g=>selected.includes(g.id)&&g.status==='ACTIVE').map(g=>g.id),
+                grants.filter(g=>selectedGrants.includes(g.id)&&g.status==='ACTIVE').map(g=>g.id),
                 title,body,toUtc(validity)),
             'Rascunho criado. Revise antes de publicar.')}
           className="rounded-lg bg-emerald-800 px-4 py-2 font-semibold text-white disabled:opacity-40">
@@ -272,7 +275,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
                 'Simulação: prestação '+money(result.simulation.uniform_payment)+
                 ', total '+money(result.simulation.total_payable)+
                 '. Nenhum empréstimo foi solicitado.');
-            },'Simulação concluída sem movimento financeiro.')}
+            },'Simulação concluída sem movimento financeiro.',false)}
             className="rounded-lg border border-emerald-700 px-3 py-2 text-sm">
             Simular valor extraordinário
           </button>
