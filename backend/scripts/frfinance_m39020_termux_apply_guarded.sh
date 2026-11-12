@@ -30,6 +30,16 @@ SQL111="backend/migrations/111_frfinance_special_credit_integrity_guards.sql"
 for prog in psql pg_dump pg_restore createdb dropdb sha256sum; do
   command -v "$prog" >/dev/null || die "Dependência ausente: $prog"
 done
+# O servidor original é PostgreSQL 18. Cliente de dump/restore de versão
+# anterior (ex.: pg_dump 17 do Debian) interrompe o processo antes do backup.
+# O operador deve escolher clientes 18 já instalados no Termux ou Debian;
+# este script NUNCA instala outro PostgreSQL e NUNCA cria outro cluster.
+for prog in pg_dump pg_restore; do
+  detected="$("$prog" --version 2>/dev/null)" ||
+    die "Não foi possível identificar a versão de $prog"
+  [[ "$detected" =~ ^(pg_dump|pg_restore)\\ \(PostgreSQL\)\ 18\. ]] ||
+    die "$prog incompatível com servidor 18: $detected. Selecione cliente PostgreSQL 18 antes de aplicar SQL."
+done
 # Não permitir opções de libpq herdadas ou arquivos de serviço.
 [[ -z "${PGOPTIONS:-}${PGSERVICE:-}${PGHOSTADDR:-}${PGPASSFILE:-}" ]] ||
   die "Substituições libpq externas não são permitidas"
