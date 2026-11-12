@@ -47,6 +47,16 @@ FR_FINANCE_APPROVED_SHA=<sha_completo_aprovado> \
 bash /data/data/com.termux/files/home/fr-finance/backend/scripts/frfinance_m39036_debian_clone_audit_only.sh
 ```
 
+**Exclusão condicional, separada da sincronização, APENAS após M39036 retornar elegível:**
+```bash
+# Somente no Debian; requer prova de SHA, árvore limpa,
+# ausência de arquivos ignorados, stashes, commits só locais,
+# integridade dos DOIS backups e confirmação interativa.
+FR_FINANCE_APPROVED_SHA=<sha_completo_aprovado> \\
+  bash /data/data/com.termux/files/home/fr-finance/backend/scripts/frfinance_m39037_delete_verified_duplicate_debian.sh
+```
+Se qualquer uma dessas condições falhar, a exclusão é BLOQUEADA. Não utilizar `rm -rf` manualmente para contornar essa proteção.
+
 **Atenção:** até a primeira sincronização, o script M39035 pode ainda não existir no original. Use a inspeção e sincronização conservadora encaminhadas ao operador no chat; NUNCA crie clone alternativo para obter o script.
 
 A exclusão de `/root/fr-finance` é **passo futuro com prova**, nunca efeito colateral de `audit`, `sync` ou de comandos de banco.
