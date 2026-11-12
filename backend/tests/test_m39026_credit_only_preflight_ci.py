@@ -66,6 +66,8 @@ def test_credit_only_passes_with_47_tables_and_no_credit_objects(capsys):
     out = capsys.readouterr().out
     assert "M39026_STATUS=PASS" in out
     assert "M39026_CREDIT_TABLES=ABSENT_6_OF_6" in out
+    assert any("host(inet_server_addr())" in query for query, _ in db.executed)
+    assert all("inet_server_addr()::text" not in query for query, _ in db.executed)
     assert "M39026_SQL_110_111=READY_FOR_SEPARATELY_APPROVED" in out
     assert all(q.lstrip().startswith(("SELECT", "SET TRANSACTION READ ONLY"))
                for q, _ in db.executed)
