@@ -54,8 +54,9 @@ export const MasterTenantRegistryView:React.FC<{state:AppState}>=({state})=>{
         <ShieldCheck className="h-6 w-6 shrink-0 text-[#f1d485]" aria-hidden="true"/>
       </div>
       <p className="mt-4 text-xs text-emerald-100/85">
-        Convites e alterações de acesso aguardam implementação e aprovação.
-        Nenhuma conta é criada, ativada ou suspensa por esta tela.
+        Convites e alterações de acesso exigem verificação de identidade,
+        contratos e aprovação operacional. Esta tela apenas consulta cadastros:
+        nenhuma conta é criada, ativada ou suspensa aqui.
       </p>
     </div>
 
