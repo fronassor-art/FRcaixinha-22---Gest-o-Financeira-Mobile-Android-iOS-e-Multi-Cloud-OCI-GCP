@@ -94,3 +94,13 @@ def test_duplicate_delete_requires_exact_head_clean_backup_and_interactive_appro
     assert "git reset" not in src
     subprocess.run(["bash","-n",str(SCRIPTS/"frfinance_m39037_delete_verified_duplicate_debian.sh")],
                    check=True,capture_output=True,text=True)
+
+
+
+def test_old_backup_cannot_assume_the_pre_migration_47_table_schema():
+    src=(SCRIPTS/"frfinance_m39030_pg18_backup_restore_only.sh").read_text()
+    assert 'LEGACY_PRE_MIGRATION_BACKUP_OBSOLETE_USE_VERIFIED_POST_MIGRATION_BACKUP' in src
+    assert f'ROOT="{CANONICAL}"' in src
+    assert "pg_dump" in src  # archival, but installer exits before calling it
+    subprocess.run(["bash","-n",str(SCRIPTS/"frfinance_m39030_pg18_backup_restore_only.sh")],
+                   check=True,capture_output=True,text=True)
