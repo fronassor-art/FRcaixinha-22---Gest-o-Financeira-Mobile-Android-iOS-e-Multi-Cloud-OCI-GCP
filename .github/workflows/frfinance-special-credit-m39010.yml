@@ -39,7 +39,7 @@ jobs:
           FR_FINANCE_PIX_REAL: "OFF"
         run: python -m pytest -q backend/tests/test_special_credit_contract_ci.py
       - name: FastAPI RBAC e handoff Termux gated
-        run: python -m pytest -q backend/tests/test_m39020_special_credit_api_ci.py backend/tests/test_m39020_termux_handoff_ci.py backend/tests/test_m39026_credit_only_preflight_ci.py
+        run: python -m pytest -q backend/tests/test_m39020_special_credit_api_ci.py backend/tests/test_m39020_termux_handoff_ci.py backend/tests/test_m39026_credit_only_preflight_ci.py backend/tests/test_m39032_post_migration_readonly_ci.py
 
   frontend:
     name: React, tipos e build android-web
