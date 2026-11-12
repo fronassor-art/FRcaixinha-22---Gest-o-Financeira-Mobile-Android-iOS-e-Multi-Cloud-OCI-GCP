@@ -106,10 +106,12 @@ jobs:
           GRANT SELECT ON public.users,public.tenants,
             public.cycles,public.memberships TO frc_ai_app;
           SQL
-      - name: Executar migracoes 110 e 111 somente neste banco descartavel
+      - name: Executar SQL 110 e 111 em UMA transacao no PostgreSQL 18 descartavel
         run: |
-          psql -v ON_ERROR_STOP=1 -f backend/migrations/110_fr_finance_special_credit_offline.sql
-          psql -v ON_ERROR_STOP=1 -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
+          psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -c "SET frfinance.m39020_migration_mode='CI_DISPOSABLE'" \
+            -f backend/migrations/110_fr_finance_special_credit_offline.sql \
+            -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
       - name: Teste E2E SQL de integridade, permissoes e revogacao
         run: psql -v ON_ERROR_STOP=1 -f backend/tests/sql/m39020_special_credit_integrity_ci.sql
       - name: Verificar tabelas e RLS obrigatorios
