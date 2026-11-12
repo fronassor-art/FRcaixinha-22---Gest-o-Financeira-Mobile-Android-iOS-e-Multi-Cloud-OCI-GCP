@@ -13,7 +13,9 @@ from pathlib import Path
 import subprocess
 import sys
 
-PROJECT = Path.home() / "fr-finance"
+# Repositório ÚNICO: HOME do Termux nativo, nunca /root/fr-finance no Debian.
+# Este caminho Android é acessível no PRoot; não criar clone substituto.
+PROJECT = Path("/data/data/com.termux/files/home/fr-finance")
 BRANCH = "atualizacao-ai-studio-9b46a63187"
 DB = "frcaixinha_aistudio_dev"
 OWNER = "frc_ai_owner"
@@ -60,7 +62,7 @@ def git(*args: str) -> str:
 
 def verify_repo() -> None:
     if not PROJECT.is_dir() or not (PROJECT / ".git").exists():
-        raise RuntimeError("DEBIAN_REPOSITORY_NOT_FOUND")
+        raise RuntimeError("TERMUX_CANONICAL_REPOSITORY_NOT_FOUND_DO_NOT_CLONE")
     approved = os.environ.get("AI_STUDIO_APPROVED_SHA", "")
     if len(approved) != 40 or not all(c in "0123456789abcdef" for c in approved):
         raise RuntimeError("APPROVED_SHA_REQUIRED")
