@@ -18,6 +18,9 @@ for(const item of ['FR_FINANCE_ANDROID_RELEASE_PROFILE','VITE_API_URL',
  'release exige origem HTTPS pública','release não aceita Termux.']) {
   assert.ok(cap.includes(item),'missing Capacitor gate '+item);
 }
-assert.ok(gradle.includes('applicationIdSuffix ".aistudio"'));
+assert.ok(gradle.includes('applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"'));
+assert.ok(gradle.includes('FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC'));
+assert.ok(gradle.includes('if (releaseRequested && diagnosticParallel)'));
+assert.ok(gradle.includes('signingConfig signingConfigs.productionRelease'));
 assert.ok(!manifest.includes('android:usesCleartextTraffic="true"'));
 console.log('PASS M21700 release requires dedicated signing and public HTTPS');
