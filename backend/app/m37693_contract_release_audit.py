@@ -34,6 +34,13 @@ def _current_requirements(root: Path) -> tuple[list[dict], list[dict]]:
     items: list[dict] = []
     documents: list[dict] = []
     for family, path, expected_bullets, expected_sections in DOCS:
+        # M37693 audits a frozen 57-requirement baseline. The later M39010
+        # contractual annex has its OWN focused CI; do not silently expand or
+        # relabel the original 281 review tasks when product clauses evolve.
+        annex_prefix = (
+            "7. Crédito Especial/Extraordinário" if family == "CADERNO_MESTRE"
+            else "H. Crédito Especial/Extraordinário"
+        )
         raw = (root / path).read_bytes()
         content = raw.decode("utf-8")
         lines = content.splitlines()
@@ -41,6 +48,8 @@ def _current_requirements(root: Path) -> tuple[list[dict], list[dict]]:
         sections: set[str] = set()
         count = 0
         for line_number, line in enumerate(lines, 1):
+            if line.startswith("## ") and line[3:].strip().startswith(annex_prefix):
+                break  # New M39010 annex is tested separately, not 281 legacy tasks.
             if line.startswith("## "):
                 section = line[3:].strip()
                 sections.add(section)
