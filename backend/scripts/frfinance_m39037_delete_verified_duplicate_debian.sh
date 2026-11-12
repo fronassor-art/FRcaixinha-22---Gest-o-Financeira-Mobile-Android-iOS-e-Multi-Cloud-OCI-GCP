@@ -25,6 +25,20 @@ BRANCH="atualizacao-ai-studio-9b46a63187"
   die "Clone nao e diretorio fisico exato esperado"
 [[ "$(stat -Lc '%d:%i' "$CANON")" != "$(stat -Lc '%d:%i' "$EXTRA")" ]] ||
   die "Original e clone apontam para a MESMA pasta"
+# Clones precisam compartilhar MESMO remoto, não apenas o mesmo SHA.
+[[ "$(git -C "$CANON" remote get-url origin)" == \
+   "$(git -C "$EXTRA" remote get-url origin)" ]] ||
+  die "Remotos dos dois checkouts divergentes"
+# Não remover código em uso por processo cujo diretório de trabalho
+# seja o clone secundário. Parar serviços antigos explicitamente antes.
+for proc in /proc/[0-9]*; do
+  [[ -d "$proc" ]] || continue
+  cwd="$(readlink -e "$proc/cwd" 2>/dev/null || true)"
+  case "$cwd" in
+    "$EXTRA"|"$EXTRA"/*)
+      die "Processo ainda usa o clone: PID=${proc##*/}" ;;
+  esac
+done
 [[ "$(git -C "$CANON" rev-parse --show-toplevel)" == "$CANON" ]] ||
   die "Original nao coincide com raiz Git"
 [[ "$(git -C "$EXTRA" rev-parse --show-toplevel)" == "$EXTRA" ]] ||
