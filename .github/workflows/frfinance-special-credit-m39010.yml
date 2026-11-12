@@ -38,6 +38,8 @@ jobs:
           FR_FINANCE_SPECIAL_CREDIT_SANDBOX: "NO"
           FR_FINANCE_PIX_REAL: "OFF"
         run: python -m pytest -q backend/tests/test_special_credit_contract_ci.py
+      - name: FastAPI RBAC e handoff Termux gated
+        run: python -m pytest -q backend/tests/test_m39020_special_credit_api_ci.py backend/tests/test_m39020_termux_handoff_ci.py
 
   frontend:
     name: React, tipos e build android-web
@@ -52,6 +54,8 @@ jobs:
       - run: npm ci
       - name: TypeScript sem erros
         run: npm run lint
+      - name: Contrato UI campanhas e push Android sem envio
+        run: npx tsx src/tests/m39020_credit_push_ui_ci.test.ts
       - name: Build frontend
         run: npm run build
 
