@@ -29,7 +29,9 @@ def test_atomic_apply_is_not_called_by_preflight():
     pre=(BACKEND/"scripts/frfinance_m39020_termux_preflight.sh").read_text()
     for forbidden in ("--single-transaction","pg_dump --format","createdb ","git pull","git merge","psql -f"):
         assert forbidden not in pre
-    assert "local-readonly" in pre
+    assert "frfinance_m39026_credit_only_preflight.py" in pre
+    assert '"/root/.venvs/frcaixinha-aistudio/bin/python"' in pre
+    assert 'python3 backend/scripts/aistudio_migration_inventory.py local-readonly' not in pre
     assert "AI_STUDIO_APPROVED_SHA" in pre
     assert "M39020_DATABASE_MIGRATIONS=NONE" in pre
 
