@@ -56,12 +56,12 @@ jobs:
         run: npm run build
 
   sql-disposable:
-    name: Candidato SQL 110 - PostgreSQL descartavel, RLS FORCE
+    name: SQL 110-111 - PostgreSQL 18 descartavel, transicoes e RLS FORCE
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: only_ci_disposable
@@ -106,8 +106,12 @@ jobs:
           GRANT SELECT ON public.users,public.tenants,
             public.cycles,public.memberships TO frc_ai_app;
           SQL
-      - name: Executar migracao somente neste banco descartavel
-        run: psql -v ON_ERROR_STOP=1 -f backend/migrations/110_fr_finance_special_credit_offline.sql
+      - name: Executar migracoes 110 e 111 somente neste banco descartavel
+        run: |
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/110_fr_finance_special_credit_offline.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
+      - name: Teste E2E SQL de integridade, permissoes e revogacao
+        run: psql -v ON_ERROR_STOP=1 -f backend/tests/sql/m39020_special_credit_integrity_ci.sql
       - name: Verificar tabelas e RLS obrigatorios
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
@@ -138,4 +142,4 @@ jobs:
         run: |
           test "$PGDATABASE" = "frfinance_ci_credit"
           test "$PGPORT" = "5432"
-          ! grep -Ei '\b(insert into loans|update loans|pix_transfer|money_out)\b' backend/migrations/110_fr_finance_special_credit_offline.sql
+          ! grep -Ei '\b(insert into loans|update loans|pix_transfer|money_out)\b' backend/migrations/11{0,1}_*.sql
