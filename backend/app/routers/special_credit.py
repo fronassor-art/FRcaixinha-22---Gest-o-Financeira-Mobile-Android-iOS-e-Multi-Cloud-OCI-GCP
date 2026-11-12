@@ -107,7 +107,9 @@ class StrictModel(BaseModel):
 
 class GrantBatch(StrictModel):
     member_ids: list[UUID] = Field(min_length=1, max_length=50)
-    ceiling_brl: Decimal
+    # The current authoritative Price engine has a hard ceiling of R$ 50,000.
+    # Never promise a higher exception before a separately reviewed engine/policy migration.
+    ceiling_brl: Decimal = Field(gt=Decimal("0"), le=Decimal("50000.00"))
     expires_at: datetime
     reason: str = Field(min_length=20, max_length=2000)
     request_id: UUID
@@ -196,7 +198,7 @@ async def create_grants(tenant_id: UUID, payload: GrantBatch,
             "INSERT INTO public.special_credit_grants "
             "(tenant_id,cycle_id,member_id,created_by,ceiling_brl,reason,expires_at,request_id) "
             "VALUES($1,$2,$3,$4,$5,$6,$7,$8) "
-            "ON CONFLICT(tenant_id,created_by,request_id,member_id) DO NOTHING "
+            "ON CONFLICT DO NOTHING "
             "RETURNING id,ceiling_brl,expires_at,reason",
             tenant_id, cycle["id"], member_id, actor, ceiling, payload.reason.strip(),
             payload.expires_at, payload.request_id)
@@ -291,6 +293,11 @@ async def create_campaign(tenant_id: UUID, payload: CampaignDraft,
                 or old["body"] != payload.body.strip()
                 or old["expires_at"] != payload.expires_at):
             raise HTTPException(409, "Chave de idempotência incompatível.")
+        old_grants = await conn.fetch(
+            "SELECT grant_id FROM public.special_credit_recipients "
+            "WHERE campaign_id=$1 AND tenant_id=$2", old["id"], tenant_id)
+        if {r["grant_id"] for r in old_grants} != set(payload.grant_ids):
+            raise HTTPException(409, "Reutilização de campanha com destinatários diferentes.")
         return {"id":str(old["id"]),"status":"DRAFT_OR_EXISTING","created":False}
     campaign = row["id"]
     for grant in grants:
@@ -337,6 +344,8 @@ async def publish_campaign(tenant_id: UUID, campaign_id: UUID,
         "JOIN public.memberships m ON m.id=r.member_id "
         "WHERE r.campaign_id=$1 AND r.tenant_id=$2 "
         "AND (g.status <> 'ACTIVE' OR g.expires_at <= now() "
+        " OR g.expires_at < (SELECT c.expires_at FROM public.special_credit_campaigns c "
+        " WHERE c.id=$1 AND c.tenant_id=$2) "
         " OR m.status <> 'ATIVA' OR g.tenant_id<>r.tenant_id)", campaign_id, tenant_id)
     if invalid:
         raise HTTPException(409, "Uma das autorizações ou adesões está inválida.")
