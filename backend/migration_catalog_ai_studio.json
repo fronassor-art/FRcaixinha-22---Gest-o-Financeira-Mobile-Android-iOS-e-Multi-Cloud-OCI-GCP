@@ -1132,6 +1132,16 @@
       "inspect_object": "public.special_credit_grants, public.special_credit_campaigns, public.special_credit_recipients, public.special_credit_preferences, public.special_credit_outbox, public.special_credit_audit; RLS FORCE; never real dispatch",
       "local_evidence": null,
       "source_blob_sha": "33dfbf4e66337f263db39556f5d325903602b15b"
+    },
+    {
+      "id": "migrations:111",
+      "source_path": "backend/migrations/111_frfinance_special_credit_integrity_guards.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "sc_m39020_* BEFORE INSERT/UPDATE; tenant, cycle, permission and state transition guards",
+      "local_evidence": null,
+      "source_blob_sha": "cb8382a5c8bf992b643ee9503088a880793e0d00"
     }
   ]
 }
