@@ -114,3 +114,32 @@ def test_m39034_never_runs_post_migration_sql_or_external_network():
     assert "CREATE TABLE" not in script
     assert "DROP TABLE" not in script
     assert "INSERT INTO" not in script
+
+
+def test_m39043_direct_script_entrypoint_resolves_backend_imports():
+    """Reproduz o caso Termux: execução por CAMINHO sem PYTHONPATH/CWD no sys.path.
+
+    -I remove cwd e PYTHONPATH do interpretador para identificar regressões de
+    caminho; runpy executa o cabeçalho do script, mas NÃO seu main e não lê PG.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[1] / "scripts" /
+              "frfinance_m39034_rls_api_offline.py")
+    probe = (
+        "import runpy,sys; "
+        "runpy.run_path(sys.argv[1],run_name='__entrypoint_probe__'); "
+        "from backend.app.dependencies import AuthenticatedSession; "
+        "from backend.app.routers import special_credit; "
+        "assert AuthenticatedSession is not None; "
+        "assert special_credit.router is not None; "
+        "print('M39043_DIRECT_SCRIPT_IMPORT=PASS')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", probe, str(script)],
+        capture_output=True, text=True, timeout=20, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "M39043_DIRECT_SCRIPT_IMPORT=PASS" in result.stdout
