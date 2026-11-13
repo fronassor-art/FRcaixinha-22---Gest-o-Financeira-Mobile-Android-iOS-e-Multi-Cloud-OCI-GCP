@@ -1,5 +1,17 @@
 # FR Finance M39066 — Master: preços mensal e anual livres e independentes
 
+> **Substituição operacional pela M39067 (13/11/2026):** as instruções
+> abaixo para aplicar SQL112 isoladamente são **históricas e não devem
+> ser executadas**. O instalador `frfinance_m39066_master_prices_sql112_termux.py --apply`
+> está bloqueado. O pacote comercial aprovado exige SQL112+SQL113 juntas,
+> após `--inspect` e autorização interativa, via
+> `backend/scripts/frfinance_m39067_apply_saas_prices_promotions_pg18.py`.
+> A versão atual do Caderno e Contrato Técnico Mestre está em
+> `docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md` e
+> `docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md`.
+> Nenhuma migração do PG18 original foi feita pelo GitHub/CI.
+
+
 ## Pedido e estado
 
 - O APK M39065 foi atualizado e a autenticação local passou `TEST_MODE` e
