@@ -70,6 +70,83 @@ GRANT INSERT(campaign_id,revision,plan_tier,billing_period,base_price_version_id
  promotional_price,audience,title,benefit_description,starts_at,ends_at,
  state,reason,created_by) ON public.platform_saas_promotion_revisions TO frcaixinha_app_role;
 
+-- Invariante de append no proprio PostgreSQL: API nao e autoridade exclusiva.
+-- Nenhuma revisao publicada pode mudar campos comerciais de seu rascunho.
+CREATE FUNCTION public.frfinance_guard_saas_promotion_append()
+RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp
+AS $m39067_guard$
+DECLARE
+ older public.platform_saas_promotion_revisions%ROWTYPE;
+ linked_tier varchar(20);
+BEGIN
+ SELECT v.plan_tier INTO linked_tier
+ FROM public.platform_license_price_versions v
+ WHERE v.id=NEW.base_price_version_id;
+ IF linked_tier IS DISTINCT FROM NEW.plan_tier THEN
+   RAISE EXCEPTION 'M39067_BASE_PRICE_VERSION_PLAN_MISMATCH';
+ END IF;
+
+ IF NEW.revision=1 THEN
+   IF NEW.state<>'DRAFT' THEN
+     RAISE EXCEPTION 'M39067_FIRST_VERSION_MUST_BE_DRAFT';
+   END IF;
+ ELSE
+   SELECT * INTO older FROM public.platform_saas_promotion_revisions
+    WHERE campaign_id=NEW.campaign_id
+    ORDER BY revision DESC LIMIT 1;
+   IF older.id IS NULL OR NEW.revision<>older.revision+1 THEN
+     RAISE EXCEPTION 'M39067_REVISION_NOT_SEQUENTIAL';
+   END IF;
+   IF ROW(NEW.plan_tier,NEW.billing_period,NEW.base_price_version_id,
+       NEW.promotional_price,NEW.audience,NEW.title,
+       NEW.benefit_description,NEW.starts_at,NEW.ends_at)
+      IS DISTINCT FROM
+      ROW(older.plan_tier,older.billing_period,older.base_price_version_id,
+       older.promotional_price,older.audience,older.title,
+       older.benefit_description,older.starts_at,older.ends_at)
+   THEN
+     RAISE EXCEPTION 'M39067_REVIEW_CANNOT_REWRITE_COMMERCIAL_SNAPSHOT';
+   END IF;
+   IF NOT ((older.state='DRAFT' AND NEW.state='PUBLISHED') OR
+           (older.state='PUBLISHED' AND NEW.state='CANCELED')) THEN
+     RAISE EXCEPTION 'M39067_INVALID_CAMPAIGN_TRANSITION';
+   END IF;
+ END IF;
+
+ IF NEW.state='PUBLISHED' THEN
+   IF NEW.ends_at<=now() THEN
+     RAISE EXCEPTION 'M39067_EXPIRED_PROMOTION_CANNOT_PUBLISH';
+   END IF;
+   PERFORM pg_advisory_xact_lock(39068,hashtext(NEW.plan_tier||':'||NEW.billing_period));
+   IF EXISTS (
+     SELECT 1 FROM (
+       SELECT DISTINCT ON (campaign_id) campaign_id,revision,plan_tier,
+         billing_period,starts_at,ends_at,state
+       FROM public.platform_saas_promotion_revisions
+       ORDER BY campaign_id,revision DESC
+     ) latest
+     WHERE latest.campaign_id<>NEW.campaign_id
+       AND latest.state='PUBLISHED'
+       AND latest.plan_tier=NEW.plan_tier
+       AND latest.billing_period=NEW.billing_period
+       AND latest.ends_at>NEW.starts_at
+       AND latest.starts_at<NEW.ends_at
+   ) THEN
+     RAISE EXCEPTION 'M39067_OVERLAPPING_PUBLISHED_PROMOTION';
+   END IF;
+ END IF;
+ RETURN NEW;
+END
+$m39067_guard$;
+
+CREATE TRIGGER frfinance_guard_saas_promo_append
+ BEFORE INSERT ON public.platform_saas_promotion_revisions
+ FOR EACH ROW EXECUTE FUNCTION public.frfinance_guard_saas_promotion_append();
+
+REVOKE ALL ON FUNCTION public.frfinance_guard_saas_promotion_append()
+ FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role;
+
 -- Ponte de leitura limitada: administradores novos, autenticação do tenant validada.
 -- Não entrega rascunhos/cancelamentos nem dados de outros administradores.
 -- Não emite convite, cobrança, desconto automático, licença ou pagamento.
