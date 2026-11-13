@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MasterSaasPortfolioView } from './MasterSaasPortfolioView';
+import { MasterSaasPromotionsPanel, NewAdminSaasOffersPanel } from './SaasPromotionsPanel';
 import { financialApi } from '../services/financialApiService';
 import {
   ShieldCheck,
@@ -222,6 +223,8 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
           'Consulta indisponível. Nenhuma licença será presumida ativa.'}
         </p>}
       </div>
+      {currentRole === 'TENANT_ADMIN' && state.currentTenantId &&
+        <NewAdminSaasOffersPanel tenantId={state.currentTenantId} />}
       <p className="mt-3 text-xs text-amber-950">
         Novas contratações, pagamentos e ativações continuam desabilitados
         até autorização e integração real dos provedores.
@@ -255,6 +258,8 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
   return (
     <div className="space-y-6">
       <MasterSaasPortfolioView userId={state.currentUserId ?? null}/>
+      <MasterSaasPromotionsPanel plans={catalog?.plans || []}
+        actorId={state.currentUserId ?? null} />
       {/* Header com Regras Comerciais */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
