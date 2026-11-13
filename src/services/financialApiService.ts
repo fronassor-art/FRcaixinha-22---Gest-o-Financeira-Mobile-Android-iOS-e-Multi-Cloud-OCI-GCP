@@ -402,7 +402,7 @@ class FinancialApiService {
       status: string;
       version_id: string | null;
       monthly_price: string | null;
-      annual_price_computed: string | null;
+      annual_price: string | null;
       updated_at: string | null;
     }>;
   }> {
@@ -476,11 +476,16 @@ class FinancialApiService {
   public async updateMasterLicensePrice(
     tier: 'ESSENCIAL' | 'INTERMEDIARIO',
     monthly_price: number,
+    annual_price: number,
+    expected_version_id: string,
     reason: string
   ): Promise<{ status: string; version_id: string; monthly_price: string;
-    annual_price_computed: string }> {
+    annual_price: string; billing_status: 'OFF_NO_PROVIDER_NO_CHARGE' }> {
     return this.request('/api/v1/master/license-prices', {
-      method: 'POST', body: JSON.stringify({ tier, monthly_price, reason }),
+      method: 'POST',
+      body: JSON.stringify({
+        tier, monthly_price, annual_price, expected_version_id, reason,
+      }),
     });
   }
 
