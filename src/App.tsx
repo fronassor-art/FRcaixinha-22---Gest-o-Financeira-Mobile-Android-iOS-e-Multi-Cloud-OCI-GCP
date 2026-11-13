@@ -56,6 +56,10 @@ import { NotificationsView } from './components/NotificationsView';
 import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
 import { authService, AuthenticatedUser } from './services/authService';
 import { createForegroundSessionGuard } from './services/sessionResumeGuard';
+import {
+  discardMasterCampaignDraft, hasSavedMasterCampaignDraft,
+  masterCampaignDraftStorage,
+} from './services/masterCampaignDraftPersistence';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => appStore.getState());
@@ -164,10 +168,22 @@ export default function App() {
     appStore.setAuthenticatedContext(user);
     setSecurityOpen(false);
     setMoreOpen(false);
-    setTabHistory(startTabHistory(initialRoleTab(user.role)));
+    // Restaurar a tela da campanha somente depois de um NOVO login Master
+    // autenticado pelo servidor. Nenhum token ou permissão é guardado offline.
+    const restoreCampaign = user.role === 'MASTER' &&
+      hasSavedMasterCampaignDraft(masterCampaignDraftStorage(), user.id);
+    setTabHistory(startTabHistory(
+      restoreCampaign ? 'LICENCAS' : initialRoleTab(user.role)
+    ));
   };
 
   const handleLogout = async () => {
+    // Logout explícito elimina o formulário comercial deste Master.
+    // Alternar de aplicativo NÃO faz logout nem elimina rascunhos.
+    const outgoing = authService.getUser();
+    if (outgoing?.role === 'MASTER') {
+      discardMasterCampaignDraft(masterCampaignDraftStorage(), outgoing.id);
+    }
     await authService.logout();
     setAuthenticatedUser(null);
     appStore.clearAuthenticatedContext();
@@ -207,19 +223,10 @@ export default function App() {
     );
   }
 
-  // Enquanto volta do segundo plano, nunca expor dados de um perfil cuja
-  // autorização ainda não foi revalidada pelo servidor.
-  if (resumeValidationPending) {
-    return (
-      <main role="status" aria-live="polite"
-        className="min-h-screen flex items-center justify-center bg-[#edf5ed] p-6">
-        <div className="max-w-md rounded-2xl border border-[#b7cbb8] bg-white p-6 text-center text-[#17452f]">
-          <strong className="block text-lg">Verificando sua sessão</strong>
-          <p className="mt-2 text-sm">Confirmando o acesso seguro com o servidor.</p>
-        </div>
-      </main>
-    );
-  }
+  // M39075: NÃO retornar outro componente ao validar foreground.
+  // A antiga return condicional desmontava o formulário e apagava os campos.
+  // O conteúdo permanece montado, mas inacessível com inert + aria-hidden
+  // até o servidor confirmar a sessão. Se expirar, a tela de login substitui-o.
 
   // Itens de navegação conforme papel autenticado (Cláusula 11.1)
   const renderNavTabs = () => {
@@ -264,7 +271,19 @@ export default function App() {
     navItems.some(item => item.id === activeTab) ? activeTab : null;
 
   return (
-    <div className="fr-app-shell min-w-0 max-w-full bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e]">
+    <>
+      {resumeValidationPending && (
+        <main role="status" aria-live="polite"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#edf5ed] p-6">
+          <div className="max-w-md rounded-2xl border border-[#b7cbb8] bg-white p-6 text-center text-[#17452f]">
+            <strong className="block text-lg">Verificando sua sessão</strong>
+            <p className="mt-2 text-sm">Confirmando o acesso seguro com o servidor.</p>
+          </div>
+        </main>
+      )}
+      <div aria-hidden={resumeValidationPending} inert={resumeValidationPending}
+        className={'fr-app-shell min-w-0 max-w-full bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e]' +
+          (resumeValidationPending ? ' invisible pointer-events-none select-none' : '')}>
       {/* Top Navbar */}
       <Navbar
         state={state}
@@ -558,6 +577,7 @@ export default function App() {
           </div>
         </div>
       </MobileDevicePreviewModal>
-    </div>
+      </div>
+    </>
   );
 }
