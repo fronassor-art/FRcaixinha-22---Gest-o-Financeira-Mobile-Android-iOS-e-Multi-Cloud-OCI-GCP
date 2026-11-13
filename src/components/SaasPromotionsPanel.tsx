@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { financialApi } from '../services/financialApiService';
 import { formatBRL } from '../services/financialEngine';
+import {CampaignDraftForm, EMPTY_MASTER_CAMPAIGN_DRAFT,
+  discardMasterCampaignDraft, hasDraftContent, masterCampaignDraftStorage,
+  readMasterCampaignDraft, saveMasterCampaignDraft,
+} from '../services/masterCampaignDraftPersistence';
 
 type ActiveTier = 'ESSENCIAL' | 'INTERMEDIARIO';
 type Period = 'MONTHLY' | 'ANNUAL';
@@ -17,16 +21,57 @@ export const MasterSaasPromotionsPanel: React.FC<{
 }> = ({ plans, actorId }) => {
   const [items, setItems] = useState<Campaign[]>([]);
   const [status, setStatus] = useState<'loading'|'ready'|'error'>('loading');
-  const [tier, setTier] = useState<ActiveTier>('ESSENCIAL');
-  const [period, setPeriod] = useState<Period>('MONTHLY');
-  const [priceText, setPriceText] = useState('');
-  const [title, setTitle] = useState('');
-  const [benefit, setBenefit] = useState('');
-  const [startsAt, setStartsAt] = useState('');
-  const [endsAt, setEndsAt] = useState('');
-  const [reason, setReason] = useState('');
+  // M39075: somente formulario SaaS do Master, sem credenciais ou dados de membros.
+  const [draftScope,setDraftScope] = useState(actorId);
+  const [form,setForm] = useState<CampaignDraftForm>(() =>
+    readMasterCampaignDraft(masterCampaignDraftStorage(),actorId) ||
+    {...EMPTY_MASTER_CAMPAIGN_DRAFT}
+  );
+  const [restored,setRestored] = useState(() =>
+    readMasterCampaignDraft(masterCampaignDraftStorage(),actorId) !== null
+  );
+  const [savedLocally,setSavedLocally] = useState<boolean|null>(null);
+  const {tier, period, priceText, title, benefit, startsAt, endsAt, reason} = form;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    // Um login Master diferente nao pode visualizar rascunhos de outro ator.
+    const saved=readMasterCampaignDraft(masterCampaignDraftStorage(),actorId);
+    setForm(saved || {...EMPTY_MASTER_CAMPAIGN_DRAFT});
+    setRestored(saved !== null);
+    setSavedLocally(null);
+    setDraftScope(actorId);
+  }, [actorId]);
+
+  useEffect(() => {
+    if (!restored || draftScope !== actorId) return;
+    const frame=window.requestAnimationFrame(() => {
+      document.getElementById('frfinance-master-saas-promotions')?.scrollIntoView({
+        block: 'start', behavior: 'instant',
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [restored,draftScope,actorId]);
+
+  const changeField = (field: keyof CampaignDraftForm, value: string) => {
+    if (!actorId || draftScope !== actorId || busy) return;
+    const updated={...form,[field]:value};
+    setForm(updated);
+    // Persistencia sincrona antes de Android suspender a WebView.
+    setSavedLocally(saveMasterCampaignDraft(
+      masterCampaignDraftStorage(),actorId,updated
+    ));
+  };
+
+  const discardLocal = () => {
+    if (!actorId || busy) return;
+    discardMasterCampaignDraft(masterCampaignDraftStorage(),actorId);
+    setForm({...EMPTY_MASTER_CAMPAIGN_DRAFT});
+    setRestored(false);
+    setSavedLocally(null);
+    setMessage('Preenchimento local descartado. Nenhuma campanha publicada foi alterada.');
+  };
 
   const load = useCallback(async () => {
     setStatus('loading');
