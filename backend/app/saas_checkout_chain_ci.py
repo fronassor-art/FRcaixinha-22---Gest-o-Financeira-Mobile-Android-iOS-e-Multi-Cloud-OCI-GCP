@@ -164,7 +164,7 @@ def review_checkout(
             or not _cents(offer.monthly_cents)
             or not _cents(offer.annual_cents)
             or not _cents(offer.expected_cents)
-            or offer.annual_cents != offer.monthly_cents * 10
+            # Preco anual independente conforme SQL112; esperado vem da versao.
             or offer.expected_cents != (
                 offer.monthly_cents if offer.period == "MONTHLY"
                 else offer.annual_cents)):
