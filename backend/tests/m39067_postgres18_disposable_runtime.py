@@ -8,6 +8,7 @@ real de generated->ordinary column, trigger e função de divulgação interna.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import os
 from pathlib import Path
@@ -133,6 +134,8 @@ def run(conn) -> None:
     ).fetchone()[0] == Decimal("550.11")
     print("M39067_DISPOSABLE_INDEPENDENT_MONTHLY_ANNUAL=PASS")
 
+    fixed_start=datetime.now(timezone.utc)-timedelta(days=1)
+    fixed_end=fixed_start+timedelta(days=21)
     draft_sql=(
         "INSERT INTO public.platform_saas_promotion_revisions "
         "(campaign_id,revision,plan_tier,billing_period,base_price_version_id,"
@@ -140,11 +143,11 @@ def run(conn) -> None:
         "state,reason,created_by) "
         "VALUES (%s,%s,%s,%s,%s,%s,'NEW_ADMIN_ONLY',"
         "'Oferta de entrada','Desconto de homologacao para novos admins',"
-        "now()-interval '1 day',now()+interval '20 days',%s,"
+        "%s,%s,%s,"
         "'Aprovacao comercial com motivo suficiente',%s)"
     )
     def args(cam,rev,tier="ESSENCIAL",period="ANNUAL",ver=newer,price="480.33",state="DRAFT"):
-        return (cam,rev,tier,period,ver,price,state,admin)
+        return (cam,rev,tier,period,ver,price,fixed_start,fixed_end,state,admin)
     conn.execute(draft_sql,args(campaign,1))
     expect_pg_exception(conn,draft_sql,args(uuid4(),1,state="PUBLISHED"),"DIRECT_PUBLISH")
     expect_pg_exception(conn,draft_sql,args(uuid4(),1,tier="INTERMEDIARIO"),"TIER_VERSION_MISMATCH")
