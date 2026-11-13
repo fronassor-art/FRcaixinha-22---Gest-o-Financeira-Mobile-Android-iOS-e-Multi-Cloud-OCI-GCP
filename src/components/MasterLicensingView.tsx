@@ -125,6 +125,9 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
   // Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25)
   const [editingTier, setEditingTier] = useState<LicensePlanTier | null>(null);
   const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(0);
+  const [newAnnualPrice, setNewAnnualPrice] = useState<number>(0);
+  const [editingVersionId, setEditingVersionId] = useState<string | null>(null);
+  const [priceSaving, setPriceSaving] = useState(false);
   const [changeReason, setChangeReason] = useState<string>('Reajuste comercial anual');
 
   // Simulador de Upgrade Pro-Rata
@@ -134,15 +137,35 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
   const handleSavePrice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTier || editingTier === 'AMPLIADO' || !isMaster) return;
+    if (!editingTier || editingTier === 'AMPLIADO' || !isMaster ||
+        !editingVersionId || priceSaving) return;
+    const validCurrency = (value: number) => Number.isFinite(value) &&
+      value > 0 && value <= 999999.99 && Number.isInteger(Math.round(value * 100)) &&
+      Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
+    if (!validCurrency(newMonthlyPrice) || !validCurrency(newAnnualPrice) ||
+        changeReason.trim().length < 15) {
+      alert('Informe os dois preços positivos em centavos e uma justificativa de 15 caracteres.');
+      return;
+    }
+    setPriceSaving(true);
     try {
-      const response = await financialApi.updateMasterLicensePrice(editingTier, newMonthlyPrice, changeReason);
-      if (response.status !== 'VERSION_PERSISTED_NO_BILLING') throw new Error('Persistência não confirmada');
+      const response = await financialApi.updateMasterLicensePrice(
+        editingTier, newMonthlyPrice, newAnnualPrice, editingVersionId,
+        changeReason.trim(),
+      );
+      if (response.status !== 'VERSION_PERSISTED_NO_BILLING' ||
+          response.billing_status !== 'OFF_NO_PROVIDER_NO_CHARGE') {
+        throw new Error('Persistência não confirmada');
+      }
       setEditingTier(null);
+      setEditingVersionId(null);
       setRevision(n => n + 1);
-      alert('Nova versão de preço registrada no PostgreSQL. Nenhuma cobrança ou assinatura foi alterada.');
+      alert('Mensalidade e anuidade registradas como nova versão no PostgreSQL. Nenhuma cobrança ou assinatura foi alterada.');
     } catch {
-      alert('Não foi possível registrar o preço no servidor. Nenhum sucesso foi declarado.');
+      setRevision(n => n + 1);
+      alert('Preço não confirmado. O catálogo pode ter mudado: revise os valores atualizados antes de tentar novamente.');
+    } finally {
+      setPriceSaving(false);
     }
   };
 
@@ -151,7 +174,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
     ...p,
     plan_tier: p.tier,
     monthly_price: p.monthly_price ? Number(p.monthly_price) : 0,
-    annual_price_computed: p.annual_price_computed ? Number(p.annual_price_computed) : 0,
+    annual_price: p.annual_price ? Number(p.annual_price) : 0,
   })) || [];
   const currentEssencialPrice = prices.find(p => p.tier === 'ESSENCIAL');
   const currentInterPrice = prices.find(p => p.tier === 'INTERMEDIARIO');
@@ -242,7 +265,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
             </span>
           </div>
           <p className="text-xs text-slate-600 mt-1">
-            Receitas de licença são exclusivas da plataforma e segregadas do dinheiro dos membros (Cláusula 1.7 e 3.11). O valor anual é rigorosamente <strong>10 × valor mensal</strong> (2 meses de desconto).
+            Receitas de licença são exclusivas da plataforma e segregadas do dinheiro dos membros (Cláusula 1.7 e 3.11). Os preços <strong>mensal e anual são independentes</strong> e editáveis apenas pelo Master. Cada alteração cria uma nova versão, sem reajustar contratos antigos.
           </p>
         </div>
 
@@ -306,7 +329,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
                 <span className="text-xs text-slate-500">/mês</span>
               </div>
               <div className="text-xs text-emerald-700 font-semibold mt-1">
-                Anual: {formatBRL(currentEssencialPrice?.annual_price_computed || 0)} / ano (10x mensal)
+                Anual: {formatBRL(currentEssencialPrice?.annual_price || 0)} / ano (definido pelo Master)
               </div>
             </div>
 
@@ -340,7 +363,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
                 className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Editar Preço Mensal (Master)</span>
+                <span>Editar Preços Mensal e Anual (Master)</span>
               </button>
             ) : (
               <div className="text-center text-xs text-slate-500 py-2">Plano Básico Homologado</div>
@@ -374,7 +397,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
                 <span className="text-xs text-slate-500">/mês</span>
               </div>
               <div className="text-xs text-emerald-700 font-semibold mt-1">
-                Anual: {formatBRL(currentInterPrice?.annual_price_computed || 0)} / ano (10x mensal)
+                Anual: {formatBRL(currentInterPrice?.annual_price || 0)} / ano (definido pelo Master)
               </div>
             </div>
 
@@ -408,7 +431,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
                 className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Editar Preço Mensal (Master)</span>
+                <span>Editar Preços Mensal e Anual (Master)</span>
               </button>
             ) : (
               <div className="text-center text-xs font-bold text-emerald-700 py-2">Plano Contratado Atualmente</div>
@@ -434,7 +457,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
             <div className="mt-4">
               <div className="flex items-baseline gap-1 text-slate-500">
-                <span className="text-2xl font-bold">R$ 129,90</span>
+                <span className="text-lg font-bold">Sem preço publicado</span>
                 <span className="text-xs">/mês (indicativo)</span>
               </div>
               <div className="text-xs text-slate-500 mt-1">Anual: R$ 1.299,00 / ano</div>
@@ -512,7 +535,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
             <form onSubmit={handleSavePrice} className="space-y-4 text-xs">
               <div>
                 <label htmlFor="master-license-monthly-price" className="block font-semibold text-slate-700 mb-1">
-                  Novo Valor Mensal (R$) <span className="text-emerald-600 font-normal">(Único campo editável)</span>
+                  Novo Valor Mensal (R$) <span className="text-emerald-600 font-normal">(editável)</span>
                 </label>
                 <input
                   id="master-license-monthly-price"
@@ -532,18 +555,23 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-500 mb-1">
-                  Valor Anual Calculado Automaticamente (R$) <span className="text-slate-400 font-normal">(Leitura obrigatória)</span>
+                <label htmlFor="master-license-annual-price" className="block font-semibold text-slate-700 mb-1">
+                  Novo Valor Anual (R$) <span className="text-emerald-600 font-normal">(editável independentemente)</span>
                 </label>
                 <input
-                  type="text"
-                  readOnly
-                  disabled
-                  value={formatBRL(roundCents(newMonthlyPrice * 10))}
-                  className="w-full text-base font-mono font-bold px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
+                  id="master-license-annual-price"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0.01"
+                  max="999999.99"
+                  required
+                  value={newAnnualPrice}
+                  onChange={e => setNewAnnualPrice(Number(e.target.value))}
+                  className="w-full text-lg font-bold px-3 py-2 border border-slate-300 rounded-lg text-slate-900"
                 />
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  Regra AT-25: Proibido editar a anuidade diretamente; sempre 10 × mensalidade.
+                <span className="text-[10px] text-slate-600 mt-1 block">
+                  A anuidade é definida pelo Master; nenhum desconto ou multiplicador automático é imposto.
                 </span>
               </div>
 
