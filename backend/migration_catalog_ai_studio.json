@@ -1161,7 +1161,7 @@
       "do_not_apply_source_to_termux": false,
       "inspect_object": "public.platform_saas_promotion_revisions (RLS FORCE, immutable revisions); public.frfinance_saas_new_admin_published_promotions() gated eligibility, no billing",
       "local_evidence": null,
-      "source_blob_sha": "8839665d9801ead9d9baa340c2db8ec2a7e56d59"
+      "source_blob_sha": "33c94b871602a8ad93f86bd7a724a8638124ff0f"
     }
   ]
 }
