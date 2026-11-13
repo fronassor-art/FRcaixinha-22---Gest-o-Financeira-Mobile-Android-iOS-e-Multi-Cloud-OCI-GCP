@@ -22,7 +22,7 @@ from backend.scripts.frfinance_m39066_master_prices_sql112_termux import (
 
 SQL112 = ROOT / "backend/migrations/112_frfinance_master_independent_saas_prices.sql"
 SQL113 = ROOT / "backend/migrations/113_frfinance_saas_new_admin_promotions.sql"
-SQL113_BLOB = "8839665d9801ead9d9baa340c2db8ec2a7e56d59"
+SQL113_BLOB = "33c94b871602a8ad93f86bd7a724a8638124ff0f"
 
 
 def validate_sql113_hash() -> None:
@@ -95,6 +95,7 @@ def apply_in_single_transaction(conn, count_before: int) -> None:
         "ALTER COLUMN annual_price DROP EXPRESSION" in ddl112
         and "CREATE TABLE public.platform_saas_promotion_revisions" in ddl113
         and "CREATE FUNCTION public.frfinance_saas_new_admin_published_promotions()" in ddl113
+        and "CREATE TRIGGER frfinance_guard_saas_promo_append" in ddl113
         and "FORCE ROW LEVEL SECURITY" in ddl113
     )
     if not required:
