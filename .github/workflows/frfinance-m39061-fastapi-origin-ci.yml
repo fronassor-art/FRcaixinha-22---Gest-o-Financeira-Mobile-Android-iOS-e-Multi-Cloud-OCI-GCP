@@ -1,0 +1,36 @@
+name: FR Finance M39061 existing FastAPI launcher identity offline CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m39061_existing_fastapi_process_origin.py'
+      - 'backend/tests/test_m39061_existing_fastapi_process_origin_ci.py'
+      - '.github/workflows/frfinance-m39061-fastapi-origin-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-launcher-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest==8.3.4
+      - name: Fake proc/network probes only, no live process changes
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39061_existing_fastapi_process_origin_ci.py
+          echo 'M39061_CI_REAL_PROCESS_INSPECTION=NONE'
+          echo 'M39061_PROCESS_START_STOP=NONE'
+          echo 'M39061_REAL_SQL=NONE'
+          echo 'M39061_PIX_REAL=OFF'
