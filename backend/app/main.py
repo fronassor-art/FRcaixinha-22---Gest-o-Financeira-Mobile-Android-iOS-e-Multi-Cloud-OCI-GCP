@@ -80,6 +80,10 @@ app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(tenants.router, prefix=settings.API_V1_STR)
 app.include_router(invitations.router, prefix=settings.API_V1_STR)
 app.include_router(master.router, prefix=settings.API_V1_STR)
+# M39067: promoções comerciais SaaS isoladas das campanhas de crédito.
+from .routers import saas_promotions as _saas_promotions
+app.include_router(_saas_promotions.master_router, prefix=settings.API_V1_STR)
+app.include_router(_saas_promotions.tenant_router, prefix=settings.API_V1_STR)
 app.include_router(contributions.router, prefix=settings.API_V1_STR)
 app.include_router(cycle_contribution_price.router, prefix=settings.API_V1_STR)
 app.include_router(member_cycle_previews.router, prefix=settings.API_V1_STR)
