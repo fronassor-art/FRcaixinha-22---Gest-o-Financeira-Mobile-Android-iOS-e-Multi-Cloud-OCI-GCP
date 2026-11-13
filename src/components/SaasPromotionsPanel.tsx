@@ -107,7 +107,7 @@ export const MasterSaasPromotionsPanel: React.FC<{
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (busy) return;
+    if (busy || !actorId || draftScope !== actorId) return;
     const plan = plans.find(p => p.tier === tier && p.status === 'ACTIVE');
     const price = Number(priceText);
     const start = new Date(startsAt), end = new Date(endsAt);
@@ -132,6 +132,10 @@ export const MasterSaasPromotionsPanel: React.FC<{
       });
       if (result.status !== 'DRAFT_PERSISTED_NO_BILLING')
         throw new Error('Rascunho não persistido');
+      discardMasterCampaignDraft(masterCampaignDraftStorage(),actorId);
+      setForm({...EMPTY_MASTER_CAMPAIGN_DRAFT});
+      setRestored(false);
+      setSavedLocally(null);
       setMessage('Rascunho gravado. Publique separadamente para torná-lo visível aos novos administradores elegíveis.');
       await load();
     } catch { setMessage('Rascunho não confirmado. Atualize o catálogo e revise os dados.'); }
@@ -159,8 +163,15 @@ export const MasterSaasPromotionsPanel: React.FC<{
     finally { setBusy(false); }
   };
 
+  if (draftScope !== actorId) {
+    return <section role="status" className="rounded-xl border bg-white p-4">
+      Confirmando identidade para recuperar o preenchimento da campanha...
+    </section>;
+  }
+
   return (
-    <section className="rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6 space-y-4">
+    <section id="frfinance-master-saas-promotions"
+      className="rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6 space-y-4">
       <header>
         <h2 className="font-extrabold text-lg text-emerald-900">Promoções SaaS — Administrador Master</h2>
         <p className="text-sm text-slate-700">
@@ -170,14 +181,14 @@ export const MasterSaasPromotionsPanel: React.FC<{
       </header>
       <form onSubmit={create} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <label className="block">Plano
-          <select aria-label="Plano da promoção" value={tier} onChange={e=>setTier(e.target.value as ActiveTier)}
+          <select aria-label="Plano da promoção" value={tier} onChange={e=>changeField('tier',e.target.value)}
             className="block mt-1 w-full rounded-lg border p-2">
             <option value="ESSENCIAL">Essencial</option>
             <option value="INTERMEDIARIO">Intermediário</option>
           </select>
         </label>
         <label className="block">Período
-          <select aria-label="Período promocional" value={period} onChange={e=>setPeriod(e.target.value as Period)}
+          <select aria-label="Período promocional" value={period} onChange={e=>changeField('period',e.target.value)}
             className="block mt-1 w-full rounded-lg border p-2">
             <option value="MONTHLY">Mensal</option>
             <option value="ANNUAL">Anual</option>
@@ -185,7 +196,7 @@ export const MasterSaasPromotionsPanel: React.FC<{
         </label>
         <label className="block">Preço promocional (R$)
           <input aria-label="Preço promocional" type="number" inputMode="decimal" min="0.01" max="999999.99"
-            step="0.01" required value={priceText} onChange={e=>setPriceText(e.target.value)}
+            step="0.01" required value={priceText} onChange={e=>changeField('priceText',e.target.value)}
             className="block mt-1 w-full rounded-lg border p-2" />
         </label>
         <label className="block">Público
@@ -194,25 +205,25 @@ export const MasterSaasPromotionsPanel: React.FC<{
         </label>
         <label className="block">Início da vigência (horário do celular)
           <input type="datetime-local" aria-label="Início da promoção" required value={startsAt}
-            onChange={e=>setStartsAt(e.target.value)}
+            onChange={e=>changeField('startsAt',e.target.value)}
             className="block mt-1 w-full rounded-lg border p-2" />
         </label>
         <label className="block">Fim da vigência (horário do celular)
           <input type="datetime-local" aria-label="Fim da promoção" required value={endsAt}
-            onChange={e=>setEndsAt(e.target.value)}
+            onChange={e=>changeField('endsAt',e.target.value)}
             className="block mt-1 w-full rounded-lg border p-2" />
         </label>
         <label className="block sm:col-span-2">Título da campanha
           <input type="text" minLength={5} maxLength={120} required value={title}
-            onChange={e=>setTitle(e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
+            onChange={e=>changeField('title',e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
         </label>
         <label className="block sm:col-span-2">Benefício e condições
           <textarea minLength={10} maxLength={500} required value={benefit}
-            onChange={e=>setBenefit(e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
+            onChange={e=>changeField('benefit',e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
         </label>
         <label className="block sm:col-span-2">Justificativa comercial auditável
           <textarea minLength={15} maxLength={500} required value={reason}
-            onChange={e=>setReason(e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
+            onChange={e=>changeField('reason',e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
         </label>
         <button type="submit" disabled={busy || !plans.some(p=>p.tier===tier && p.status==='ACTIVE' && p.version_id)}
           className="rounded-lg bg-emerald-800 text-white font-semibold px-4 py-3 disabled:opacity-50">
