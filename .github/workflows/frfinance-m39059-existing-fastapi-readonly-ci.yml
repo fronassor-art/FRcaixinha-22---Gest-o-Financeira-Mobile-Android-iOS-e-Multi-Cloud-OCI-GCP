@@ -1,0 +1,37 @@
+name: FR Finance M39059 FastAPI anonymous boundary CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m39059_existing_fastapi_anonymous_readonly.py'
+      - 'backend/tests/test_m39059_existing_fastapi_anonymous_readonly_ci.py'
+      - '.github/workflows/frfinance-m39059-existing-fastapi-readonly-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-api-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install pytest only
+        run: python -m pip install pytest==8.3.4
+      - name: Check HTTP and guards with synthetic answers only
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39059_existing_fastapi_anonymous_readonly_ci.py
+          echo 'M39059_NETWORK=NONE'
+          echo 'M39059_DATABASE_WRITES=NONE'
+          echo 'M39059_LOGIN=NONE'
+          echo 'M39059_PIX_REAL=OFF'
