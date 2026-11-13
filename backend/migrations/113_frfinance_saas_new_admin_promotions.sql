@@ -80,7 +80,7 @@ RETURNS TABLE(
  starts_at timestamptz,ends_at timestamptz,revision integer,
  base_price_version_id uuid
 )
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp
 AS $m39067_read$
 DECLARE
  actor uuid;
