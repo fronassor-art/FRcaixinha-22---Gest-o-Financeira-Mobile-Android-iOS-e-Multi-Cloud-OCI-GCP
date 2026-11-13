@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import stat
 import sys
 
 from backend.scripts.frfinance_m39054_auth_pg18_preflight import verify_original
@@ -97,7 +96,7 @@ def matching_owners(inodes: set[str]) -> tuple[list[str], str]:
                 owners.append("UNCLASSIFIED_COMMAND")
                 continue
             args = [a.decode("utf-8", errors="replace")
-                    for a in raw.rstrip(b"\\x00").split(b"\\x00") if a]
+                    for a in raw.rstrip(b"\x00").split(b"\x00") if a]
             owners.append(process_class(args))
         except (OSError, PermissionError, ValueError):
             continue
