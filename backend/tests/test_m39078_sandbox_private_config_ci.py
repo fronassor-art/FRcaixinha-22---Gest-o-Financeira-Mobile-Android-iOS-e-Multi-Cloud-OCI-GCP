@@ -24,7 +24,8 @@ def test_read_flag_does_not_touch_other_secrets(raw,expected):
     assert m.existing_value(raw)[0] == expected
     updated=m.replace_flag(raw,"YES")
     assert m.existing_value(updated)[0]=="YES"
-    assert updated.count("FR_FINANCE_SPECIAL_CREDIT_SANDBOX=YES")==1
+    active_lines = [line for line in updated.splitlines() if m.LINE.match(line)]
+    assert active_lines == ["FR_FINANCE_SPECIAL_CREDIT_SANDBOX=YES"]
 
 
 def test_absent_flag_only_appends_new_local_setting():
