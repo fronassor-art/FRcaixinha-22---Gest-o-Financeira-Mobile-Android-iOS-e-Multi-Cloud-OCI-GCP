@@ -58,7 +58,10 @@ def test_check_signer_only_uses_password_in_child_env(monkeypatch, tmp_path, cap
     monkeypatch.setattr(m, "PASSWORD_FILE", password)
     calls = []
     def run(args, **kw):
-        calls.append((args, kw))
+        # A implementação remove a senha do dicionário temporário após
+        # a chamada. Guardar snapshot independente ANTES da limpeza;
+        # nunca exigir que a senha permaneça no ambiente após keytool.
+        calls.append((tuple(args), {**kw, "env": dict(kw["env"])}, kw["env"]))
         digest = ":".join(
             m.EXPECTED_MAIN_CERT[i:i+2]
             for i in range(0, len(m.EXPECTED_MAIN_CERT), 2)
@@ -66,10 +69,13 @@ def test_check_signer_only_uses_password_in_child_env(monkeypatch, tmp_path, cap
         return SimpleNamespace(returncode=0, stdout="SHA256: " + digest, stderr="")
     monkeypatch.setattr(m.subprocess, "run", run)
     assert m.check_existing_signer() == m.EXPECTED_MAIN_CERT
-    args, options = calls[0]
+    args, options, live_child_env = calls[0]
     assert "synthetic_password_no_real_secret" not in " ".join(args)
     assert "-storepass:env" in args
     assert options["env"]["FR_FINANCE_READONLY_STOREPASS"] == "synthetic_password_no_real_secret"
+    # O dicionário original continua efetivamente higienizado.
+    assert "FR_FINANCE_READONLY_STOREPASS" not in live_child_env
+    assert "FR_FINANCE_READONLY_STOREPASS" not in os.environ
     assert "synthetic_password_no_real_secret" not in capsys.readouterr().out
 
 
