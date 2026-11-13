@@ -334,8 +334,12 @@ async def publish_campaign(tenant_id: UUID, campaign_id: UUID,
     _authorize(tenant_id, session, "TENANT_ADMIN")
     await _check_admin(conn, tenant_id, session)
     c = await conn.fetchrow(
-        "SELECT id,status,expires_at FROM public.special_credit_campaigns "
-        "WHERE id=$1 AND tenant_id=$2 FOR UPDATE", campaign_id, tenant_id)
+        "SELECT c.id,c.status,c.expires_at FROM public.special_credit_campaigns c "
+        "WHERE c.id=$1 AND c.tenant_id=$2 "
+        "AND EXISTS (SELECT 1 FROM public.cycles cy "
+        "WHERE cy.id=c.cycle_id AND cy.tenant_id=$2 "
+        "AND cy.status='ABERTO' AND cy.start_date<=CURRENT_DATE "
+        "AND cy.end_date>=CURRENT_DATE) FOR UPDATE OF c", campaign_id, tenant_id)
     if c is None or c["status"] not in ("DRAFT","PUBLISHED"):
         raise HTTPException(409, "Campanha indisponível.")
     if c["expires_at"] <= datetime.now(timezone.utc):
@@ -401,9 +405,12 @@ async def member_opportunities(tenant_id: UUID,
         "JOIN public.special_credit_campaigns c ON c.id=r.campaign_id "
         "JOIN public.special_credit_grants g ON g.id=r.grant_id "
         "JOIN public.memberships m ON m.id=r.member_id "
+        "JOIN public.cycles cy ON cy.id=c.cycle_id AND cy.tenant_id=$1 "
         "WHERE r.tenant_id=$1 AND r.user_id=$2 AND c.tenant_id=$1 "
         "AND c.status='PUBLISHED' AND c.expires_at>now() "
         "AND g.status='ACTIVE' AND g.expires_at>now() AND m.status='ATIVA' "
+        "AND g.cycle_id=cy.id AND cy.status='ABERTO' "
+        "AND cy.start_date<=CURRENT_DATE AND cy.end_date>=CURRENT_DATE "
         "ORDER BY c.published_at DESC LIMIT 100", tenant_id, _uid(session))
     return [{"recipient_id":str(r["recipient_id"]),"campaign_id":str(r["campaign_id"]),
              "grant_id":str(r["grant_id"]),"title":r["title"],"message":r["body"],
@@ -422,8 +429,11 @@ async def reply(tenant_id: UUID, recipient_id: UUID, payload: OpportunityReply,
         "WHERE r.id=$2 AND r.tenant_id=$3 AND r.user_id=$4 "
         "AND r.response_status='PENDING' "
         "AND EXISTS (SELECT 1 FROM public.special_credit_campaigns c "
+        "JOIN public.cycles cy ON cy.id=c.cycle_id AND cy.tenant_id=$3 "
         "WHERE c.id=r.campaign_id AND c.tenant_id=$3 "
-        " AND c.status='PUBLISHED' AND c.expires_at>now()) "
+        "AND c.status='PUBLISHED' AND c.expires_at>now() "
+        "AND cy.status='ABERTO' AND cy.start_date<=CURRENT_DATE "
+        "AND cy.end_date>=CURRENT_DATE) "
         "AND EXISTS (SELECT 1 FROM public.special_credit_grants g "
         "WHERE g.id=r.grant_id AND g.tenant_id=$3 "
         " AND g.status='ACTIVE' AND g.expires_at>now()) "
@@ -484,7 +494,9 @@ async def simulate_special(tenant_id: UUID, payload: SpecialSimulation,
         "FROM public.special_credit_grants g "
         "JOIN public.memberships m ON m.id=g.member_id "
         "JOIN public.cycles c ON c.id=g.cycle_id "
-        "WHERE g.id=$1 AND g.tenant_id=$2 AND m.user_id=$3 AND c.tenant_id=$2",
+        "WHERE g.id=$1 AND g.tenant_id=$2 AND m.user_id=$3 AND c.tenant_id=$2 "
+        "AND c.status='ABERTO' AND c.start_date<=CURRENT_DATE "
+        "AND c.end_date>=CURRENT_DATE",
         payload.grant_id, tenant_id, _uid(session))
     if row is None or not request_is_permitted(
         grant_status=row["status"],valid_until=row["expires_at"],
