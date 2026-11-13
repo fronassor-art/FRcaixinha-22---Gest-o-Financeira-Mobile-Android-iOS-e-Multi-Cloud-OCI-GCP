@@ -78,9 +78,11 @@ def _check_expiry(expires_at: datetime, end_date) -> None:
 async def _cycle(conn, tenant_id: UUID):
     cycle = await conn.fetchrow(
         "SELECT id,end_date FROM public.cycles WHERE tenant_id=$1 "
-        "AND status='ABERTO' ORDER BY start_date DESC,id DESC LIMIT 1", tenant_id)
+        "AND status='ABERTO' AND start_date<=CURRENT_DATE "
+        "AND end_date>=CURRENT_DATE "
+        "ORDER BY start_date DESC,id DESC LIMIT 1", tenant_id)
     if cycle is None:
-        raise HTTPException(409, "Não há ciclo aberto na caixinha.")
+        raise HTTPException(409, "Não há ciclo vigente e aberto na caixinha.")
     return cycle
 
 
