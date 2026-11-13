@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BriefcaseBusiness, ChevronRight, Coins, Layers3, ShieldCheck, TrendingUp, Users, Wallet } from 'lucide-react';
+import { BriefcaseBusiness, ChevronRight, Coins, Gift, Layers3, Megaphone, ShieldCheck, TrendingUp, Users, Wallet } from 'lucide-react';
 import { financialApi } from '../services/financialApiService';
 import { AppState } from '../services/store';
 
@@ -171,6 +171,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
               <Users className="h-4 w-4"/>Membros
             </button>
           )}
+          {/* M39076: atalho visível; acesso real continua condicionado ao servidor. */}
+          <button type="button"
+            onClick={() => onNavigateTab(member ? 'MINHAS_OPORTUNIDADES' : 'CAMPANHAS_MEMBROS')}
+            className="fr-outline flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm">
+            {member ? <Gift className="h-4 w-4"/> : <Megaphone className="h-4 w-4"/>}
+            {member ? 'Minhas oportunidades' : 'Campanhas para membros'}
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
