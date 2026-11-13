@@ -22,7 +22,7 @@ from backend.scripts.frfinance_m39066_master_prices_sql112_termux import (
 
 SQL112 = ROOT / "backend/migrations/112_frfinance_master_independent_saas_prices.sql"
 SQL113 = ROOT / "backend/migrations/113_frfinance_saas_new_admin_promotions.sql"
-SQL113_BLOB = "3e126f2b6ca43d0e73a4be2aa44e204b58bf3911"
+SQL113_BLOB = "8839665d9801ead9d9baa340c2db8ec2a7e56d59"
 
 
 def validate_sql113_hash() -> None:
