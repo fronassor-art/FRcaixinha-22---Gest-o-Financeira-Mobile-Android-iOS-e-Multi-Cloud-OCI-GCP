@@ -489,6 +489,57 @@ class FinancialApiService {
     });
   }
 
+  // --- Promoções SaaS M39067: apenas Master edita; não gera cobrança ---
+
+  public async fetchMasterSaasPromotions(): Promise<{
+    source: 'POSTGRESQL_RLS';
+    scope: 'MASTER_SAAS_PROMOTIONS';
+    delivery: string;
+    billing: string;
+    promotions: Array<{
+      campaign_id: string; revision: number; plan_tier: 'ESSENCIAL'|'INTERMEDIARIO';
+      billing_period: 'MONTHLY'|'ANNUAL'; base_price_version_id: string;
+      promotional_price: string; audience: 'NEW_ADMIN_ONLY';
+      title: string; benefit_description: string; starts_at: string; ends_at: string;
+      state: 'DRAFT'|'PUBLISHED'|'CANCELED';
+    }>;
+  }> {
+    return this.request('/api/v1/master/saas-promotions');
+  }
+
+  public async createMasterSaasPromotionDraft(payload: {
+    plan_tier: 'ESSENCIAL'|'INTERMEDIARIO';
+    billing_period: 'MONTHLY'|'ANNUAL';
+    base_price_version_id: string;
+    promotional_price: number; title: string; benefit_description: string;
+    starts_at: string; ends_at: string; reason: string;
+  }): Promise<{status: 'DRAFT_PERSISTED_NO_BILLING'}> {
+    return this.request('/api/v1/master/saas-promotions/draft', {
+      method: 'POST', body: JSON.stringify(payload),
+    });
+  }
+
+  public async transitionMasterSaasPromotion(payload: {
+    campaign_id: string; expected_revision: number;
+    action: 'PUBLISH'|'CANCEL'; reason: string;
+  }): Promise<{status: 'REVISION_PERSISTED_NO_BILLING'}> {
+    return this.request('/api/v1/master/saas-promotions/transition', {
+      method: 'POST', body: JSON.stringify(payload),
+    });
+  }
+
+  public async fetchTenantSaasPromotions(tenantId: string): Promise<{
+    source: 'POSTGRESQL_RLS'; scope: 'ELIGIBLE_NEW_TENANT_ADMIN_ONLY';
+    tenant_id: string; billing: 'OFF_NO_PROVIDER_NO_CHARGE';
+    offers: Array<{
+      campaign_id: string;plan_tier:string;billing_period:'MONTHLY'|'ANNUAL';
+      promotional_price:string;title:string;benefit_description:string;
+      starts_at:string;ends_at:string;revision:number;base_price_version_id:string;
+    }>;
+  }> {
+    return this.request(`/api/v1/tenants/${encodeURIComponent(tenantId)}/saas-promotions`);
+  }
+
   // --- Cotas e Contribuições ---
 
   public async fetchQuotas(tenantId: string) {
