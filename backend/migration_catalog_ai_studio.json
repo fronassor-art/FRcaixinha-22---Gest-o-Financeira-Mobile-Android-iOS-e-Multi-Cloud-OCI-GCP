@@ -1152,6 +1152,16 @@
       "inspect_object": "public.platform_license_price_versions.annual_price DROP EXPRESSION; monthly annual independent; append-only and RLS retained",
       "local_evidence": null,
       "source_blob_sha": "10da8aaef7beb3d6559a14d064be53e1aae5a01f"
+    },
+    {
+      "id": "migrations:113",
+      "source_path": "backend/migrations/113_frfinance_saas_new_admin_promotions.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.platform_saas_promotion_revisions (RLS FORCE, immutable revisions); public.frfinance_saas_new_admin_published_promotions() gated eligibility, no billing",
+      "local_evidence": null,
+      "source_blob_sha": "3e126f2b6ca43d0e73a4be2aa44e204b58bf3911"
     }
   ]
 }
