@@ -6,8 +6,6 @@ import {CampaignDraftForm, EMPTY_MASTER_CAMPAIGN_DRAFT,
   readMasterCampaignDraft, saveMasterCampaignDraft,
 } from '../services/masterCampaignDraftPersistence';
 
-type ActiveTier = 'ESSENCIAL' | 'INTERMEDIARIO';
-type Period = 'MONTHLY' | 'ANNUAL';
 type Plan = {
   tier: 'ESSENCIAL' | 'INTERMEDIARIO' | 'AMPLIADO';
   status: string;
@@ -178,6 +176,14 @@ export const MasterSaasPromotionsPanel: React.FC<{
           Promoções mensais ou anuais para novos administradores, com preço, benefício e vigência próprios.
           Não envia mensagens, concede licença ou cobra Pix.
         </p>
+        {restored && <p role="status" className="mt-2 rounded-lg bg-emerald-50 p-2 text-sm text-emerald-900">
+          Preenchimento anterior recuperado neste aparelho. Revise valores e datas antes de criar.
+        </p>}
+        {hasDraftContent(form) && <p className="mt-2 text-xs text-slate-700">
+          {savedLocally === false
+            ? 'Atenção: armazenamento local indisponível; mantenha o aplicativo aberto.'
+            : 'Preenchimento salvo automaticamente neste aparelho por até 72 horas, somente para esta conta Master.'}
+        </p>}
       </header>
       <form onSubmit={create} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <label className="block">Plano
@@ -233,6 +239,11 @@ export const MasterSaasPromotionsPanel: React.FC<{
           className="rounded-lg border border-emerald-700 text-emerald-900 px-4 py-3">
           Atualizar campanhas
         </button>
+        {hasDraftContent(form) &&
+          <button type="button" onClick={discardLocal} disabled={busy}
+            className="rounded-lg border border-slate-400 text-slate-800 px-4 py-3">
+            Descartar preenchimento local
+          </button>}
       </form>
       {message && <p role="status" className="text-sm text-emerald-950">{message}</p>}
       {status==='error' && <p role="alert" className="text-sm text-amber-900">
