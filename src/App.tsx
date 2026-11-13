@@ -24,7 +24,7 @@ import {
   Cloud,
   Smartphone,
   Apple,
-  Menu, MoreHorizontal, ChevronDown, Crown, BriefcaseBusiness, UserRound, X, LogOut, Bell
+  Menu, MoreHorizontal, ChevronDown, Crown, BriefcaseBusiness, UserRound, X, LogOut, Bell, Megaphone, Gift
 } from 'lucide-react';
 import { appStore, AppState } from './services/store';
 import { Navbar } from './components/Navbar';
@@ -39,6 +39,7 @@ import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
 import { MemberAnnualPreviewView } from './components/MemberAnnualPreviewView';
 import { ServerLoansView } from './components/ServerLoansView';
+import { SpecialCreditView } from './components/SpecialCreditView';
 import { ConsentView } from './components/ConsentView';
 import { LedgerView } from './components/LedgerView';
 import { MasterLicensingView } from './components/MasterLicensingView';
@@ -250,6 +251,7 @@ export default function App() {
         { id: 'MEMBROS', label: 'Membros e Cotas', icon: Users },
         { id: 'CONTRIBUICOES', label: 'Contribuições', icon: Wallet },
         { id: 'EMPRESTIMOS', label: 'Empréstimos', icon: TrendingUp },
+        { id: 'CAMPANHAS_MEMBROS', label: 'Campanhas para Membros', icon: Megaphone },
         { id: 'LEDGER', label: 'Livro-Razão', icon: FileSpreadsheet },
         { id: 'FECHAMENTO', label: 'Fechamento', icon: Coins },
         { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
@@ -261,6 +263,7 @@ export default function App() {
       { id: 'MEU_PAINEL', label: 'Meu Painel', icon: LayoutDashboard },
       { id: 'MINHAS_CONTRIBUICOES', label: 'Minhas Contribuições', icon: Wallet },
       { id: 'MEU_EMPRESTIMO', label: 'Meu Empréstimo', icon: TrendingUp },
+      { id: 'MINHAS_OPORTUNIDADES', label: 'Minhas Oportunidades', icon: Gift },
       { id: 'MEU_RESULTADO', label: 'Meu Resultado', icon: Coins },
         { id: 'NOTIFICACOES', label: 'Notificações', icon: Bell },
     ];
@@ -412,6 +415,11 @@ export default function App() {
         {visibleTab === 'EMPRESTIMOS' && (
           <ServerLoansView state={state} />
         )}
+        {/* Campanhas de Crédito Especial exclusivamente para o administrador da caixinha.
+            A API valida tenant, role e sandbox em todas as ações. */}
+        {visibleTab === 'CAMPANHAS_MEMBROS' && state.currentRole === 'TENANT_ADMIN' && (
+          <SpecialCreditView state={state}/>
+        )}
         {visibleTab === 'CONSENTIMENTO' && <ConsentView state={state} />}
         {visibleTab === 'LEDGER' && <LedgerView state={state} />}
         {visibleTab === 'FECHAMENTO' && state.currentRole === 'TENANT_ADMIN' && (
@@ -440,6 +448,10 @@ export default function App() {
         )}
         {visibleTab === 'MEU_EMPRESTIMO' && (
           <ServerLoansView state={state} />
+        )}
+        {/* Consulta pessoal de ofertas: não permite conceder crédito. */}
+        {visibleTab === 'MINHAS_OPORTUNIDADES' && state.currentRole === 'TENANT_MEMBER' && (
+          <SpecialCreditView state={state}/>
         )}
         {visibleTab === 'AUTORIZACAO_ADMIN' && <ConsentView state={state} />}
         {visibleTab === 'MEU_RESULTADO' && state.currentRole === 'TENANT_MEMBER' && (
