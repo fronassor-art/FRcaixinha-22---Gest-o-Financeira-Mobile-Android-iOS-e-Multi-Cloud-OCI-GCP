@@ -81,10 +81,22 @@ def inspect_sql112_113(conn) -> tuple[str,str,int]:
             "has_function_privilege('frcaixinha_auth_role',"
             "'public.frfinance_saas_new_admin_published_promotions()','EXECUTE')"
         ).fetchone()
-        if table_audit != (True,True) or access != (
+        trigger = conn.execute(
+            "SELECT count(*) FROM pg_catalog.pg_trigger "
+            "WHERE tgrelid='public.platform_saas_promotion_revisions'::regclass "
+            "AND tgname='frfinance_guard_saas_promo_append' "
+            "AND tgenabled='O' AND NOT tgisinternal"
+        ).fetchone()[0]
+        definer = conn.execute(
+            "SELECT prosecdef,COALESCE(array_to_string(proconfig,','),'') "
+            "FROM pg_catalog.pg_proc "
+            "WHERE oid='public.frfinance_saas_new_admin_published_promotions()'::regprocedure"
+        ).fetchone()
+        if (table_audit != (True,True) or access != (
             True,False,False,False,True,False,
-        ):
-            raise Blocked("SQL113_RLS_OR_PRIVILEGES_UNSAFE")
+        ) or trigger != 1 or definer is None or definer[0] is not True
+                or "search_path=pg_catalog,pg_temp" not in definer[1]):
+            raise Blocked("SQL113_RLS_PRIVILEGES_TRIGGER_OR_FUNCTION_UNSAFE")
         return monthly_state, "SQL113_APPLIED_SAFE_NO_REPEAT", total
 
 
