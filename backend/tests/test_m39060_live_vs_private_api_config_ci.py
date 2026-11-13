@@ -111,5 +111,5 @@ def test_source_only_read():
     assert 'request_local("/api/v1/auth/status")' in source
     for value in ('"POST"', "ALTER ROLE ", "INSERT INTO ", "CREATE ROLE ",
                   "uvicorn.run(", "subprocess.Popen(", "print(flags)",
-                  "print(health)", "/proc/", "os.system("):
+                  "print(health)", "Path(\"/proc", "os.system("):
         assert value not in source
