@@ -189,7 +189,7 @@ jobs:
           ).stdout
           package_line = next((line for line in out.splitlines()
                                if line.startswith("package: ")), "")
-          match = re.search(r"name='([^']+)'\\s+versionCode='([0-9]+)'", package_line)
+          match = re.search(r"name='([^']+)'\s+versionCode='([0-9]+)'", package_line)
           if not match or match.group(1) != "com.frcaixinha.app.aistudio":
               raise SystemExit("M39065_BLOCKED=WRONG_ANDROID_PACKAGE")
           version = int(match.group(2))
@@ -204,7 +204,7 @@ jobs:
           ).stdout
           certs = {
               cert.lower() for cert in re.findall(
-                  r"^(?:Signer #1|V2 Signer): certificate SHA-256 digest:\\s*([0-9a-fA-F]{64})",
+                  r"^(?:Signer #1|V2 Signer): certificate SHA-256 digest:\s*([0-9a-fA-F]{64})",
                   verified, flags=re.MULTILINE | re.IGNORECASE,
               )
           }
