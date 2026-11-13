@@ -65,6 +65,7 @@ jobs:
           npm run lint
           npx tsx src/tests/m39020_credit_push_ui_ci.test.ts
           npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
+          npx tsx src/tests/m39070_android_saas_master_promotions_ci.test.ts
 
       - name: Empacotar web e sincronizar Capacitor debug
         run: |
