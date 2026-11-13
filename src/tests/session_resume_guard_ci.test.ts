@@ -67,7 +67,11 @@ async function main(){
  assert.match(source,/document.addEventListener\('visibilitychange', onVisible\)/);
  assert.match(source,/window.addEventListener\('pageshow', onPageShow\)/);
  assert.match(source,/event.persisted/);
- assert.match(source,/if \(resumeValidationPending\)/);
+ assert.match(source,/resumeValidationPending && \\(/);
+ assert.match(source,/aria-hidden=\\{resumeValidationPending\\}/);
+ assert.match(source,/inert=\\{resumeValidationPending\\}/);
+ assert.doesNotMatch(source,/if \\(resumeValidationPending\\)\\s*\\{\\s*return\\s*\\(/,
+   'foreground não pode desmontar o formulário em edição');
  assert.match(source,/role="status"/);
  assert.match(source,/else if \(!authService.getUser\(\)\)/);
  assert.match(source,/const bootstrap = authService.captureSession\(\)/);
