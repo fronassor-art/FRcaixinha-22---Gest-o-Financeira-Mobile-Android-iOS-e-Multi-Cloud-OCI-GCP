@@ -200,6 +200,11 @@ def main() -> int:
     args = parser.parse_args()
 
     print("=== FR FINANCE M39066 — SQL112 PRECO MASTER INDEPENDENTE ===")
+    if args.apply:
+        # SQL113 passou a ser obrigatoria no mesmo pacote comercial.
+        # NUNCA aplicar SQL112 isoladamente: apenas inspecionar por M39066.
+        print("M39066_STATUS=BLOCKED_SUPERSEDED_USE_M39067_SQL112_113_ATOMIC")
+        return 2
     try:
         validate_context()
         import psycopg
