@@ -1142,6 +1142,16 @@
       "inspect_object": "sc_m39020_* BEFORE INSERT/UPDATE; tenant, cycle, permission and state transition guards",
       "local_evidence": null,
       "source_blob_sha": "1fbe349b7d785eb3e5bc7852f84cd01f2b465ae1"
+    },
+    {
+      "id": "migrations:112",
+      "source_path": "backend/migrations/112_frfinance_master_independent_saas_prices.sql",
+      "classification": "LOCAL_CANDIDATE_REQUIRES_PROOF",
+      "requires_local_equivalent_before_use": false,
+      "do_not_apply_source_to_termux": false,
+      "inspect_object": "public.platform_license_price_versions.annual_price DROP EXPRESSION; monthly annual independent; append-only and RLS retained",
+      "local_evidence": null,
+      "source_blob_sha": "10da8aaef7beb3d6559a14d064be53e1aae5a01f"
     }
   ]
 }
