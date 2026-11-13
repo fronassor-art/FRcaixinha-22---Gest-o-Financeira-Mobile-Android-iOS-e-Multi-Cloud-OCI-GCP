@@ -101,7 +101,7 @@ def inspect_original(conn) -> str:
             state = "LEGACY_10X_GENERATED_READY_FOR_SQL112"
         elif details[0] == "" and details[1] is True:
             granted = conn.execute(
-                "SELECT has_column_privilege('frc_ai_app',"
+                "SELECT has_column_privilege('frcaixinha_app_role',"
                 "'public.platform_license_price_versions','annual_price','INSERT')"
             ).fetchone()[0]
             constraint = conn.execute(
@@ -173,8 +173,20 @@ def apply_migration(conn) -> None:
     with conn.transaction():
         conn.execute("SET LOCAL lock_timeout='5000ms'")
         conn.execute("SET LOCAL statement_timeout='30000ms'")
-        # Declaracao SQL112 inclui o teste final de PGDATA/role e attgenerated.
+        # SQL112 exige PGDATA/role/coluna gerada antes da alteracao.
         conn.execute(source)
+        # Validar DENTRO da transacao: erro aqui desfaz TODA a DDL.
+        flag = conn.execute(
+            "SELECT attgenerated FROM pg_catalog.pg_attribute "
+            "WHERE attrelid='public.platform_license_price_versions'::regclass "
+            "AND attname='annual_price' AND NOT attisdropped"
+        ).fetchone()
+        priv = conn.execute(
+            "SELECT has_column_privilege('frcaixinha_app_role',"
+            "'public.platform_license_price_versions','annual_price','INSERT')"
+        ).fetchone()[0]
+        if flag is None or flag[0] != "" or priv is not True:
+            raise Blocked("SQL112_ATOMIC_VERIFICATION_FAILED")
     post = inspect_original(conn)
     if post != "SQL112_ALREADY_APPLIED_SAFE_NO_REPEAT":
         raise Blocked("SQL112_POSTCHECK_FAILED")
