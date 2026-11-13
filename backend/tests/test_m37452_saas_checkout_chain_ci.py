@@ -150,7 +150,7 @@ def test_contract_attestation_fail_closed(changes,code):
     ({"preparation_tier":"AMPLIADO"},"UNBOUND_OR_INVALID_PRICE_VERSION"),
     ({"plan_status":"BLOCKED"},"UNBOUND_OR_INVALID_PRICE_VERSION"),
     ({"period":"WEEKLY"},"UNBOUND_OR_INVALID_PRICE_VERSION"),
-    ({"annual_cents":199371},"UNBOUND_OR_INVALID_PRICE_VERSION"),
+    ({"annual_cents":0},"UNBOUND_OR_INVALID_PRICE_VERSION"),
     ({"expected_cents":10000},"UNBOUND_OR_INVALID_PRICE_VERSION"),
     ({"expected_cents":True},"UNBOUND_OR_INVALID_PRICE_VERSION"),
     ({"currency":"USD"},"UNBOUND_OR_INVALID_PRICE_VERSION"),
@@ -162,6 +162,19 @@ def test_price_and_preparation_fail_closed(changes,code):
     result=evaluate(offer=replace(o,**changes))
     assert result.state==code
     deny_all_real_effects(result)
+
+
+def test_independent_annual_price_uses_frozen_offered_cents():
+    c,o,_,_=fixtures()
+    # O anual independe da mensalidade e nao pode ser calculado x10.
+    newer=replace(o,period="ANNUAL",annual_cents=157123,
+                  expected_cents=157123)
+    result=review_checkout(contract=c,offer=newer,now=NOW)
+    assert result.state=="CONTRACT_OFFER_REVIEW_CI_ONLY"
+    deny_all_real_effects(result)
+    mismatched=review_checkout(contract=c,
+        offer=replace(newer,expected_cents=157124),now=NOW)
+    assert mismatched.state=="UNBOUND_OR_INVALID_PRICE_VERSION"
 
 
 @pytest.mark.parametrize("changes,code",[
