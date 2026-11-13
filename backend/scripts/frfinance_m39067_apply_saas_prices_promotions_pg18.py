@@ -25,6 +25,25 @@ SQL113 = ROOT / "backend/migrations/113_frfinance_saas_new_admin_promotions.sql"
 SQL113_BLOB = "33c94b871602a8ad93f86bd7a724a8638124ff0f"
 
 
+def search_path_is_restricted(proconfig) -> bool:
+    """Exige configuração efetiva segura; aceita espaço pós-vírgula do PG18.
+
+    pg_proc.proconfig é text[], não comparar texto renderizado/concatenado.
+    Valores adicionais, duplicados, public, caminhos extras e ordem trocada
+    são rejeitados. Esta função não altera configurações do PostgreSQL.
+    """
+    if not isinstance(proconfig, (list, tuple)):
+        return False
+    matches = [
+        option.split("=", 1)[1]
+        for option in proconfig
+        if isinstance(option, str) and option.startswith("search_path=")
+    ]
+    return len(matches) == 1 and [
+        part.strip().lower() for part in matches[0].split(",")
+    ] == ["pg_catalog", "pg_temp"]
+
+
 def validate_sql113_hash() -> None:
     if SQL113.is_symlink() or not SQL113.is_file():
         raise Blocked("SQL113_FILE_MISSING_OR_SYMLINK")
@@ -88,14 +107,14 @@ def inspect_sql112_113(conn) -> tuple[str,str,int]:
             "AND tgenabled='O' AND NOT tgisinternal"
         ).fetchone()[0]
         definer = conn.execute(
-            "SELECT prosecdef,COALESCE(array_to_string(proconfig,','),'') "
+            "SELECT prosecdef,proconfig "
             "FROM pg_catalog.pg_proc "
             "WHERE oid='public.frfinance_saas_new_admin_published_promotions()'::regprocedure"
         ).fetchone()
         if (table_audit != (True,True) or access != (
             True,False,False,False,True,False,
         ) or trigger != 1 or definer is None or definer[0] is not True
-                or "search_path=pg_catalog,pg_temp" not in definer[1]):
+                or not search_path_is_restricted(definer[1])):
             raise Blocked("SQL113_RLS_PRIVILEGES_TRIGGER_OR_FUNCTION_UNSAFE")
         return monthly_state, "SQL113_APPLIED_SAFE_NO_REPEAT", total
 
