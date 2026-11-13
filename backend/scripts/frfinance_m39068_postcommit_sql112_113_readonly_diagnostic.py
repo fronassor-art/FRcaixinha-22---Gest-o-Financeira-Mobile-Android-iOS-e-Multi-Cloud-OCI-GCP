@@ -16,21 +16,8 @@ from backend.scripts.frfinance_m39066_master_prices_sql112_termux import (
 )
 from backend.scripts.frfinance_m39067_apply_saas_prices_promotions_pg18 import (
     validate_sql113_hash,
+    search_path_is_restricted,
 )
-
-
-def search_path_is_restricted(proconfig) -> bool:
-    """O PostgreSQL pode inserir espaço após vírgula ao armazenar proconfig."""
-    if not isinstance(proconfig, (list, tuple)):
-        return False
-    matches = [
-        part.split("=", 1)[1]
-        for part in proconfig
-        if isinstance(part, str) and part.startswith("search_path=")
-    ]
-    return len(matches) == 1 and [
-        p.strip().lower() for p in matches[0].split(",")
-    ] == ["pg_catalog", "pg_temp"]
 
 
 def inspect_schema(conn) -> dict[str, bool | str]:
