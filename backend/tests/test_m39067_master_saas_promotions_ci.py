@@ -234,6 +234,13 @@ def test_schema_and_docs_policy_registered():
         "NEW_ADMIN_ONLY", "UNIQUE(campaign_id,revision)",
         "frfinance_saas_new_admin_published_promotions",
         "GRANT INSERT(", "REVOKE ALL ON",
+        "CREATE TRIGGER frfinance_guard_saas_promo_append",
+        "M39067_BASE_PRICE_VERSION_PLAN_MISMATCH",
+        "M39067_REVISION_NOT_SEQUENTIAL",
+        "M39067_REVIEW_CANNOT_REWRITE_COMMERCIAL_SNAPSHOT",
+        "M39067_INVALID_CAMPAIGN_TRANSITION",
+        "M39067_OVERLAPPING_PUBLISHED_PROMOTION",
+        "SECURITY DEFINER SET search_path=pg_catalog,pg_temp",
     ):
         assert marker in sql
     for forbidden in ("CREATE DATABASE", "ALTER ROLE", "UPDATE public.",
@@ -245,6 +252,20 @@ def test_schema_and_docs_policy_registered():
     assert "SQL112" in notebook and "SQL113" in notebook
     assert "10 × mensal" in docs
     assert "não" in docs.lower()
+
+
+def test_combined_migration_replaces_standalone_apply():
+    runner=(ROOT/"backend/scripts/frfinance_m39067_apply_saas_prices_promotions_pg18.py").read_text()
+    old=(ROOT/"backend/scripts/frfinance_m39066_master_prices_sql112_termux.py").read_text()
+    assert "SQL113_BLOB" in runner
+    assert "conn.execute(ddl112)" in runner
+    assert "conn.execute(ddl113)" in runner
+    assert "with conn.transaction():" in runner
+    assert "SQL113_RLS_PRIVILEGES_TRIGGER_OR_FUNCTION_UNSAFE" in runner
+    assert "APLICAR_SQL112_113_FR_FINANCE" in runner
+    assert "BLOCKED_SUPERSEDED_USE_M39067_SQL112_113_ATOMIC" in old
+    for denied in ("createdb", "dropdb", "subprocess.Popen(", "os.kill("):
+        assert denied not in runner
 
 
 def test_no_real_dispatch_or_payments_from_routes():
