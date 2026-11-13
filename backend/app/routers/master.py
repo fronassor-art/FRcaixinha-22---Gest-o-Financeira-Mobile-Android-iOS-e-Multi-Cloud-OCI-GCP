@@ -56,8 +56,15 @@ class AdminTransitionPreviewRequest(BaseModel):
 
 
 class LicensePriceChange(BaseModel):
-    tier: Literal['ESSENCIAL', 'INTERMEDIARIO']
-    monthly_price: Decimal = Field(..., gt=Decimal('0'), le=Decimal('999999.99'), decimal_places=2)
+    """Precos SaaS independentes, nunca valor da cota dos membros."""
+    tier: Literal["ESSENCIAL", "INTERMEDIARIO"]
+    expected_version_id: uuid.UUID
+    monthly_price: Decimal = Field(
+        ..., gt=Decimal("0"), le=Decimal("999999.99"), decimal_places=2
+    )
+    annual_price: Decimal = Field(
+        ..., gt=Decimal("0"), le=Decimal("999999.99"), decimal_places=2
+    )
     reason: str = Field(..., min_length=15, max_length=500)
 
 
@@ -398,7 +405,7 @@ async def get_platform_licenses(
                 "members_limit": r["members_limit"], "quotas_limit": r["quotas_limit"],
                 "status": r["status"], "version_id": str(r["version_id"]) if r["version_id"] else None,
                 "monthly_price": str(r["monthly_price"]) if r["monthly_price"] is not None else None,
-                "annual_price_computed": str(r["annual_price"]) if r["annual_price"] is not None else None,
+                "annual_price": str(r["annual_price"]) if r["annual_price"] is not None else None,
                 "updated_at": r["created_at"].isoformat() if r["created_at"] else None,
             }
             for r in rows
@@ -412,32 +419,68 @@ async def change_platform_license_price(
     session: AuthenticatedSession = Depends(require_master),
     conn = Depends(get_rls_db_connection),
 ):
-    """Apenas o Master registra uma NOVA versao; sem alterar assinaturas ja pagas."""
+    """Nova versao mensal+anual independente, somente Master autenticado.
+
+    get_rls_db_connection assegura transacao unica. Advisory lock serializa
+    updates do mesmo plano; expected_version_id evita sobrescrita silenciosa.
+    A versao de oferta/assinatura ja aceita nao e editada. Sem Pix ou faturamento.
+    """
+    # Falhar fechado ate o banco receber SQL112: nao inferir anuidade pela formula.
+    is_independent = await conn.fetchval(
+        "SELECT attgenerated='' FROM pg_catalog.pg_attribute "
+        "WHERE attrelid=to_regclass('public.platform_license_price_versions') "
+        "AND attname='annual_price' AND NOT attisdropped"
+    )
+    if is_independent is not True:
+        raise HTTPException(
+            status_code=503,
+            detail="Migração da anuidade independente ainda não homologada."
+        )
+
+    await conn.fetchval(
+        "SELECT pg_advisory_xact_lock(39066,hashtext($1::text))",
+        payload.tier,
+    )
     plan = await conn.fetchrow(
         "SELECT tier,status FROM public.platform_license_plans WHERE tier=$1", payload.tier
     )
     if not plan or plan["status"] != "ACTIVE":
         raise HTTPException(status_code=422, detail="Plano indisponivel para precificacao.")
+
+    latest_id = await conn.fetchval(
+        "SELECT id FROM public.platform_license_price_versions "
+        "WHERE plan_tier=$1 ORDER BY created_at DESC,id DESC LIMIT 1",
+        payload.tier,
+    )
+    if latest_id is None or str(latest_id) != str(payload.expected_version_id):
+        raise HTTPException(
+            status_code=409,
+            detail="O catálogo foi atualizado. Recarregue os preços antes de editar.",
+        )
+
     actor = uuid.UUID(session.user_id)
     row = await conn.fetchrow(
         "INSERT INTO public.platform_license_price_versions"
-        "(plan_tier,monthly_price,changed_by,reason) VALUES($1,$2,$3,$4) "
+        "(plan_tier,monthly_price,annual_price,changed_by,reason)"
+        " VALUES($1,$2,$3,$4,$5) "
         "RETURNING id,monthly_price,annual_price,created_at",
-        payload.tier, payload.monthly_price, actor, payload.reason.strip()
+        payload.tier, payload.monthly_price, payload.annual_price,
+        actor, payload.reason.strip(),
     )
     await conn.execute(
         "INSERT INTO public.audit_events(actor_id,actor_role,action,object_type,object_id,"
         "reason,evidence_ref) VALUES($1,'MASTER','SAAS_PRICE_VERSION_CREATED',"
         "'LICENSE_PRICE',$2,$3,$4)",
-        actor, str(row["id"]), payload.reason.strip(), "SAAS_PRICE_VERSION"
+        actor, str(row["id"]), payload.reason.strip(), "SAAS_INDEPENDENT_PRICES_M39066"
     )
     return {
         "status": "VERSION_PERSISTED_NO_BILLING",
         "tier": payload.tier,
         "version_id": str(row["id"]),
         "monthly_price": str(row["monthly_price"]),
-        "annual_price_computed": str(row["annual_price"]),
+        "annual_price": str(row["annual_price"]),
         "created_at": row["created_at"].isoformat(),
+        "billing_status": "OFF_NO_PROVIDER_NO_CHARGE",
     }
 
 
