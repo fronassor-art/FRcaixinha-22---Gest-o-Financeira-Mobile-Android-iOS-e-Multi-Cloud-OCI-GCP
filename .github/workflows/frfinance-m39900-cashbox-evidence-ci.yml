@@ -5,12 +5,16 @@ on:
     branches: [atualizacao-ai-studio-9b46a63187]
     paths:
       - 'src/services/exclusiveCashboxEvidence.ts'
+      - 'backend/app/exclusive_cashbox_provenance.py'
+      - 'backend/tests/test_m39900_exclusive_cashbox_provenance_ci.py'
       - 'src/components/ExclusiveCashboxView.tsx'
       - 'src/tests/m39900_exclusive_cashbox_evidence_ci.test.ts'
       - '.github/workflows/frfinance-m39900-cashbox-evidence-ci.yml'
   pull_request:
     paths:
       - 'src/services/exclusiveCashboxEvidence.ts'
+      - 'backend/app/exclusive_cashbox_provenance.py'
+      - 'backend/tests/test_m39900_exclusive_cashbox_provenance_ci.py'
       - 'src/components/ExclusiveCashboxView.tsx'
       - 'src/tests/m39900_exclusive_cashbox_evidence_ci.test.ts'
       - '.github/workflows/frfinance-m39900-cashbox-evidence-ci.yml'
@@ -49,3 +53,19 @@ jobs:
           echo 'M39900_REAL_MONEY=OFF'
           echo 'M39900_MIGRATIONS=NONE'
           echo 'M39900_TERMUX_RESTART=NONE'
+
+  three-cashboxes-provenance:
+    name: Prove three distinct accounting scopes without PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: No-IO cross-cashbox policy tests
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p 'test_m39900_exclusive_cashbox_provenance_ci.py' -v
+          echo 'M39900_CASHBOX_POSTINGS=NONE'
+          echo 'M39900_POSTGRESQL_ACCESS=NONE'
+          echo 'M39900_REAL_TRANSFERS=OFF'
