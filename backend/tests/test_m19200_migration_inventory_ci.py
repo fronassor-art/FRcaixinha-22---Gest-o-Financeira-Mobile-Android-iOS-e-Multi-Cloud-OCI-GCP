@@ -18,7 +18,14 @@ def test_full_migration_catalog():
     assert c("CI_ONLY_NEEDS_PORT")==3
     assert c("STAGING_ONLY_NEEDS_PORT")>=16
     assert c("CI_ONLY_TEST_OR_FIXTURE")>=21
-    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==20
+    # M39086: candidates 112/113 were appended; all remain unproven locally.
+    assert c("LOCAL_CANDIDATE_REQUIRES_PROOF")==22
+    newest = {x["id"]: x for x in entries if x["id"] in ("migrations:112", "migrations:113")}
+    assert set(newest)=={"migrations:112", "migrations:113"}
+    assert all(x["classification"]=="LOCAL_CANDIDATE_REQUIRES_PROOF"
+               and x["local_evidence"] is None
+               and x["do_not_apply_source_to_termux"] is False
+               for x in newest.values())
     candidate = next(e for e in entries if e["id"]=="migrations:110")
     assert candidate["source_path"]=="backend/migrations/110_fr_finance_special_credit_offline.sql"
     assert candidate["local_evidence"] is None
