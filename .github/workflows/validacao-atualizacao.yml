@@ -390,6 +390,13 @@ jobs:
         run: |
           python -m pytest -q -p no:cacheprovider backend/tests/test_m38990_pg18_access_delivery_ci.py
           python -m pytest -q -p no:cacheprovider backend/tests/test_m38960_access_delivery_api_integration_ci.py backend/tests/test_m38980_oauth_callback_on_main_ci.py backend/tests/test_m4400_orders_webhook_ci.py
+      - name: M39100 — 330 requisitos originais e anexos + 2310 tarefas (NO GO)
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39100_full_traceability_ci.py
+          python -B backend/scripts/frfinance_m39100_super_macropacote_readonly.py audit
       - name: Executar testes de API
         env:
           PYTHONPATH: backend
