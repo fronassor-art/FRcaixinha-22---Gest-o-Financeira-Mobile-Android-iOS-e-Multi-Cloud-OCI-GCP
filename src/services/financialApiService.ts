@@ -9,6 +9,8 @@
  */
 
 import { authService, getApiBaseUrl, AuthSessionSnapshot } from './authService';
+import {parseMasterExclusiveCashbox,parseTenantAdminExclusiveCashbox,
+ type MasterExclusiveCashbox,type TenantAdminExclusiveCashbox} from './exclusiveCashboxBoundary';
 import {parseProviderPixCheckout, ProviderPixCheckout, parseFinancialReceipt, FinancialReceipt} from './pixAutomationBoundary';
 import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 import { parseMasterAdminRegistry, adminRegistryQuery, MasterAdminRegistryPage } from './masterAdminRegistry';
@@ -190,6 +192,27 @@ class FinancialApiService {
   }
 
   // --- Consultas de painéis (somente dados autoritativos, sem seed) ---
+
+  /** M39090: Master-only SaaS evidence; not a bank balance. */
+  public async fetchMasterExclusiveCashbox():Promise<MasterExclusiveCashbox>{
+    const user=authService.getUser();
+    if(!user||user.role!=='MASTER'||user.tenantId)
+      throw Error('Caixa Master: sessão de plataforma exigida.');
+    const raw:unknown=await this.request('/api/v1/master/exclusive-cashbox',{cache:'no-store'});
+    return parseMasterExclusiveCashbox(raw);
+  }
+
+  /** M39090: only the owner of this authenticated tenant can view status. */
+  public async fetchTenantAdminExclusiveCashbox(tenantId:string):Promise<TenantAdminExclusiveCashbox>{
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(role!=='TENANT_ADMIN')
+      throw Error('Caixa exclusivo exige administrador da caixinha.');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/admin-exclusive-cashbox',
+      {cache:'no-store'}
+    );
+    return parseTenantAdminExclusiveCashbox(raw,tenantId);
+  }
 
   public async fetchMasterOverview(): Promise<{
     source: 'POSTGRESQL_RLS';
