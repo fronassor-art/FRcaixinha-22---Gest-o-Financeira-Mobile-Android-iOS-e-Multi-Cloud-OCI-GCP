@@ -61,6 +61,10 @@ export async function requestSpecialCredit<T>(
     transport.invalidateIfCurrent(snapshot);
     throw new Error('Sessão expirada. Entre novamente.');
   }
+  if (response.status === 404 && path === '/capabilities')
+    throw new Error('Rota de Crédito Especial ausente no servidor (404). A API em execução está desatualizada ou incorreta. Verifique a versão do FastAPI local; não altere o banco.');
+  if (response.status === 404)
+    throw new Error('Rota de Crédito Especial não encontrada no backend (404). Confira a rota e a versão do servidor, sem repetir operações.');
   if (response.status === 503)
     throw new Error('Módulo em preparação. Verifique habilitação local antes do teste.');
   if (!response.ok)
