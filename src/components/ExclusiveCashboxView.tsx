@@ -1,6 +1,6 @@
-/** FR Finance M39090 — two exclusive READ-ONLY financial areas.
- * The UI must never convert SaaS intent counts or 15% simulation into a
- * bank balance, a withdrawable amount, a receipt, or an approved transfer.
+/** FR Finance M39090 + M39900: exclusive cashboxes in READ-ONLY homologation.
+ * The SaaS intent counter and collective tenant ledger are NOT bank money.
+ * Never display invented receipts, payments, withdrawals, or account balances.
  */
 import React,{useEffect,useState} from 'react';
 import {ShieldCheck,Wallet,RefreshCcw} from 'lucide-react';
@@ -10,6 +10,9 @@ import {financialApi} from '../services/financialApiService';
 import type {
   MasterExclusiveCashbox,TenantAdminExclusiveCashbox,
 } from '../services/exclusiveCashboxBoundary';
+import {
+  adminCashboxEvidence,masterCashboxEvidence,
+} from '../services/exclusiveCashboxEvidence';
 
 type State={
   key:string;phase:'loading'|'ready'|'error';
@@ -50,6 +53,10 @@ export function ExclusiveCashboxView({state}:{state:AppState}){
   const current=result.key===key?result:{key,phase:'loading' as const};
   const master=role==='MASTER';
   const caption=master?'Caixa exclusivo do Administrador Master':'Caixa exclusivo do Administrador da Caixinha';
+  const items=current.phase==='ready'
+    ?(master&&current.master?masterCashboxEvidence(current.master)
+      :!master&&current.admin?adminCashboxEvidence(current.admin):[])
+    :[];
   return <section aria-label={caption} className="space-y-4">
     <div className="fr-green-card rounded-3xl p-5 text-white">
       <div className="flex items-center gap-2">
@@ -71,26 +78,36 @@ export function ExclusiveCashboxView({state}:{state:AppState}){
     </div>
     <div className="fr-light-card space-y-3 rounded-2xl p-5">
       <div className="flex items-center gap-2">
-        <ShieldCheck className="h-5 w-5 text-emerald-800"/>
-        <h3 className="font-bold text-emerald-950">Conferência de registros</h3>
+        <ShieldCheck className="h-5 w-5 text-emerald-800" aria-hidden="true"/>
+        <h3 className="font-bold text-emerald-950">Conferência de registros e pendências</h3>
       </div>
       {current.phase==='loading'&&<p role="status">Consultando dados segregados do servidor...</p>}
       {current.phase==='error'&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
         Caixa exclusivo não pôde ser confirmado no backend desta instalação.
         Verifique se a API FR Finance está atualizada. Nenhum saldo foi presumido.
       </p>}
-      {current.phase==='ready'&&master&&current.master&&<div className="space-y-2 text-sm">
-        <p>Intenções de cobrança SaaS registradas: <strong>{current.master.payment_intents_count}</strong></p>
-        <p>Preparações de assinatura registradas: <strong>{current.master.subscription_preparations_count}</strong></p>
-        <p className="text-amber-800">Cobranças preparadas não equivalem a receita recebida.</p>
+      {current.phase==='ready'&&items.length>0&&<div className="space-y-3" aria-label="Categorias do caixa exclusivo">
+        {items.map(item=><article key={item.id}
+          className="rounded-xl border border-slate-200 bg-white/80 p-4">
+          <h4 className="text-sm font-bold text-emerald-950">{item.label}</h4>
+          <p className="mt-1 text-base font-semibold text-slate-800">
+            {item.kind==='COUNT_ONLY'
+              ?`${item.count} registros (somente quantidade)`
+              :'Aguardando comprovação'}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">{item.detail}</p>
+        </article>)}
       </div>}
-      {current.phase==='ready'&&!master&&current.admin&&<div className="space-y-2 text-sm">
-        <p>Registros contábeis da sua caixinha: <strong>{current.admin.ledger_transactions_count}</strong></p>
-        <p>Participação contratual prevista do administrador: <strong>15% do lucro líquido elegível</strong></p>
-        <p>Participação prevista dos membros elegíveis: <strong>85%</strong></p>
-        <p className="text-amber-800">O rateio depende do fechamento anual, auditoria e conciliação.
-          Não há remuneração liberada nem transferência autorizada.</p>
-      </div>}
+      {current.phase==='ready'&&!master&&current.admin&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+        Referência da caixinha inaugural: 15% do lucro líquido elegível para
+        o administrador e 85% para os membros. Outras caixinhas exigem
+        percentual contratual próprio comprovado. Esta consulta não confirma
+        cálculo de remuneração, fechamento, transferência ou disponibilidade.
+      </p>}
+      {current.phase==='ready'&&master&&current.master&&<p className="text-xs text-amber-800">
+        Cobranças preparadas não equivalem a receita recebida. O Caixa Master
+        não agrega dinheiro ou despesas das caixinhas de terceiros.
+      </p>}
       <button type="button" onClick={()=>setRefresh(n=>n+1)}
         className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-800 px-4 text-sm font-semibold text-emerald-900">
         <RefreshCcw className="h-4 w-4" aria-hidden="true"/> Atualizar consulta
