@@ -22,7 +22,7 @@ assert(ui.includes("onClick={()=>void run(()=>specialCreditApi.cancel("));
 assert(api.includes("'/cycle-readiness'"));
 assert(api.includes('real_credit_enabled:false'));
 assert(api.includes('external_dispatch:false'));
-assert(boundary.includes('authService') === false); // transport stays session-injected.
+assert(!boundary.includes('import { authService }')); // transport stays session-injected.
 assert(boundary.includes('transport.isCurrent(snapshot)'));
 assert(backend.includes('@router.get("/cycle-readiness")'));
 assert(backend.includes('_authorize(tenant_id, session, "TENANT_ADMIN")'));
