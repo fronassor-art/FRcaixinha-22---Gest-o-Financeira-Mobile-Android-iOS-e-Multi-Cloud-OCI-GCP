@@ -245,18 +245,36 @@ jobs:
             echo "::error::Arquivo de assinatura, alias ou senha invalidos."
             exit 1
           fi
+          # Verify the SAME certificate as the installed working M39065 APK.
+          export M39089_PRIVATE_STOREPASS="$ANDROID_SIGNING_STORE_PASSWORD"
+          digest="$(keytool -list -v -storetype PKCS12 -keystore "$KEYSTORE_FILE" -alias "$ANDROID_SIGNING_ALIAS" -storepass:env M39089_PRIVATE_STOREPASS | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          unset M39089_PRIVATE_STOREPASS
+          if [[ "$digest" != "ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7" ]]; then
+            echo "::error::M39089_BLOCKED=ORIGINAL_APK_SIGNING_CERT_MISMATCH"
+            exit 2
+          fi
+          # Never downgrade below the last proven installed main APK M39065
+          # (3906508) or the latest known M39076 candidate (3906531).
+          version_code=$((3909000 + GITHUB_RUN_NUMBER))
+          if (( version_code <= 3906531 || version_code > 2100000000 )); then
+            echo "::error::M39089_BLOCKED=ANDROID_VERSION_CODE_DOWNGRADE"
+            exit 2
+          fi
           echo "FRCAIXINHA_ANDROID_KEYSTORE_FILE=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+          echo "FRCAIXINHA_ANDROID_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+          echo "M39089_SIGNING_CERT=MATCH_WORKING_M39065"
+          echo "M39089_PLANNED_VERSION_CODE=$version_code"
       - name: Compilar APK assinado para atualizacoes futuras
         working-directory: android
         env:
           FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING: '1'
-          FRCAIXINHA_ANDROID_VERSION_CODE: ${{ github.run_number }}
           FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
           FRCAIXINHA_ANDROID_KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
           FRCAIXINHA_ANDROID_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
+          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3906531
           for attempt in 1 2 3; do
             LOG="$RUNNER_TEMP/fr-finance-gradle-$attempt.log"
             if ./gradlew --no-daemon assembleDebug 2>&1 | tee "$LOG"; then
@@ -279,12 +297,14 @@ jobs:
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/ai-studio-apk-badging.txt
           grep -F "package: name='com.frcaixinha.app.aistudio'" /tmp/ai-studio-apk-badging.txt
-          grep -F "versionCode='${{ github.run_number }}'" /tmp/ai-studio-apk-badging.txt
+          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3906531
+          grep -F "versionCode='${FRCAIXINHA_ANDROID_VERSION_CODE}'" /tmp/ai-studio-apk-badging.txt
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/frcaixinha-apk-signing.txt
           grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/frcaixinha-apk-signing.txt
-          grep -E "Signer: certificate SHA-256 digest:" /tmp/frcaixinha-apk-signing.txt
+          grep -F "Signer: certificate SHA-256 digest: ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7" /tmp/frcaixinha-apk-signing.txt
+          echo "M39089_APK_MAIN_SIGNING_AND_VERSION=PASS"
       - name: Disponibilizar APK debug
         uses: actions/upload-artifact@v4
         with:
