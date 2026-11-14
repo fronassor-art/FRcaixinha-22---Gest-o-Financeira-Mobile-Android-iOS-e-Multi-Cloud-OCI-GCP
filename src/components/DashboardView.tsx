@@ -86,6 +86,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
           </div>
           <p className="mt-5 text-xs font-medium text-emerald-100/85">Caixinhas cadastradas</p>
           <p className="mt-1 text-4xl font-extrabold">{data.total_tenants}</p>
+          <button type="button" onClick={() => onNavigateTab('MASTER_CASHBOX')}
+            className="mt-4 flex min-h-11 w-full items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3 text-left">
+            <span className="text-sm text-emerald-50">Meu Caixa Exclusivo Master</span>
+            <ChevronRight className="h-5 w-5 text-[#f1d485]" aria-hidden="true"/>
+          </button>
           <button type="button" onClick={() => onNavigateTab('CAIXINHAS')}
             className="mt-4 flex min-h-11 w-full items-center justify-between rounded-xl border border-[#c7aa68]/35 bg-black/15 px-3 py-3 text-left"
           >
@@ -159,6 +164,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateT
           {member ? 'Seu resumo individual' : 'Resumo desta caixinha'}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
+          {!member&&<button type="button" onClick={()=>onNavigateTab('ADMIN_CASHBOX')}
+            className="fr-gold-button flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm">
+            <Wallet className="h-4 w-4"/> Meu Caixa Exclusivo
+          </button>}
           <button type="button"
             onClick={() => onNavigateTab(member ? 'MINHAS_CONTRIBUICOES' : 'CONTRIBUICOES')}
             className="fr-gold-button flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm">
