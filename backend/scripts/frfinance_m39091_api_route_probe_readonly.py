@@ -57,7 +57,7 @@ def inspect_local_openapi() -> tuple[str, set[str]]:
         if not isinstance(document, dict) or not isinstance(document.get("paths"), dict):
             return "INVALID_OPENAPI", set()
         # Only GET endpoints are valid for these read-only capabilities.
-        # A route with the correct name but only POST is not accepted.
+        # Matching paths exposed by non-GET methods are rejected.
         expected_get = {
             path for path, operations in document["paths"].items()
             if isinstance(path, str) and isinstance(operations, dict)
