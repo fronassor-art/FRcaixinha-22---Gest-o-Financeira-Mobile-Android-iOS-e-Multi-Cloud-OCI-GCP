@@ -682,6 +682,20 @@ jobs:
           # CI-only, fora do diretorio de migracoes do Termux.
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
           PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
+      - name: M39600 — caixas Master/Admin/Membro RLS SQL real em PostgreSQL 16 descartavel
+        env:
+          GITHUB_ACTIONS: 'true'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$PGDATABASE" = frcaixinha_ci
+          test "$PGPORT" = 5432
+          PGOPTIONS='-c frfinance.m39600_ci=DISPOSABLE_ONLY' psql -X -v ON_ERROR_STOP=1 -v CI_M39600_DISPOSABLE=1 -f backend/tests/sql/m39600_exclusive_cashbox_rls_disposable_ci.sql
       - name: Criar usuário de aplicação para teste
         env:
           PGHOST: 127.0.0.1
@@ -894,6 +908,20 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frcaixinha_pg18_auth"
           psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_verifier LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
           psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO frcaixinha_pg18_verifier"
+      - name: M39600 — caixas Master/Admin/Membro RLS SQL real em PostgreSQL 18 descartavel
+        env:
+          GITHUB_ACTIONS: 'true'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$PGDATABASE" = frcaixinha_ci
+          test "$PGPORT" = 5432
+          PGOPTIONS='-c frfinance.m39600_ci=DISPOSABLE_ONLY' psql -X -v ON_ERROR_STOP=1 -v CI_M39600_DISPOSABLE=1 -f backend/tests/sql/m39600_exclusive_cashbox_rls_disposable_ci.sql
       - name: M37445 — abertura autenticada de tres valores em PG18 descartavel
         env:
           GITHUB_ACTIONS: 'true'
