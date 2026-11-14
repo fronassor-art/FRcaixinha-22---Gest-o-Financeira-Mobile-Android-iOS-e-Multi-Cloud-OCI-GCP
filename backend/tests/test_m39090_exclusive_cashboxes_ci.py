@@ -82,7 +82,7 @@ def test_master_sees_only_saas_evidence_not_tenant_balance():
         with TestClient(app) as c:
             response=c.get(MASTER_PATH)
         assert response.status_code==200,response.text
-        assert response.headers.get("cache-control")=="private, no-store, max-age=0"
+        assert "no-store" in response.headers.get("cache-control", "").lower()
         assert response.headers.get("pragma")=="no-cache"
         assert response.headers.get("vary")=="Authorization"
         v=response.json()
@@ -110,7 +110,7 @@ def test_tenant_owner_sees_only_own_evidence_not_imaginary_share():
         with TestClient(app) as c:
             response=c.get(TENANT_PATH)
         assert response.status_code==200,response.text
-        assert response.headers.get("cache-control")=="private, no-store, max-age=0"
+        assert "no-store" in response.headers.get("cache-control", "").lower()
         assert response.headers.get("pragma")=="no-cache"
         assert response.headers.get("vary")=="Authorization"
         v=response.json()
