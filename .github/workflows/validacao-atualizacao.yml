@@ -745,24 +745,24 @@ jobs:
           mkdir -p "$RUNNER_TEMP/frfinance-pg16-bin"
           for pgtool in pg_dump pg_restore; do
             cat > "$RUNNER_TEMP/frfinance-pg16-bin/$pgtool" <<'PG16_WRAP'
-#!/usr/bin/env bash
-set -euo pipefail
-# This wrapper is only for a disposable Github Actions PostgreSQL 16 service.
-if [[ "${GITHUB_ACTIONS:-}" != "true" || "${PGHOST:-}" != "127.0.0.1" ||
-      "${PGPORT:-}" != "5432" || "${PGUSER:-}" != "postgres" ||
-      ( "${PGDATABASE:-}" != "frcaixinha_ci" &&
-        "${PGDATABASE:-}" != "frcaixinha_restore_ci" ) ]]; then
-  echo "M39087_PG16_CLIENT_WRAPPER=BLOCKED_NONDISPOSABLE_CONTEXT" >&2
-  exit 2
-fi
-command_name="$(basename "$0")"
-if [[ "$command_name" != "pg_dump" && "$command_name" != "pg_restore" ]]; then
-  exit 2
-fi
-exec docker run --rm -i --network host \
-  -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
-  postgres:16 "$command_name" "$@"
-PG16_WRAP
+          #!/usr/bin/env bash
+          set -euo pipefail
+          # This wrapper is only for a disposable Github Actions PostgreSQL 16 service.
+          if [[ "${GITHUB_ACTIONS:-}" != "true" || "${PGHOST:-}" != "127.0.0.1" ||
+                "${PGPORT:-}" != "5432" || "${PGUSER:-}" != "postgres" ||
+                ( "${PGDATABASE:-}" != "frcaixinha_ci" &&
+                  "${PGDATABASE:-}" != "frcaixinha_restore_ci" ) ]]; then
+            echo "M39087_PG16_CLIENT_WRAPPER=BLOCKED_NONDISPOSABLE_CONTEXT" >&2
+            exit 2
+          fi
+          command_name="$(basename "$0")"
+          if [[ "$command_name" != "pg_dump" && "$command_name" != "pg_restore" ]]; then
+            exit 2
+          fi
+          exec docker run --rm -i --network host \
+            -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
+            postgres:16 "$command_name" "$@"
+          PG16_WRAP
             chmod 700 "$RUNNER_TEMP/frfinance-pg16-bin/$pgtool"
           done
           export PATH="$RUNNER_TEMP/frfinance-pg16-bin:$PATH"
