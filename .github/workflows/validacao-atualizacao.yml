@@ -737,13 +737,35 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq age postgresql-client-16
-          # PG16 disposable service must use PG16 client utilities for both
-          # dump and restore. PG18 pg_restore emits SET transaction_timeout,
-          # unsupported by the PG16 server; never strip SQL or ignore errors.
-          test -x /usr/lib/postgresql/16/bin/pg_dump
-          test -x /usr/lib/postgresql/16/bin/pg_restore
-          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          sudo apt-get install -y -qq age
+          # Run PG16 client binaries from the very same official container
+          # image as the disposable CI database, avoiding host apt packages
+          # and PG18 -> PG16 transaction_timeout restore incompatibility.
+          docker image inspect postgres:16 >/dev/null
+          mkdir -p "$RUNNER_TEMP/frfinance-pg16-bin"
+          for pgtool in pg_dump pg_restore; do
+            cat > "$RUNNER_TEMP/frfinance-pg16-bin/$pgtool" <<'PG16_WRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+# This wrapper is only for a disposable Github Actions PostgreSQL 16 service.
+if [[ "${GITHUB_ACTIONS:-}" != "true" || "${PGHOST:-}" != "127.0.0.1" ||
+      "${PGPORT:-}" != "5432" || "${PGUSER:-}" != "postgres" ||
+      ( "${PGDATABASE:-}" != "frcaixinha_ci" &&
+        "${PGDATABASE:-}" != "frcaixinha_restore_ci" ) ]]; then
+  echo "M39087_PG16_CLIENT_WRAPPER=BLOCKED_NONDISPOSABLE_CONTEXT" >&2
+  exit 2
+fi
+command_name="$(basename "$0")"
+if [[ "$command_name" != "pg_dump" && "$command_name" != "pg_restore" ]]; then
+  exit 2
+fi
+exec docker run --rm -i --network host \
+  -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
+  postgres:16 "$command_name" "$@"
+PG16_WRAP
+            chmod 700 "$RUNNER_TEMP/frfinance-pg16-bin/$pgtool"
+          done
+          export PATH="$RUNNER_TEMP/frfinance-pg16-bin:$PATH"
           test "$(pg_dump --version | awk '{print $NF}' | cut -d. -f1)" = "16"
           test "$(pg_restore --version | awk '{print $NF}' | cut -d. -f1)" = "16"
           test "$(psql -tAc 'SHOW server_version_num' | tr -d '[:space:]' | cut -c1-2)" = "16"
