@@ -187,6 +187,12 @@ jobs:
         run: npx tsx src/tests/m22500_legacy_contributions_ui_ci.test.ts
       - name: Validar identidade visual e separacao por perfil
         run: npx tsx src/tests/premium_brand_ui.test.ts
+      - name: M39090 M39091 — caixas exclusivos e rota Crédito Especial 404
+        run: |
+          npx tsx src/tests/m39090_exclusive_cashboxes_ci.test.ts
+          npx tsx src/tests/m39091_special_credit_route_404_ci.test.ts
+          npx tsx src/tests/m39076_tenant_campaigns_navigation_ci.test.ts
+          npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
       - name: Build web
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -391,6 +397,7 @@ jobs:
           python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
           python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
           python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
+          python -m pytest -q backend/tests/test_m39090_exclusive_cashboxes_ci.py backend/tests/test_m39091_local_api_route_probe_ci.py
           python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
           python -m pytest -q backend/tests/test_member_obligations_oracle_ci.py
