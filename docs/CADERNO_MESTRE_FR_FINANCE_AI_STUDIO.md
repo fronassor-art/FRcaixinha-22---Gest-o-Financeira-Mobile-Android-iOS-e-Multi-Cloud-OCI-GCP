@@ -70,3 +70,12 @@
 - **Próximo gate antes da produção:** congelamento de oferta vinculada à versão de campanha, aceite inequívoco e documentado, consentimentos de comunicação, integração do provedor de cobrança e conciliação. A publicação informativa atual **não** completa esses requisitos.
 
 **Contraparte normativa:** [CTM-SAAS-01 a CTM-SAAS-09](CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md). As fontes históricas PDF e o FR Caixinha 2.2 original não são alterados nesta frente.
+
+## 9. Caixa exclusivo Master e Caixa exclusivo do Administrador — M39090 (consulta segura)
+- A plataforma mantém **Caixa Exclusivo do Administrador Master** para evidências de receitas SaaS e assinaturas, sem acesso a capital, saldos ou Livro-Razão de membros das caixinhas.
+- Cada caixinha dispõe de **Caixa Exclusivo do seu Administrador Titular** para acompanhar, em caráter documental, a participação prevista de **15% do lucro líquido elegível**; os **85% dos membros** permanecem no cálculo e na conciliação próprios, sem apropriação antecipada.
+- Os dois painéis do aplicativo existem na navegação por papel e são exibidos apenas após autenticação; a API revalida o papel e o tenant a cada GET no PostgreSQL RLS.
+- A primeira entrega M39090 disponibiliza **indicadores contabilizados e status**, não conta bancária, saldo confirmado, comissão creditada, recebimento, transferência ou saque. Campos de saldo ficam `null`/“Não disponível” até prova independente de conciliação e fechamento.
+- Contagens de intenções SaaS não representam receita recebida; contagens de lançamentos da caixinha não representam dinheiro do administrador. Jamais derivar saldo de somatório de intenções, quotas ou campanhas.
+- Caminho posterior para operacionalizar saldos: desenho de contas de titularidade, regime de competência, fechamento aprovado, lançamentos imutáveis, conciliação do provedor, trilhas de autorização/auditoria, RLS, migrações revisadas e homologação de provedores. **Não aplicar SQL original nem habilitar Pix real sem autorização expressa adicional.**
+- Erro 404 em Campanhas do Crédito Especial deve ser diagnosticado primeiro comparando as rotas do FastAPI realmente em execução com as rotas versionadas; mudança de banco ou reativação de crédito não é solução automática.
