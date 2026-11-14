@@ -1,0 +1,71 @@
+name: FR Finance M39500 M39501 — SQL110-113 e FastAPI READ ONLY
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/m39500_migration_reconciliation.py'
+      - 'backend/scripts/frfinance_m39500_readonly_homologation.py'
+      - 'backend/scripts/frfinance_m39091_api_route_probe_readonly.py'
+      - 'backend/tests/test_m39500_migration_reconciliation_ci.py'
+      - 'backend/tests/test_m39501_fastapi_route_attestation_ci.py'
+      - 'backend/migrations/110_fr_finance_special_credit_offline.sql'
+      - 'backend/migrations/111_frfinance_special_credit_integrity_guards.sql'
+      - 'backend/migrations/112_frfinance_master_independent_saas_prices.sql'
+      - 'backend/migrations/113_frfinance_saas_new_admin_promotions.sql'
+      - '.github/workflows/frfinance-m39500-pg18-catalog-404-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/m39500_migration_reconciliation.py'
+      - 'backend/scripts/frfinance_m39500_readonly_homologation.py'
+      - 'backend/scripts/frfinance_m39091_api_route_probe_readonly.py'
+      - 'backend/tests/test_m39500_migration_reconciliation_ci.py'
+      - 'backend/tests/test_m39501_fastapi_route_attestation_ci.py'
+      - 'backend/migrations/110_fr_finance_special_credit_offline.sql'
+      - 'backend/migrations/111_frfinance_special_credit_integrity_guards.sql'
+      - 'backend/migrations/112_frfinance_master_independent_saas_prices.sql'
+      - 'backend/migrations/113_frfinance_saas_new_admin_promotions.sql'
+      - '.github/workflows/frfinance-m39500-pg18-catalog-404-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m39500-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sqlite-free-pg18-catalog:
+    name: 110–113 integrity and 404 cannot fake PASS
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: .
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias de teste sem criar PostgreSQL
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest==8.3.4
+      - name: Verificar SQL110 a SQL113 e erros seguros de FastAPI
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39500_migration_reconciliation_ci.py \
+            backend/tests/test_m39501_fastapi_route_attestation_ci.py \
+            backend/tests/test_m39091_local_api_route_probe_ci.py \
+            backend/tests/test_m39032_post_migration_readonly_ci.py \
+            backend/tests/test_m39068_postcommit_sql112_113_readonly_ci.py
+      - name: Conferir checkpoint offline sem conectar ao banco original
+        run: |
+          python -B backend/scripts/frfinance_m39500_readonly_homologation.py --offline
+          echo 'M39500_NO_LOCAL_DATABASE_ACCESS=PASS'
+          echo 'M39500_NO_SQL_MIGRATIONS=PASS'
+          echo 'M39500_NO_LIVE_CREDIT_OR_PIX=PASS'
