@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      PYTHONPATH: .
+      PYTHONPATH: backend:.
       PYTHONDONTWRITEBYTECODE: '1'
       FR_FINANCE_PIX_REAL: 'OFF'
       FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
