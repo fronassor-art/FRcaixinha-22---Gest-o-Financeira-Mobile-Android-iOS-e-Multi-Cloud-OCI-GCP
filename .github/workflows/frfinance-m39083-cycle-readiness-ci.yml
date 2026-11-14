@@ -1,0 +1,69 @@
+name: FR Finance M39083 current-cycle campaign UI safe preflight
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/routers/special_credit.py'
+      - 'backend/tests/test_m39083_credit_cycle_readiness_ci.py'
+      - 'src/components/SpecialCreditView.tsx'
+      - 'src/services/specialCreditApi.ts'
+      - 'src/tests/m39083_cycle_readiness_ui_ci.test.ts'
+      - '.github/workflows/frfinance-m39083-cycle-readiness-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependencias
+        run: python -m pip install -r backend/requirements.txt
+      - name: Read-only cycle readiness and previous credit gates
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39083_credit_cycle_readiness_ci.py \
+            backend/tests/test_m39082_special_credit_cycle_actions_ci.py \
+            backend/tests/test_m39081_credit_cycle_validity_ci.py \
+            backend/tests/test_m39033_special_credit_route_flow_ci.py \
+            backend/tests/test_m39020_special_credit_api_ci.py \
+            backend/tests/test_m39080_credit_campaign_cycle_readonly_ci.py
+          echo 'M39083_ORIGINAL_POSTGRESQL=NOT_CONNECTED'
+          echo 'M39083_DATABASE_WRITES=NONE'
+          echo 'M39083_PIX_REAL=OFF'
+
+  frontend-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      FR_FINANCE_PIX_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Admin UI readiness and navigation
+        run: |
+          npx tsx src/tests/m39083_cycle_readiness_ui_ci.test.ts
+          npx tsx src/tests/m39076_tenant_campaigns_navigation_ci.test.ts
+          npx tsx src/tests/m39020_credit_push_ui_ci.test.ts
+          echo 'M39083_EXTERNAL_DELIVERY=OFF'
+          echo 'M39083_REAL_CREDIT=OFF'
