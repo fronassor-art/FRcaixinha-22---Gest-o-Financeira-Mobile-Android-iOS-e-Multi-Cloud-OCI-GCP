@@ -40,17 +40,26 @@ def test_pg16_restore_keeps_crypto_integrity_and_strict_error_exit():
     end = workflow.index("  postgres18-preflight:", start)
     backup = workflow[start:end]
     for required in (
-        "postgresql-client-16",
-        "/usr/lib/postgresql/16/bin/pg_dump",
-        "/usr/lib/postgresql/16/bin/pg_restore",
-        'export PATH="/usr/lib/postgresql/16/bin:$PATH"',
-        'SHOW server_version_num',
+        "docker image inspect postgres:16",
+        "docker run --rm -i --network host",
+        "postgres:16 \"$command_name\" \"$@\"", 
+        "-e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE",
+        'export PATH="$RUNNER_TEMP/frfinance-pg16-bin:$PATH"',
+        "GITHUB_ACTIONS:-",
+        "PGHOST:-",
+        "PGPORT:-",
+        "PGUSER:-",
+        "PGDATABASE:-",
+        "frcaixinha_restore_ci",
+        "M39087_PG16_CLIENT_WRAPPER=BLOCKED_NONDISPOSABLE_CONTEXT",
+        "SHOW server_version_num",
         "age-keygen",
         "backend/scripts/backup_age.sh",
         "backend/scripts/restore_disposable_ci.sh",
         'test "$restored" = "$original"',
     ):
         assert required in backup, required
+    assert "postgresql-client-16" not in backup
     assert backup.count("pg_dump --version") == 1
     assert backup.count("pg_restore --version") == 1
     assert 'image: postgres:16' in workflow
