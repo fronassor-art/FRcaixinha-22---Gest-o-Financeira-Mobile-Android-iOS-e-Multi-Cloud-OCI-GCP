@@ -398,6 +398,13 @@ jobs:
           python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39100_full_traceability_ci.py
           python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39101_android_source_route_ci.py
           python -B backend/scripts/frfinance_m39100_super_macropacote_readonly.py audit
+      - name: M39500–M39501 — SQL110 a 113 e FastAPI 404 sem falso PASS
+        env:
+          PYTHONPATH: backend:.
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39500_migration_reconciliation_ci.py backend/tests/test_m39501_fastapi_route_attestation_ci.py
+          python -B backend/scripts/frfinance_m39500_readonly_homologation.py --offline
       - name: Executar testes de API
         env:
           PYTHONPATH: backend
