@@ -35,8 +35,15 @@ assert.match(dashboard,/tenant.tenant_id !== state.currentTenantId/);
 assert.match(dashboard,/role === 'TENANT_ADMIN'/);
 assert.doesNotMatch(dashboard,/R\$\s*1\.850/);
 assert.doesNotMatch(dashboard,/setTimeout\(|Math.random\(/);
+// M39088: M39076 adds this member-only opportunity tab; the historical
+// brand suite must keep enforcing the precise role-scoped menu, not remove it.
 assert.deepEqual(tabsAllowedToRole('TENANT_MEMBER'),
-  ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO','NOTIFICACOES']);
+  ['MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MINHAS_OPORTUNIDADES','MEU_RESULTADO','NOTIFICACOES']);
+assert.equal(tabsAllowedToRole('MASTER').includes('MINHAS_OPORTUNIDADES'),false);
+assert.equal(tabsAllowedToRole('TENANT_ADMIN').includes('MINHAS_OPORTUNIDADES'),false);
+assert.equal(tabsAllowedToRole('TENANT_ADMIN').includes('CAMPANHAS_MEMBROS'),true);
+assert.equal(tabsAllowedToRole('TENANT_MEMBER').includes('CAMPANHAS_MEMBROS'),false);
+assert.equal(tabsAllowedToRole('MASTER').includes('CAMPANHAS_MEMBROS'),false);
 
 const app=file('src/App.tsx');
 assert.doesNotMatch(app,/handleContextSwitch|profilePickerOpen|Trocar perfil/);
