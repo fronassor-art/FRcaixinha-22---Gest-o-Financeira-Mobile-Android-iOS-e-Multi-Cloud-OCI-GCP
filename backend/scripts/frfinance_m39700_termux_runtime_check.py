@@ -99,8 +99,8 @@ def review_runtime(fetch=read_json_loopback) -> dict[str, str]:
     health_status, health = fetch(PATHS[0])
     checkpoint_status, checkpoint = fetch(PATHS[1])
     openapi_status, openapi = fetch(PATHS[2])
-    ready_status, ready = fetch(PATHS[3])
-
+    # Never call a readiness route of an unidentified/wrong application.
+    # It might point to the independent FR Caixinha 2.2 database.
     h = (classify_health(health) if health_status == 200
          else "HEALTH_HTTP_" + str(health_status))
     c = (classify_checkpoint(checkpoint) if checkpoint_status == 200
@@ -110,7 +110,16 @@ def review_runtime(fetch=read_json_loopback) -> dict[str, str]:
         r, missing = classify_routes(openapi)
     else:
         r, missing = "OPENAPI_HTTP_" + str(openapi_status), ()
-    a = classify_readiness(ready_status, ready)
+    identity_safe = (
+        h == "FR_FINANCE_ONLINE"
+        and c == "M39700_RUNNING_CODE_LOADED"
+        and r == "GET_ROUTES_PRESENT"
+    )
+    if identity_safe:
+        ready_status, ready = fetch(PATHS[3])
+        a = classify_readiness(ready_status, ready)
+    else:
+        a = "SKIPPED_UNVERIFIED_RUNNING_APP"
 
     if (h == "FR_FINANCE_ONLINE"
             and c == "M39700_RUNNING_CODE_LOADED"
