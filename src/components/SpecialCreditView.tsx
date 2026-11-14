@@ -172,7 +172,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     </header>
     <button type="button" onClick={()=>setRevision(n=>n+1)}
       className="rounded-lg border border-emerald-700 px-3 py-2 text-sm text-emerald-900">
-      Atualizar oportunidades
+      {role==='TENANT_ADMIN'?'Atualizar campanhas':'Atualizar oportunidades'}
     </button>
     {loading&&<p role="status">Consultando o banco de homologação...</p>}
     {message&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{message}</p>}
