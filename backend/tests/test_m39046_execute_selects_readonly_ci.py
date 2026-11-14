@@ -16,7 +16,7 @@ ROUTER = Path(__file__).resolve().parents[1] / "app" / "routers" / "special_cred
 
 def test_inventory_differentiates_readonly_queries_from_row_locks():
     queries = m.read_queries(ROUTER.read_text(encoding="utf-8"))
-    assert len(queries) == m.EXPECTED_QUERIES == 17
+    assert len(queries) == m.EXPECTED_QUERIES == 18
     locking = [sql for _, _, sql in queries if m.is_locking(sql)]
     assert len(locking) == m.EXPECTED_LOCKING == 2
     assert any("FOR SHARE" in sql for sql in locking)
@@ -30,6 +30,25 @@ def test_inventory_differentiates_readonly_queries_from_row_locks():
             assert value.startswith("SELECT ")
             assert "$" not in value
             assert "EXPLAIN" not in value
+
+
+def test_cycle_readiness_query_is_tenant_scoped_scalar_and_date_gated():
+    queries = m.read_queries(ROUTER.read_text(encoding="utf-8"))
+    matches = [
+        sql for _, _, sql in queries
+        if sql.startswith("SELECT EXISTS (SELECT 1 FROM public.cycles ")
+    ]
+    assert len(matches) == 1
+    sql = matches[0]
+    for condition in (
+        "tenant_id=$1", "status='ABERTO'",
+        "start_date<=CURRENT_DATE", "end_date>=CURRENT_DATE"
+    ):
+        assert condition in sql
+    assert m._scalar_zero(sql)
+    assert not m.is_locking(sql)
+    assert m.executable_sql(sql).startswith("SELECT EXISTS (")
+
 
 
 class FakeResponse:
@@ -86,12 +105,12 @@ def test_all_safe_reads_execute_under_rls_without_exposing_rows(capsys):
     output = capsys.readouterr().out
     assert "M39046_STATUS=PASS" not in output  # main imprime após a auditoria
     assert "M39046_RLS_ACTIVE=6_OF_6" in output
-    assert "M39046_SELECTS_EXECUTED=30" in output
+    assert "M39046_SELECTS_EXECUTED=32" in output
     assert "M39046_LOCKING_SELECTS_SKIPPED=2" in output
     assert "M39046_DATABASE_WRITES=NONE" in output
     assert len([q for q,_ in fake.queries if q.startswith("SELECT ") and
                 not q.startswith(("SELECT current_", "SELECT EXISTS(SELECT 1 FROM public.tenants",
-                                  "SELECT row_security_active", "SELECT set_config"))]) == 30
+                                  "SELECT row_security_active", "SELECT set_config"))]) == 32
 
 
 def test_leak_or_wrong_baseline_never_returns_pass():
@@ -100,6 +119,19 @@ def test_leak_or_wrong_baseline_never_returns_pass():
         m.audit_actual_selects(FakeReadOnlyPg(leak=True), queries)
     with pytest.raises(RuntimeError, match="READ_QUERY_COVERAGE_DRIFT"):
         m.audit_actual_selects(FakeReadOnlyPg(), queries[:-1])
+
+
+def test_synthetic_cycle_readiness_true_is_rejected_as_leak():
+    class FakeUnscopedCycle(FakeReadOnlyPg):
+        def execute(self, query, args=None):
+            if query.startswith("SELECT EXISTS (SELECT 1 FROM public.cycles "):
+                self.queries.append((query, args))
+                return FakeResponse(all_rows=[(True,)])
+            return super().execute(query, args)
+
+    queries = m.read_queries(ROUTER.read_text(encoding="utf-8"))
+    with pytest.raises(RuntimeError, match="M39046_QUERY_FAILED"):
+        m.audit_actual_selects(FakeUnscopedCycle(), queries)
 
 
 def test_main_rejects_noncanonical_environment(monkeypatch, capsys):
