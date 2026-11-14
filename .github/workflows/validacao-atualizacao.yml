@@ -744,8 +744,8 @@ jobs:
           test -x /usr/lib/postgresql/16/bin/pg_dump
           test -x /usr/lib/postgresql/16/bin/pg_restore
           export PATH="/usr/lib/postgresql/16/bin:$PATH"
-          test "$(pg_dump --version | grep -oE '[0-9]+\\.[0-9]+' | head -1 | cut -d. -f1)" = "16"
-          test "$(pg_restore --version | grep -oE '[0-9]+\\.[0-9]+' | head -1 | cut -d. -f1)" = "16"
+          test "$(pg_dump --version | awk '{print $NF}' | cut -d. -f1)" = "16"
+          test "$(pg_restore --version | awk '{print $NF}' | cut -d. -f1)" = "16"
           test "$(psql -tAc 'SHOW server_version_num' | tr -d '[:space:]' | cut -c1-2)" = "16"
           age-keygen -o "$RUNNER_TEMP/frcaixinha-ci-identity.txt"
           recipient="$(age-keygen -y "$RUNNER_TEMP/frcaixinha-ci-identity.txt")"
