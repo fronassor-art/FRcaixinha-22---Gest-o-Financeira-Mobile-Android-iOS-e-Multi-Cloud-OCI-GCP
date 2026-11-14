@@ -1,0 +1,35 @@
+name: FR Finance M38410 Brevo TXT delimiters and diagnostics CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  brevo-code-syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Provar duas sintaxes TXT e diagnostico DNS sem rede
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38410_brevo_code_variants_ci.py \
+            backend/tests/test_m38370_public_mail_dns_failure_diagnosis_ci.py \
+            backend/tests/test_m38330_brevo_dkim_txt_live_path_ci.py \
+            backend/tests/test_m38290_brevo_dns_policy_ci.py \
+            backend/tests/test_m38250_mail_dns_readonly_ci.py \
+            backend/tests/test_m27700_public_provider_intake_ci.py
+          echo "M38449_DNS_EXTERNAL_QUERIES=NONE"
+          echo "M38449_PROVIDER_AUTHENTICATION=NOT_ATTESTED"
+          echo "M38449_EMAIL_REAL=OFF"
+          echo "M38449_PIX_REAL=OFF"
+          echo "M38449_REAL_ACTIVATION=OFF"
+          echo "M38449_PRODUCTION=BLOCKED"

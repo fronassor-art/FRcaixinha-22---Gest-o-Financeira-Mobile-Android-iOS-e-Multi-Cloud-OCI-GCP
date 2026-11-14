@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { MasterSaasPortfolioView } from './MasterSaasPortfolioView';
+import { MasterSaasPromotionsPanel, NewAdminSaasOffersPanel } from './SaasPromotionsPanel';
+import { financialApi } from '../services/financialApiService';
 import {
   ShieldCheck,
   CreditCard,
@@ -13,7 +16,7 @@ import {
   Layers
 } from 'lucide-react';
 import { AppState, appStore } from '../services/store';
-import { formatBRL, formatDateBR, calculateLicenseUpgradeProRata, roundCents } from '../services/financialEngine';
+import { formatBRL, formatDateBR, roundCents } from '../services/financialEngine';
 import { LicensePlanTier } from '../types';
 
 interface MasterLicensingViewProps {
@@ -31,10 +34,101 @@ interface MasterLicensingViewProps {
 export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state, onOpenPixModal }) => {
   const currentRole = state.currentRole;
   const isMaster = currentRole === 'MASTER';
+  const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof financialApi.fetchMasterLicenses>> | null>(null);
+  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    if (!isMaster) return () => { active = false; };
+    setCatalog(null);
+    setCatalogStatus('loading');
+    financialApi.fetchMasterLicenses().then(result => {
+      if (result.source !== 'POSTGRESQL_RLS') throw new Error('Fonte inválida');
+      if (active) { setCatalog(result); setCatalogStatus('ready'); }
+    }).catch(() => {
+      if (active) { setCatalog(null); setCatalogStatus('error'); }
+    });
+    return () => { active = false; };
+  }, [isMaster, state.currentUserId, revision]);
+
+
+  type PrepItem = { id: string; plan_tier: string; billing_period: string;
+    status: string; created_at: string; tenant_id?: string };
+  type PrepStatus = { key: string; status: 'loading' | 'ready' | 'error';
+    preparations: PrepItem[] };
+  const prepScope = [state.currentUserId, currentRole, state.currentTenantId].join(':');
+  const [subscriptionPreps, setSubscriptionPreps] = useState<PrepStatus>({
+    key: '', status: 'loading', preparations: [],
+  });
+  useEffect(() => {
+    let active = true;
+    setSubscriptionPreps({ key: prepScope, status: 'loading', preparations: [] });
+    const call = currentRole === 'MASTER'
+      ? financialApi.fetchMasterSubscriptionPreparations()
+      : currentRole === 'TENANT_ADMIN' && state.currentTenantId
+        ? financialApi.fetchTenantLicensePreparation(state.currentTenantId)
+        : null;
+    if (!call) {
+      setSubscriptionPreps({ key: prepScope, status: 'ready', preparations: [] });
+      return () => { active = false; };
+    }
+    call.then(response => {
+      if (response.source !== 'POSTGRESQL_RLS' ||
+          response.billing_status !== 'NO_PROVIDER_NO_FINANCIAL_ACTIVATION' ||
+          ('tenant_id' in response && response.tenant_id !== state.currentTenantId)) {
+        throw new Error('Fonte ou contexto SaaS inválido');
+      }
+      if (active) setSubscriptionPreps({ key: prepScope, status: 'ready',
+        preparations: response.preparations });
+    }).catch(() => {
+      if (active) setSubscriptionPreps({ key: prepScope, status: 'error', preparations: [] });
+    });
+    return () => { active = false; };
+  }, [prepScope, revision]);
+  const prepCurrent: PrepStatus = subscriptionPreps.key === prepScope
+    ? subscriptionPreps
+    : { key: prepScope, status: 'loading', preparations: [] };
+
+  type SaasStatus = { key: string; status: 'loading' | 'ready' | 'error';
+    payments: Array<{id:string;status:string;expected_amount_cents:number}>;
+    licenses: Array<{id:string;plan_tier:string;status:string;effective_status:string;valid_until:string}> };
+  const saasScope = [state.currentUserId,currentRole,state.currentTenantId].join(':');
+  const [billing, setBilling] = useState<SaasStatus>({
+    key:'',status:'loading',payments:[],licenses:[],
+  });
+  useEffect(() => {
+    let active = true;
+    setBilling({key:saasScope,status:'loading',payments:[],licenses:[]});
+    const request = currentRole==='MASTER'
+      ? financialApi.fetchMasterSaasPaymentStatus()
+      : currentRole==='TENANT_ADMIN' && state.currentTenantId
+        ? financialApi.fetchTenantSaasPaymentStatus(state.currentTenantId)
+        : null;
+    if (!request) {
+      setBilling({key:saasScope,status:'ready',payments:[],licenses:[]});
+      return () => {active=false;};
+    }
+    request.then(result => {
+      if (result.source !== 'POSTGRESQL_RLS' ||
+          ('tenant_id' in result && result.tenant_id !== state.currentTenantId)) {
+        throw new Error('Contexto SaaS inválido');
+      }
+      if (active) setBilling({key:saasScope,status:'ready',
+        payments:result.payments,licenses:result.licenses});
+    }).catch(() => {
+      if (active) setBilling({key:saasScope,status:'error',payments:[],licenses:[]});
+    });
+    return () => {active=false;};
+  }, [saasScope,revision]);
+  const currentBilling: SaasStatus = billing.key===saasScope ? billing :
+    {key:saasScope,status:'loading',payments:[],licenses:[]};
 
   // Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25)
   const [editingTier, setEditingTier] = useState<LicensePlanTier | null>(null);
-  const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(89.90);
+  const [newMonthlyPrice, setNewMonthlyPrice] = useState<number>(0);
+  const [newAnnualPrice, setNewAnnualPrice] = useState<number>(0);
+  const [editingVersionId, setEditingVersionId] = useState<string | null>(null);
+  const [priceSaving, setPriceSaving] = useState(false);
   const [changeReason, setChangeReason] = useState<string>('Reajuste comercial anual');
 
   // Simulador de Upgrade Pro-Rata
@@ -42,37 +136,130 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
   const currentSub = state.subscriptions.find(s => s.tenant_id === state.currentTenantId);
 
-  const handleSavePrice = (e: React.FormEvent) => {
+  const handleSavePrice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTier) return;
+    if (!editingTier || editingTier === 'AMPLIADO' || !isMaster ||
+        !editingVersionId || priceSaving) return;
+    const validCurrency = (value: number) => Number.isFinite(value) &&
+      value > 0 && value <= 999999.99 && Number.isInteger(Math.round(value * 100)) &&
+      Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
+    if (!validCurrency(newMonthlyPrice) || !validCurrency(newAnnualPrice) ||
+        changeReason.trim().length < 15) {
+      alert('Informe os dois preços positivos em centavos e uma justificativa de 15 caracteres.');
+      return;
+    }
+    setPriceSaving(true);
     try {
-      appStore.updateLicenseMonthlyPrice(editingTier, newMonthlyPrice, changeReason);
-      setEditingTier(null);
-      alert('Versão de preço comercial registrada com sucesso! Anual recalculado automaticamente como 10x mensal.');
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        alert(err.message);
-      } else {
-        alert('Erro ao atualizar preço.');
+      const response = await financialApi.updateMasterLicensePrice(
+        editingTier, newMonthlyPrice, newAnnualPrice, editingVersionId,
+        changeReason.trim(),
+      );
+      if (response.status !== 'VERSION_PERSISTED_NO_BILLING' ||
+          response.billing_status !== 'OFF_NO_PROVIDER_NO_CHARGE') {
+        throw new Error('Persistência não confirmada');
       }
+      setEditingTier(null);
+      setEditingVersionId(null);
+      setRevision(n => n + 1);
+      alert('Mensalidade e anuidade registradas como nova versão no PostgreSQL. Nenhuma cobrança ou assinatura foi alterada.');
+    } catch {
+      setRevision(n => n + 1);
+      alert('Preço não confirmado. O catálogo pode ter mudado: revise os valores atualizados antes de tentar novamente.');
+    } finally {
+      setPriceSaving(false);
     }
   };
 
-  const currentEssencialPrice = state.priceVersions.find(p => p.plan_tier === 'ESSENCIAL');
-  const currentInterPrice = state.priceVersions.find(p => p.plan_tier === 'INTERMEDIARIO');
-  const currentAmpPrice = state.priceVersions.find(p => p.plan_tier === 'AMPLIADO');
+  // Preços lidos exclusivamente do backend PostgreSQL; nunca de seeds locais.
+  const prices = catalog?.plans.map(p => ({
+    ...p,
+    plan_tier: p.tier,
+    monthly_price: p.monthly_price ? Number(p.monthly_price) : 0,
+    annual_price: p.annual_price ? Number(p.annual_price) : 0,
+  })) || [];
+  const currentEssencialPrice = prices.find(p => p.tier === 'ESSENCIAL');
+  const currentInterPrice = prices.find(p => p.tier === 'INTERMEDIARIO');
+  const currentAmpPrice = prices.find(p => p.tier === 'AMPLIADO');
 
-  // Cálculo pro-rata se for admin simulando upgrade
-  const upgradeProRata = calculateLicenseUpgradeProRata(
-    89.90, // De Essencial
-    109.90, // Para Intermediário
-    new Date('2026-10-16'),
-    new Date('2027-10-16'),
-    new Date()
-  );
+  if (!isMaster) {
+    return <section role="status" className="rounded-xl border border-amber-300 bg-white p-5">
+      <h2 className="text-lg font-bold">Licença SaaS da caixinha</h2>
+      {currentRole !== 'TENANT_ADMIN' ? (
+        <p className="mt-2 text-sm text-slate-700">
+          Informações comerciais são restritas ao administrador contratante.
+        </p>
+      ) : prepCurrent.status !== 'ready' ? (
+        <p className="mt-2 text-sm text-slate-700">
+          {prepCurrent.status === 'loading' ? 'Consultando o PostgreSQL...' :
+            'Não foi possível consultar a licença. Nenhum status fictício será exibido.'}
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-slate-700">
+            {prepCurrent.preparations.length} preparação(ões) documentais visíveis.
+            Nenhuma representa licença ativa ou pagamento conciliado.
+          </p>
+          {prepCurrent.preparations.map(p => (
+            <p key={p.id} className="mt-2 text-sm text-slate-700">
+              {p.plan_tier} • {p.billing_period} • {p.status}
+            </p>
+          ))}
+        </>
+      )}
+      <div className="mt-4 rounded-xl border border-slate-200 p-3 text-sm text-slate-800">
+        <strong>Status SaaS validado pelo servidor</strong>
+        {currentBilling.status==='ready' ? (
+          <p className="mt-1">
+            {currentBilling.payments.length} cobrança(s) registrada(s),
+            {' '}{currentBilling.licenses.filter(l => l.effective_status==='ACTIVE').length} licença(s) ativa(s).
+            {currentBilling.licenses.map(l => (
+              <span key={l.id} className="block">
+                {l.plan_tier} • {l.effective_status} • validade {l.valid_until}
+              </span>
+            ))}
+          </p>
+        ) : <p className="mt-1 text-amber-950">
+          {currentBilling.status==='loading' ? 'Consultando registros...' :
+          'Consulta indisponível. Nenhuma licença será presumida ativa.'}
+        </p>}
+      </div>
+      {currentRole === 'TENANT_ADMIN' && state.currentTenantId &&
+        <NewAdminSaasOffersPanel tenantId={state.currentTenantId} />}
+      <p className="mt-3 text-xs text-amber-950">
+        Novas contratações, pagamentos e ativações continuam desabilitados
+        até autorização e integração real dos provedores.
+      </p>
+    </section>;
+  }
+
+  if (catalogStatus !== 'ready') {
+    return <section role="status" className="rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="text-lg font-bold">Licenças e Preços — Master</h2>
+      <p className="mt-2 text-sm">
+        {catalogStatus === 'error'
+          ? 'Catálogo do PostgreSQL indisponível. Não é permitido editar preços simulados.'
+          : 'Carregando preços registrados no servidor...'}
+      </p>
+      <button type="button" onClick={() => setRevision(n => n + 1)}
+        className="mt-3 rounded-lg border px-4 py-2">Tentar novamente</button>
+    </section>;
+  }
+
+  // A diferença mensal vem apenas das versões do catálogo confirmadas no PostgreSQL.
+  // Não existe cálculo "a pagar" antes de uma licença com datas autenticadas.
+  const essentialMonthly = currentEssencialPrice?.monthly_price;
+  const intermediateMonthly = currentInterPrice?.monthly_price;
+  const illustrativeMonthlyDelta =
+    typeof essentialMonthly==='number' && Number.isFinite(essentialMonthly) && essentialMonthly>0 &&
+    typeof intermediateMonthly==='number' && Number.isFinite(intermediateMonthly) && intermediateMonthly>0
+      ? roundCents(Math.max(0,intermediateMonthly-essentialMonthly))
+      : null;
 
   return (
     <div className="space-y-6">
+      <MasterSaasPortfolioView userId={state.currentUserId ?? null}/>
+      <MasterSaasPromotionsPanel plans={catalog?.plans || []}
+        actorId={state.currentUserId ?? null} />
       {/* Header com Regras Comerciais */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -83,7 +270,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
             </span>
           </div>
           <p className="text-xs text-slate-600 mt-1">
-            Receitas de licença são exclusivas da plataforma e segregadas do dinheiro dos membros (Cláusula 1.7 e 3.11). O valor anual é rigorosamente <strong>10 × valor mensal</strong> (2 meses de desconto).
+            Receitas de licença são exclusivas da plataforma e segregadas do dinheiro dos membros (Cláusula 1.7 e 3.11). Os preços <strong>mensal e anual são independentes</strong> e editáveis apenas pelo Master. Cada alteração cria uma nova versão, sem reajustar contratos antigos.
           </p>
         </div>
 
@@ -92,6 +279,35 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
           <span>Fuso Oficial: <strong>America/Belem</strong> (Dia Âncora Preservado)</span>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+        <h3 className="font-bold text-slate-900">Preparações de licenças — dados PostgreSQL</h3>
+        {prepCurrent.status === 'ready' ? (
+          <p className="mt-1 text-slate-700">
+            {prepCurrent.preparations.length} preparação(ões) no inventário consultado.
+            Nenhuma é pagamento, renovação conciliada ou licença ativada.
+          </p>
+        ) : (
+          <p className="mt-1 text-amber-950">
+            {prepCurrent.status === 'loading' ? 'Consultando o servidor...' :
+              'Consulta SaaS indisponível; não mostrar assinaturas demonstrativas.'}
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+        <h3 className="font-bold text-slate-900">Cobranças e licenças — PostgreSQL</h3>
+        {currentBilling.status==='ready' ? (
+          <p className="mt-1 text-slate-700">
+            {currentBilling.payments.length} cobrança(s) persistida(s) e
+            {' '}{currentBilling.licenses.filter(l => l.effective_status==='ACTIVE').length} licença(s) ativa(s).
+            Nenhum registro financeiro é inferido a partir de dados locais de demonstração.
+          </p>
+        ) : <p className="mt-1 text-amber-950">
+          {currentBilling.status==='loading' ? 'Consultando o servidor...' :
+            'Status não confirmado pelo servidor.'}
+        </p>}
+      </section>
 
       {/* Grid dos 3 Planos Oficiais */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -113,12 +329,12 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
             <div className="mt-4">
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900">
-                  {formatBRL(currentEssencialPrice?.monthly_price || 89.90)}
+                  {formatBRL(currentEssencialPrice?.monthly_price || 0)}
                 </span>
                 <span className="text-xs text-slate-500">/mês</span>
               </div>
               <div className="text-xs text-emerald-700 font-semibold mt-1">
-                Anual: {formatBRL(currentEssencialPrice?.annual_price_computed || 899.00)} / ano (10x mensal)
+                Anual: {formatBRL(currentEssencialPrice?.annual_price || 0)} / ano (definido pelo Master)
               </div>
             </div>
 
@@ -147,12 +363,12 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
               <button
                 onClick={() => {
                   setEditingTier('ESSENCIAL');
-                  setNewMonthlyPrice(currentEssencialPrice?.monthly_price || 89.90);
+                  setNewMonthlyPrice(currentEssencialPrice?.monthly_price || 0);
                 }}
                 className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Editar Preço Mensal (Master)</span>
+                <span>Editar Preços Mensal e Anual (Master)</span>
               </button>
             ) : (
               <div className="text-center text-xs text-slate-500 py-2">Plano Básico Homologado</div>
@@ -181,12 +397,12 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
             <div className="mt-4">
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900">
-                  {formatBRL(currentInterPrice?.monthly_price || 109.90)}
+                  {formatBRL(currentInterPrice?.monthly_price || 0)}
                 </span>
                 <span className="text-xs text-slate-500">/mês</span>
               </div>
               <div className="text-xs text-emerald-700 font-semibold mt-1">
-                Anual: {formatBRL(currentInterPrice?.annual_price_computed || 1099.00)} / ano (10x mensal)
+                Anual: {formatBRL(currentInterPrice?.annual_price || 0)} / ano (definido pelo Master)
               </div>
             </div>
 
@@ -215,12 +431,12 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
               <button
                 onClick={() => {
                   setEditingTier('INTERMEDIARIO');
-                  setNewMonthlyPrice(currentInterPrice?.monthly_price || 109.90);
+                  setNewMonthlyPrice(currentInterPrice?.monthly_price || 0);
                 }}
                 className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Editar Preço Mensal (Master)</span>
+                <span>Editar Preços Mensal e Anual (Master)</span>
               </button>
             ) : (
               <div className="text-center text-xs font-bold text-emerald-700 py-2">Plano Contratado Atualmente</div>
@@ -246,7 +462,7 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
             <div className="mt-4">
               <div className="flex items-baseline gap-1 text-slate-500">
-                <span className="text-2xl font-bold">R$ 129,90</span>
+                <span className="text-lg font-bold">Sem preço publicado</span>
                 <span className="text-xs">/mês (indicativo)</span>
               </div>
               <div className="text-xs text-slate-500 mt-1">Anual: R$ 1.299,00 / ano</div>
@@ -280,38 +496,34 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
         </div>
       </div>
 
-      {/* Seção de Demonstração do Cálculo de Upgrade Pro-Rata (Cláusula 3.10) */}
+      {/* M37451 — simulação educativa, sem datas fictícias nem cobrança. */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
         <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
           <Layers className="w-4 h-4 text-emerald-600" />
-          <span>Simulador de Upgrade Pro-Rata Transparente (Cláusula 3.10 / AT-20)</span>
+          <span>Prévia informativa de upgrade (Cláusula 3.10)</span>
         </h3>
+        <p className="text-xs text-slate-700">
+          Diferença mensal entre os planos Essencial e Intermediário, calculada
+          somente a partir dos preços atuais do catálogo PostgreSQL.
+          Esta comparação não é uma proposta de cobrança nem uma licença ativada.
+        </p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+          <span className="font-medium text-slate-700">Diferença mensal meramente ilustrativa: </span>
+          <strong className="text-slate-900">
+            {illustrativeMonthlyDelta!==null ? formatBRL(illustrativeMonthlyDelta) : 'Indisponível — catálogo não confirmado'}
+          </strong>
+        </div>
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+          Valor pro-rata a pagar: não calculado. O cálculo depende de assinatura
+          e licença válidas, datas reais de vigência e comprovação de pagamento.
+          Sem esses documentos, nenhum valor devido, desconto ou upgrade é confirmado.
+        </p>
         <p className="text-xs text-slate-600">
-          O cálculo do upgrade considera cada segmento de vigência já adquirido e não transcorrido pela fórmula:
-          <code className="mx-1 px-1.5 py-0.5 bg-slate-100 rounded text-slate-800 font-mono text-[11px]">
+          Fórmula contratual apenas para referência:
+          <code className="mx-1 px-1.5 py-0.5 bg-slate-100 font-mono text-[11px]">
             max(0, novo_preco - antigo_preco) × segundos_restantes / segundos_totais
           </code>.
         </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-          <div>
-            <span className="text-slate-500 block">Diferença de Valor:</span>
-            <strong className="text-slate-900 font-mono text-sm">{formatBRL(upgradeProRata.priceDifference)}</strong>
-          </div>
-          <div>
-            <span className="text-slate-500 block">Dias Restantes no Segmento:</span>
-            <strong className="text-slate-900 font-mono text-sm">{upgradeProRata.daysRemaining} de {upgradeProRata.totalDays} dias</strong>
-          </div>
-          <div>
-            <span className="text-slate-500 block">Valor Pro-Rata Devido:</span>
-            <strong className="text-emerald-700 font-mono text-base font-extrabold">{formatBRL(upgradeProRata.proRataAmount)}</strong>
-          </div>
-          <div className="flex items-center">
-            <span className="text-[11px] text-slate-500">
-              Mantém <code>active_until</code> e o dia âncora original sem deriva temporal.
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Modal de Edição de Preço pelo Master (Cláusula 3.2-A / AT-24 / AT-25) */}
@@ -327,32 +539,44 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
 
             <form onSubmit={handleSavePrice} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Novo Valor Mensal (R$) <span className="text-emerald-600 font-normal">(Único campo editável)</span>
+                <label htmlFor="master-license-monthly-price" className="block font-semibold text-slate-700 mb-1">
+                  Novo Valor Mensal (R$) <span className="text-emerald-600 font-normal">(editável)</span>
                 </label>
                 <input
+                  id="master-license-monthly-price"
+                  aria-describedby="master-license-price-help"
                   type="number"
-                  step="0.10"
+                  inputMode="decimal"
+                  step="0.01"
                   min="1"
                   value={newMonthlyPrice}
                   onChange={e => setNewMonthlyPrice(Number(e.target.value))}
                   className="w-full text-lg font-bold px-3 py-2 border border-slate-300 rounded-lg text-slate-900"
                 />
+                <p id="master-license-price-help" className="mt-2 text-[11px] text-slate-600">
+                  Preço da assinatura da plataforma. Não é o valor da cota
+                  do membro, cujo mínimo é R$ 150,00 por ciclo.
+                </p>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-500 mb-1">
-                  Valor Anual Calculado Automaticamente (R$) <span className="text-slate-400 font-normal">(Leitura obrigatória)</span>
+                <label htmlFor="master-license-annual-price" className="block font-semibold text-slate-700 mb-1">
+                  Novo Valor Anual (R$) <span className="text-emerald-600 font-normal">(editável independentemente)</span>
                 </label>
                 <input
-                  type="text"
-                  readOnly
-                  disabled
-                  value={formatBRL(roundCents(newMonthlyPrice * 10))}
-                  className="w-full text-base font-mono font-bold px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
+                  id="master-license-annual-price"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0.01"
+                  max="999999.99"
+                  required
+                  value={newAnnualPrice}
+                  onChange={e => setNewAnnualPrice(Number(e.target.value))}
+                  className="w-full text-lg font-bold px-3 py-2 border border-slate-300 rounded-lg text-slate-900"
                 />
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  Regra AT-25: Proibido editar a anuidade diretamente; sempre 10 × mensalidade.
+                <span className="text-[10px] text-slate-600 mt-1 block">
+                  A anuidade é definida pelo Master; nenhum desconto ou multiplicador automático é imposto.
                 </span>
               </div>
 
@@ -367,7 +591,8 @@ export const MasterLicensingView: React.FC<MasterLicensingViewProps> = ({ state,
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
-                Cada alteração cria uma <code>LicensePriceVersion</code> imutável. Assinaturas já pagas e ofertas em andamento não sofrem reajuste retroativo.
+                Cada alteração registra uma nova versão de preço com histórico imutável.
+                Assinaturas já pagas e ofertas em andamento não sofrem reajuste retroativo.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

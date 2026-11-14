@@ -1,0 +1,78 @@
+name: FR Finance M38701 local 043-044 catalog read-only synthetic CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg-catalog-only-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: backend
+      FR_FINANCE_EMAIL_REAL: "OFF"
+      FR_FINANCE_PIX_REAL: "OFF"
+      FR_FINANCE_REAL_USER_ACTIVATION: "OFF"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install synthetic-only pytest dependency
+        run: python -m pip install pytest==8.3.4
+      - name: Run offline reporter and synthetic no-IO tests
+        run: |
+          python backend/scripts/aistudio_m38701_local_043_044_catalog_readonly.py offline
+          python backend/scripts/frfinance_m38794_project_isolation.py reference
+          python backend/scripts/frfinance_m38795_pg18_runtime_probe.py offline
+          python backend/scripts/frfinance_m38796_pg18_control_preflight.py offline
+          python backend/scripts/frfinance_m38797_wal_storage_preflight.py offline
+          python backend/scripts/frfinance_m38798_cold_snapshot_capacity_readonly.py offline
+          python backend/scripts/frfinance_m38800_existing_services_probe.py offline
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38800_existing_services_probe_ci.py \
+            backend/tests/test_m38801_existing_fastapi_and_db_url_ci.py \
+            backend/tests/test_m38804_single_financial_contract_notif_pix_ci.py \
+            backend/tests/test_m38798_cold_snapshot_capacity_readonly_ci.py \
+            backend/tests/test_m38797_wal_storage_preflight_ci.py \
+            backend/tests/test_m38796_pg18_control_preflight_ci.py \
+            backend/tests/test_m38795_pg18_runtime_probe_ci.py \
+            backend/tests/test_m38794_project_isolation_ci.py \
+            backend/tests/test_m38701_local_043_044_catalog_readonly_ci.py \
+            backend/tests/test_m38651_cycle_minimum_contract_drift_ci.py
+          echo "M38794_PROJECT_ISOLATION=TESTED_OFFLINE"
+          echo "M38794_FR22_ACCESS=NONE"
+          echo "M38794_RUNNING_CLUSTER=NOT_ATTESTED"
+          echo "M38795_LOCAL_PROCESS_PROBE=NOT_EXECUTED_ON_GITHUB"
+          echo "M38795_PG_SERVER_START_STOP=NONE"
+          echo "M38796_PG_CONTROLDATA_LIVE=NOT_EXECUTED_IN_CI"
+          echo "M38796_POSTMASTER_PID_DELETE=NONE"
+          echo "M38796_PG_CONTROL_MUTATIONS=NONE"
+          echo "M38797_LOCAL_WAL_INSPECTION=NOT_EXECUTED_IN_CI"
+          echo "M38797_WAL_INTEGRITY=NOT_ATTESTED"
+          echo "M38797_RECOVERY_PERMISSION=NOT_GRANTED"
+          echo "M38797_POSTMASTER_PID_DELETE=NONE"
+          echo "M38798_REAL_PGDATA_METADATA=NOT_READ_IN_CI"
+          echo "M38798_BACKUP_CREATED=NO"
+          echo "M38798_RECOVERY_PERMISSION=NOT_GRANTED"
+          echo "M38800_LOCAL_POSTGRES=NOT_CONTACTED_IN_CI"
+          echo "M38800_LOCAL_FASTAPI=NOT_CONTACTED_IN_CI"
+          echo "M38800_SECOND_POSTGRESQL=NONE"
+          echo "M38800_SECOND_FASTAPI=NONE"
+          echo "M38800_NEW_DATABASE=NONE"
+          echo "M38800_NEW_REPOSITORY=NONE"
+          echo "M38800_LOCAL_043_044=COMPATIBLE_OBSERVED_NOT_EXECUTION_PROOF"
+          echo "M38790_LOCAL_PG_CONNECTIONS=NONE"
+          echo "M38790_DB_MUTATIONS=NONE"
+          echo "M38790_PG_043_044_MIGRATION_PROVENANCE=NOT_ATTESTED"
+          echo "M38790_EMAIL_REAL=OFF"
+          echo "M38790_PIX_REAL=OFF"
+          echo "M38790_REAL_USERS=OFF"
+          echo "M38790_PRODUCTION=BLOCKED"

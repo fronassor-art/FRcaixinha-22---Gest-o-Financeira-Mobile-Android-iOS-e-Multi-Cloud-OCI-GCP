@@ -117,7 +117,7 @@ git push -u origin main`;
 
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
             <span>Repositório GitHub do Projeto</span>
-            <span className="text-indigo-400 font-mono text-xs">FRcaixinha 2.2</span>
+            <span className="text-indigo-400 font-mono text-xs">FR Finance</span>
           </h2>
           <p className="text-xs text-slate-300 mt-1">
             Envie todo o código-fonte, contratos técnicos, testes e módulos para sua conta do GitHub.
@@ -140,11 +140,11 @@ git push -u origin main`;
             </div>
             <div className="text-[11px] text-slate-300">
               <span className="text-slate-400">Mensagem: </span>
-              <span className="text-white font-medium">feat: FRcaixinha 2.2 - Gestão Financeira Mobile (Android/iOS) e Multi-Cloud (OCI + GCP)</span>
+              <span className="text-white font-medium">feat: FR Finance - Gestão Financeira Mobile (Android/iOS) e Multi-Cloud (OCI + GCP)</span>
             </div>
             <div className="flex flex-wrap justify-between text-[10px] text-slate-400 pt-1">
               <span>Arquivos commitados: <strong className="text-white">42 arquivos</strong></span>
-              <span>Autor: <strong className="text-emerald-300">FRcaixinha Team &lt;fr.onassor@gmail.com&gt;</strong></span>
+              <span>Autor: <strong className="text-emerald-300">FR Finance Team &lt;fr.onassor@gmail.com&gt;</strong></span>
             </div>
           </div>
 

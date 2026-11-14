@@ -1,0 +1,1175 @@
+name: Validação da atualização AI Studio
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Evita execuções simultâneas do mesmo PR sobrecarregarem Maven Central.
+concurrency:
+  group: fr-finance-ai-studio-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend e regras locais
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci
+      - name: Tipagem
+        run: npm run lint
+      - name: Testes TypeScript
+        run: npm run test:audit
+      - name: Testes de integração do estado financeiro
+        run: npx tsx src/tests/server_integration.test.ts
+      - name: Testes de identidade única, contexto e concorrência no cliente
+        run: npx tsx src/tests/auth_context_security.test.ts
+      - name: Testar cliente dos tres perfis no APK
+        run: npx tsx src/tests/mobile_three_profiles.test.ts
+      - name: Testar acesso distinto por novo login para Master Admin e Membro
+        run: npx tsx src/tests/mobile_master_multi_role.test.ts
+      - name: Validar Macropacote 140 — vinte fronteiras de contexto e sessoes
+        run: npx tsx src/tests/macropacote_140_auth_boundary_ci.test.ts
+      - name: Verificar segregacao do menu de cada perfil
+        run: npx tsx src/tests/role_scope_ui.test.ts
+      - name: M15000 — central de notificações sem entrega simulada
+        run: npx tsx src/tests/m15000_notifications_ui.test.ts
+      - name: M19000 — inbox funcional na UI
+        run: npx tsx src/tests/m19000_notifications_functional_ui.test.ts
+      - name: M19000 — politica Android loopback somente debug
+        run: npx tsx src/tests/m19000_android_loopback_ci.test.ts
+      - name: Regressao Livro-Razao acessivel somente ao administrador
+        run: npx tsx src/tests/ledger_menu_visibility_ci.test.ts
+      - name: Validar caminhos de primeiro acesso sem auto-cadastro
+        run: npx tsx src/tests/login_first_access_ui.test.ts
+      - name: M38960 — convites e recuperação no Android
+        run: npx tsx src/tests/m38960_access_delivery_ui_ci.test.ts
+      - name: M38993 — links seguros de convite e nova senha Android
+        run: npx tsx src/tests/m38993_access_token_redeem_ui_ci.test.ts
+      - name: Validar entrada reservada e confirmacao Master
+        run: npx tsx src/tests/owner_private_access_ui.test.ts
+      - name: Validar governanca Master e segregacao da interface
+        run: npx tsx src/tests/master_tenant_registry_ui.test.ts
+      - name: M39003 — revisar telas reais do APK e distinguir licença SaaS da cota
+        run: npx tsx src/tests/m39003_apk_ui_screenshot_regressions_ci.test.ts
+      - name: Validar responsaveis cadastrais Master
+        run: npx tsx src/tests/master_admin_registry_ui.test.ts
+      - name: Validar Macropacote 120 — inventario SaaS Master
+        run: npx tsx src/tests/master_saas_portfolio_ci.test.ts
+      - name: Validar pre-analise Master de convites e estados seguros
+        run: npx tsx src/tests/master_onboarding_preflight_ui.test.ts
+      - name: M25300 — conferência do texto contratual sem aceite ou cadastro
+        run: npx tsx src/tests/m25300_contract_review_ui_ci.test.ts
+      - name: M25400 — hash de texto canônico conferido no cliente
+        run: npx tsx src/tests/m25400_canonical_contract_ui_ci.test.ts
+      - name: M25600 — lançamento com bloqueios auditáveis no Master
+        run: npx tsx src/tests/m25600_launch_readiness_ui_ci.test.ts
+      - name: Validar simulador de fluxo, idempotencia e auditoria Master
+        run: npx tsx src/tests/master_workflow_audit_ui.test.ts
+      - name: Validar isolamento de paineis e membros por tenant no cliente
+        run: npx tsx src/tests/tenant_read_boundary_ci.test.ts
+      - name: Diagnosticar causas seguras de bloqueio Price no APK
+        run: npx tsx src/tests/loan_simulation_feedback_ci.test.ts
+      - name: Validar Pix oficial sem baixa manual
+        run: npx tsx src/tests/pix_automation_boundary_ci.test.ts
+      - name: Validar Orders Pix MLB com IDs ORD e PAY
+        run: npx tsx src/tests/mp_orders_pix_boundary_ci.test.ts
+      - name: Validar cronograma Price e rejeicao de simulacao tardia
+        run: npx tsx src/tests/loan_simulation_integrity_ci.test.ts
+      - name: Macropacote 180 — Price, sessao e consentimento
+        run: npx tsx src/tests/macropacote_180_credit_ci.test.ts
+      - name: Validar erros HTTP seguros e integridade do JSON financeiro
+        run: npx tsx src/tests/api_response_policy_ci.test.ts
+      - name: Validar previa anual individual e nao apuracao de lucro
+        run: npx tsx src/tests/member_annual_preview_ci.test.ts
+      - name: M531 — Parser e painel de inadimplência registrados, sem bloqueio financeiro
+        run: npx tsx src/tests/member_cycle_risk_ci.test.ts
+      - name: M1401 — Fronteira das obrigacoes cadastrais no aplicativo
+        run: npx tsx src/tests/member_obligations_ci.test.ts
+      - name: M601 — Integridade cruzada do Livro-Razão e contribuições no aplicativo
+        run: npx tsx src/tests/financial_integrity_m760_ci.test.ts
+      - name: M761 — Fila de solicitações e isolamento do painel
+        run: npx tsx src/tests/member_lifecycle_sandbox_ci.test.ts
+      - name: M921 — Capacidade sandbox informada pelo servidor e solicitação com confirmação
+        run: npx tsx src/tests/member_lifecycle_capabilities_ci.test.ts
+      - name: M921 — Guardas de fechamento contratual com pendências reais
+        run: npx tsx src/tests/lifecycle_closing_gates_ci.test.ts
+      - name: M1081 — Revisão documental e contestação com parser fechado
+        run: npx tsx src/tests/member_review_events_ci.test.ts
+      - name: Validar previa anual operacional do Admin sem liquidação
+        run: npx tsx src/tests/admin_annual_preview_ci.test.ts
+      - name: Macropacote 160 — 20 validacoes de previa registrada
+        run: npx tsx src/tests/macropacote_160_preview_ci.test.ts
+      - name: Macropacote 200 — Livro-Razao e integridade do cliente
+        run: npx tsx src/tests/macropacote_200_ledger_ci.test.ts
+      - name: Macropacote 220 — detalhes contabeis seguros e isolamento
+        run: npx tsx src/tests/macropacote_220_ledger_boundary_ci.test.ts
+      - name: M300 — extrato contábil por conta, paginação e segregação
+        run: npx tsx src/tests/macropacote_300_ledger_account_entries_ci.test.ts
+      - name: M320 — diretório sem saldos e segregação no frontend
+        run: npx tsx src/tests/macropacote_320_ledger_empty_ci.test.ts
+      - name: M320 — máquina de estados de visibilidade contábil
+        run: npx tsx src/tests/macropacote_320_visibility_policy_ci.test.ts
+      - name: M360 — navegação por cursor, parser e isolamento da sessão
+        run: npx tsx src/tests/macropacote_360_keyset_ci.test.ts
+      - name: M2200 — mil navegacoes seguras de extrato sem dados bancarios
+        run: npx tsx src/tests/macropacote_2200_ledger_navigation_ci.test.ts
+      - name: M300 — identidade FR Caixinha e contrato comum
+        run: npx tsx src/tests/macropacote_300_product_identity_ci.test.ts
+      - name: M25700 — shell de atestação local não aplica migrations
+        run: bash -n backend/scripts/aistudio_macro_25700_checkpoint.sh
+      - name: Macropacote 220 — validar comando somente leitura Termux
+        run: bash -n backend/scripts/aistudio_220_termux_readonly_checkpoint.sh
+      - name: Macropacote 240 e 280 — scripts somente leitura
+        run: |
+          bash -n backend/scripts/aistudio_240_roles_readonly.sh
+          bash -n backend/scripts/aistudio_240_backup_integrity_readonly.sh
+          bash -n backend/scripts/aistudio_280_runtime_readonly.sh
+          bash -n backend/scripts/aistudio_300_checkpoint_readonly.sh
+          bash -n backend/scripts/aistudio_320_checkpoint_readonly.sh
+          bash -n backend/scripts/aistudio_360_checkpoint_readonly.sh
+      - name: Validar contrato financeiro de contribuições, datas e centavos
+        run: npx tsx src/tests/contributions_integrity_ci.test.ts
+      - name: M20300 histórico de abas por perfil
+        run: npx tsx src/tests/m20300_tab_history_ci.test.ts
+      - name: M20400 política de valor por ciclo sem repricing silencioso
+        run: npx tsx src/tests/m20400_cycle_price_ui_ci.test.ts
+      - name: M20500 reenvio idempotente de cota por sessão e caixinha
+        run: npx tsx src/tests/m20500_cycle_price_retry_ci.test.ts
+      - name: M20600 piso contratual de R$150 por cota
+        run: npx tsx src/tests/m20600_floor_ui_ci.test.ts
+      - name: M37451 — nao simular cobranca pro-rata sem licenca
+        run: npx tsx src/tests/m37451_master_no_fictitious_prorata_ci.test.ts
+      - name: M37449 — estados 404 sem ciclo, 409 legado e bloqueios
+        run: npx tsx src/tests/m37449_no_active_cycle_ui_ci.test.ts
+      - name: M37447 — diagnostico de perfil de API no APK e login sem credenciais
+        run: npx tsx src/tests/m37447_mobile_backend_diagnostic_ci.test.ts
+      - name: M37446 — integracao admin mobile UI, session e limite por ciclo
+        run: npx tsx src/tests/m37446_admin_cycle_open_ui_ci.test.ts
+      - name: M37427 escolha explicita por ciclo e recibo assinado pelo servidor
+        run: npx tsx src/tests/m37427_cycle_open_amount_ui_ci.test.ts
+      - name: M20900 prévia de ciclo no aplicativo, sem criar cobranças
+        run: npx tsx src/tests/m20900_cycle_opening_ui_ci.test.ts
+      - name: M21300 consistência da marca FR Finance em Android e web
+        run: npx tsx src/tests/m21300_fr_finance_brand_ci.test.ts
+      - name: M21400 validar logotipo atualizado e versão do cache
+        run: npx tsx src/tests/m21400_fr_finance_logo_cache_ci.test.ts
+      - name: Validar leituras de emprestimos e contribuições por perfil
+        run: npx tsx src/tests/financial_read_boundary_ci.test.ts
+      - name: Validar reautenticacao ao retornar do segundo plano
+        run: npx tsx src/tests/session_resume_guard_ci.test.ts
+      - name: Validar inventario de sessoes e revogacao no cliente
+        run: npx tsx src/tests/session_inventory_security_ci.test.ts
+      - name: Validar Master explicito e rejeicao de login concorrente
+        run: npx tsx src/tests/owner_login_hardening_ci.test.ts
+      - name: Validar concorrencia de sessoes e falhas de rede no frontend
+        run: npx tsx src/tests/session_resilience_ci.test.ts
+      - name: Validar matriz de permissoes declaradas no cliente Master
+        run: npx tsx src/tests/master_permission_matrix_ui.test.ts
+      - name: Validar barras de sistema e safe area Android
+        run: npx tsx src/tests/android_safe_area_ci.test.ts
+      - name: M21700 — release Android HTTPS e assinatura segregada
+        run: npx tsx src/tests/m21700_android_release_gate_ci.test.ts
+      - name: M21900 validar pipeline de APK remoto OCI
+        run: npx tsx src/tests/m21900_oci_remote_apk_ci.test.ts
+      - name: M22500 revisar histórico de contribuições no Android sem efeitos
+        run: npx tsx src/tests/m22500_legacy_contributions_ui_ci.test.ts
+      - name: Validar identidade visual e separacao por perfil
+        run: npx tsx src/tests/premium_brand_ui.test.ts
+      - name: Build web
+        env:
+          VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run build
+
+  android:
+    name: Compilar APK debug
+    needs: [frontend, backend-sem-banco, postgres-isolado, postgres18-preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Cache e isolamento de dependências Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Instalar dependências
+        run: npm ci
+      - name: Build e sincronização Capacitor (FastAPI no loopback do APK debug)
+        env:
+          FRCAIXINHA_ANDROID_LOCAL_TEST: '1'
+          VITE_API_URL: http://127.0.0.1:8000
+          VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run cap:build
+      - name: Validar URL e esquema Android debug
+        env:
+          VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node -e "const c=require('./android/app/src/main/assets/capacitor.config.json'); if(c.server.androidScheme!=='http' || c.server.cleartext!==false || c.plugins?.SystemBars?.insetsHandling!=='css' || c.plugins?.SystemBars?.style!=='DARK') process.exit(1)"
+          grep -RlF 'http://127.0.0.1:8000' dist/assets | grep -q .
+          grep -RlF "${VITE_APP_BUILD_REF:0:7}" dist/assets | grep -q .
+      - name: Preparar assinatura persistente para atualizacoes
+        env:
+          ANDROID_SIGNING_JKS_BASE64: ${{ secrets.FRCAIXINHA_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
+          ANDROID_SIGNING_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_SIGNING_JKS_BASE64" || -z "$ANDROID_SIGNING_STORE_PASSWORD" || -z "$ANDROID_SIGNING_ALIAS" || -z "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
+            echo "::error::Assinatura persistente ausente. Configure os quatro Actions secrets FRCAIXINHA_ANDROID_* conforme docs/AI_STUDIO_ASSINATURA_PERSISTENTE.md."
+            exit 1
+          fi
+          umask 077
+          KEYSTORE_FILE="$RUNNER_TEMP/frcaixinha-aistudio-stable-signing.p12"
+          printf '%s' "$ANDROID_SIGNING_JKS_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          test -s "$KEYSTORE_FILE"
+          if ! keytool -list -keystore "$KEYSTORE_FILE" -storetype PKCS12 -alias "$ANDROID_SIGNING_ALIAS" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" >/dev/null 2>&1; then
+            echo "::error::Arquivo de assinatura, alias ou senha invalidos."
+            exit 1
+          fi
+          # Verify the SAME certificate as the installed working M39065 APK.
+          export M39089_PRIVATE_STOREPASS="$ANDROID_SIGNING_STORE_PASSWORD"
+          digest="$(keytool -list -v -storetype PKCS12 -keystore "$KEYSTORE_FILE" -alias "$ANDROID_SIGNING_ALIAS" -storepass:env M39089_PRIVATE_STOREPASS | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          unset M39089_PRIVATE_STOREPASS
+          if [[ "$digest" != "ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7" ]]; then
+            echo "::error::M39089_BLOCKED=ORIGINAL_APK_SIGNING_CERT_MISMATCH"
+            exit 2
+          fi
+          # Never downgrade below the last proven installed main APK M39065
+          # (3906508) or the latest known M39076 candidate (3906531).
+          version_code=$((3909000 + GITHUB_RUN_NUMBER))
+          if (( version_code <= 3906531 || version_code > 2100000000 )); then
+            echo "::error::M39089_BLOCKED=ANDROID_VERSION_CODE_DOWNGRADE"
+            exit 2
+          fi
+          echo "FRCAIXINHA_ANDROID_KEYSTORE_FILE=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+          echo "FRCAIXINHA_ANDROID_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+          echo "M39089_SIGNING_CERT=MATCH_WORKING_M39065"
+          echo "M39089_PLANNED_VERSION_CODE=$version_code"
+      - name: Compilar APK assinado para atualizacoes futuras
+        working-directory: android
+        env:
+          FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING: '1'
+          FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
+          FRCAIXINHA_ANDROID_KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
+          FRCAIXINHA_ANDROID_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3906531
+          for attempt in 1 2 3; do
+            LOG="$RUNNER_TEMP/fr-finance-gradle-$attempt.log"
+            if ./gradlew --no-daemon assembleDebug 2>&1 | tee "$LOG"; then
+              exit 0
+            fi
+            # Retry ONLY transient download/network failures. Do not retry
+            # compiler, signing, lint, dependency-integrity or Gradle task errors.
+            if [[ "$attempt" == 3 ]] || ! grep -Eqi \
+              'Received status code 429|Too Many Requests|SocketTimeoutException|Read timed out|Downloading .* failed: timeout|Connect timed out|Connection reset|Server returned HTTP response code: 50[234]|HTTP (502|503|504)|Bad Gateway|Gateway Timeout' "$LOG"; then
+              exit 1
+            fi
+            echo "::warning::Download Gradle/Maven transitório; repetição limitada sem ignorar erro de compilação."
+            sleep $((attempt * 15))
+          done
+      - name: Verificar pacote Android independente antes do upload
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | tee /tmp/ai-studio-apk-badging.txt
+          grep -F "package: name='com.frcaixinha.app.aistudio'" /tmp/ai-studio-apk-badging.txt
+          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3906531
+          grep -F "versionCode='${FRCAIXINHA_ANDROID_VERSION_CODE}'" /tmp/ai-studio-apk-badging.txt
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/frcaixinha-apk-signing.txt
+          grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/frcaixinha-apk-signing.txt
+          grep -F "Signer: certificate SHA-256 digest: ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7" /tmp/frcaixinha-apk-signing.txt
+          echo "M39089_APK_MAIN_SIGNING_AND_VERSION=PASS"
+      - name: Disponibilizar APK debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: frcaixinha-ai-studio-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-sem-banco:
+    name: API sem banco configurado
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências Python
+        run: python -m pip install -r backend/requirements.txt
+      - name: Preparar extrator de clausulas PDF somente CI
+        run: python -m pip install --no-deps pypdf==5.9.0
+      - name: Auditar cláusulas dos documentos mestres versionados
+        run: python backend/scripts/aistudio_contract_clause_extract_ci.py
+      - name: Verificar importação do FastAPI
+        env:
+          PYTHONPATH: backend
+        run: python -c "from app.main import app; print('FastAPI importado')"
+      - name: M38992 — sintaxe do instalador aditivo original (sem executar)
+        run: bash -n backend/scripts/frfinance_m38992_apply_m047_original_pg18.sh
+      - name: M38994 — validar sintaxe M048, sem aplicar no banco
+        run: bash -n backend/scripts/frfinance_m38994_apply_m048_original_pg18.sh
+      - name: M39002 — proteger backup e transferência de dados Android
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m39002_android_private_data_backup_ci.py
+      - name: M39001 — diagnostico de acesso e Brevo sem envio, sem SQL
+        env:
+          PYTHONPATH: backend:backend/scripts
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m39001_mail_readiness_nosend_ci.py
+      - name: M38999 — acesso usa apenas DB original autenticado, financeiro inalterado
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38999_access_without_financial_db_ci.py
+      - name: M38998 — validar permissao original M048 sem leitura restrita de PGDATA
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38998_m048_least_privilege_attestation_ci.py
+      - name: M38996 — preparar somente api.env original, sem SMTP real ou novo banco
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38996_stage_existing_mail_config_ci.py
+      - name: M38995 — localizar configuracoes Brevo previamente homologadas sem ler segredos
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38995_access_runtime_readonly_ci.py
+      - name: M38993 — tokens de acesso de uso único no PG18 original
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+        run: python -m pytest -q -p no:cacheprovider backend/tests/test_m38993_token_redemption_ci.py
+      - name: M38990 — outbox do banco original, convite e recuperação (sem envio)
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+          FR_FINANCE_ACCESS_MAIL_WORKER: "OFF"
+        run: |
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m38990_pg18_access_delivery_ci.py
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m38960_access_delivery_api_integration_ci.py backend/tests/test_m38980_oauth_callback_on_main_ci.py backend/tests/test_m4400_orders_webhook_ci.py
+      - name: Executar testes de API
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q backend/tests/test_rls_and_api.py -k TestFastAPIApiEndpoints
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_security_guards.py backend/tests/test_mercado_pago_safety.py backend/tests/test_mercado_pago_adapter.py backend/tests/test_price_contract.py backend/tests/test_annual_consent.py
+          python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
+          python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
+          python -m pytest -q backend/tests/test_member_obligations_oracle_ci.py
+          python -m pytest -q backend/tests/test_m1720_financial_sandbox_ci.py
+          python -m pytest -q backend/tests/test_m1880_financial_evidence_ci.py
+          python -m pytest -q backend/tests/test_m2040_sandbox_contract_ci.py
+          python -m pytest -q backend/tests/test_m2200_three_source_preflight_ci.py
+          python -m pytest -q backend/tests/test_m2300_operational_preflight_ci.py
+          python -m pytest -q backend/tests/test_m2400_connect_webhook_preflight_ci.py
+          python -m pytest -q backend/tests/test_m2600_readonly_gateway_ci.py backend/tests/test_m2600_oci_staging_static_ci.py
+          python -m pytest -q backend/tests/test_m2700_oci_plan_guard_ci.py
+          python -m pytest -q backend/tests/test_m2800_oci_mp_connectors_ci.py
+          python -m pytest -q backend/tests/test_m2900_webhook_server_ci.py
+          python -m pytest -q backend/tests/test_m3000_oci_staging_server_ci.py
+          python -m pytest -q backend/tests/test_m3100_provider_account_role_ci.py
+          python -m pytest -q backend/tests/test_m3200_oci_recovery_policy_ci.py
+          python -m pytest -q backend/tests/test_m3300_mp_webhook_ingress_ci.py
+          python -m pytest -q backend/tests/test_m3400_pix_automation_contract_ci.py
+          python -m pytest -q backend/tests/test_m3500_mp_pix_provider_ports_ci.py
+          python -m pytest -q backend/tests/test_m3600_pix_workflow_ports_ci.py
+          python -m pytest -q backend/tests/test_m3700_pix_staging_schema_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m3800_pix_app_automation_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4100_orders_pix_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4200_oauth_rotation_ci.py
+          python -m pytest -q backend/tests/test_m4300_money_out_gate_ci.py
+          python -m pytest -q backend/tests/test_m4400_orders_webhook_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4500_orders_staging_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4600_orders_workflow_ci.py
+          python -m pytest -q backend/tests/test_m4700_orders_schema_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m4900_approval_no_installments_ci.py
+          python -m pytest -q backend/tests/test_m5000_orders_staging_sql_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m5100_orders_reservation_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m5200_orders_three_source_ci.py
+          python -m pytest -q backend/tests/test_m5300_orders_recovery_ci.py
+          python -m pytest -q backend/tests/test_m5400_price_payout_date_ci.py
+          python -m pytest -q backend/tests/test_m5500_final_financial_gates_ci.py
+          python -m pytest -q backend/tests/test_m5700_staging_chain_guard_ci.py
+          python -m pytest -q backend/tests/test_m6000_ledger_reversal_preview_ci.py
+          python -m pytest -q backend/tests/test_m6200_credit_liquidity_ci.py
+          python -m pytest -q backend/tests/test_m6400_final_gates_ci.py
+          python -m pytest -q backend/tests/test_m6500_holds_schema_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m6600_holds_adapter_ci.py
+          python -m pytest -q backend/tests/test_m6800_partial_refund_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m6900_orders_stored_binding_ci.py
+          python -m pytest -q backend/tests/test_m7200_final_gates_ci.py
+          python -m pytest -q backend/tests/test_m7900_incident_recovery_ci.py
+          python -m pytest -q backend/tests/test_m8600_discrepancy_circuit_ci.py
+          python -m pytest -q backend/tests/test_m9400_incident_timeline_queue_ci.py
+          python -m pytest -q backend/tests/test_m10200_case_integrity_ci.py
+          python -m pytest -q backend/tests/test_m11000_retry_alias_integrity_ci.py
+          python -m pytest -q backend/tests/test_m12000_replay_rollback_ci.py
+          python -m pytest -q backend/tests/test_m13000_checkpoint_readiness_ci.py
+          python -m pytest -q backend/tests/test_m14000_staging_audit_static_ci.py
+          python -m pytest -q backend/tests/test_m15000_notifications_ci.py
+          python -m pytest -q backend/tests/test_m16000_notifications_staging_static_ci.py
+          python -m pytest -q backend/tests/test_m17000_signed_notification_origin_ci.py
+          python -m pytest -q backend/tests/test_m17000_notification_page_cursor_ci.py
+          python -m pytest -q backend/tests/test_m18000_notification_session_gate_ci.py
+          python -m pytest -q backend/tests/test_m19000_notifications_local_static_ci.py
+          python -m pytest -q backend/tests/test_m19000_termux_local_control_ci.py
+          python -m pytest -q backend/tests/test_m19100_incremental_ci.py
+          python backend/scripts/aistudio_migration_inventory.py repo-check
+          python -m pytest -q backend/tests/test_m19200_migration_inventory_ci.py
+          python -m pytest -q backend/tests/test_m19300_local_lifecycle_parity_ci.py
+          python -m pytest -q backend/tests/test_m20100_local_parity_schema_ci.py
+          python -m pytest -q backend/tests/test_m20400_cycle_price_ci.py
+          python -m pytest -q backend/tests/test_m20600_floor_static_ci.py
+          python -m pytest -q backend/tests/test_m20700_pg_quota_floor_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m20800_cycle_opening_preview_ci.py
+          python -m pytest -q backend/tests/test_m21000_cycle_opening_static_ci.py
+          python -m pytest -q backend/tests/test_m21100_cycle_open_installer_ci.py
+          python -m pytest -q backend/tests/test_m21200_mp_test_credential_guard_ci.py
+          python -m pytest -q backend/tests/test_m21500_mp_pix_sandbox_lab_ci.py
+          python -m pytest -q backend/tests/test_m21600_production_cors_ci.py
+          python -m pytest -q backend/tests/test_m21800_mp_pix_test_attestation_ci.py
+          python -m pytest -q backend/tests/test_m22000_production_auth_gate_ci.py
+          python -m pytest -q backend/tests/test_m22100_oci_production_db_preflight_ci.py
+          python -m pytest -q backend/tests/test_m22600_local_auth_baseline_ci.py
+          python -m pytest -q backend/tests/test_m22700_oauth_multitenant_hardening_ci.py
+          python -m pytest -q backend/tests/test_m22800_no_legacy_financial_routes_ci.py
+          python -m pytest -q backend/tests/test_m22900_orders_get_no_bank_effect_ci.py
+          python -m pytest -q backend/tests/test_m23000_oauth_callback_uri_ci.py
+          python -m pytest -q backend/tests/test_m23100_oauth_sandbox_coordinator_ci.py
+          python -m pytest -q backend/tests/test_m23200_oauth_staging_sql_contract_ci.py
+          python -m pytest -q backend/tests/test_m23300_oauth_staging_adapter_ci.py
+          python -m pytest -q backend/tests/test_m23400_oci_vault_secret_ocid_ci.py
+          python -m pytest -q backend/tests/test_m23500_oauth_tenant_token_sink_ci.py
+          python -m pytest -q backend/tests/test_m23600_oauth_consent_cas_ci.py
+          python -m pytest -q backend/tests/test_m23700_oauth_cas_registry_ci.py
+          python -m pytest -q backend/tests/test_m23800_oauth_pending_registration_ci.py
+          python -m pytest -q backend/tests/test_m23900_oauth_generation_worker_ci.py
+          python -m pytest -q backend/tests/test_m24000_contract_gap_147_ci.py
+          python -m pytest -q backend/tests/test_m24000_oauth_ambiguous_ack_ci.py
+          python -m pytest -q backend/tests/test_m24100_oauth_protected_store_port_ci.py
+          python -m pytest -q backend/tests/test_m24200_oauth_failed_ref_guard_ci.py
+          python -m pytest -q backend/tests/test_m24300_oauth_recovery_readonly_ci.py
+          python -m pytest -q backend/tests/test_m24400_explicit_invite_acceptance_ci.py
+          python -m pytest -q backend/tests/test_m24500_existing_identity_versioned_consent_ci.py
+          python -m pytest -q backend/tests/test_m24600_invitation_document_binding_ci.py
+          python -m pytest -q backend/tests/test_m24900_invitation_preflight_ci.py
+          python -m pytest -q backend/tests/test_m25000_invitation_contract_readiness_ci.py
+          python -m pytest -q backend/tests/test_m25100_published_contract_catalog_ci.py
+          python -m pytest -q backend/tests/test_m25200_contract_text_integrity_ci.py
+          python -m pytest -q backend/tests/test_m25400_canonical_contract_delivery_ci.py
+          python -m pytest -q backend/tests/test_m25500_onboarding_smtp_transport_ci.py
+          python -m pytest -q backend/tests/test_m25600_launch_readiness_ci.py
+          python -m pytest -q backend/tests/test_m28700_m29000_release_matrix_ci.py
+          python -m pytest -q backend/tests/test_m29100_m29400_onboarding_chain_ci.py
+          python -m pytest -q backend/tests/test_m29500_m29800_two_tenant_closing_ci.py
+          python -m pytest -q backend/tests/test_m29810_fr_finance_identity_ci.py
+          python -m pytest -q backend/tests/test_m29900_m30300_contract_coverage_ci.py
+          python -m pytest -q backend/tests/test_m30400_m30800_annual_ci.py
+          python -m pytest -q backend/tests/test_m30900_m31300_saas_enrollment_ci.py
+          python -m pytest -q backend/tests/test_m31400_m31800_saas_capacity_ci.py
+          python -m pytest -q backend/tests/test_m31900_m32300_saas_guards_ci.py
+          python -m pytest -q backend/tests/test_m32400_m32800_saas_claim_static_ci.py
+          bash -n backend/scripts/frfinance_rename_termux_directory.sh
+          python -m pytest -q backend/tests/test_m25700_local_attestation_guard_ci.py
+          python -m pytest -q backend/tests/test_m25900_staging_outbox_contract_ci.py
+          python -m pytest -q backend/tests/test_m26000_recovery_staging_policy_ci.py
+          python -m pytest -q backend/tests/test_m26100_dispatch_lease_policy_ci.py
+          python -m pytest -q backend/tests/test_m26200_signed_receipt_ci.py
+          python -m pytest -q backend/tests/test_m26300_mail_receipt_audit_policy_ci.py
+          python -m pytest -q backend/tests/test_m26400_delivery_envelope_ci.py
+          python -m pytest -q backend/tests/test_m26500_delivery_decision_ci.py
+          python -m pytest -q backend/tests/test_m26600_delivery_terminal_gate_ci.py
+          python -m pytest -q backend/tests/test_m26700_encrypted_outbox_policy_ci.py
+          python -m pytest -q backend/tests/test_m26800_key_lifecycle_ci.py
+          python -m pytest -q backend/tests/test_m26900_oci_vault_keys_ci.py
+          python -m pytest -q backend/tests/test_m27000_outbound_worker_preflight_ci.py
+          python -m pytest -q backend/tests/test_m27100_email_ownership_challenge_policy_ci.py
+          python -m pytest -q backend/tests/test_m27200_email_bridge_ci.py
+          python -m pytest -q backend/tests/test_m27300_recipient_index_guard_ci.py
+          python -m pytest -q backend/tests/test_m27400_committed_challenge_handoff_ci.py
+          python -m pytest -q backend/tests/test_m27500_challenge_readback_policy_ci.py
+          python -m pytest -q backend/tests/test_m27700_public_provider_intake_ci.py
+          python -m pytest -q backend/tests/test_m27800_operator_intake_cli_ci.py
+          python -m pytest -q backend/tests/test_m27900_operator_release_worklist_ci.py
+          python -m pytest -q backend/tests/test_m28100_provider_setup_sequence_ci.py
+          python -m pytest -q backend/tests/test_m28200_public_tls_probe_ci.py
+          python -m pytest -q backend/tests/test_m28300_provider_secret_inventory_ci.py
+          python -m pytest -q backend/tests/test_m22300_cookie_origin_guard_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m22400_legacy_contributions_review_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
+          python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
+          python -m pytest -q backend/tests/test_migration_028_contract_ci.py
+          python -m pytest -q backend/tests/test_migration_029_contract_ci.py
+          python -m pytest -q backend/tests/test_migration_030_contract_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_180_credit_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_200_ledger_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_220_audit_ci.py
+          python -m pytest -q backend/tests/test_aistudio_240_gates.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_260_ledger_read_ci.py
+          python -m pytest -q backend/tests/test_macropacote_280_runtime_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_300_ledger_journal_ci.py
+          python -m pytest -q backend/tests/test_macropacote_300_runtime_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_320_empty_directory_ci.py
+          python -m pytest -q backend/tests/test_macropacote_320_directory_http_ci.py
+          python -m pytest -q backend/tests/test_macropacote_320_runtime_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_macropacote_360_keyset_ci.py
+          python -m pytest -q backend/tests/test_macropacote_360_runtime_ci.py
+          python -m pytest -q backend/tests/test_termux_local_backend.py
+          python -m pytest -q backend/tests/test_aistudio_master_local_setup.py
+          python -m pytest -q backend/tests/test_aistudio_real_panels.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_price_policy_authority.py
+          python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k 'not disposable_postgres'
+          python -m pytest -q backend/tests/test_owner_private_access.py
+          python -m pytest -q backend/tests/test_master_tenant_registry.py
+          python -m pytest -q backend/tests/test_master_admin_registry.py
+          python -m pytest -q backend/tests/test_master_saas_portfolio_ci.py
+          python -m pytest -q backend/tests/test_master_onboarding_preflight.py
+          python -m pytest -q backend/tests/test_master_workflow_audit.py
+          python -m pytest -q backend/tests/test_master_permission_matrix.py
+          python -m pytest -q backend/tests/test_aistudio_lifecycle_disabled.py
+          python -m pytest -q backend/tests/test_auth_context_security_headers.py
+          python -m pytest -q backend/tests/test_macropacote_140_access_ci.py
+          python -m pytest -q backend/tests/test_macropacote_160_preview_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_auth_session_fail_closed_ci.py
+          python -m pytest -q backend/tests/test_master_explicit_login_policy.py
+          python -m pytest -q backend/tests/test_aistudio_governance_api.py
+          python -m pytest -q backend/tests/test_platform_provider_adapters.py backend/tests/test_aistudio_live_status_api.py
+
+  postgres-isolado:
+    name: Migrações e testes de RLS em PostgreSQL descartável
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: frcaixinha_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frcaixinha_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências Python
+        run: python -m pip install -r backend/requirements.txt
+      - name: Aplicar migrações no banco descartável
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/001_initial_schema.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/002_financial_extensions.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/003_canonical_ledger_and_pix.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/004_quota_read_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/005_restrict_identity_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/006_auth_test_access.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/007_contribution_read_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/008_persistent_auth_sessions.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/009_tenant_context_and_references.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/010_ledger_integrity.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/011_platform_license_catalog.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/012_minimize_application_identity_access.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/013_users_identity_rls.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/014_account_lifecycle_preparation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/015_contract_versions_and_acceptance.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/016_saas_preparations_no_billing.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/017_saas_payment_activation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/018_invite_email_verification.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/019_named_contexts_and_session_inventory.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/020_session_bound_named_contexts.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/021_session_bound_memberships.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/022_auth_session_issuance_limits.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/023_session_context_guarded_transition.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/024_token_bound_session_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/025_verifier_bound_session_issuance.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/026_credential_bound_proofs_and_session_revocation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/027_shared_login_attempt_limits.sql
+          # CI original: backend/migrations/028_member_lifecycle_sandbox_requests.sql
+          # CI original: backend/migrations/029_member_lifecycle_review_events.sql
+          # CI original: backend/migrations/030_member_lifecycle_case_rounds.sql
+          # Run exact local forks against disposable PostgreSQL 16.
+          PGOPTIONS='-c frcaixinha.lifecycle_local_ci=1' \
+            psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -f backend/local_migrations/028_member_lifecycle_sandbox_requests.sql \
+            -f backend/local_migrations/029_member_lifecycle_review_events.sql \
+            -f backend/local_migrations/030_member_lifecycle_case_rounds.sql
+          PGOPTIONS='-c frcaixinha.notifications_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/migrations/031_notification_inbox_local_sandbox.sql
+          bash backend/scripts/aistudio_local_parity_034_041_ci.sh
+          PGOPTIONS='-c frcaixinha.cycle_price_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/042_cycle_contribution_price_audit.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20400_cycle_policy_functional_ci.sql
+          PGOPTIONS='-c frcaixinha.quota_floor_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/043_cycle_contribution_contract_minimum.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20700_quota_floor_functional_ci.sql
+          PGOPTIONS='-c frcaixinha.cycle_open_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/044_cycle_opening_audit.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m21000_cycle_opening_functional_ci.sql
+          # M33400-M33800: admission read policy tested in disposable PostgreSQL.
+          PGOPTIONS='-c frcaixinha.saas_admission_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/045_saas_member_plan_visibility.sql
+          # M33900-M34300: tested ONLY in disposable PostgreSQL CI.
+          PGOPTIONS='-c frcaixinha.saas_write_lock_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/046_saas_membership_quota_write_lock.sql
+          # CI-only, fora do diretorio de migracoes do Termux.
+          PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
+          PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
+      - name: Criar usuário de aplicação para teste
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_ci LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_ci"
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_auth_ci LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frcaixinha_auth_ci"
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_verifier_ci LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO frcaixinha_verifier_ci"
+      - name: Executar testes existentes de RLS
+        env:
+          PYTHONPATH: backend
+          DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_and_api.py -k TestPostgreSQLRowLevelSecurityCRUD
+
+      - name: Testar isolamento com registros sintéticos
+        env:
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_RATE_LIMIT_HMAC_KEY: ci-only-test-hmac-secret-of-40-bytes-placeholder
+          DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: |
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_onboarding_permission_matrix_ci.py
+          python -m pytest -q backend/tests/test_aistudio_master_catalog.py -k disposable_postgres
+          python -m pytest -q backend/tests/test_aistudio_account_lifecycle_ci.py
+          python -m pytest -q backend/tests/test_aistudio_governance_ci.py
+          python -m pytest -q backend/tests/test_aistudio_live_engines_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_named_sessions_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_login_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_roles_e2e_ci.py
+          python -m pytest -q -s --asyncio-mode=auto backend/tests/test_aistudio_financial_lab_integrated_ci.py
+          python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
+          python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
+          python -m pytest -q backend/tests/test_member_obligations_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
+          python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
+          python -m pytest -q backend/tests/test_migration_028_contract_ci.py
+          python -m pytest -q backend/tests/test_migration_029_contract_ci.py
+          python -m pytest -q backend/tests/test_migration_030_contract_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m2040_sandbox_persistence_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m2500_mp_connect_inbox_persistence_ci.py
+
+      - name: Testar prontidão FastAPI com PostgreSQL descartável
+        env:
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          FRCAIXINHA_TEST_AUTH: '1'
+          ENVIRONMENT: homologation
+          AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_RATE_LIMIT_HMAC_KEY: ci-only-test-hmac-secret-of-40-bytes-placeholder
+          DATABASE_URL: postgresql://frcaixinha_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q backend/tests/test_termux_readiness_ci.py
+
+      - name: Testar bootstrap em banco descartável
+        env:
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q backend/tests/test_bootstrap_ci.py backend/tests/test_tenant_provisioning_ci.py
+
+      - name: M5700 — ensaiar migrações Orders 034-038 em staging descartável
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: bash backend/scripts/aistudio_staging_chain_ci.sh
+
+      - name: Backup cifrado age e restauração descartável
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          # Run PG16 client binaries from the very same official container
+          # image as the disposable CI database, avoiding host apt packages
+          # and PG18 -> PG16 transaction_timeout restore incompatibility.
+          docker image inspect postgres:16 >/dev/null
+          mkdir -p "$RUNNER_TEMP/frfinance-pg16-bin"
+          for pgtool in pg_dump pg_restore; do
+            cat > "$RUNNER_TEMP/frfinance-pg16-bin/$pgtool" <<'PG16_WRAP'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          # This wrapper is only for a disposable Github Actions PostgreSQL 16 service.
+          if [[ "${GITHUB_ACTIONS:-}" != "true" || "${PGHOST:-}" != "127.0.0.1" ||
+                "${PGPORT:-}" != "5432" || "${PGUSER:-}" != "postgres" ||
+                ( "${PGDATABASE:-}" != "frcaixinha_ci" &&
+                  "${PGDATABASE:-}" != "frcaixinha_restore_ci" ) ]]; then
+            echo "M39087_PG16_CLIENT_WRAPPER=BLOCKED_NONDISPOSABLE_CONTEXT" >&2
+            exit 2
+          fi
+          command_name="$(basename "$0")"
+          if [[ "$command_name" != "pg_dump" && "$command_name" != "pg_restore" ]]; then
+            exit 2
+          fi
+          exec docker run --rm -i --network host \
+            -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
+            postgres:16 "$command_name" "$@"
+          PG16_WRAP
+            chmod 700 "$RUNNER_TEMP/frfinance-pg16-bin/$pgtool"
+          done
+          export PATH="$RUNNER_TEMP/frfinance-pg16-bin:$PATH"
+          test "$(pg_dump --version | awk '{print $NF}' | cut -d. -f1)" = "16"
+          test "$(pg_restore --version | awk '{print $NF}' | cut -d. -f1)" = "16"
+          test "$(psql -tAc 'SHOW server_version_num' | tr -d '[:space:]' | cut -c1-2)" = "16"
+          age-keygen -o "$RUNNER_TEMP/frcaixinha-ci-identity.txt"
+          recipient="$(age-keygen -y "$RUNNER_TEMP/frcaixinha-ci-identity.txt")"
+          psql -v ON_ERROR_STOP=1 -c "INSERT INTO users(email,full_name,cpf,phone) VALUES('backup-ci@example.invalid','Backup sintético','00000000000000','00000000000')"
+          AGE_RECIPIENT="$recipient" BACKUP_OUTPUT="$RUNNER_TEMP/frcaixinha-ci.dump.age" bash backend/scripts/backup_age.sh
+          createdb frcaixinha_restore_ci
+          PGDATABASE=frcaixinha_restore_ci AGE_IDENTITY_FILE="$RUNNER_TEMP/frcaixinha-ci-identity.txt" BACKUP_INPUT="$RUNNER_TEMP/frcaixinha-ci.dump.age" bash backend/scripts/restore_disposable_ci.sh
+          original="$(psql -tAc "SELECT count(*) FROM users WHERE email='backup-ci@example.invalid'")"
+          restored="$(PGDATABASE=frcaixinha_restore_ci psql -tAc "SELECT count(*) FROM users WHERE email='backup-ci@example.invalid'")"
+          test "$original" = "1"
+          test "$restored" = "$original"
+
+  postgres18-preflight:
+    name: PostgreSQL 18 preflight — transacao unica e RLS Master
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: frcaixinha_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frcaixinha_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencias Python
+        run: python -m pip install -r backend/requirements.txt
+      - name: Migrar 001-030 + 031 local-sandbox em UMA transacao no PostgreSQL 18 descartavel
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          # Reproduzir os papeis tecnicos locais SEM tocar o banco Termux.
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_auth LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          scripts=()
+          for i in $(seq 1 30); do
+            printf -v n '%03d' "$i"
+            if (( i >= 28 )); then
+              files=(backend/local_migrations/"$n"_*.sql)
+            else
+              files=(backend/migrations/"$n"_*.sql)
+            fi
+            test "${#files[@]}" -eq 1
+            test -f "${files[0]}"
+            scripts+=(-f "${files[0]}")
+          done
+          scripts+=(-f backend/migrations/031_notification_inbox_local_sandbox.sql)
+          scripts+=(-f backend/scripts/aistudio_post_migration_roles.sql)
+          PGOPTIONS='-c frcaixinha.notifications_local_ci=1 -c frcaixinha.lifecycle_local_ci=1' \
+            psql -X -v ON_ERROR_STOP=1 --single-transaction "${scripts[@]}"
+          bash backend/scripts/aistudio_local_parity_034_041_ci.sh
+          PGOPTIONS='-c frcaixinha.cycle_price_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/042_cycle_contribution_price_audit.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20400_cycle_policy_functional_ci.sql
+          PGOPTIONS='-c frcaixinha.quota_floor_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/043_cycle_contribution_contract_minimum.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m20700_quota_floor_functional_ci.sql
+          PGOPTIONS='-c frcaixinha.cycle_open_local_ci=1' psql -X -v ON_ERROR_STOP=1 --single-transaction -f backend/local_migrations/044_cycle_opening_audit.sql
+          psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m21000_cycle_opening_functional_ci.sql
+          # M33800: include plan visibility in PG18 base before staging clone.
+          PGOPTIONS='-c frcaixinha.saas_admission_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/045_saas_member_plan_visibility.sql
+          # M33900-M34300: tested ONLY in disposable PostgreSQL CI.
+          PGOPTIONS='-c frcaixinha.saas_write_lock_ci=1' psql -X -v ON_ERROR_STOP=1 -f backend/local_migrations/046_saas_membership_quota_write_lock.sql
+          PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/031_mp_sandbox_evidence_ci_only.sql
+          PGOPTIONS='-c frcaixinha.ci_sandbox=1' psql -X -v ON_ERROR_STOP=1 -f backend/ci_migrations/032_mp_connect_inbox_ci_only.sql
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_app LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frcaixinha_pg18_app"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_auth LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frcaixinha_pg18_auth"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frcaixinha_pg18_verifier LOGIN PASSWORD 'ci-test-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO frcaixinha_pg18_verifier"
+      - name: M37445 — abertura autenticada de tres valores em PG18 descartavel
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          PGOPTIONS='-c frfinance.m37445_disposable_ci=1' \
+            psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m37445_cycle_opening_e2e_disposable_ci.sql
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.users')" = 0
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.cycles')" = 0
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.cycle_opening_audit')" = 0
+          echo M37445_POST_TRANSACTION_BASELINE=PASS
+      - name: M37438 — ensaio transacional e rollback no PostgreSQL 18 descartavel do CI
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          python backend/scripts/aistudio_m37438_disposable_ci_sql.py > "$RUNNER_TEMP/m37438_ci_rollback.sql"
+          PGOPTIONS='-c frfinance.dev_cleanup_m37437=EXPLICIT_DEV_ONLY_PURGE_APPROVED -c frfinance.m37437_verified_backup_sha=714bc50de8dfc42d25f1b9bbe54e9841df883f0d606f467015c0e153b4d9b88b -c frfinance.m37437_ci_disposable=1' \
+            psql -X -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/m37438_ci_rollback.sql"
+          test "$(psql -X -t -A -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.users')" = 0
+      - name: Verificar RLS do Master e precos com usuarios sinteticos
+        env:
+          PYTHONPATH: backend
+          AI_STUDIO_CI_PG18: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          DATABASE_URL: postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: python -m pytest -q --asyncio-mode=auto backend/tests/test_aistudio_pg18_preflight.py
+      - name: Auditoria financeira integrada ficticia no PostgreSQL 18 descartavel
+        env:
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          DATABASE_URL: postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: |
+          python -m pytest -q -s --asyncio-mode=auto backend/tests/test_aistudio_financial_lab_integrated_ci.py
+          python -m pytest -q backend/tests/test_cashbox_segregation_and_profit_ci.py
+          python -m pytest -q backend/tests/test_member_cycle_contract_ci.py backend/tests/test_annual_closing_contract_ci.py backend/tests/test_loan_arrears_contract_ci.py backend/tests/test_tenant_exit_contract_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_cycle_risk_api_ci.py
+          python -m pytest -q backend/tests/test_member_obligations_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_obligations_api_ci.py
+          python -m pytest -q backend/tests/test_financial_integrity_oracle_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_financial_integrity_api_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_sandbox_ci.py
+          python -m pytest -q backend/tests/test_migration_028_contract_ci.py
+          python -m pytest -q backend/tests/test_migration_029_contract_ci.py
+          python -m pytest -q backend/tests/test_migration_030_contract_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m2040_sandbox_persistence_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_m2500_mp_connect_inbox_persistence_ci.py
+      - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
+        env:
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_AUTH_DATABASE_URL: postgresql://frcaixinha_pg18_auth:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_pg18_verifier:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          DATABASE_URL: postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+        run: |
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01g_credential_proof_ci.py
+          python -m pytest -q --asyncio-mode=auto backend/tests/test_p0_01h_shared_rate_limit_ci.py
+
+      - name: M37427 — autorização explicita de abertura M044 com flag fechada
+        run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37427_explicit_cycle_open_ci.py
+      - name: M37452 — cadeia SaaS sintetica e fail-closed sem licenca ou Pix real
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37452_saas_checkout_chain_ci.py
+      - name: M37453 — readback SaaS de contrato e preparacao em PG descartavel
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37453_saas_disposable_readback_ci.py
+      - name: M37454 — aceite explicito SaaS, hash de prova sintetica e anti-replay
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37454_saas_consent_linkage_ci.py
+      - name: M37455 — persistencia descartavel de aceite, unicidade e privilegios minimos
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37455_saas_disposable_consent_ci.py
+      - name: M37456 — vinculo imutavel de aceite sintetico e preparacao SaaS
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37456_saas_consent_preparation_link_ci.py
+      - name: M37457 — bloquear preparo antes do aceite e atestacao CI isolada
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37457_preparation_chronology_ci.py backend/tests/test_m37457_chronology_readback_ci.py
+      - name: M37458 — consentimento ANTES do preparo em PG descartavel sem pagamento real
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37458_saas_consent_before_preparation_ci.py
+      - name: M37459 — contrato API SaaS, permissao server-only e rollback CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37459_saas_api_contract_ci.py backend/tests/test_m37459_saas_api_transaction_ci.py
+      - name: M37460 — fronteira HTTP SaaS autenticada so em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37460_saas_authenticated_boundary_ci.py
+      - name: M37461 — sessao e oferta do PostgreSQL descartavel, leitura somente
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37461_saas_server_context_readback_ci.py
+      - name: M37462 — sessao/token autenticado por hash, revogacao e isolacao CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37460_saas_authenticated_boundary_ci.py backend/tests/test_m37461_saas_server_context_readback_ci.py backend/tests/test_m37462_verified_session_binding_ci.py backend/tests/test_auth_session_fail_closed_ci.py
+      - name: M37463 — escopo contrato/token/sessao antes e apos revogacao em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37463_token_scoped_offer_readback_ci.py
+      - name: M37464 — transacao de consentimento atomico e revogacao concorrente CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37464_atomic_consent_lock_ci.py
+      - name: M37465 — HTTP contrato SaaS e executor atomico no PostgreSQL de CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37465_saas_http_atomic_adapter_ci.py
+      - name: M37466 — auditoria read-only de aceite pos-commit e sessao revogada CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37466_post_commit_audit_ci.py
+      - name: M37467 — oferta contratual congelada, valor e hash, idempotencia CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37467_frozen_offer_idempotence_ci.py
+      - name: M37468 — contrato congelado vs recibo e auditoria pos-revogacao CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37468_frozen_receipt_audit_ci.py
+      - name: M37469 — bloqueios operacionais reais e zero autorizacao por CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37469_release_blockers_readonly.py
+      - name: M37469 — relatorio de prioridades operacionais somente leitura
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37469_release_blockers_readonly.py plan
+      - name: M37470 — inventario OCI tipado ligado a bloqueios operacionais sem release
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37470_oci_live_release_bridge_ci.py
+      - name: M37470 — baseline OCI sem rede e sem credenciais
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37470_oci_live_release_readonly.py offline
+      - name: M37500 — revisoes adversariais de membro email Pix OCI e 15 85
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37500_release_safety_ci.py
+      - name: M37500 — 192 etapas imutaveis sem aprovacao automatica
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37500_release_workplan_ci.py backend/tests/test_m37500_offline_cli_ci.py
+      - name: M37500 — SQL 066-068 catalogado com hashes e guardas CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37500_migration_guard_ci.py
+      - name: M37500 — relatorio offline das 192 tarefas
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37500_megapack_offline.py summary
+      - name: M37500 — preflight de migracoes staging CI sem aplicar SQL
+        run: PYTHONPATH=backend python backend/scripts/aistudio_m37500_migration_preflight.py
+      - name: M37450 — inventario de licencas PG18 original, sem escrita CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37450_license_inventory_ci.py
+      - name: M37446 — API de previa administrativa, sem banco e sem escrita
+        run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37446_admin_ui_api_contract_ci.py
+      - name: M37445 — verificacao estatica de E2E SQL em CI descartavel
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37445_cycle_opening_disposable_ci.py
+      - name: M37444 — prontidao da abertura de ciclo no PG18 original, read only
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37444_cycle_readiness_ci.py
+      - name: M37443 — auditoria pos-saneamento PG18 somente leitura
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37443_post_reset_ci.py
+      - name: M37441 — distribuicao 3+2 de auditoria com guardia conservadora
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37441_audit_split_ci.py
+      - name: M37440 — diagnostico agregado fail-closed das 18 contagens
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37440_baseline_readonly_ci.py
+      - name: M37439 — aplicador local auditado (somente testes, nao executar apply)
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37439_guarded_local_installer_ci.py
+      - name: M37438 — montar transacao ficticia sem commit
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37438_disposable_rehearsal_ci.py
+      - name: M37437 — candidato SQL de saneamento sintetico, sem executar no CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37437_dev_fixture_reset_candidate_ci.py
+      - name: M37436 — escopo e FKs do ciclo antigo no banco original
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37436_legacy_cycle_scope_ci.py
+      - name: M37435 — dependencias dos valores de desenvolvimento no mesmo PG18
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37435_legacy_dependency_inventory_ci.py
+      - name: M37434 — contrato de piso e banco unico existente
+        run: PYTHONPATH=backend python -m pytest -q --asyncio-mode=auto backend/tests/test_m37434_same_database_price_ci.py
+      - name: M37432 — ensaio seguro de recuperacao isolada PG18
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37432_dev_restore_rehearsal_ci.py
+      - name: M37431 — backup cifrado de desenvolvimento fail closed
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37431_dev_clean_backup_ci.py
+      - name: M37421–M37425 — auditoria do preco legado somente leitura
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37425_dev_legacy_price_inventory_ci.py
+      - name: M37401–M37420 — sessao sintética inexistente e perfil forjado GET-only
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37401_m37420_local_session_boundary_ci.py
+      - name: M37381–M37400 — smoke local GET sem credenciais nem efeitos financeiros
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37381_m37400_local_runtime_smoke_ci.py
+      - name: M37361–M37370 — atestacao read-only das estruturas PG18 locais
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37361_m37370_local_pg18_evidence_ci.py
+      - name: M37351–M37360 — OCI IAM rede e inventario leitura unificada
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37351_m37360_oci_unified_readonly_ci.py
+      - name: M37341–M37350 — IAM privilegios minimos plano inerte e classificacao sem mutacoes
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37341_m37350_oci_iam_review_plan_ci.py
+      - name: M37331–M37340 — inventario OCI IAM policies e dynamic groups somente leitura
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37331_m37340_oci_iam_readonly_ci.py
+      - name: M37323–M37330 — OCI bootstrap plan only e bloqueios de seguranca
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37323_m37330_oci_bootstrap_plan_ci.py
+      - name: M37318–M37322 — OCI gates operacionais sem deploy e SDK padronizado
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37318_m37322_oci_operational_readiness_ci.py
+      - name: M37312–M37316 — rede OCI existente segura sem aplicar Terraform
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37312_m37316_oci_existing_network_ci.py
+      - name: M37311 — OCI Vault SDK HTTP 200 e paginacao somente leitura
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37311_oci_sdk_vault_ci.py
+      - name: M37306–M37310 — OCI SDK compute list HTTP 200 e paginacao sem mutacoes
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m37306_m37310_oci_sdk_compute_ci.py
+      - name: M36900–M37300 — inventario OCI real com API simulada sem mutacoes
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m36900_m37300_oci_live_inventory_ci.py
+      - name: M36400–M36800 — tres fontes SaaS e segregacao de revisores CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m36400_m36800_saas_three_source_ci.py
+      - name: M35900–M36300 — trilha append-only de conciliacao SaaS em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m35900_m36300_saas_reconciliation_static_ci.py
+      - name: M35400–M35800 — RLS master, preco fixado e conferencia do GET SaaS
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m35400_m35800_saas_persisted_readback_ci.py
+      - name: M34900–M35300 — GET autenticado da plataforma e auditoria de pagamento
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m34900_m35300_saas_provider_readback_ci.py
+      - name: M34400–M34800 — provas atomicas do pre-cadastro em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m34400_m34800_saas_admission_intent_static_ci.py
+      - name: M33900–M34300 — travar DML direto de membros e cotas
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m33900_m34300_saas_write_lock_static_ci.py
+      - name: M33400–M33800 — integracao de preflight SaaS e isolamento
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m33400_m33800_saas_admission_ci.py
+      - name: M32900–M33300 — recuperar reservas expiradas somente em CI
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_m32900_m33300_saas_expiry_static_ci.py
+
+      - name: M6300 — PostgreSQL 18 staging descartável, replay e worker RBAC
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: bash backend/scripts/aistudio_staging_chain_ci.sh
+
+  m37500-sql-disposable:
+    name: M37500 SQL 066-068 PostgreSQL 18 descartavel
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: ci-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exigir banco CI e aplicar tres SQL SEM dados financeiros reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d postgres -c 'CREATE DATABASE frcaixinha_staging'
+          {
+            printf '%s\n' "SET frfinance.m37500_ci = '1';"
+            cat backend/staging_migrations/066_release_gate_evidence_quarantine_ci_only.sql
+            cat backend/staging_migrations/067_mail_delivery_quarantine_ci_only.sql
+            cat backend/staging_migrations/068_payment_reconciliation_hold_ci_only.sql
+          } | psql -X -v ON_ERROR_STOP=1 -d frcaixinha_staging
+      - name: Verificar RLS append only e zero registros reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(psql -X -At -d frcaixinha_staging -c "
+          SELECT CASE WHEN
+            (SELECT count(*) FROM pg_class
+             WHERE oid IN (
+               'public.fr_m37500_release_gate_quarantine_ci'::regclass,
+               'public.fr_m37501_mail_quarantine_ci'::regclass,
+               'public.fr_m37502_reconciliation_hold_ci'::regclass
+             ) AND relrowsecurity AND relforcerowsecurity) = 3
+             AND (SELECT count(*) FROM public.fr_m37500_release_gate_quarantine_ci) = 0
+             AND (SELECT count(*) FROM public.fr_m37501_mail_quarantine_ci) = 0
+             AND (SELECT count(*) FROM public.fr_m37502_reconciliation_hold_ci) = 0
+             AND (SELECT count(*) FROM pg_trigger
+                  WHERE tgname LIKE 'fr_m3750%no_%_ci' AND NOT tgisinternal) = 6
+           THEN 'PASS' ELSE 'BLOCKED' END;")"
+          test "$result" = "PASS"
+          echo "M37500_SQL_PG18_DISPOSABLE=PASS"
+          echo "M37500_ORIGINAL_DB=NOT_ACCESSED"
+          echo "M37500_REAL_PIX=OFF"
+
+  exportar-fonte-ai-studio:
+    name: Empacotar codigo-fonte para AI Studio
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verificar snapshot e montar ZIP do codigo-fonte
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          # Recusar arquivos tipicamente secretos que nao podem ir ao AI Studio.
+          if git ls-files | grep -E '(^|/)(\.env$|\.env\.(local|production)$|[^/]+\.(pem|p12|pfx|jks|keystore|key|dump|sqlite|db)$)'; then
+            echo "BLOQUEADO: possiveis segredos versionados."
+            exit 1
+          fi
+          mkdir -p export
+          git archive --format=zip --prefix=AI_Studio/ --output=export/AI_Studio_Codigo_Fonte.zip HEAD
+          unzip -t export/AI_Studio_Codigo_Fonte.zip
+          sha256sum export/AI_Studio_Codigo_Fonte.zip > export/SHA256_codigo_fonte.txt
+          git rev-parse HEAD > export/COMMIT_ORIGEM.txt
+      - name: Disponibilizar pacote de codigo-fonte
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI_Studio_Codigo_Fonte_Snapshot
+          path: export/
+          if-no-files-found: error
+          retention-days: 7

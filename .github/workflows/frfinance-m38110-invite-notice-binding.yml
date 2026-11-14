@@ -1,0 +1,30 @@
+name: FR Finance M38110 invitation contract notice binding CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  onboarding-notification-binding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Checar vinculos sintéticos sem email ou banco
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38110_invitation_notice_binding_ci.py \
+            backend/tests/test_m15000_notifications_ci.py \
+            backend/tests/test_m29100_m29400_onboarding_chain_ci.py
+          echo "M38139_PENDING_MEMBER_NOTICE=CORRELATED_OFFLINE"
+          echo "M38139_CONSENT_REAL=OFF"
+          echo "M38139_EMAIL_REAL=OFF"
+          echo "M38139_ACTIVATION_REAL=OFF"
+          echo "M38139_PRODUCTION=BLOCKED"

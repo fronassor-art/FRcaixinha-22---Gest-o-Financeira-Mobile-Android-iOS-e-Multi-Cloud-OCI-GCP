@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const manifest=readFileSync('android/app/src/debug/AndroidManifest.xml','utf8');
+const policy=readFileSync('android/app/src/debug/res/xml/local_api_network_security.xml','utf8');
+const base=readFileSync('android/app/src/main/AndroidManifest.xml','utf8');
+const cfg=readFileSync('capacitor.config.ts','utf8');
+assert.ok(manifest.includes('android:networkSecurityConfig="@xml/local_api_network_security"'));
+assert.ok(policy.includes('<base-config cleartextTrafficPermitted="false"'));
+assert.ok(policy.includes('<domain-config cleartextTrafficPermitted="true"'));
+assert.ok(policy.includes('127.0.0.1'));
+assert.ok(policy.includes('localhost'));
+assert.ok(!policy.includes('0.0.0.0'));
+assert.ok(!base.includes('android:usesCleartextTraffic="true"'));
+assert.ok(cfg.includes("http://127.0.0.1:8000"));
+assert.ok(cfg.includes('cleartext: false'));
+console.log('PASS M19000 Android debug loopback only; external cleartext still blocked');

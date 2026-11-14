@@ -1,0 +1,32 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Chaves de assinatura, material de recuperação e backups locais
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.dump.age
+android/keystore.properties
+backend/.secrets/
+backups/
+
+# AI Studio OCI staging: manter planos/estados e inputs locais fora do GitHub.
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfvars.json
+**/*.auto.tfvars
+**/*.tfplan
+**/*tfplan.json
+**/*.plan.json
+
+# Firebase Android: configuração fornecida localmente no APK de homologação
+android/app/google-services.json

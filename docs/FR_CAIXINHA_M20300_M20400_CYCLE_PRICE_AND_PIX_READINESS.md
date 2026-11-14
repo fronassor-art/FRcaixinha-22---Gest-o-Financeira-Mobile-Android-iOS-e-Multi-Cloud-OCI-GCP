@@ -1,0 +1,8 @@
+# FR Caixinha AI Studio — M20300/M20400, navegação e contribuição por ciclo
+
+- M20300: histórico Voltar/Avançar para a mesma sessão/perfil, sem atravessar identidade; botão Pix agora reflete `pix_collection_enabled` da API e fica desativado quando falso.
+- M20400: migração local 042 cria auditoria append-only e RLS; funções SECURITY DEFINER verificam token PostgreSQL, tenant e papel TENANT_ADMIN. O valor `policies.contribution_per_quota` é configurável por tenant/ciclo antes de gerar obrigações. A alteração exige motivo e idempotência.
+- Se o ciclo já tem cobranças, a solicitação de R$150,00 é registrada como `PENDING_REVIEW`. **Não modifica contribuições existentes nem gera quitação**. O valor R$100,00 da competência 2027-12 precisa de uma revisão financeira própria e auditada.
+- Migração local exige 44 tabelas preexistentes, backup age recuperável, confirmação `AUTORIZO_POLITICA_COTA_042` e transação de SQL 042, ficando 45 tabelas após PASS. A API deve ser reiniciada somente depois da migração, e APK só após ambos.
+- Falta autorização comercial e infraestrutura real do Mercado Pago: conta de cada tenant conectada via OAuth, segredos em cofre/backend, domínio HTTPS, webhook assinado e persistência, idempotência, consultas autenticadas e conciliação. O servidor OCI staging não está implantado por estes commits. Não colocar token no GitHub, no frontend nem neste chat; a existência de token no Termux por si só não ativa o Pix.
+- Payouts requerem habilitação independente; nenhum Pix real ou movimento financeiro é ativado neste pacote. A verificação de produção virá após um preflight separado.

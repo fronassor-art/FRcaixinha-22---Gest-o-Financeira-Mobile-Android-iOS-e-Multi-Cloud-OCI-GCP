@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+"""M27800 — safe operator intake in Termux, public metadata ONLY.
+
+Stores file outside Git checkout, chmod 0600; never requests, accepts,
+stores, echoes or prints credentials. No database/network/OCI/SMTP/MP calls.
+
+Usage:
+ PYTHONPATH=backend python3 backend/scripts/aistudio_provider_intake.py init
+ PYTHONPATH=backend python3 backend/scripts/aistudio_provider_intake.py fields
+ PYTHONPATH=backend python3 backend/scripts/aistudio_provider_intake.py set KEY VALUE
+ PYTHONPATH=backend python3 backend/scripts/aistudio_provider_intake.py audit
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import secrets
+import stat
+import sys
+
+from app.operator_release_worklist import release_worklist
+from app.provider_setup_sequence import prioritized_public_steps
+from app.public_https_attestation import probe_public_https_origin, PublicTlsProbeBlocked
+from app.public_api_health_attestation import probe_public_api_health, PublicApiHealthBlocked
+from app.provider_secret_inventory import secret_names_and_access_plan
+from app.provider_intake_schema import (
+    FIELDS, FIELD_BY_KEY, IntakeBlocked, intake_audit,
+    new_manifest, validate_field, validate_manifest,
+)
+
+
+ROOT_DIR = ".config/frfinance-aistudio"
+FILENAME = "provider-public-inputs.json"
+MAX_LENGTH = 16384
+
+
+def _deny() -> IntakeBlocked:
+    return IntakeBlocked("M27800_PRIVATE_PUBLIC_INTAKE_BLOCKED")
+
+
+def _default_file() -> Path:
+    return Path.home() / ROOT_DIR / FILENAME
+
+
+def _check_location(path: Path, *, create_dir: bool) -> None:
+    parent = path.parent
+    if parent.is_symlink() or (path.exists() and path.is_symlink()):
+        raise _deny()
+    if create_dir:
+        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not parent.is_dir():
+        raise _deny()
+    if (stat.S_IMODE(parent.stat().st_mode) & 0o077) != 0:
+        raise _deny()
+    if path.exists():
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or (stat.S_IMODE(info.st_mode) & 0o177) != 0:
+            raise _deny()
+        if info.st_uid != os.getuid():
+            raise _deny()
+
+
+def _reject_duplicates(pairs):
+    result = {}
+    for k,v in pairs:
+        if k in result:
+            raise _deny()
+        result[k] = v
+    return result
+
+
+def read_file(path: Path) -> dict:
+    _check_location(path,create_dir=False)
+    if not path.is_file() or path.stat().st_size > MAX_LENGTH:
+        raise _deny()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"),
+                          object_pairs_hook=_reject_duplicates)
+        return validate_manifest(data)
+    except (UnicodeError,ValueError,TypeError,OSError):
+        raise _deny() from None
+
+
+def _atomic_save(path: Path, data: dict, *, must_be_new=False) -> None:
+    _check_location(path,create_dir=True)
+    if must_be_new and path.exists():
+        raise _deny()
+    payload=(json.dumps(validate_manifest(data),indent=2,sort_keys=True)
+             + "\n").encode("utf-8")
+    if len(payload)>MAX_LENGTH:
+        raise _deny()
+    tmp=path.parent / (".provider-intake-"+secrets.token_hex(12)+".tmp")
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL
+    if hasattr(os,"O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd=None
+    try:
+        fd=os.open(tmp,flags,0o600)
+        with os.fdopen(fd,"wb") as handle:
+            fd=None
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if must_be_new and path.exists():
+            raise _deny()
+        os.replace(tmp,path)
+    finally:
+        if fd is not None:
+            os.close(fd)
+        tmp.unlink(missing_ok=True)
+
+
+def initialize(path: Path) -> None:
+    _atomic_save(path,new_manifest(),must_be_new=True)
+
+
+def save_public_field(path: Path,key: str,value: str) -> None:
+    # Reject KEY first, before parsing any potential secret value.
+    approved=validate_field(key,value)
+    saved=read_file(path)
+    saved["public_inputs"][key]=approved
+    _atomic_save(path,saved)
+
+
+def remove_public_field(path: Path,key: str) -> None:
+    if key not in FIELD_BY_KEY:
+        raise _deny()
+    saved=read_file(path)
+    saved["public_inputs"].pop(key,None)
+    _atomic_save(path,saved)
+
+
+def _print_audit(path: Path) -> None:
+    data=read_file(path)
+    report=intake_audit(data)
+    print("FR_FINANCE_INTAKE=READ_ONLY")
+    print("FR_FINANCE_SECRET_VALUES=NEVER_COLLECTED")
+    print("FR_FINANCE_REAL_MAIL=OFF")
+    print("FR_FINANCE_REAL_USER_ACTIVATION=OFF")
+    print("FR_FINANCE_PIX_INBOUND=OFF")
+    print("FR_FINANCE_PIX_OUTBOUND=OFF")
+    print("FR_FINANCE_EXTERNAL_ATTESTATION=REQUIRED")
+    for gate in report["gates"]:
+        print("GATE_"+gate["gate"]+"="+gate["status"])
+        for key in gate["missing_public_fields"]:
+            print("MISSING_"+gate["gate"]+"="+key)
+    print("PUBLIC_FIELDS_PRESENT_COUNT="+str(len(report["public_fields_present"])))
+    print("PUBLIC_FIELDS_MISSING_COUNT="+str(len(report["public_fields_absent"])))
+    print("FR_FINANCE_PUBLIC_INTAKE_AUDIT=PASS")
+
+
+def main(argv=None) -> int:
+    parser=argparse.ArgumentParser(
+        description="FR Finance AI Studio — somente identificadores públicos; NUNCA insira senhas, tokens, secrets ou DSNs."
+    )
+    parser.add_argument("action",choices=("init","fields","set","unset","audit","plan","next","probe-https","probe-api-health","secrets-plan"))
+    parser.add_argument("key",nargs="?")
+    parser.add_argument("value",nargs="?")
+    args=parser.parse_args(argv)
+    path=_default_file()
+    try:
+        if args.action=="fields":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            for field in FIELDS:
+                print(field.key+": "+field.description)
+        elif args.action=="init":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            initialize(path)
+            print("FR_FINANCE_PUBLIC_INTAKE_INITIALIZED=PASS")
+        elif args.action=="set":
+            if args.key is None or args.value is None:
+                raise _deny()
+            save_public_field(path,args.key,args.value)
+            print("FR_FINANCE_PUBLIC_FIELD_SAVED=PASS")
+        elif args.action=="unset":
+            if args.key is None or args.value is not None:
+                raise _deny()
+            remove_public_field(path,args.key)
+            print("FR_FINANCE_PUBLIC_FIELD_UNSET=PASS")
+        elif args.action=="audit":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            _print_audit(path)
+        elif args.action=="plan":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            report=release_worklist(read_file(path))
+            print("FR_FINANCE_PROVIDER_PLAN=READ_ONLY")
+            for stage in report["stages"]:
+                print("=== "+stage["id"]+" ===")
+                for item in stage["actions"]:
+                    print(item["responsible"]+": "+item["action"])
+            print("FR_FINANCE_PROVIDER_PLAN=BLOCKED_EXTERNAL_EVIDENCE")
+        elif args.action=="next":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            report=prioritized_public_steps(read_file(path))
+            print("FR_FINANCE_PUBLIC_SETUP=ORDERED_NOT_LIVE")
+            for phase in report["stages"]:
+                print("=== "+phase["phase"]+" ===")
+                for task in phase["missing"]:
+                    print("MISSING="+task["field"]+" | "+task["action"])
+            if report["next_public_field"] is None:
+                print("NEXT_PUBLIC_FIELD=NONE")
+                print("EXTERNAL_PROOFS=NOT_VERIFIED")
+            else:
+                print("NEXT_PUBLIC_FIELD="+report["next_public_field"])
+            print("FR_FINANCE_LIVE_SERVICES=OFF")
+        elif args.action=="probe-https":
+            # Explicit opt-in: "probe-https APP_URL AUTHORIZE_PUBLIC_TLS_ONLY"
+            # No cookies, URL contents, credentials, HTTP method, API calls or SMTP.
+            if args.key not in {"APP_URL","MP_OAUTH_REDIRECT_URI","MP_WEBHOOK_URL"} or args.value!="AUTHORIZE_PUBLIC_TLS_ONLY":
+                raise _deny()
+            public=read_file(path)["public_inputs"]
+            if args.key not in public:
+                raise _deny()
+            from urllib.parse import urlsplit
+            value=public[args.key]
+            origin="https://"+urlsplit(value).hostname
+            report=probe_public_https_origin(origin)
+            if not (report.dns_public and report.hostname_certificate_valid and
+                    not report.production_ready and not report.pix_enabled):
+                raise _deny()
+            print("M28200_PUBLIC_DNS_AND_TLS=PASS")
+            print("M28200_HTTP_REQUESTS=0")
+            print("M28200_SMTP_MESSAGES=0")
+            print("M28200_REAL_PROVIDERS=NOT_ATTESTED")
+        elif args.action=="probe-api-health":
+            # Explicit opt-in, only the allowlisted public APP_URL.
+            # Executes one GET /api/health per pinned public DNS IP, no
+            # redirects, credentials, secret values, database, or cloud writes.
+            if args.key!="APP_URL" or args.value!="AUTHORIZE_PUBLIC_HEALTH_READ_ONLY":
+                raise _deny()
+            public=read_file(path)["public_inputs"]
+            origin=public.get("APP_URL")
+            if type(origin) is not str:
+                raise _deny()
+            report=probe_public_api_health(origin)
+            if (not report.public_dns_and_tls_observed
+                    or not report.health_contract_observed
+                    or report.production_authorized or report.real_pix_authorized
+                    or report.real_user_activation_authorized):
+                raise _deny()
+            print("M38209_PUBLIC_HEALTH_GET=PASS_READ_ONLY")
+            print("M38209_SANDBOX_CONTRACT=OBSERVED")
+            print("M38209_DATABASE_CONFIG_CLAIM=" + (
+                "DECLARED" if report.database_configured_claim else "NOT_DECLARED"))
+            print("M38209_REAL_DATABASE_RLS=NOT_ATTESTED")
+            print("M38209_OCI_VM_IDENTITY=NOT_ATTESTED")
+            print("M38209_PRODUCTION_AUTH=NOT_ATTESTED")
+            print("M38209_EMAIL_REAL=OFF")
+            print("M38209_PIX_REAL=OFF")
+            print("M38209_ACTIVATION_REAL=OFF")
+            print("M38209_PRODUCTION=BLOCKED")
+        elif args.action=="secrets-plan":
+            if args.key is not None or args.value is not None:
+                raise _deny()
+            # May run without any public provider fields: no secrets are read.
+            plan=secret_names_and_access_plan()
+            print("FR_FINANCE_SECRETS_PLAN=ALIAS_ONLY_NO_VALUES")
+            for item in plan["secret_requirements"]:
+                print(item["alias"]+" | "+item["storage"]+" | "+
+                      item["owner_role"]+" | "+item["isolation"])
+            print("FR_FINANCE_SECRETS_STATUS=NOT_ATTESTED")
+            print("FR_FINANCE_LIVE_SERVICES=OFF")
+        return 0
+    except (IntakeBlocked,PublicTlsProbeBlocked,PublicApiHealthBlocked,OSError):
+        print("FR_FINANCE_PUBLIC_INTAKE=BLOCKED_INVALID_OR_MISSING_INPUT",file=sys.stderr)
+        return 2
+
+
+if __name__=="__main__":
+    sys.exit(main())

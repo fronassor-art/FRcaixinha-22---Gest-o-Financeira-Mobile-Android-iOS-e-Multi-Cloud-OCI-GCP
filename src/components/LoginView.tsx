@@ -1,0 +1,384 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users, BriefcaseBusiness, AlertCircle } from 'lucide-react';
+import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform } from '../services/authService';
+import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
+import {probeMobileBackendHealth} from '../services/mobileBackendProbe';
+import { AccessLinkView, parseAccessLink, type AccessLink } from './AccessLinkView';
+
+interface LoginViewProps {
+  onLoginSuccess: (user: AuthenticatedUser) => void;
+  sessionExpiredNotice?: boolean;
+}
+type AccessMode = 'login' | 'new';
+type NewAccess = 'member' | 'admin' | null;
+
+/** Identidade única: somente o servidor concede o papel depois do login. */
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExpiredNotice = false }) => {
+  const [mode, setMode] = useState<AccessMode>('login');
+  const [selectedRole, setSelectedRole] = useState<AuthenticatedUser['role'] | null>(null);
+  const [newAccess, setNewAccess] = useState<NewAccess>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [tenantChoice, setTenantChoice] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetHelp, setResetHelp] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [accessLink, setAccessLink] = useState<AccessLink | null>(() =>
+    typeof window === 'undefined' ? null : parseAccessLink(window.location.hash));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [backendCheckBusy, setBackendCheckBusy] = useState(false);
+  const [backendCheckMessage, setBackendCheckMessage] = useState<string | null>(null);
+  const backendProfile = inspectMobileBackend(isNativeMobilePlatform(),getApiBaseUrl());
+  const verifyBackend = async () => {
+    if (backendCheckBusy) return;
+    setBackendCheckBusy(true);
+    setBackendCheckMessage(null);
+    try {
+      const health = await probeMobileBackendHealth(isNativeMobilePlatform(),getApiBaseUrl());
+      if (!health.ok || !health.databaseConfigured) {
+        setBackendCheckMessage(health.message);
+        return;
+      }
+      const result = await authService.checkAuthStatus();
+      setBackendCheckMessage(health.message + ' ' + interpretAuthenticationStatus(result));
+    } catch {
+      setBackendCheckMessage('Não foi possível confirmar a API. Nenhuma sessão foi iniciada.');
+    } finally {
+      setBackendCheckBusy(false);
+    }
+  };
+  const build = String(import.meta.env?.VITE_APP_BUILD_REF || 'local').slice(0, 7);
+  // A navegacao reservada nao e uma credencial: o backend e a unica autoridade.
+  const ownerRoute = '#/acesso-proprietario';
+  const logoTaps = useRef({ count: 0, last: 0 });
+  useEffect(() => {
+    const syncReservedRoute = () => {
+      if (window.location.hash !== ownerRoute) return;
+      setMode('login');
+      setSelectedRole('MASTER');
+      setTenantChoice('');
+      setNewAccess(null);
+      setPassword('');
+      setError(null);
+    };
+    syncReservedRoute();
+    window.addEventListener('hashchange', syncReservedRoute);
+    return () => window.removeEventListener('hashchange', syncReservedRoute);
+  }, []);
+  useEffect(() => {
+    // The existing Brevo deep link arrives as a URL fragment. Discard it
+    // from visible browser history before sending anything to the API.
+    const receiveAccessLink = () => {
+      const parsed = parseAccessLink(window.location.hash);
+      if (parsed) {
+        setAccessLink(parsed);
+        window.history.replaceState(
+          null, '', window.location.pathname + window.location.search,
+        );
+      }
+    };
+    receiveAccessLink();
+    window.addEventListener('hashchange', receiveAccessLink);
+    return () => window.removeEventListener('hashchange', receiveAccessLink);
+  }, []);
+
+  const openReservedAccess = () => {
+    if (mode !== 'login' || selectedRole !== null) return;
+    const now = Date.now();
+    const count = now - logoTaps.current.last <= 4000 ? logoTaps.current.count + 1 : 1;
+    logoTaps.current = { count, last: now };
+    if (count !== 7) return;
+    logoTaps.current = { count: 0, last: 0 };
+    setSelectedRole('MASTER');
+    setTenantChoice('');
+    setPassword('');
+    setError(null);
+  };
+  const returnToPublicAccess = () => {
+    setSelectedRole(null);
+    setTenantChoice('');
+    setError(null);
+    setPassword('');
+    if (typeof window !== 'undefined' && window.location.hash === ownerRoute) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    if (!selectedRole) {
+      setError('Escolha seu perfil de acesso.');
+      return;
+    }
+    if (!email.trim() || !password) {
+      setError('Informe o e-mail e a senha.');
+      return;
+    }
+    const chosenTenant = selectedRole === 'MASTER' ? '' : tenantChoice.trim();
+    if (chosenTenant && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chosenTenant)) {
+      setError('O ID da caixinha precisa ter o formato UUID informado pelo administrador.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const user = await authService.login(email.trim(), password, selectedRole, chosenTenant || undefined);
+      setPassword('');
+      onLoginSuccess(user);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível entrar.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestRecovery = async () => {
+    if (resetBusy) return;
+    setResetNotice(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 254) {
+      setResetNotice('Informe seu e-mail antes de solicitar a recuperação.');
+      return;
+    }
+    setResetBusy(true);
+    try {
+      const response = await authService.requestPasswordReset(email.trim());
+      setResetNotice(response.message);
+    } catch (cause) {
+      // When the existing backend/outbox is not ready, never claim delivery.
+      setResetNotice(cause instanceof Error ? cause.message : 'Recuperação indisponível.');
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  if (accessLink) {
+    return <AccessLinkView link={accessLink} onBack={() => setAccessLink(null)} />;
+  }
+
+  return (
+    <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-8 sm:py-10 flex flex-col items-center justify-center">
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="flex flex-col items-center pb-6">
+          <button type="button" onClick={openReservedAccess} aria-label="Logotipo FR Finance"
+            className="rounded-[26px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f3d483]">
+            <img src="/icon.svg?v=fr-finance-m21400" alt="FR Finance — monograma dourado e folhas"
+              width="120" height="120" className="h-24 w-24 rounded-[26px] shadow-2xl shadow-amber-600/20" />
+          </button>
+          <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
+            <span className="fr-gold-text">FR</span><span className="text-[#f7ecbf]"> Finance</span>
+          </h1>
+          <p className="mt-1 text-center text-sm text-emerald-100/80">
+            Mais que um app, um futuro em construção.
+          </p>
+        </div>
+
+        <section className="rounded-[26px] border border-[#b99950]/40 bg-[#043c2d]/90 p-5 shadow-2xl shadow-black/30 sm:p-7"
+          aria-label="Acesso à FR Finance">
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-[#376d4d] bg-[#032e24] p-1" role="group" aria-label="Opções de acesso">
+            <button type="button" onClick={() => { setMode('login'); setNewAccess(null); setError(null); }}
+              aria-pressed={mode === 'login'}
+              className={'min-h-11 rounded-lg px-3 text-sm font-semibold ' + (mode === 'login' ? 'fr-gold-button' : 'text-[#e9d9a7]')}>
+              Entrar
+            </button>
+            <button type="button" onClick={() => { setMode('new'); returnToPublicAccess(); setResetHelp(false); }}
+              aria-pressed={mode === 'new'}
+              className={'min-h-11 rounded-lg px-3 text-sm font-semibold ' + (mode === 'new' ? 'fr-gold-button' : 'text-[#e9d9a7]')}>
+              Primeiro acesso
+            </button>
+          </div>
+
+          {mode === 'login' ? (
+            selectedRole === null ? (
+              <div className="mt-5">
+                <h2 className="text-xl font-bold text-[#fff5d7]">Entrar na sua conta</h2>
+                <p className="mt-1 text-sm text-emerald-100/80">
+                  Escolha a área para entrar. Cada perfil tem acesso exclusivo.
+                </p>
+                <div className="mt-5 grid gap-3" role="group" aria-label="Selecionar perfil antes do login">
+                  {([
+                    {role:'TENANT_ADMIN' as const, title:'Administrador', detail:'Gestão da sua caixinha', icon:BriefcaseBusiness},
+                    {role:'TENANT_MEMBER' as const, title:'Membro', detail:'Minha participação', icon:Users},
+                  ]).map(option => {
+                    const Icon = option.icon;
+                    return (
+                      <button key={option.role} type="button"
+                        onClick={() => { setSelectedRole(option.role); setTenantChoice(''); setError(null); }}
+                        className="fr-outline flex min-h-16 items-center gap-3 rounded-xl p-3 text-left">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#d4b56a]">
+                          <Icon className="h-5 w-5 text-[#f1d286]" aria-hidden="true" />
+                        </span>
+                        <span><strong className="block text-sm text-white">{option.title}</strong>
+                          <span className="text-xs text-emerald-100/70">{option.detail}</span></span>
+                        <ArrowRight className="ml-auto h-5 w-5 text-[#e4c576]" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-4 text-center text-xs text-emerald-100/70">
+                  O servidor verifica as permissões após informar sua senha.
+                </p>
+              </div>
+            ) : (
+            <div className="mt-5">
+              <button type="button" onClick={returnToPublicAccess}
+                className="mb-3 flex min-h-9 items-center gap-2 text-xs font-semibold text-[#f3d483]">
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Escolher outro perfil
+              </button>
+              <h2 className="text-xl font-bold text-[#fff5d7]">
+                {selectedRole === 'MASTER' ? 'Administrador Master' :
+                  selectedRole === 'TENANT_ADMIN' ? 'Administrador' : 'Membro'}
+              </h2>
+              <p className="mt-1 text-sm text-emerald-100/80">
+                Informe suas credenciais para esta área.
+              </p>
+
+              {sessionExpiredNotice && (
+                <p role="status" className="mt-3 rounded-lg border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-100">
+                  Sua sessão expirou. Entre novamente.
+                </p>
+              )}
+              {error && (
+                <div role="alert" className="mt-3 flex items-start gap-2 rounded-lg border border-rose-400/40 bg-rose-950/50 p-3 text-sm text-rose-100">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}
+                </div>
+              )}
+
+              <form className="mt-5 space-y-4" onSubmit={submit}>
+                <div>
+                  <label htmlFor="login-username" className="mb-1.5 block text-sm font-semibold text-[#f5e7c2]">E-mail ou usuário</label>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-[#b6d1be]" aria-hidden="true" />
+                    <input id="login-username" type="text" autoComplete="username" value={email}
+                      onChange={event => setEmail(event.target.value)} placeholder="Seu e-mail"
+                      className="fr-input min-h-12 w-full rounded-xl pl-11 pr-3 text-base" />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <label htmlFor="login-password" className="text-sm font-semibold text-[#f5e7c2]">Senha</label>
+                    <button type="button" onClick={() => setResetHelp(value => !value)}
+                      aria-expanded={resetHelp}
+                      className="text-xs font-semibold text-[#f3d483] underline underline-offset-2">Esqueci a senha</button>
+                  </div>
+                  <div className="relative">
+                    <KeyRound className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-[#b6d1be]" aria-hidden="true" />
+                    <input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password"
+                      value={password} onChange={event => setPassword(event.target.value)} placeholder="Sua senha"
+                      className="fr-input min-h-12 w-full rounded-xl pl-11 pr-12 text-base" />
+                    <button type="button" onClick={() => setShowPassword(value => !value)}
+                      aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                      className="absolute right-3 top-3 min-h-7 min-w-7 text-[#f5de9d]">
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  {resetHelp && (
+                    <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-900/20 p-3 text-xs text-amber-100">
+                      <p>Informe o e-mail da conta e solicite a recuperação. Se o serviço ainda não estiver habilitado, nenhuma mensagem será enviada.</p>
+                      <button type="button" disabled={resetBusy}
+                        onClick={() => { void requestRecovery(); }}
+                        className="mt-3 min-h-10 rounded-lg border border-amber-300/60 px-3 font-semibold disabled:opacity-50">
+                        {resetBusy ? 'Solicitando...' : 'Enviar instruções de recuperação'}
+                      </button>
+                      {resetNotice && <p role="status" className="mt-2" aria-live="polite">{resetNotice}</p>}
+                    </div>
+                  )}
+                </div>
+                {selectedRole !== 'MASTER' && (
+                  <div>
+                    <label htmlFor="login-tenant" className="mb-1.5 block text-sm font-semibold text-[#f5e7c2]">
+                      ID da caixinha <span className="font-normal text-emerald-100/75">(se participa de várias)</span>
+                    </label>
+                    <input id="login-tenant" type="text" autoComplete="off" autoCapitalize="off" spellCheck={false}
+                      value={tenantChoice} onChange={event => setTenantChoice(event.target.value)}
+                      placeholder="ID fornecido pelo administrador"
+                      aria-describedby="login-tenant-help"
+                      className="fr-input min-h-12 w-full rounded-xl px-3 text-base" />
+                    <p id="login-tenant-help" className="mt-1 text-xs text-emerald-100/70">
+                      Se há mais de uma caixinha no mesmo perfil, informe o ID da desejada.
+                      O servidor confirma o vínculo antes de permitir acesso.
+                    </p>
+                  </div>
+                )}
+                <button type="submit" disabled={loading}
+                  className="fr-gold-button flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-base disabled:opacity-60">
+                  {loading ? 'Verificando...' : 'Entrar'}
+                  {!loading && <ArrowRight className="h-5 w-5" aria-hidden="true" />}
+                </button>
+              </form>
+              <p className="mt-4 flex items-center justify-center gap-2 text-xs text-emerald-100/70">
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Acesso protegido pelo servidor
+              </p>
+            </div>
+            )
+          ) : (
+            <div className="mt-5">
+              <h2 className="text-xl font-bold text-[#fff5d7]">Primeiro acesso</h2>
+              <p className="mt-1 text-sm text-emerald-100/80">Como deseja participar?</p>
+              <div className="mt-4 grid gap-3">
+                <button type="button" onClick={() => setNewAccess('member')}
+                  aria-pressed={newAccess === 'member'}
+                  className={'fr-outline flex min-h-16 w-full items-center gap-3 rounded-xl p-4 text-left ' +
+                    (newAccess === 'member' ? 'ring-2 ring-amber-300' : '')}>
+                  <Users className="h-6 w-6 shrink-0 text-[#f4d689]" aria-hidden="true" />
+                  <span><strong className="block text-sm text-white">Sou novo membro</strong>
+                    <span className="text-xs text-emerald-100/70">Participar de uma caixinha</span></span>
+                </button>
+                <button type="button" onClick={() => setNewAccess('admin')}
+                  aria-pressed={newAccess === 'admin'}
+                  className={'fr-outline flex min-h-16 w-full items-center gap-3 rounded-xl p-4 text-left ' +
+                    (newAccess === 'admin' ? 'ring-2 ring-amber-300' : '')}>
+                  <BriefcaseBusiness className="h-6 w-6 shrink-0 text-[#f4d689]" aria-hidden="true" />
+                  <span><strong className="block text-sm text-white">Quero administrar uma caixinha</strong>
+                    <span className="text-xs text-emerald-100/70">Acesso sujeito à autorização</span></span>
+                </button>
+              </div>
+              {newAccess && (
+                <div role="status" className="mt-4 rounded-xl border border-amber-400/40 bg-[#123d2b] p-4">
+                  <p className="text-sm font-semibold text-[#fff0be]">
+                    {newAccess === 'member' ? 'Acesso de membro' : 'Acesso de administrador'}
+                  </p>
+                  <p className="mt-1 text-sm text-emerald-50">
+                    {newAccess === 'member'
+                      ? 'Peça um convite ao administrador da caixinha.'
+                      : 'A administração da plataforma precisa autorizar seu acesso.'}
+                  </p>
+                  <p className="mt-2 text-xs text-[#f7dc99]">
+                    Uma única identidade pode participar de mais de uma caixinha e
+                    exercer perfis diferentes quando autorizada. Não crie outra
+                    identidade para cada vínculo.
+                  </p>
+                  <p className="mt-2 text-xs text-[#f7dc99]">
+                    Os convites eletrônicos e a ativação por e-mail ainda não foram habilitados.
+                    Não é possível criar a conta diretamente neste aplicativo.
+                  </p>
+                </div>
+              )}
+              <button type="button" onClick={() => { setMode('login'); setNewAccess(null); }}
+                className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#8eab83] text-sm font-semibold text-[#f4e9cd]">
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Já tenho conta
+              </button>
+            </div>
+          )}
+        </section>
+
+        {backendProfile.mobile && (
+          <section aria-label="Diagnóstico do servidor móvel" className="mt-4 rounded-xl border border-amber-500/40 bg-[#123d2b] p-3 text-xs text-emerald-50">
+            <p className="font-semibold">{backendProfile.label}</p>
+            <p className="mt-1">{backendProfile.description}</p>
+            <button type="button" disabled={backendCheckBusy}
+              onClick={() => {void verifyBackend();}}
+              className="mt-3 min-h-10 rounded-lg border border-[#d4b56a] px-3 font-semibold text-[#fff0be] disabled:opacity-50">
+              {backendCheckBusy ? 'Consultando servidor...' : 'Verificar conexão com a API'}
+            </button>
+            {backendCheckMessage && <p role="status" className="mt-2">{backendCheckMessage}</p>}
+          </section>
+        )}
+        <p className="mt-4 text-center text-[11px] text-emerald-100/60">
+          Homologação · build {build} · sem operações financeiras reais
+        </p>
+      </div>
+    </main>
+  );
+};

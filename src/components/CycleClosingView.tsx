@@ -73,6 +73,8 @@ export const CycleClosingView: React.FC<CycleClosingViewProps> = ({ state, onOpe
     m => m.tenant_id === state.currentTenantId && m.user_id === currentTenant?.admin_user_id
   );
 
+  const [errorModal, setErrorModal] = useState<{ title: string; message: string; detail?: string } | null>(null);
+
   const handleAuthorizeClosingPix = () => {
     const totalToDisburse = roundCents(closingResult.memberPool + closingResult.adminPool);
 
@@ -82,25 +84,41 @@ export const CycleClosingView: React.FC<CycleClosingViewProps> = ({ state, onOpe
       description: `Liquidação de encerramento anual prevista para 10/01/2028`,
       recipientName: `Todos os ${members.length} cotistas e administrador`,
       referenceId: `close-settle-${Date.now()}`,
-      onConfirm: () => {
-        setClosingStatus('FECHADO');
-        appStore.addAudit(
-          'CYCLE_CLOSED',
-          `Fechamento anual do ciclo 2027 concluído com rateio de R$ ${totalToDisburse.toFixed(2)}`,
-          'CYCLE',
-          currentCycle?.id || '2027'
-        );
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.5 },
-        });
+      onConfirm: async () => {
+        try {
+          await appStore.closeCycle(currentCycle?.id || 'cycle-2027-inaugural');
+          setClosingStatus('FECHADO');
+          confetti({
+            particleCount: 150,
+            spread: 80,
+            origin: { y: 0.5 },
+          });
+        } catch (err: any) {
+          setErrorModal({
+            title: 'Fechamento de Ciclo Bloqueado',
+            message: err?.message || 'Falha ao processar o fechamento do ciclo no backend.',
+            detail: err?.detail || 'A apuração do lucro, rateio Capital-Dias V2 e distribuição de centavos exigem persistência transacional no PostgreSQL.'
+          });
+        }
       },
     });
   };
 
   return (
     <div className="space-y-6">
+      {/* Banner de Estado do Backend Contratual */}
+      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow-xs flex items-start gap-3">
+        <Scale className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-950">
+          <span className="font-bold block text-sm text-amber-900 mb-0.5">
+            Apuração Autoritativa Capital-Dias V2: FastAPI + PostgreSQL
+          </span>
+          <p>
+            O cálculo do pool de membros (85%), taxa de administração (15%), pesos ponderados pelo tempo e a distribuição dos maiores restos (Hare-Niemeyer) são homologados e arquivados pelo backend oficial. Operações locais sem banco conectado são bloqueadas.
+          </p>
+        </div>
+      </div>
+
       {/* Header do Fechamento Central */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -265,6 +283,33 @@ export const CycleClosingView: React.FC<CycleClosingViewProps> = ({ state, onOpe
           </div>
         </div>
       </div>
+
+      {/* Modal de Bloqueio por Backend Não Conectado */}
+      {errorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 text-rose-700">
+              <Scale className="w-6 h-6 shrink-0" />
+              <h3 className="font-bold text-base text-slate-900">{errorModal.title}</h3>
+            </div>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-950 space-y-1.5">
+              <span className="font-bold block text-rose-900">{errorModal.message}</span>
+              {errorModal.detail && <p className="text-[11px] text-rose-800">{errorModal.detail}</p>}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              O encerramento do ciclo e rateio de sobras não foi gravado localmente para evitar distribuição fictícia de valores sem confirmação no livro-razão do servidor.
+            </p>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setErrorModal(null)}
+                className="px-5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl cursor-pointer"
+              >
+                Compreendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

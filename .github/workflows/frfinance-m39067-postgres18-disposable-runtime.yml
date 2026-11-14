@@ -1,0 +1,62 @@
+name: FR Finance M39067 PostgreSQL 18 disposable SQL112-113 runtime
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/migrations/112_frfinance_master_independent_saas_prices.sql'
+      - 'backend/migrations/113_frfinance_saas_new_admin_promotions.sql'
+      - 'backend/tests/m39067_postgres18_disposable_runtime.py'
+      - '.github/workflows/frfinance-m39067-postgres18-disposable-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39067-pg18-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sql112-113-disposable:
+    name: Only PostgreSQL 18 CI disposable — never Termux
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m39067_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_synthetic_not_a_secret
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m39067_disposable_ci"
+          --health-interval 5s
+          --health-timeout 4s
+          --health-retries 12
+    env:
+      FRCAIXINHA_CI_ISOLATED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      CI_PROMOTIONS_DATABASE_URL: postgresql://postgres:ci_synthetic_not_a_secret@127.0.0.1:55433/fr_m39067_disposable_ci
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CI psycopg only
+        run: python -m pip install 'psycopg[binary]==3.2.4'
+      - name: SQL112+113 PG18 DDL, append trigger and eligibility smoke
+        run: |
+          python -B backend/tests/m39067_postgres18_disposable_runtime.py
+      - name: Confirm isolation
+        run: |
+          echo 'M39067_DISPOSABLE_DATABASE=fr_m39067_disposable_ci'
+          echo 'M39067_DISPOSABLE_PORT=55433'
+          echo 'M39067_NATIVE_TERMUX_POSTGRESQL=UNTOUCHED'
+          echo 'M39067_ORIGINAL_DB_PASSWORD=NOT_USED'
+          echo 'M39067_PRODUCTION=BLOCKED'
