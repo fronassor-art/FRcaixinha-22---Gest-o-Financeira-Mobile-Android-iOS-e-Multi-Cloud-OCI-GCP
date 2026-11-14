@@ -2,9 +2,15 @@ import assert from 'node:assert/strict';
 import { tabsAllowedToRole, isRoleTabAllowed, initialRoleTab } from '../services/roleScope';
 
 assert.deepEqual(tabsAllowedToRole('TENANT_MEMBER'),[
-  'MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MEU_RESULTADO','NOTIFICACOES',
+  'MEU_PAINEL','MINHAS_CONTRIBUICOES','MEU_EMPRESTIMO','MINHAS_OPORTUNIDADES','MEU_RESULTADO','NOTIFICACOES',
 ]);
 assert.equal(initialRoleTab('TENANT_MEMBER'),'MEU_PAINEL');
+assert.equal(isRoleTabAllowed('TENANT_MEMBER','MINHAS_OPORTUNIDADES'),true);
+assert.equal(isRoleTabAllowed('MASTER','MINHAS_OPORTUNIDADES'),false);
+assert.equal(isRoleTabAllowed('TENANT_ADMIN','MINHAS_OPORTUNIDADES'),false);
+assert.equal(isRoleTabAllowed('TENANT_ADMIN','CAMPANHAS_MEMBROS'),true);
+assert.equal(isRoleTabAllowed('TENANT_MEMBER','CAMPANHAS_MEMBROS'),false);
+assert.equal(isRoleTabAllowed('MASTER','CAMPANHAS_MEMBROS'),false);
 for(const tab of [
   'MEMBROS','LEDGER','FECHAMENTO','CONSENTIMENTO',
   'AUTORIZACAO_ADMIN','LICENCAS','SUPORTE','NUVEM','AUDITORIA',
