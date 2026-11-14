@@ -155,6 +155,26 @@ async def capabilities(tenant_id: UUID,
     }
 
 
+@router.get("/cycle-readiness")
+async def cycle_readiness(tenant_id: UUID,
+                          session: AuthenticatedSession = Depends(get_current_session),
+                          conn=Depends(get_rls_db_connection)):
+    """Read-only check. Never opens a cycle or creates a financial obligation."""
+    _authorize(tenant_id, session, "TENANT_ADMIN")
+    await _check_admin(conn, tenant_id, session)
+    current = await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM public.cycles "
+        "WHERE tenant_id=$1 AND status='ABERTO' "
+        "AND start_date<=CURRENT_DATE AND end_date>=CURRENT_DATE)",
+        tenant_id)
+    return {
+        "current_open_cycle": current is True,
+        "campaign_creation_allowed": current is True,
+        "real_credit_enabled": False,
+        "external_dispatch": False,
+    }
+
+
 @router.get("/members")
 async def eligible_members(tenant_id: UUID,
                            session: AuthenticatedSession = Depends(get_current_session),
