@@ -81,11 +81,12 @@ def test_rejects_wrong_process_worktree_and_ambiguous_socket(tmp_path):
                                for x in valid_argv())+b"\0")
     tcp=tmp_path/"tcp"
     tcp.write_text(TCP_TEXT)
+    original_owners=m.owners_for_inodes
     monkey=pytest.MonkeyPatch()
     try:
         monkey.setattr(m,"TCP",tcp)
         monkey.setattr(m,"owners_for_inodes",
-                        lambda _: m.owners_for_inodes({"98765"},proc))
+                        lambda _: original_owners({"98765"},proc))
         monkey.setattr(m,"read_json_loopback",
                         lambda _: (200,{"app":"FR Finance","status":"ONLINE"}))
         result=m.review_origin()
