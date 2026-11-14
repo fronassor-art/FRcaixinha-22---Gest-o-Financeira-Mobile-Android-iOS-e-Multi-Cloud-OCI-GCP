@@ -216,6 +216,13 @@ def health_check():
     }
 
 
+@app.get("/api/health/checkpoint", include_in_schema=False)
+def m39700_loaded_runtime_checkpoint():
+    """Loaded-code marker; no DB reads, secrets, finance or build-SHA claims."""
+    from .m39700_runtime_contract import checkpoint_payload
+    return checkpoint_payload()
+
+
 @app.get("/api/health/runtime", include_in_schema=False)
 def backend_runtime_contract():
     """Versao do contrato e limites de leitura ja carregados no processo Python.
