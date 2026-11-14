@@ -23,7 +23,7 @@ from backend.scripts.frfinance_m39045_query_plans_readonly import (
 )
 
 # Baseline congelada: qualquer nova consulta do roteador exige nova auditoria.
-EXPECTED_QUERIES = 17
+EXPECTED_QUERIES = 18  # M39085: 1 read-only tenant cycle-readiness SELECT added in M39083
 EXPECTED_LOCKING = 2
 LOCKING = re.compile(r"\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b|\bFOR\s+(?:KEY\s+)?SHARE\b",
                      flags=re.IGNORECASE)
