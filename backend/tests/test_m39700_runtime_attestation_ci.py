@@ -120,6 +120,31 @@ def test_combined_runtime_blocks_partial_or_fake_pass(path,response,expected):
     assert probe.review_runtime(lambda name: cases[name])["M39700_STATUS"] == expected
 
 
+@pytest.mark.parametrize("path,reason", [
+    ("/api/health", "WRONG_APP"),
+    ("/api/health/checkpoint", "MISSING_RUNTIME_MARKER"),
+    ("/openapi.json", "MISSING_GET_ROUTES"),
+])
+def test_unknown_or_stale_app_never_queries_any_database_readiness(path,reason):
+    responses=valid_responses()
+    if reason == "WRONG_APP":
+        responses[path]=(200,{"app":"FR Caixinha 2.2","status":"ONLINE"})
+    elif reason == "MISSING_RUNTIME_MARKER":
+        responses[path]=(404,None)
+    else:
+        responses[path]=(200,{"paths":{}})
+    requested=[]
+    def guarded_fetch(route):
+        requested.append(route)
+        if route == "/api/health/ready":
+            pytest.fail("Never call readiness on unknown app or stale FastAPI")
+        return responses[route]
+    report=probe.review_runtime(guarded_fetch)
+    assert report["M39700_AUTH_READINESS"]=="SKIPPED_UNVERIFIED_RUNNING_APP"
+    assert report["M39700_STATUS"]=="BLOCKED_RUNNING_API_OR_VERSION"
+    assert requested == list(probe.PATHS[:3])
+
+
 def test_combined_runtime_pass_only_when_all_four_checks_pass():
     report = probe.review_runtime(lambda name: valid_responses()[name])
     assert report["M39700_STATUS"] == "PASS_READ_ONLY_RUNTIME_AND_TEST_AUTH"
