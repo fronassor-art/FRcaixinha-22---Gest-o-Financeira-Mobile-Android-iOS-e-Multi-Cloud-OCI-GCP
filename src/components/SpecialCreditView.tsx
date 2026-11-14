@@ -36,6 +36,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState(false);
   const [enabled,setEnabled]=useState(false);
+  const [cycleReady,setCycleReady]=useState(false);
   const [members,setMembers]=useState<EligibleMember[]>([]);
   const [selectedMembers,setSelectedMembers]=useState<string[]>([]);
   const [selectedGrants,setSelectedGrants]=useState<string[]>([]);
@@ -56,7 +57,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   useEffect(()=>{
     let active=true;
     const snapshot=authService.captureSession();
-    setLoading(true);setMessage('');setEnabled(false);
+    setLoading(true);setMessage('');setEnabled(false);setCycleReady(false);
     setMembers([]);setSelectedMembers([]);setSelectedGrants([]);setGrants([]);setCampaigns([]);
     setOpportunities([]);setPrefs(initialPrefs);setSimulation('');setPushDiagnostic('');
     if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}
@@ -69,13 +70,21 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
         const cap=await specialCreditApi.capabilities(tenant);
         if(!cap.sandbox_enabled) throw new Error('Crédito Especial ainda não habilitado para homologação.');
         if(role==='TENANT_ADMIN'){
-          const [ms,gs,cs]=await Promise.all([
+          const [ms,gs,cs,readiness]=await Promise.all([
             specialCreditApi.members(tenant),
             specialCreditApi.grants(tenant),
             specialCreditApi.campaigns(tenant),
+            specialCreditApi.cycleReadiness(tenant),
           ]);
+          if (readiness.real_credit_enabled !== false ||
+              readiness.external_dispatch !== false ||
+              typeof readiness.current_open_cycle !== 'boolean' ||
+              typeof readiness.campaign_creation_allowed !== 'boolean' ||
+              readiness.current_open_cycle !== readiness.campaign_creation_allowed)
+            throw new Error('Pré-condição do ciclo inconsistente. Cadastro bloqueado.');
           if(active&&latest.current===key&&authService.isSessionSnapshotCurrent(snapshot)){
-            setMembers(ms);setGrants(gs);setCampaigns(cs);setEnabled(true);
+            setMembers(ms);setGrants(gs);setCampaigns(cs);
+            setCycleReady(readiness.current_open_cycle);setEnabled(true);
           }
         }else if(role==='TENANT_MEMBER'){
           const [op,p]=await Promise.all([
@@ -169,6 +178,11 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     {message&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{message}</p>}
 
     {!loading&&enabled&&role==='TENANT_ADMIN'&&tenant&&<>
+      {!cycleReady&&<p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+        Nenhum ciclo vigente e aberto nesta caixinha. Criar autorizações, rascunhos
+        ou publicar campanhas está bloqueado. Em Contribuições, a prévia do próximo ciclo
+        não abre um ciclo nem habilita ofertas. Revogações e cancelamentos continuam disponíveis.
+      </p>}
       <div className="space-y-3 rounded-xl border p-3">
         <h4 className="font-semibold">1. Selecionar membros e conceder limite especial</h4>
         <p className="text-xs text-slate-600">
@@ -200,7 +214,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
             placeholder="Registrar análise financeira, exposição, disponibilidade e justificativa..."
             className="rounded-lg border p-2"/>
         </label>
-        <button disabled={busy||selectedMembers.length===0||justification.trim().length<20}
+        <button disabled={busy||!cycleReady||selectedMembers.length===0||justification.trim().length<20}
           type="button" onClick={()=>void run(
             ()=>specialCreditApi.grant(tenant,selectedMembers,limit,toUtc(validity),justification),
             'Autorizações de solicitação extraordinária registradas.')}
@@ -235,7 +249,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
           <textarea rows={3} maxLength={500} value={body}
             onChange={e=>setBody(e.target.value)} className="rounded-lg border p-2"/>
         </label>
-        <button disabled={busy||!grants.some(g=>selectedGrants.includes(g.id)&&g.status==='ACTIVE')}
+        <button disabled={busy||!cycleReady||!grants.some(g=>selectedGrants.includes(g.id)&&g.status==='ACTIVE')}
           type="button" onClick={()=>void run(
             ()=>specialCreditApi.createCampaign(tenant,
                 grants.filter(g=>selectedGrants.includes(g.id)&&g.status==='ACTIVE').map(g=>g.id),
@@ -247,7 +261,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
         <div className="space-y-2">
           {campaigns.map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2 text-sm">
             <div><strong>{c.title}</strong><p>{c.recipients} destinatário(s) • {c.status}</p></div>
-            {c.status==='DRAFT'&&<button disabled={busy} type="button"
+            {c.status==='DRAFT'&&<button disabled={busy||!cycleReady} type="button"
               onClick={()=>void run(()=>specialCreditApi.publish(tenant,c.id),
                 'Campanha publicada na caixa interna. Entregas externas permanecem bloqueadas.')}
               className="rounded-lg border border-emerald-700 px-3 py-2">
