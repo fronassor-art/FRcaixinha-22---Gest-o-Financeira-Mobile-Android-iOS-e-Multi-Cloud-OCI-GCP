@@ -396,6 +396,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39100_full_traceability_ci.py
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39101_android_source_route_ci.py
           python -B backend/scripts/frfinance_m39100_super_macropacote_readonly.py audit
       - name: Executar testes de API
         env:
