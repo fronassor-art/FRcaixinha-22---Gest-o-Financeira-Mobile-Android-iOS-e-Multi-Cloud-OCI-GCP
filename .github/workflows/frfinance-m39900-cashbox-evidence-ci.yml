@@ -1,0 +1,51 @@
+name: FR Finance M39900 — Caixas Master e Administrador (no real money)
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'src/services/exclusiveCashboxEvidence.ts'
+      - 'src/components/ExclusiveCashboxView.tsx'
+      - 'src/tests/m39900_exclusive_cashbox_evidence_ci.test.ts'
+      - '.github/workflows/frfinance-m39900-cashbox-evidence-ci.yml'
+  pull_request:
+    paths:
+      - 'src/services/exclusiveCashboxEvidence.ts'
+      - 'src/components/ExclusiveCashboxView.tsx'
+      - 'src/tests/m39900_exclusive_cashbox_evidence_ci.test.ts'
+      - '.github/workflows/frfinance-m39900-cashbox-evidence-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39900-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  segregated-cashbox-evidence:
+    name: Confirm role-scoped accounting evidence without money movements
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Master and tenant exclusive cashbox regressions
+        run: |
+          npx --no-install tsx src/tests/m39090_exclusive_cashboxes_ci.test.ts
+          npx --no-install tsx src/tests/m39900_exclusive_cashbox_evidence_ci.test.ts
+          echo 'M39900_REAL_MONEY=OFF'
+          echo 'M39900_MIGRATIONS=NONE'
+          echo 'M39900_TERMUX_RESTART=NONE'
