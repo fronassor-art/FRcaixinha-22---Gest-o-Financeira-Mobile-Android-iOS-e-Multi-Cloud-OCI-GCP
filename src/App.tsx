@@ -40,6 +40,7 @@ import { ContributionsView } from './components/ContributionsView';
 import { MemberAnnualPreviewView } from './components/MemberAnnualPreviewView';
 import { ServerLoansView } from './components/ServerLoansView';
 import { SpecialCreditView } from './components/SpecialCreditView';
+import { ExclusiveCashboxView } from './components/ExclusiveCashboxView';
 import { ConsentView } from './components/ConsentView';
 import { LedgerView } from './components/LedgerView';
 import { MasterLicensingView } from './components/MasterLicensingView';
@@ -235,6 +236,7 @@ export default function App() {
       return [
         { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
         { id: 'CAIXINHAS', label: 'Caixinhas', icon: BriefcaseBusiness },
+        { id: 'MASTER_CASHBOX', label: 'Caixa Exclusivo Master', icon: Wallet },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
         { id: 'ADMINISTRADORES', label: 'Administradores', icon: Users },
         { id: 'ONBOARDING', label: 'Preparação de acesso', icon: ShieldCheck },
@@ -250,6 +252,7 @@ export default function App() {
         { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
         { id: 'MEMBROS', label: 'Membros e Cotas', icon: Users },
         { id: 'CONTRIBUICOES', label: 'Contribuições', icon: Wallet },
+        { id: 'ADMIN_CASHBOX', label: 'Meu Caixa Exclusivo', icon: Coins },
         { id: 'EMPRESTIMOS', label: 'Empréstimos', icon: TrendingUp },
         { id: 'CAMPANHAS_MEMBROS', label: 'Campanhas para Membros', icon: Megaphone },
         { id: 'LEDGER', label: 'Livro-Razão', icon: FileSpreadsheet },
@@ -381,6 +384,9 @@ export default function App() {
             onOpenPixModal={openPixModal}
           />
         )}
+        {visibleTab === 'MASTER_CASHBOX' && state.currentRole === 'MASTER' && (
+          <ExclusiveCashboxView state={state}/>
+        )}
         {visibleTab === 'CAIXINHAS' && state.currentRole === 'MASTER' && (
           <MasterTenantRegistryView state={state} />
         )}
@@ -407,6 +413,9 @@ export default function App() {
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
+        )}
+        {visibleTab === 'ADMIN_CASHBOX' && state.currentRole === 'TENANT_ADMIN' && (
+          <ExclusiveCashboxView state={state}/>
         )}
         {visibleTab === 'MEMBROS' && <MembersView state={state} />}
         {visibleTab === 'CONTRIBUICOES' && (
