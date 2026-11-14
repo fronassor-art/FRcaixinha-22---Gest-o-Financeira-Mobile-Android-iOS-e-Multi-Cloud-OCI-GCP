@@ -6,7 +6,7 @@ server-counted *evidence metadata*, never financial balances. No SQL writes,
 new tables, Pix, transfers, reconciled statements or fabricated zero balances.
 """
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..database import get_rls_db_connection
 from ..dependencies import (
@@ -24,12 +24,21 @@ def _count(value: object) -> int:
     return value
 
 
+def _disallow_financial_caching(response: Response) -> None:
+    """Never cache financial evidence after role switch or logout."""
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Vary"] = "Authorization"
+
+
 @master_router.get("/exclusive-cashbox")
 async def master_exclusive_cashbox(
+    response: Response,
     session: AuthenticatedSession = Depends(require_master),
     conn=Depends(get_rls_db_connection),
 ):
     """Master: ONLY SaaS billing evidence, not members' money or tenants' ledgers."""
+    _disallow_financial_caching(response)
     intents = _count(await conn.fetchval(
         "SELECT count(*)::int FROM public.saas_payment_intents"))
     preparations = _count(await conn.fetchval(
@@ -52,10 +61,12 @@ async def master_exclusive_cashbox(
 @tenant_router.get("/admin-exclusive-cashbox")
 async def tenant_admin_exclusive_cashbox(
     tenant_id: UUID,
+    response: Response,
     session: AuthenticatedSession = Depends(get_current_session),
     conn=Depends(get_rls_db_connection),
 ):
     """Only original tenant owner; never expose another tenant or member capital."""
+    _disallow_financial_caching(response)
     require_tenant_access(str(tenant_id), session)
     if session.role != "TENANT_ADMIN":
         raise HTTPException(403, "Caixa exclusivo restrito ao administrador da caixinha.")
