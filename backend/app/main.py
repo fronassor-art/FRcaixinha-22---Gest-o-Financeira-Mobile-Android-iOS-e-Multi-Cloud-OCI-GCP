@@ -99,6 +99,10 @@ app.include_router(audit.router, prefix=settings.API_V1_STR)
 app.include_router(pix_automation.router, prefix=settings.API_V1_STR)
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
 app.include_router(_special_credit.router, prefix=settings.API_V1_STR)
+# M39090: read-only cashboxes; tenant role guards and RLS in the endpoints.
+from .routers import exclusive_cashboxes as _exclusive_cashboxes
+app.include_router(_exclusive_cashboxes.master_router, prefix=settings.API_V1_STR)
+app.include_router(_exclusive_cashboxes.tenant_router, prefix=settings.API_V1_STR)
 app.include_router(_mercado_pago_oauth.router, prefix=settings.API_V1_STR)
 
 # M38970: reuse the EXISTING main FastAPI for signed Mercado Pago Orders.
