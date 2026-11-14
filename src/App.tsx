@@ -236,8 +236,8 @@ export default function App() {
       return [
         { id: 'DASHBOARD', label: 'Plataforma', icon: LayoutDashboard },
         { id: 'CAIXINHAS', label: 'Caixinhas', icon: BriefcaseBusiness },
-        { id: 'MASTER_CASHBOX', label: 'Caixa Exclusivo Master', icon: Wallet },
         { id: 'LICENCAS', label: 'Licenças e Preços', icon: DollarSign },
+        { id: 'MASTER_CASHBOX', label: 'Caixa Exclusivo Master', icon: Wallet },
         { id: 'ADMINISTRADORES', label: 'Administradores', icon: Users },
         { id: 'ONBOARDING', label: 'Preparação de acesso', icon: ShieldCheck },
         { id: 'SUPORTE', label: 'Suporte', icon: LifeBuoy },
