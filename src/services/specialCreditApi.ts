@@ -26,6 +26,12 @@ export interface CreditCapabilities {
   sandbox_enabled:boolean; grants_allow_request_only:boolean; real_credit_enabled:boolean;pix_real_enabled:boolean;
   channels:Record<MarketingChannel,{code_present:boolean;real_delivery_enabled:boolean}>;
 }
+export interface CreditCycleReadiness {
+  current_open_cycle:boolean;
+  campaign_creation_allowed:boolean;
+  real_credit_enabled:false;
+  external_dispatch:false;
+}
 export interface CreditPricePreview {
   grant_id:string;approved:boolean;reserved:boolean;disbursed:boolean;
   simulation:{
@@ -49,6 +55,7 @@ async function call<T>(tenantId:string,path:string,body?:unknown):Promise<T> {
 export const specialCreditApi={
   capabilities:async (tenant:string)=>
     assertSandboxCreditCapabilities(await call<CreditCapabilities>(tenant,'/capabilities')),
+  cycleReadiness:(tenant:string)=>call<CreditCycleReadiness>(tenant,'/cycle-readiness'),
   members:(tenant:string)=>call<EligibleMember[]>(tenant,'/members'),
   grants:(tenant:string)=>call<CreditGrant[]>(tenant,'/grants'),
   grant:(tenant:string,memberIds:string[],ceiling:string,expiry:string,reason:string)=>
