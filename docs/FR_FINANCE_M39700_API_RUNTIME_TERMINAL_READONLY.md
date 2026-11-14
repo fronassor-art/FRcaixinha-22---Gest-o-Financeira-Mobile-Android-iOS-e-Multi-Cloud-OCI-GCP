@@ -13,7 +13,7 @@ Este pacote cria um marcador nao secreto de codigo carregado. Ele nao prova SHA 
 
 1. backend/app/m39700_runtime_contract.py: contrato imutavel FR_FINANCE_M39700_RUNTIME_V1, verificacao das seis rotas GET obrigatorias, identidade da aplicacao e prontidao local.
 2. backend/app/main.py: novo GET /api/health/checkpoint, sem conexao PostgreSQL, senha ou movimento financeiro, fora do schema OpenAPI. Resposta inclui repository_head_verified=false, database_catalog_attested=false, bank_reconciled=false, real_pix_enabled=false, real_payments_enabled=false e production_authorized=false.
-3. backend/scripts/frfinance_m39700_termux_runtime_check.py: quatro GETs locais fixos e sem token, exclusivamente no Termux nativo e na arvore FR Finance. Nao reinicia FastAPI, nao le credenciais, nao modifica banco.
+3. backend/scripts/frfinance_m39700_termux_runtime_check.py: ate quatro GETs locais fixos e sem token, exclusivamente no Termux nativo e na arvore FR Finance. Nao reinicia FastAPI, nao le credenciais, nao modifica banco.
 4. backend/tests/test_m39700_runtime_attestation_ci.py: regressao de 404, aplicativo incorreto, rota ausente, GET/POST, contrato obsoleto, 503 de prontidao e marcadores falsos.
 5. .github/workflows/frfinance-m39700-runtime-handoff-ci.yml e obrigatoriedade em .github/workflows/validacao-atualizacao.yml.
 
@@ -28,7 +28,7 @@ Este pacote cria um marcador nao secreto de codigo carregado. Ele nao prova SHA 
 | BLOCKED_READINESS_503_AUTH_OR_PG18_REVIEW | A API respondeu 503 no readiness; pode envolver configuracao ou PostgreSQL, sem afirmar causa precisa. |
 | PASS_READ_ONLY_RUNTIME_AND_TEST_AUTH | Instancia carregou contrato M39700, todas as rotas GET, identidade FR Finance e prontidao de autenticacao local. Nao e homologacao E2E ou de producao. |
 
-O GET /api/health/ready da API consulta metadados SQL read-only usando a propria configuracao existente. O programa de terminal nao conecta diretamente ao banco nem recebe senha.
+O GET /api/health/ready da API consulta metadados SQL read-only usando a propria configuracao existente. Por isolamento entre projetos, o programa so chama esse endpoint **depois** de validar FR Finance ONLINE, marcador carregado M39700 e todas as rotas GET obrigatorias. Se a aplicacao for desconhecida ou antiga, a consulta de prontidao nem sequer ocorre. O programa de terminal nao conecta diretamente ao banco nem recebe senha.
 
 ## Handoff
 
