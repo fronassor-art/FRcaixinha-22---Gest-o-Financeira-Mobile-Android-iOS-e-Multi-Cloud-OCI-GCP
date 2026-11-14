@@ -406,6 +406,13 @@ jobs:
           python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39500_migration_reconciliation_ci.py backend/tests/test_m39501_fastapi_route_attestation_ci.py
           python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39600_cashbox_rls_source_ci.py backend/tests/test_m39090_exclusive_cashboxes_ci.py
           python -B backend/scripts/frfinance_m39500_readonly_homologation.py --offline
+      - name: M39700 — atestar versao carregada, rotas e prontidao sem credenciais
+        env:
+          PYTHONPATH: backend:.
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39700_runtime_attestation_ci.py
+          python -B backend/scripts/frfinance_m39700_termux_runtime_check.py --source-only
       - name: Executar testes de API
         env:
           PYTHONPATH: backend
