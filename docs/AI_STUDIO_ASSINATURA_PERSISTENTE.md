@@ -4,9 +4,16 @@
 
 A instalação inicial em Android de homologação usa **um único package ID**
 \`com.frcaixinha.app.aistudio\`, com **chave de assinatura persistente** e
-\`versionCode\` crescente (\`github.run_number\`). Futuras versões deverão ser
-instaladas **sobre o mesmo aplicativo**, preservando o armazenamento local.
-Não criar applicationIdSuffix novo a cada build.
+\`versionCode\` crescente e **maior que o APK instalado**. O workflow geral
+adotou na M39089 a fórmula \`3909000 + GITHUB_RUN_NUMBER\` para corrigir
+o erro da M39088 (código 1359), inferior ao APK M39065 instalado com
+sucesso (código 3906508) e aos candidatos posteriores (código 3906531).
+O workflow M39065 é histórico e possui contador independente; **não usar
+seus artefatos antigos como atualização da linhagem M39089**. Futuras
+versões devem ser instaladas **sobre o mesmo aplicativo**, preservando
+o armazenamento local. Não criar applicationIdSuffix novo a cada build.
+O certificado SHA-256 de homologação confirmado para M39065 e M39088 é
+\`ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7\`.
 
 O Android exige simultaneamente package ID compatível, mesma assinatura e
 versionCode maior ou igual. A troca do certificado sem prova de rotação pode
