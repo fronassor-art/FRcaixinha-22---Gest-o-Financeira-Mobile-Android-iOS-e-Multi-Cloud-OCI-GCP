@@ -18,7 +18,7 @@ SOURCE_BLOBS = {
     "backend/migrations/110_fr_finance_special_credit_offline.sql":
         "a785e05bf20ae37c3bccf96ca2f8b2ff3604b35d",
     "backend/migrations/111_frfinance_special_credit_integrity_guards.sql":
-        "1fbe349b7d7852f84cd01f2b465ae1",
+        "1fbe349b7d785eb3e5bc7852f84cd01f2b465ae1",
     "backend/migrations/112_frfinance_master_independent_saas_prices.sql":
         "10da8aaef7beb3d6559a14d064be53e1aae5a01f",
     "backend/migrations/113_frfinance_saas_new_admin_promotions.sql":
