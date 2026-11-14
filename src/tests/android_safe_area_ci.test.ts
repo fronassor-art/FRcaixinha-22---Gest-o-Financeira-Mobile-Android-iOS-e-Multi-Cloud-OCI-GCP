@@ -32,7 +32,11 @@ assert.match(css,/\.fr-mobile-nav\s*\{[^}]*padding-bottom:\s*max\(\.5rem,\s*var\
 assert.match(css,/main\.fr-page\s*\{[^}]*overflow-y:\s*auto/s);
 assert.match(nav,/className="fr-app-header relative/);
 assert.doesNotMatch(nav,/fr-app-header sticky/);
-assert.match(app,/className="fr-app-shell /);
+// M39087: M39075 preserves the mounted shell during session revalidation.
+assert.match(app,/className=\\{'fr-app-shell [^']+'\\s*\\+/);
+assert.match(app,/resumeValidationPending \\? ' invisible pointer-events-none select-none' : ''/);
+assert.match(app,/aria-hidden=\\{resumeValidationPending\\} inert=\\{resumeValidationPending\\}/);
+assert.doesNotMatch(app,/className="fr-app-shell /);
 assert.match(app,/<main className="fr-app-main /);
 assert.match(app,/fr-mobile-nav relative/);
 assert.match(app,/fr-app-profile shrink-0/);
