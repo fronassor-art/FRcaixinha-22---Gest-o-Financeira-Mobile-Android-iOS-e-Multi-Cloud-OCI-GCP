@@ -412,6 +412,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39700_runtime_attestation_ci.py
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_m39800_original_fastapi_process_origin_ci.py
           python -B backend/scripts/frfinance_m39700_termux_runtime_check.py --source-only
       - name: Executar testes de API
         env:
