@@ -1,0 +1,118 @@
+name: FR Finance M40050 — Loopback HTTP lost reply and PG18 idempotent retry CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40050_loopback_http_retry_pg18_ci.py'
+      - 'backend/tests/test_m40050_loopback_http_source_ci.py'
+      - '.github/workflows/frfinance-m40050-loopback-http-retry-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/m40050_loopback_http_retry_pg18_ci.py'
+      - 'backend/tests/test_m40050_loopback_http_source_ci.py'
+      - '.github/workflows/frfinance-m40050-loopback-http-retry-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40050-ci
+  cancel-in-progress: true
+
+jobs:
+  source-gates:
+    name: CI-only source contract and money-off review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assert no real bank, external HTTP or financial authority
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m40050_loopback_http_source_ci.py' -v
+          echo M40050_SOURCE_GUARDS=PASS
+          echo M40050_REAL_PAYMENTS=OFF
+
+  disposable-http-pg18:
+    name: Real loopback HTTP disconnect after COMMIT and read-only replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      GITHUB_ACTIONS: 'true'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m40010_ci=DISPOSABLE_ONLY -c frfinance.m40020_ci=DISPOSABLE_ONLY -c frfinance.m40030_ci=DISPOSABLE_ONLY -c frfinance.m40040_ci=DISPOSABLE_ONLY -c frfinance.m40050_ci=DISPOSABLE_ONLY'
+      CI_M40050_DISPOSABLE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local psql and isolated psycopg3 dependency
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python -m pip install 'psycopg[binary]==3.2.4'
+      - name: Create disposable CI database, no application migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$PGDATABASE" = frcaixinha_ci
+          test "$PGPORT" = 5432
+          PGDATABASE=postgres psql -X -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE frcaixinha_ci"
+          d="backend/tests/sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -f "$d/m40010_disposable_init_pg18_ci.sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 \
+            -f "$d/m40020_disposable_lock_init_pg18_ci.sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f "$d/m40040_disposable_ack_init_pg18_ci.sql"
+      - name: Send loopback HTTP request, drop post-COMMIT reply, retry and audit
+        run: |
+          set -euo pipefail
+          python -B backend/tests/m40050_loopback_http_retry_pg18_ci.py
+          echo M40050_DISPOSABLE_HTTP_DB_INTEGRATION=PASS
+          echo M40050_ONLY_LOOPBACK_127_0_0_1=TRUE
+          echo M40050_PRODUCTION_HTTP=NONE
+          echo M40050_HUMAN_AUTHENTICATION=NOT_ATTESTED
+          echo M40050_ORIGINAL_DB_ACCESS=NONE
+          echo M40050_TERMUX_ACCESS=NONE
+          echo M40050_LOCAL_MIGRATIONS=NONE
+          echo M40050_REAL_PAYMENTS=OFF
+          echo M40050_PRODUCTION=BLOCKED
