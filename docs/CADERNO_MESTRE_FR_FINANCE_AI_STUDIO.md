@@ -89,3 +89,12 @@
 - GET com autenticação de Master ou Admin titular, RLS, cache desabilitado; 404 do FastAPI antigo não pode inventar histórico ou comprometer os demais painéis.
 - Não alterar o PostgreSQL do FR Finance (5433) nem acessar a base independente FR Caixinha 2.2; sem migração, reinício de serviços ou ativação de pagamentos.
 - Rastreabilidade técnica: `docs/FR_FINANCE_M39910_HISTORICO_DOCUMENTAL_CAIXAS.md`.
+
+## 11. M39920 — Fundação de escrituração dos três caixas (homologação offline)
+
+- A plataforma distingue três domínios financeiros: `PLATFORM_MASTER` para receitas/despesas de SaaS, `TENANT_ADMIN_OWN` para remuneração própria do administrador titular e `TENANT_COLLECTIVE` para cotas, empréstimos e patrimônio de cada caixinha. Não misturar fundos.
+- A futura escrituração exige partidas dobradas DR=CR, contas exclusivamente do próprio domínio/tenant, valores inteiros em centavos, referência rastreável e recusa de lançamentos duplicados ou desbalanceados.
+- O pacote M39920 **apenas valida o formato** de candidatos e testa um esquema TEMP com ROLLBACK em PostgreSQL 18 descartável; nenhuma receita, remuneração, despesa, saldo, contabilização ou transferência é criada no banco original.
+- O rateio previsto 15%/85% exige política versionada, lucro líquido elegível, Capital-Dias, auditoria, conciliação e autorização de fechamento. Prévia de lançamento não prova pagamento nem receita.
+- Migração original, permissão de escrita e pagamentos reais dependem de autorização expressa e novos gates de RLS, contabilização imutável, idempotência e evidência externa; os dois projetos PostgreSQL permanecem isolados.
+- Referência técnica: `docs/FR_FINANCE_M39920_ESCRITURACAO_PREPARACAO_CAIXAS.md`.
