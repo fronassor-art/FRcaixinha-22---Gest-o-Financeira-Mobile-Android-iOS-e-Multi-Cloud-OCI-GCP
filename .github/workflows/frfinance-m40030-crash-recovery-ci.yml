@@ -1,0 +1,193 @@
+name: FR Finance M40030 — Crash rollback, replay and proposed stop recovery CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40030_*'
+      - 'backend/tests/test_m40030_recovery_source_ci.py'
+      - '.github/workflows/frfinance-m40030-crash-recovery-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40030_*'
+      - 'backend/tests/test_m40030_recovery_source_ci.py'
+      - '.github/workflows/frfinance-m40030-crash-recovery-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40030-ci
+  cancel-in-progress: true
+
+jobs:
+  source-safety:
+    name: M40030 source and disposable-identity contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test isolation, crash guards and no financial actions
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m40030_recovery_source_ci.py' -v
+          echo M40030_SOURCE_SAFETY=PASS
+
+  disposable-pg18-crash-recovery:
+    name: PostgreSQL 18 crash-before-commit and idempotent recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m40010_ci=DISPOSABLE_ONLY -c frfinance.m40020_ci=DISPOSABLE_ONLY -c frfinance.m40030_ci=DISPOSABLE_ONLY'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure local PostgreSQL client in GitHub runner
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Create new disposable CI database and synthetic role constraints
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$PGPORT" = 5432
+          test "$PGDATABASE" = frcaixinha_ci
+          PGDATABASE=postgres psql -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE frcaixinha_ci"
+          d="backend/tests/sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -f "$d/m40010_disposable_init_pg18_ci.sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -f "$d/m40020_disposable_lock_init_pg18_ci.sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f "$d/m40030_disposable_prepare_pg18_ci.sql"
+      - name: Kill first psql process after INSERT before COMMIT
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/m40030_crashed_receipt.log"
+          stdbuf -oL -eL psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f backend/tests/sql/m40030_disposable_receipt_crash_pg18_ci.sql >"$log" 2>&1 &
+          holder=$!
+          trap 'kill -KILL "$holder" 2>/dev/null || true' EXIT
+          found=0
+          for n in $(seq 1 150); do
+            if grep -q "M40030_RECEIPT_PENDING_COMMIT_WITH_ROW_LOCK" "$log"; then
+              if ! kill -0 "$holder" 2>/dev/null; then
+                cat "$log"; exit 1
+              fi
+              found=1; break
+            fi
+            if ! kill -0 "$holder" 2>/dev/null; then cat "$log"; exit 1; fi
+            sleep 0.05
+          done
+          if [ "$found" -ne 1 ]; then cat "$log"; exit 1; fi
+          kill -KILL "$holder"
+          set +e
+          wait "$holder"
+          exit_code=$?
+          set -e
+          trap - EXIT
+          test "$exit_code" -eq 137
+          if grep -q M40030_UNEXPECTED_RECEIPT_COMMIT "$log"; then cat "$log"; exit 1; fi
+          echo M40030_RECEIPT_KILLED_BEFORE_COMMIT=PASS
+      - name: Fresh connection detects rollback and retries exact same receipt
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f backend/tests/sql/m40030_disposable_receipt_recover_pg18_ci.sql
+      - name: Committed same-tenant nonce and idempotency are never reusable
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f backend/tests/sql/m40030_disposable_replay_after_commit_pg18_ci.sql
+      - name: Kill proposed stop transaction before COMMIT
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/m40030_crashed_stop.log"
+          stdbuf -oL -eL psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f backend/tests/sql/m40030_disposable_stop_crash_pg18_ci.sql >"$log" 2>&1 &
+          holder=$!
+          trap 'kill -KILL "$holder" 2>/dev/null || true' EXIT
+          found=0
+          for n in $(seq 1 150); do
+            if grep -q "M40030_STOP_PENDING_COMMIT_WITH_ROW_LOCK" "$log"; then
+              if ! kill -0 "$holder" 2>/dev/null; then cat "$log"; exit 1; fi
+              found=1; break
+            fi
+            if ! kill -0 "$holder" 2>/dev/null; then cat "$log"; exit 1; fi
+            sleep 0.05
+          done
+          if [ "$found" -ne 1 ]; then cat "$log"; exit 1; fi
+          kill -KILL "$holder"
+          set +e
+          wait "$holder"
+          exit_code=$?
+          set -e
+          trap - EXIT
+          test "$exit_code" -eq 137
+          if grep -q M40030_UNEXPECTED_STOP_COMMIT "$log"; then cat "$log"; exit 1; fi
+          echo M40030_STOP_PROPOSAL_KILLED_BEFORE_COMMIT=PASS
+      - name: Fresh connection proves rollback then retries exact stop proposal
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f backend/tests/sql/m40030_disposable_stop_recover_pg18_ci.sql
+      - name: Post-stop reviewer cannot create new synthetic receipt
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -f backend/tests/sql/m40020_disposable_stopped_writer_pg18_ci.sql
+      - name: Independent final audit of RLS, balances and recorded events
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 \
+            -f backend/tests/sql/m40030_disposable_final_audit_pg18_ci.sql
+          echo M40030_CRASH_RECOVERY_CI=PASS
+          echo M40030_INDEPENDENT_HUMAN_AUTH=NOT_ATTESTED
+          echo M40030_REAL_REVOCATION=NOT_ATTESTED
+          echo M40030_APPROVAL_AND_PAYMENTS=OFF
+          echo M40030_TERMUX_ACCESS=NONE
+          echo M40030_ORIGINAL_DB_WRITES=NONE
+          echo M40030_LOCAL_MIGRATIONS=NONE
+          echo M40030_PRODUCTION=BLOCKED
