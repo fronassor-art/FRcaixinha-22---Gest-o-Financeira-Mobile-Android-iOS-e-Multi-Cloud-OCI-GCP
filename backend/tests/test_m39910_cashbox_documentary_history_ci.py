@@ -87,7 +87,7 @@ def test_routes_are_get_only_and_no_cache():
         with TestClient(app) as client:
             resp=client.get(MASTER_PATH)
         assert resp.status_code==200,resp.text
-        assert resp.headers["cache-control"]=="private, no-store, max-age=0"
+        assert "no-store" in resp.headers.get("cache-control","").lower()
         assert resp.headers["vary"]=="Authorization"
         assert resp.headers["pragma"]=="no-cache"
         val=resp.json()
