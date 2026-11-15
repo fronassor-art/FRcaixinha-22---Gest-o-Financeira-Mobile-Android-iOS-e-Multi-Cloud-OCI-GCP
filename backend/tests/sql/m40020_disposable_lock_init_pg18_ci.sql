@@ -1,23 +1,6 @@
 -- M40020: CI-only atomic reviewer receipt / proposed-revocation collision.
 -- Ephemeral PG18 frcaixinha_ci: DO NOT RUN in Termux/Debian or on real DB.
-\set ON_ERROR_STOP on
-\ir m40010_disposable_guard.psql
-\if :{?CI_M40020_DISPOSABLE}
-\else
-\echo M40020_BLOCKED_MISSING_DISPOSABLE_FLAG
-\quit 2
-\endif
-SELECT CASE WHEN current_database()='frcaixinha_ci'
- AND inet_server_port()=5432 AND session_user='postgres'
- AND current_setting('frfinance.m40020_ci',true)='DISPOSABLE_ONLY'
- THEN 'true' ELSE 'false' END AS m40020_disposable_identity
-\gset
-\if :m40020_disposable_identity
-\else
-\echo M40020_BLOCKED_WRONG_CLUSTER
-\quit 2
-\endif
-
+\ir m40020_disposable_guard.psql
 BEGIN;
 CREATE SCHEMA m40020_ci;
 
