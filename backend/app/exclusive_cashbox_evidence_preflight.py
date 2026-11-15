@@ -54,6 +54,7 @@ class EvidenceDraft:
     cycle_id: UUID | None = None
     policy_id: UUID | None = None
     net_profit_cents: int | None = None
+    proposed_members_pool_cents: int | None = None
     closing_year: int | None = None
 
 
@@ -155,7 +156,7 @@ def preflight_cashbox_evidence(
         if any(x is not None for x in (
             evidence.expense_reference, evidence.cycle_id,
             evidence.policy_id, evidence.net_profit_cents,
-            evidence.closing_year,
+            evidence.proposed_members_pool_cents, evidence.closing_year,
         )):
             raise ValueError("Documento de pagamento misturado com fechamento/despesa")
     elif evidence.document_kind == "FISCAL_EXPENSE":
@@ -166,7 +167,7 @@ def preflight_cashbox_evidence(
             evidence.provider_payment_id, evidence.provider_collector_id,
             evidence.provider_observed_at, evidence.cycle_id,
             evidence.policy_id, evidence.net_profit_cents,
-            evidence.closing_year,
+            evidence.proposed_members_pool_cents, evidence.closing_year,
         )):
             raise ValueError("Despesa não pode herdar estado de pagamento/fechamento")
     else:
@@ -182,8 +183,12 @@ def preflight_cashbox_evidence(
         net = _strict_cents(evidence.net_profit_cents)
         tentative_admin_share = int((Decimal(net) * Decimal("0.15")).quantize(
             Decimal("1"),rounding=ROUND_HALF_UP))
-        if tentative_admin_share != evidence.obligation_amount_cents:
-            raise ValueError("Prévia administrativa não corresponde a 15%")
+        tentative_member_pool = net - tentative_admin_share
+        if tentative_admin_share != evidence.obligation_amount_cents or (
+            _strict_cents(evidence.proposed_members_pool_cents,positive=False)
+            != tentative_member_pool
+        ):
+            raise ValueError("Prévia anual não conserva 15%/85% em centavos")
         if any(x is not None for x in (
             evidence.provider_payment_id, evidence.provider_collector_id,
             evidence.provider_observed_at, evidence.expense_reference,
