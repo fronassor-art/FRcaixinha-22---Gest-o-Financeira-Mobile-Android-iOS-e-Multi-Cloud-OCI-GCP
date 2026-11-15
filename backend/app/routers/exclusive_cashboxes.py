@@ -106,7 +106,7 @@ async def tenant_admin_exclusive_cashbox(
 # M39910 — HISTÓRICO DOCUMENTAL, NÃO EXTRATO FINANCEIRO.
 # Retorna apenas categorias/status/horários já registrados, sem dinheiro,
 # valores, referências externas, CPF, nome, identificador de pagador ou saldo.
-from datetime import datetime
+from datetime import datetime, timezone
 from collections.abc import Mapping
 
 _PAYMENT_STATES = frozenset(("PENDING", "APPROVED", "REJECTED", "CANCELED", "REFUNDED"))
@@ -128,7 +128,7 @@ def _history_record(row: Mapping, category: str, allowed: frozenset[str]) -> dic
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
         raise HTTPException(503, "Histórico documental não comprovado.") from exc
     return {
-        "id": str(event_id), "occurred_at": when.isoformat(),
+        "id": str(event_id), "occurred_at": when.astimezone(timezone.utc).isoformat(),
         "category": category, "state": state, "amount_cents": None,
         "settlement_verified": False,
     }
