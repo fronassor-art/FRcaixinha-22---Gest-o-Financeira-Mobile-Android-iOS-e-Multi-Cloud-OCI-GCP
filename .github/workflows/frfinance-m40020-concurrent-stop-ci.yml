@@ -1,0 +1,174 @@
+name: FR Finance M40020 — Concurrent review and proposed stop PG18 CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40020_*'
+      - 'backend/tests/test_m40020_concurrency_source_ci.py'
+      - '.github/workflows/frfinance-m40020-concurrent-stop-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40020_*'
+      - 'backend/tests/test_m40020_concurrency_source_ci.py'
+      - '.github/workflows/frfinance-m40020-concurrent-stop-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40020-branch
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assert isolated CI-only code and no financial authority
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m40020_concurrency_source_ci.py' -v
+          echo M40020_SOURCE_GUARDS=PASS
+
+  ephemeral-pg18-concurrency:
+    name: Real two-connection overlap against disposable PG18 only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m40010_ci=DISPOSABLE_ONLY -c frfinance.m40020_ci=DISPOSABLE_ONLY'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install local psql client if missing
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Create disposable CI database
+        env:
+          PGDATABASE: postgres
+        run: |
+          test "$GITHUB_ACTIONS" = true
+          test "$PGPORT" = 5432
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE frcaixinha_ci"
+      - name: Initialise M40010 synthetic identity roles and M40020 locks
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$PGDATABASE" = frcaixinha_ci
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -f backend/tests/sql/m40010_disposable_init_pg18_ci.sql
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 \
+            -f backend/tests/sql/m40020_disposable_lock_init_pg18_ci.sql
+      - name: Two concurrent writers, one receipt and one rejected replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="backend/tests/sql"
+          first="$RUNNER_TEMP/m40020_first.log"
+          second="$RUNNER_TEMP/m40020_duplicate.log"
+          stdbuf -oL -eL psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -f "$dir/m40020_disposable_race_first_pg18_ci.sql" >"$first" 2>&1 &
+          holder=$!
+          found=0
+          for n in $(seq 1 120); do
+            if grep -q "M40020_FIRST_WRITER_LOCK_HELD" "$first"; then
+              if ! kill -0 "$holder" 2>/dev/null; then
+                cat "$first"; echo "M40020_BLOCKED_NO_CONCURRENT_WINDOW"; exit 1
+              fi
+              found=1; break
+            fi
+            if ! kill -0 "$holder" 2>/dev/null; then
+              cat "$first"; exit 1
+            fi
+            sleep 0.1
+          done
+          if [ "$found" != 1 ]; then cat "$first"; exit 1; fi
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 \
+            -f "$dir/m40020_disposable_race_duplicate_pg18_ci.sql" \
+            >"$second" 2>&1
+          wait "$holder"
+          cat "$first"; cat "$second"
+          grep -q "M40020_FIRST_WRITER_COMMITTED" "$first"
+          grep -q "M40020_CONCURRENT_DUPLICATE_REJECTED=" "$second"
+          grep -q "M40020_SECOND_WRITER_DENIED" "$second"
+      - name: Proposed stop collides with second reviewer and denies late write
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="backend/tests/sql"
+          stop="$RUNNER_TEMP/m40020_stop.log"
+          late="$RUNNER_TEMP/m40020_late.log"
+          stdbuf -oL -eL psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -f "$dir/m40020_disposable_stop_proposal_pg18_ci.sql" >"$stop" 2>&1 &
+          holder=$!
+          found=0
+          for n in $(seq 1 120); do
+            if grep -q "M40020_STOP_PROPOSAL_LOCK_HELD" "$stop"; then
+              if ! kill -0 "$holder" 2>/dev/null; then
+                cat "$stop"; echo "M40020_BLOCKED_NO_STOP_COLLISION"; exit 1
+              fi
+              found=1; break
+            fi
+            if ! kill -0 "$holder" 2>/dev/null; then
+              cat "$stop"; exit 1
+            fi
+            sleep 0.1
+          done
+          if [ "$found" != 1 ]; then cat "$stop"; exit 1; fi
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 \
+            -f "$dir/m40020_disposable_stopped_writer_pg18_ci.sql" >"$late" 2>&1
+          wait "$holder"
+          cat "$stop"; cat "$late"
+          grep -q "M40020_STOP_PROPOSAL_COMMITTED_CI_ONLY" "$stop"
+          grep -q "M40020_CONCURRENT_RECEIPT_AFTER_STOP=DENIED" "$late"
+          grep -q "M40020_STOP_COLLISION_DENIED_CI_ONLY" "$late"
+      - name: Independent read-only audit of resulting synthetic records
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 \
+            -f backend/tests/sql/m40020_disposable_final_audit_pg18_ci.sql
+          echo M40020_POSTGRES18_COLLISIONS=PASS
+          echo M40020_HUMAN_AUTHENTICATION=NOT_ATTESTED
+          echo M40020_REAL_REVOCATION=NOT_ATTESTED
+          echo M40020_REAL_APPROVAL_AND_PAYMENTS=OFF
+          echo M40020_ORIGINAL_DB_ACCESS=NONE
+          echo M40020_TERMUX_ACCESS=NONE
+          echo M40020_LOCAL_MIGRATIONS=NONE
+          echo M40020_PRODUCTION=BLOCKED
