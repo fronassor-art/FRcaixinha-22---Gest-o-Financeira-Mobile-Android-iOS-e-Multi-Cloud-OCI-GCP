@@ -34,7 +34,7 @@ PS_ARGS = ("ps", "-u", str(os.getuid()), "-o", "args=")
 
 def candidate_type(line: str) -> str:
     """Conservative argv comparison: never certify socket or worktree."""
-    if len(line) > 2048 or any(c in line for c in ("\\n", "\\r", "\\x00")):
+    if len(line) > 2048 or any(c in line for c in ("\n", "\r", "\x00")):
         return "OTHER_COMMAND"
     try:
         args = shlex.split(line, posix=True)

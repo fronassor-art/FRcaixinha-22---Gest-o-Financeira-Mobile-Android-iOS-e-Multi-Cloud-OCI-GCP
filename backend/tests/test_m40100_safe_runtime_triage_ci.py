@@ -107,7 +107,7 @@ def sample_ps(lines, returncode=0):
         assert kwargs["timeout"] == m.PS_TIMEOUT_SECONDS
         assert kwargs["check"] is False
         return subprocess.CompletedProcess(argv, returncode,
-                 ("\\n".join(lines)).encode(),b"")
+                 ("\n".join(lines)).encode(),b"")
     return execute
 
 
