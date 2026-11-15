@@ -12,7 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import re
 from uuid import UUID
 
-from .exclusive_cashbox_journal_preflight import JournalCandidate
+from .exclusive_cashbox_journal_preflight import JournalCandidate, review_journal_candidate
 from .exclusive_cashbox_provenance import (
     PLATFORM_MASTER, TENANT_ADMIN_OWN, TENANT_COLLECTIVE, EVENT_SCOPE,
 )
@@ -101,9 +101,13 @@ def preflight_cashbox_evidence(
     """
     if type(journal) is not JournalCandidate or type(evidence) is not EvidenceDraft:
         raise ValueError("Tipos de registros documentais inválidos")
-    if journal.scope not in (PLATFORM_MASTER, TENANT_ADMIN_OWN, TENANT_COLLECTIVE):
+    if type(journal.scope) is not str or journal.scope not in (
+        PLATFORM_MASTER, TENANT_ADMIN_OWN, TENANT_COLLECTIVE,
+    ):
         raise ValueError("Escopo financeiro inválido")
-    if evidence.event_type not in _DOCUMENT_BY_EVENT or (
+    if type(evidence.event_type) is not str or (
+        evidence.event_type not in _DOCUMENT_BY_EVENT
+    ) or type(evidence.document_kind) is not str or (
         journal.event_type != evidence.event_type or
         journal.scope != evidence.scope or journal.tenant_id != evidence.tenant_id or
         journal.evidence_reference != evidence.evidence_reference or
@@ -112,6 +116,20 @@ def preflight_cashbox_evidence(
         raise ValueError("Documento de outro lançamento, evento ou caixa")
     if evidence.document_kind != _DOCUMENT_BY_EVENT[evidence.event_type]:
         raise ValueError("Natureza documental incompatível com evento")
+    # A caller can instantiate a frozen dataclass without using the journal
+    # constructor. Recompute accounting integrity; never trust the supplied
+    # fingerprint or any "already reconciled" flag.
+    recalculated = review_journal_candidate(
+        event_type=journal.event_type, scope=journal.scope,
+        tenant_id=journal.tenant_id,
+        evidence_reference=journal.evidence_reference, lines=journal.lines,
+    )
+    if journal != recalculated or any((
+        journal.evidence_attested, journal.policy_attested,
+        journal.provider_reconciled, journal.journal_posted,
+        journal.payment_enabled, journal.withdrawal_enabled,
+    )):
+        raise ValueError("Candidato contábil não coincide com pré-validação pura")
     if not isinstance(evidence.document_digest,str) or (
         _SHA256.fullmatch(evidence.document_digest) is None
     ):
