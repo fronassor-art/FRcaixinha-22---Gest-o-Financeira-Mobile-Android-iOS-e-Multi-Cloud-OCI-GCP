@@ -210,3 +210,75 @@ async def tenant_admin_exclusive_cashbox_history(
     ]
     return _history_response("TENANT_ADMIN_COLLECTIVE_REFERENCE_ONLY",
                              tenant_id, records)
+
+
+# M39960 — VIEWER AUTHENTICATION READINESS ONLY (NOT A REVIEW SIGNATURE).
+# The session provenance is generated exclusively by get_current_session.
+# No claim of documentary approval, balance, payout, or fulfilled 2-person review.
+from ..exclusive_cashbox_review_readiness import (
+    ReviewReadinessDenied, verify_review_readiness,
+)
+from ..exclusive_cashbox_provenance import PLATFORM_MASTER, TENANT_ADMIN_OWN
+
+
+def _readiness_response(scope: str, tenant_id: UUID | None) -> dict:
+    """Public-facing minimum: never return user/session IDs or expiry times."""
+    return {
+        "source": "POSTGRES_TOKEN_HASH_REFRESH",
+        "scope": scope,
+        "tenant_id": str(tenant_id) if tenant_id is not None else None,
+        "state": "SESSION_BOUND_VIEW_ONLY",
+        "session_bound": True,
+        "owner_verified_for_view": scope == TENANT_ADMIN_OWN,
+        "document_authenticated": False,
+        "independent_reviewers_verified": False,
+        "documentary_review_authorized": False,
+        "bank_reconciled": False,
+        "journal_posted": False,
+        "payment_enabled": False,
+        "payout_enabled": False,
+        "available_balance_cents": None,
+    }
+
+
+@master_router.get("/exclusive-cashbox/review-readiness")
+async def master_exclusive_cashbox_review_readiness(
+    response: Response,
+    session: AuthenticatedSession = Depends(require_master),
+):
+    """Read-only master session scope check; no tenant ledger or DB query."""
+    _disallow_financial_caching(response)
+    try:
+        verify_review_readiness(
+            session, requested_scope=PLATFORM_MASTER, requested_tenant_id=None,
+        )
+    except ReviewReadinessDenied as exc:
+        raise HTTPException(403, "Sessão Master não verificável para consulta.") from exc
+    return _readiness_response("MASTER_PLATFORM_SAAS_ONLY", None)
+
+
+@tenant_router.get("/admin-exclusive-cashbox/review-readiness")
+async def tenant_admin_exclusive_cashbox_review_readiness(
+    tenant_id: UUID,
+    response: Response,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Read-only viewer check: token-bound session AND active tenant ownership."""
+    _disallow_financial_caching(response)
+    require_tenant_access(str(tenant_id), session)
+    try:
+        verify_review_readiness(
+            session,
+            requested_scope=TENANT_ADMIN_OWN,
+            requested_tenant_id=tenant_id,
+        )
+    except ReviewReadinessDenied as exc:
+        raise HTTPException(403, "Sessão de administrador não verificável.") from exc
+    owner = await conn.fetchval(
+        "SELECT admin_user_id FROM public.tenants "
+        "WHERE id=$1 AND status='ATIVO'", tenant_id,
+    )
+    if owner != UUID(session.user_id):
+        raise HTTPException(403, "Somente o administrador titular ativo pode consultar.")
+    return _readiness_response("TENANT_ADMIN_OWN_REMUNERATION_ONLY", tenant_id)
