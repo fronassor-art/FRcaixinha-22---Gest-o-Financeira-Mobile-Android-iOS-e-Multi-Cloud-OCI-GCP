@@ -120,6 +120,33 @@ def main() -> None:
             assert private not in output
         return data
 
+    # CI-only diagnostic: independently confirm RLS behavior with the same
+    # exact app role and transaction-local settings as get_rls_db_connection.
+    # Never print identities, token contents or DSNs.
+    import asyncio
+    import asyncpg
+
+    async def _verify_fixture_rls():
+        c = await asyncpg.connect(APP_DSN, timeout=3)
+        try:
+            async with c.transaction():
+                await c.execute("SELECT set_config('app.current_user_id',$1,true)",
+                                "22222222-2222-4222-8222-222222222222")
+                await c.execute("SELECT set_config('app.current_role',$1,true)",
+                                "TENANT_ADMIN")
+                await c.execute("SELECT set_config('app.current_tenant_id',$1,true)",
+                                str(A))
+                value = await c.fetchval(
+                    "SELECT admin_user_id FROM public.tenants "
+                    "WHERE id=$1 AND status='ATIVO'", A)
+                print("M40070_CI_DIRECT_RLS_OWNER_VISIBLE=" +
+                      ("TRUE" if value == UUID("22222222-2222-4222-8222-222222222222")
+                       else "FALSE"), flush=True)
+        finally:
+            await c.close()
+
+    asyncio.run(_verify_fixture_rls())
+
     with psycopg.connect(
         host="127.0.0.1", port=5432, dbname="frcaixinha_ci",
         user="postgres", password="postgres", connect_timeout=3,
