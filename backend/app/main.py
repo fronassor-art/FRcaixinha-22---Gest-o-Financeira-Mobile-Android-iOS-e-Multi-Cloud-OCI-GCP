@@ -103,6 +103,10 @@ app.include_router(_special_credit.router, prefix=settings.API_V1_STR)
 from .routers import exclusive_cashboxes as _exclusive_cashboxes
 app.include_router(_exclusive_cashboxes.master_router, prefix=settings.API_V1_STR)
 app.include_router(_exclusive_cashboxes.tenant_router, prefix=settings.API_V1_STR)
+# M40060: authenticated read-only draft-review gap view; zero approval authority.
+from .routers import exclusive_cashbox_review_gaps as _review_policy_gaps
+app.include_router(_review_policy_gaps.master_router, prefix=settings.API_V1_STR)
+app.include_router(_review_policy_gaps.tenant_router, prefix=settings.API_V1_STR)
 app.include_router(_mercado_pago_oauth.router, prefix=settings.API_V1_STR)
 
 # M38970: reuse the EXISTING main FastAPI for signed Mercado Pago Orders.
