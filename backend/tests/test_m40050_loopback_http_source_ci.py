@@ -25,7 +25,9 @@ class M40050LoopbackSourceGate(unittest.TestCase):
             '"CI_M40050_DISPOSABLE": "1"',
             "frfinance.m40050_ci",
             "DISPOSABLE_ONLY",
-            "M40050_BLOCKED_",
+            "BLOCKED_UNSAFE_",
+            "BLOCKED_MISSING_",
+            "BLOCKED_WRONG_DATABASE_IDENTITY",
             "require_ephemeral_environment()",
             "connect_timeout=3",
         ):
