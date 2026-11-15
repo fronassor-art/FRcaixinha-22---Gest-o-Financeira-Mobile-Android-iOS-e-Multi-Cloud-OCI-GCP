@@ -38,10 +38,7 @@ class M39930SourceGuard(unittest.TestCase):
             "EXECUTE 'SET CONSTRAINTS ALL IMMEDIATE'",
             "M39930 unbalanced journal escaped",
             "WHEN check_violation",
-            "M39930 account", # deliberately not here? change below
         ):
-            if item == "M39930 account":
-                continue
             self.assertIn(item,self.source)
 
     def test_three_scopes_rls_and_zero_write_app_role(self):
