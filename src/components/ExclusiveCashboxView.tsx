@@ -10,6 +10,7 @@ import {financialApi} from '../services/financialApiService';
 import type {
   MasterExclusiveCashbox,TenantAdminExclusiveCashbox,
 } from '../services/exclusiveCashboxBoundary';
+import type {ExclusiveCashboxHistory} from '../services/exclusiveCashboxHistoryBoundary';
 import {
   adminCashboxEvidence,masterCashboxEvidence,
 } from '../services/exclusiveCashboxEvidence';
@@ -18,6 +19,8 @@ type State={
   key:string;phase:'loading'|'ready'|'error';
   master?:MasterExclusiveCashbox;
   admin?:TenantAdminExclusiveCashbox;
+  history?:ExclusiveCashboxHistory;
+  historyPhase?:'loading'|'ready'|'unavailable';
 };
 
 export function ExclusiveCashboxView({state}:{state:AppState}){
@@ -29,7 +32,7 @@ export function ExclusiveCashboxView({state}:{state:AppState}){
   useEffect(()=>{
     let active=true;
     const snapshot=authService.captureSession();
-    setResult({key,phase:'loading'});
+    setResult({key,phase:'loading',historyPhase:'loading'});
     const user=authService.getUser();
     if(!user||user.id!==state.currentUserId||user.role!==role||
        (role==='TENANT_ADMIN'&&(!tenant||user.tenantId!==tenant))||
@@ -42,10 +45,26 @@ export function ExclusiveCashboxView({state}:{state:AppState}){
       :financialApi.fetchTenantAdminExclusiveCashbox(tenant!).then(admin=>({admin}));
     void load.then(data=>{
       if(active&&authService.isSessionSnapshotCurrent(snapshot))
-        setResult({key,phase:'ready',...data});
+        setResult(prev=>({
+          ...(prev.key===key?prev:{key,phase:'loading' as const}),
+          key,phase:'ready',...data,
+        }));
     }).catch(()=>{
       if(active&&authService.isSessionSnapshotCurrent(snapshot))
-        setResult({key,phase:'error'});
+        setResult(prev=>({...prev,key,phase:'error'}));
+    });
+    // Independent request: a 404 on a stale FastAPI never hides the base cashbox.
+    const loadHistory=role==='MASTER'
+      ?financialApi.fetchMasterExclusiveCashboxHistory()
+      :financialApi.fetchTenantAdminExclusiveCashboxHistory(tenant!);
+    void loadHistory.then(history=>{
+      if(active&&authService.isSessionSnapshotCurrent(snapshot))
+        setResult(prev=>prev.key===key
+          ?{...prev,history,historyPhase:'ready'}:prev);
+    }).catch(()=>{
+      if(active&&authService.isSessionSnapshotCurrent(snapshot))
+        setResult(prev=>prev.key===key
+          ?{...prev,historyPhase:'unavailable'}:prev);
     });
     return ()=>{active=false;};
   },[key,refresh,state.currentUserId,role,tenant]);
@@ -108,6 +127,39 @@ export function ExclusiveCashboxView({state}:{state:AppState}){
         Cobranças preparadas não equivalem a receita recebida. O Caixa Master
         não agrega dinheiro ou despesas das caixinhas de terceiros.
       </p>}
+      {current.phase==='ready'&&<div className="space-y-3" aria-label="Histórico documental do caixa">
+        <h3 className="text-sm font-bold text-emerald-950">
+          Histórico documental (não é extrato bancário)
+        </h3>
+        {current.historyPhase==='loading'&&<p role="status" className="text-sm text-slate-600">
+          Consultando os eventos registrados...
+        </p>}
+        {current.historyPhase==='unavailable'&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+          Histórico não disponível nesta versão da API. Nenhum lançamento ou saldo foi presumido.
+        </p>}
+        {current.historyPhase==='ready'&&current.history&&
+          (current.history.entries.length===0
+            ?<p className="text-sm text-slate-600">Nenhum registro documental encontrado.</p>
+            :<ul className="space-y-2">
+              {current.history.entries.map(item=><li key={item.category+':'+item.id}
+                className="rounded-xl border border-slate-200 p-3">
+                <p className="text-sm font-semibold text-slate-800">
+                  {item.category==='SAAS_INTENT'
+                    ?'Intenção SaaS (não é recebimento)'
+                    :item.category==='SAAS_PREPARATION'
+                      ?'Preparação de assinatura (não é receita)'
+                      :'Registro do livro-razão COLETIVO (não é remuneração)'}
+                </p>
+                <p className="text-xs text-slate-600">
+                  {new Date(item.occurred_at).toLocaleString('pt-BR')} ·
+                  {' '}Estado técnico: {item.state}
+                </p>
+                <p className="mt-1 text-xs text-amber-900">
+                  Valor liquidado ou disponível: não comprovado.
+                </p>
+              </li>)}
+            </ul>)}
+      </div>}
       <button type="button" onClick={()=>setRefresh(n=>n+1)}
         className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-800 px-4 text-sm font-semibold text-emerald-900">
         <RefreshCcw className="h-4 w-4" aria-hidden="true"/> Atualizar consulta
