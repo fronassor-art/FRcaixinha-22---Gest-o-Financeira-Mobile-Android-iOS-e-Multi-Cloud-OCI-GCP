@@ -58,7 +58,7 @@ const api=readFileSync('backend/app/routers/exclusive_cashboxes.py','utf8');
 assert.match(view,/masterCashboxEvidence\(current\.master\)/);
 assert.match(view,/adminCashboxEvidence\(current\.admin\)/);
 assert.match(view,/authService\.isSessionSnapshotCurrent\(snapshot\)/);
-assert.match(view,/Outras caixinhas exigem/);
+assert.match(view,/política versionada comprovada/);
 assert.match(view,/15% do lucro líquido elegível/);
 assert.match(view,/Não disponível/);
 assert.match(view,/Aguardando comprovação/);
