@@ -315,12 +315,51 @@ BEGIN
    'TENANT_ADMIN_OWN','tenant:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
    repeat('0',64),repeat('1',64),repeat('2',64),
    '66666666-6666-4666-8666-666666666666',
-   '75555555-5555-4555-8555-555555555555',
+   '85555555-5555-4555-8555-555555555555',
    'f8444444-4444-4444-8444-444444444444',
    'f9444444-4444-4444-8444-444444444444','REQUEST_MORE_EVIDENCE');
  EXCEPTION WHEN unique_violation THEN blocked:=true;
  END;
  IF NOT blocked THEN RAISE EXCEPTION 'M40000 session replay accepted'; END IF;
+
+
+ -- A new session id cannot let the existing reviewer claim again.
+ blocked:=false;
+ BEGIN
+  INSERT INTO m40000_ci.review_receipts(
+   id,packet_id,scope,cashbox_key,journal_fingerprint,document_digest,
+   policy_draft_fingerprint,reviewer_id,session_id,nonce,idempotency_key,action)
+  VALUES(
+   'f7777777-7777-4777-8777-777777777777',
+   '33333333-3333-4333-8333-333333333333',
+   'TENANT_ADMIN_OWN','tenant:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+   repeat('0',64),repeat('1',64),repeat('2',64),
+   '75555555-5555-4555-8555-555555555555',
+   'f8777777-7777-4777-8777-777777777777',
+   'f9777777-7777-4777-8777-777777777777',
+   'fa777777-7777-4777-8777-777777777777','REQUEST_MORE_EVIDENCE');
+ EXCEPTION WHEN unique_violation THEN blocked:=true;
+ END;
+ IF NOT blocked THEN RAISE EXCEPTION 'M40000 duplicate reviewer accepted'; END IF;
+
+ -- The same nonce cannot be reused within a tenant scope.
+ blocked:=false;
+ BEGIN
+  INSERT INTO m40000_ci.review_receipts(
+   id,packet_id,scope,cashbox_key,journal_fingerprint,document_digest,
+   policy_draft_fingerprint,reviewer_id,session_id,nonce,idempotency_key,action)
+  VALUES(
+   'f8888888-8888-4888-8888-888888888888',
+   '33333333-3333-4333-8333-333333333333',
+   'TENANT_ADMIN_OWN','tenant:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+   repeat('0',64),repeat('1',64),repeat('2',64),
+   '66666666-6666-4666-8666-666666666666',
+   'f8888888-8888-4888-8888-888888888889',
+   '85555555-5555-4555-8555-555555555555',
+   'fa888888-8888-4888-8888-888888888888','REQUEST_MORE_EVIDENCE');
+ EXCEPTION WHEN unique_violation THEN blocked:=true;
+ END;
+ IF NOT blocked THEN RAISE EXCEPTION 'M40000 nonce replay accepted'; END IF;
 
  -- Cross-tenant or altered document digest cannot match the packet FK.
  blocked:=false;
