@@ -79,3 +79,13 @@
 - Contagens de intenções SaaS não representam receita recebida; contagens de lançamentos da caixinha não representam dinheiro do administrador. Jamais derivar saldo de somatório de intenções, quotas ou campanhas.
 - Caminho posterior para operacionalizar saldos: desenho de contas de titularidade, regime de competência, fechamento aprovado, lançamentos imutáveis, conciliação do provedor, trilhas de autorização/auditoria, RLS, migrações revisadas e homologação de provedores. **Não aplicar SQL original nem habilitar Pix real sem autorização expressa adicional.**
 - Erro 404 em Campanhas do Crédito Especial deve ser diagnosticado primeiro comparando as rotas do FastAPI realmente em execução com as rotas versionadas; mudança de banco ou reativação de crédito não é solução automática.
+
+## 10. M39910 — Histórico documental dos caixas exclusivos, sem saldos
+
+- O Caixa Master pode visualizar apenas a sequência temporal dos estados de intenções SaaS e preparações de assinatura, limitada a dez itens, nunca tratada como ingresso financeiro comprovado.
+- O Administrador titular pode consultar, como **referência coletiva**, eventos temporais do Livro-Razão da própria caixinha, limitados a dez itens; esses registros não são seu histórico de remuneração pessoal.
+- Todos os registros permanecem sem valores monetários exibíveis: `amount_cents=null`, `available_balance_cents=null`, `settlement_verified=false` e `transfer_enabled=false`.
+- Regra 15%/85% de lucro líquido anual continua normativa. Política de ciclo, reconciliação, elegibilidade e fechamento devem ser provados antes de qualquer reconhecimento, rateio ou transferência; M39910 não realiza apuração.
+- GET com autenticação de Master ou Admin titular, RLS, cache desabilitado; 404 do FastAPI antigo não pode inventar histórico ou comprometer os demais painéis.
+- Não alterar o PostgreSQL do FR Finance (5433) nem acessar a base independente FR Caixinha 2.2; sem migração, reinício de serviços ou ativação de pagamentos.
+- Rastreabilidade técnica: `docs/FR_FINANCE_M39910_HISTORICO_DOCUMENTAL_CAIXAS.md`.
