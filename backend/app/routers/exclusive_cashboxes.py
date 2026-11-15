@@ -229,7 +229,7 @@ def _readiness_response(scope: str, tenant_id: UUID | None) -> dict:
         "tenant_id": str(tenant_id) if tenant_id is not None else None,
         "state": "SESSION_BOUND_VIEW_ONLY",
         "session_bound": True,
-        "owner_verified_for_view": scope == TENANT_ADMIN_OWN,
+        "owner_verified_for_view": tenant_id is not None,
         "document_authenticated": False,
         "independent_reviewers_verified": False,
         "documentary_review_authorized": False,
