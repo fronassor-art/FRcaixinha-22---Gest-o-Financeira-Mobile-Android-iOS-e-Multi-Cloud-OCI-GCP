@@ -55,10 +55,11 @@ a navegação no Android, pode autorizar acessos.
   conciliadas, histórico de entradas/saídas, relatórios por competência e
   extrato com trilha de auditoria; validação independente dos eventos de
   pagamento antes do reconhecimento da receita.
-- **Administrador:** percentual contratual configurável por caixinha
-  (a configuração inaugural prevê 15%/85%, mas outras podem ser distintas),
-  apuração periódica, remuneração a pagar, despesas do administrador,
-  lançamentos de seu caixa e extrato próprio.
+- **Administrador:** apuração do percentual contratual de 15%/85% previsto
+  no Caderno Mestre e Contrato Técnico, com verificação da política versionada
+  por ciclo; remuneração a pagar, despesas próprias e extrato exigem
+  comprovação independente e aprovação formal. Não alterar percentuais sem
+  revisão normativa expressa.
 - **Coletivo:** ledger separado e reconciliado do tenant, fechamento com
   autorização e evidências que suportem o reconhecimento de resultados e
   posterior obrigação para com administrador e membros. Proibir
