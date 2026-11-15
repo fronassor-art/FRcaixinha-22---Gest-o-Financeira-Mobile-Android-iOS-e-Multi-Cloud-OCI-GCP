@@ -303,8 +303,7 @@ BEGIN
  END;
  IF NOT blocked THEN RAISE EXCEPTION 'M40000 idempotency replay accepted'; END IF;
 
- -- Reusing a session for a second identity is prohibited even on a new packet
- -- only if that second identity targets the same packet. Use tenant B single receipt.
+ -- Reusing a session for a different reviewer in the same packet is prohibited.
  blocked:=false;
  BEGIN
   INSERT INTO m40000_ci.review_receipts(
