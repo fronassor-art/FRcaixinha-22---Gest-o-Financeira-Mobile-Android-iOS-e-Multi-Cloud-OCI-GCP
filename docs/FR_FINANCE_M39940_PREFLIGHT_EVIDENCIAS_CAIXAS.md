@@ -51,8 +51,11 @@ não confiável, sem conexão com provedor, banco, identidade real ou API.
    validação de NF-e ou aprovação de despesa.
 6. Para remuneração do administrador, só cabe o domínio
    `TENANT_ADMIN_OWN`, com ciclo e política apontados por UUID,
-   ano declarado e comparação numérica **ilustrativa** com 15%
-   do lucro líquido informado. **Não lê a política, não calcula
+   ano declarado e comparação numérica **ilustrativa** do total
+   informado com 15% para administrador e 85% para membros, com
+   arredondamento exato em centavos. São conferidos dois valores:
+   remuneração proposta e pool proposto aos membros, exigindo
+   soma igual ao lucro informado. **Não lê a política, não calcula
    resultado real, não reconhece obrigação, não libera retirada.**
 7. IDs propostos de preparador e revisor devem ser distintos,
    mas **não demonstram identidade, vínculo, consentimento,
