@@ -61,7 +61,7 @@ class TestM40030CrashRecovery(unittest.TestCase):
                 self.assertIn("SELECT pg_sleep(8);",src)
                 self.assertIn("COMMIT;",src)
                 self.assertLess(src.index(mark),src.index("SELECT pg_sleep(8);"))
-                self.assertLess(src.index("SELECT pg_sleep(8);"),src.index("COMMIT;"))
+                self.assertLess(src.index("SELECT pg_sleep(8);"),src.index("\nCOMMIT;"))
                 self.assertIn("M40030_UNEXPECTED_",src)
 
     def test_retry_after_crash_and_named_unique_replay_rejections(self):
