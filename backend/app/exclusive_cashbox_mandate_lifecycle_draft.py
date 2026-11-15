@@ -131,7 +131,7 @@ def inspect_untrusted_mandate_lifecycle(
     terminal_draft_reviewers: set[UUID] = set()
     latest_time: datetime | None = None
     chain = fingerprint
-    for item in events:
+    for position, item in enumerate(events):
         if type(item) is not MandateEventDraft:
             raise MandateLifecycleDraftDenied("Evento não corresponde a declaração de mandato")
         event_id = _uuid(item.event_id)
@@ -144,6 +144,10 @@ def inspect_untrusted_mandate_lifecycle(
             raise MandateLifecycleDraftDenied("Replay, outro caixa ou política diferente")
         if type(item.action) is not str or item.action not in _ACTIONS:
             raise MandateLifecycleDraftDenied("Estado de mandato aprovado é proibido")
+        if (position < 2 and item.action != "APPOINTMENT_PROPOSED") or (
+            position >= 2 and item.action not in _TERMINAL_ACTIONS
+        ):
+            raise MandateLifecycleDraftDenied("Duas propostas iniciais antecedem desistência/revogação")
         digest = item.claimed_document_digest
         if (type(digest) is not str or _DIGEST.fullmatch(digest) is None or
             digest in seen_digests):
