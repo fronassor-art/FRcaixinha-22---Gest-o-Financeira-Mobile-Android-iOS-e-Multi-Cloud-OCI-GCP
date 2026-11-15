@@ -118,10 +118,10 @@ export function ExclusiveCashboxView({state}:{state:AppState}){
         </article>)}
       </div>}
       {current.phase==='ready'&&!master&&current.admin&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
-        Referência da caixinha inaugural: 15% do lucro líquido elegível para
-        o administrador e 85% para os membros. Outras caixinhas exigem
-        percentual contratual próprio comprovado. Esta consulta não confirma
-        cálculo de remuneração, fechamento, transferência ou disponibilidade.
+        Regra contratual prevista: 15% do lucro líquido elegível para
+        o administrador e 85% para os membros. O cálculo de cada ciclo exige
+        política versionada comprovada e fechamento auditado. Esta consulta
+        não confirma remuneração, transferência ou disponibilidade.
       </p>}
       {current.phase==='ready'&&master&&current.master&&<p className="text-xs text-amber-800">
         Cobranças preparadas não equivalem a receita recebida. O Caixa Master
