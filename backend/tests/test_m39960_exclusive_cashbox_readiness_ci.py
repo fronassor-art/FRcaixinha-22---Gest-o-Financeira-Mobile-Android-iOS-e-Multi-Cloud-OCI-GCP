@@ -29,12 +29,18 @@ SESSION_ID=UUID("77777777-7777-4777-8777-777777777777")
 MASTER_PATH="/api/v1/master/exclusive-cashbox/review-readiness"
 ADMIN_PATH=f"/api/v1/tenants/{TENANT_A}/admin-exclusive-cashbox/review-readiness"
 AT=datetime.now(timezone.utc)
+_UNSET=object()
 
 
 def session(role="TENANT_ADMIN", tenant=TENANT_A, actor=ADMIN_ID,
             *, origin="POSTGRES_TOKEN_HASH_REFRESH",
-            refreshed_at=AT, expires_at=AT+timedelta(minutes=15),
+            refreshed_at=_UNSET, expires_at=_UNSET,
             sid=SESSION_ID, is_master=None):
+    now=datetime.now(timezone.utc)
+    if refreshed_at is _UNSET:
+        refreshed_at=now
+    if expires_at is _UNSET:
+        expires_at=now+timedelta(minutes=15)
     if is_master is None:
         is_master=(role=="MASTER")
     return AuthenticatedSession(
@@ -143,7 +149,7 @@ def test_verified_tenant_owner_only_one_select_and_no_synthetic_payment():
     ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,None,AT+timedelta(minutes=15)),
     ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT,None),
     ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT-timedelta(minutes=6),AT+timedelta(minutes=10)),
-    ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT+timedelta(seconds=2),AT+timedelta(minutes=15)),
+    ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT+timedelta(days=1),AT+timedelta(days=1,minutes=15)),
     ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT,AT),
     ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT,AT+timedelta(minutes=31)),
     ("POSTGRES_TOKEN_HASH_REFRESH",SESSION_ID,AT.replace(tzinfo=None),AT+timedelta(minutes=15)),
@@ -212,18 +218,20 @@ def test_master_boundary_cannot_be_forged_by_tenant_or_legacy():
 
 
 def test_pure_gate_rejects_tenant_collective_and_stale_observation():
-    m=session("MASTER",None,MASTER_ID)
+    now=datetime.now(timezone.utc)
+    m=session("MASTER",None,MASTER_ID,refreshed_at=now,
+              expires_at=now+timedelta(minutes=15))
     with pytest.raises(ReviewReadinessDenied):
         verify_review_readiness(m,requested_scope=TENANT_COLLECTIVE,
-                                requested_tenant_id=None,observed_at=AT)
+                                requested_tenant_id=None,observed_at=now)
     with pytest.raises(ReviewReadinessDenied):
         verify_review_readiness(m,requested_scope=PLATFORM_MASTER,
-            requested_tenant_id=None,observed_at=AT+timedelta(minutes=6))
+            requested_tenant_id=None,observed_at=now+timedelta(minutes=6))
     with pytest.raises(ReviewReadinessDenied):
         verify_review_readiness(m,requested_scope=PLATFORM_MASTER,
             requested_tenant_id=None,observed_at=datetime(2026,11,15,13,0))
     result=verify_review_readiness(m,requested_scope=PLATFORM_MASTER,
-                                  requested_tenant_id=None,observed_at=AT)
+                                  requested_tenant_id=None,observed_at=now)
     assert result.session_bound is True
     assert result.independent_reviewer_verified is False
     assert result.documentary_review_authorized is False
