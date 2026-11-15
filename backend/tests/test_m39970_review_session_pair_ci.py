@@ -1,4 +1,5 @@
 """M39970 — two untrusted review claims correlated to session shapes only."""
+import ast
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -160,11 +161,22 @@ class M39970ReviewSessionPair(unittest.TestCase):
         src=(Path(__file__).resolve().parents[1]/
              "app/exclusive_cashbox_review_session_pair.py").read_text()
         for forbidden in (
-            "asyncpg","psycopg","httpx","requests.","INSERT INTO",
-            "UPDATE public.","DELETE FROM","create_payment","approve_payout",
-            "subprocess.","os.kill","@router.post",
+            "asyncpg.connect(","psycopg.connect(","httpx.","requests.get(",
+            "requests.post(","INSERT INTO","UPDATE public.","DELETE FROM",
+            "create_payment","approve_payout","subprocess.","os.kill",
+            "@router.post",
         ):
             self.assertNotIn(forbidden,src)
+        parsed=ast.parse(src)
+        prohibited_roots={"asyncpg","psycopg","httpx","requests","urllib",
+                          "socket","subprocess"}
+        for node in ast.walk(parsed):
+            if isinstance(node,ast.Import):
+                self.assertFalse(any(
+                    item.name.split(".")[0] in prohibited_roots
+                    for item in node.names))
+            if isinstance(node,ast.ImportFrom) and node.module:
+                self.assertNotIn(node.module.split(".")[0],prohibited_roots)
         self.assertIn("verified_independent_reviewers: bool = False",src)
         self.assertIn("payout_enabled: bool = False",src)
         self.assertIn("SERVER_MUST_OBTAIN_EACH_SESSION",src)
