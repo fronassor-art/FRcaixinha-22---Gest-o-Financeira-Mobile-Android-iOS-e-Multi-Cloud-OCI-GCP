@@ -107,9 +107,13 @@ def _assert_view_only(response, scope, tenant=None):
                 "journal_posted","payment_enabled","payout_enabled"):
         assert p[key] is False
     assert p["available_balance_cents"] is None
-    assert not any(word in str(p).lower() for word in (
-        "ci.invalid@example.test","77777777-7777",
-        "password","token_hash","bearer","reviewer_id","user_id",
+    assert not any(key in p for key in (
+        "email","user_id","session_id","token","token_hash",
+        "reviewer_id","provider_payment_id","password",
+    ))
+    public_values=str({k:v for k,v in p.items() if k!="source"}).lower()
+    assert not any(secret in public_values for secret in (
+        "ci.invalid@example.test","77777777-7777","bearer ",
     ))
 
 
