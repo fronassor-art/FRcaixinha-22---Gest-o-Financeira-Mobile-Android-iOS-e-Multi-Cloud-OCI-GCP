@@ -11,6 +11,7 @@
 import { authService, getApiBaseUrl, AuthSessionSnapshot } from './authService';
 import {parseMasterExclusiveCashbox,parseTenantAdminExclusiveCashbox,
  type MasterExclusiveCashbox,type TenantAdminExclusiveCashbox} from './exclusiveCashboxBoundary';
+import {parseExclusiveCashboxHistory,type ExclusiveCashboxHistory} from './exclusiveCashboxHistoryBoundary';
 import {parseProviderPixCheckout, ProviderPixCheckout, parseFinancialReceipt, FinancialReceipt} from './pixAutomationBoundary';
 import { parseMasterTenantRegistry, registryQuery, MasterRegistryPage, RegistryStatus } from './masterRegistry';
 import { parseMasterAdminRegistry, adminRegistryQuery, MasterAdminRegistryPage } from './masterAdminRegistry';
@@ -212,6 +213,26 @@ class FinancialApiService {
       {cache:'no-store'}
     );
     return parseTenantAdminExclusiveCashbox(raw,tenantId);
+  }
+
+  /** M39910: only documentary SaaS events, never revenue/balance. */
+  public async fetchMasterExclusiveCashboxHistory():Promise<ExclusiveCashboxHistory>{
+    const user=authService.getUser();
+    if(!user||user.role!=='MASTER'||user.tenantId)
+      throw Error('Histórico Master: sessão de plataforma exigida.');
+    const raw:unknown=await this.request(
+      '/api/v1/master/exclusive-cashbox/history',{cache:'no-store'});
+    return parseExclusiveCashboxHistory(raw,'MASTER');
+  }
+
+  /** M39910: ledger references are COLLECTIVE, not admin personal salary. */
+  public async fetchTenantAdminExclusiveCashboxHistory(tenantId:string):Promise<ExclusiveCashboxHistory>{
+    const role=assertTenantReadScope(this.currentTenantReader(),tenantId,'DASHBOARD');
+    if(role!=='TENANT_ADMIN')throw Error('Histórico exige administrador titular.');
+    const raw:unknown=await this.request(
+      '/api/v1/tenants/'+encodeURIComponent(tenantId)+'/admin-exclusive-cashbox/history',
+      {cache:'no-store'});
+    return parseExclusiveCashboxHistory(raw,'TENANT_ADMIN',tenantId);
   }
 
   public async fetchMasterOverview(): Promise<{
