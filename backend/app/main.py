@@ -107,6 +107,15 @@ app.include_router(_exclusive_cashboxes.tenant_router, prefix=settings.API_V1_ST
 from .routers import exclusive_cashbox_review_gaps as _review_policy_gaps
 app.include_router(_review_policy_gaps.master_router, prefix=settings.API_V1_STR)
 app.include_router(_review_policy_gaps.tenant_router, prefix=settings.API_V1_STR)
+
+# M40080: non-secret import-time source snapshot. A runtime marker is not
+# proof of Git SHA, actual bytecode, process ownership, or production readiness.
+from .m40080_loaded_source_marker import import_fingerprint_payload as _m40080_fingerprint
+
+@app.get("/api/health/features/m40080", include_in_schema=False)
+def m40080_loaded_source_fingerprint():
+    return _m40080_fingerprint()
+
 app.include_router(_mercado_pago_oauth.router, prefix=settings.API_V1_STR)
 
 # M38970: reuse the EXISTING main FastAPI for signed Mercado Pago Orders.
