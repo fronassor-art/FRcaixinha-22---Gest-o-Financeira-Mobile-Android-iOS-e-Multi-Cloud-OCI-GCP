@@ -101,3 +101,112 @@ async def tenant_admin_exclusive_cashbox(
         "real_payments_enabled": False,
         "status": "AWAITING_CLOSING_AND_RECONCILIATION",
     }
+
+
+# M39910 — HISTÓRICO DOCUMENTAL, NÃO EXTRATO FINANCEIRO.
+# Retorna apenas categorias/status/horários já registrados, sem dinheiro,
+# valores, referências externas, CPF, nome, identificador de pagador ou saldo.
+from datetime import datetime
+from collections.abc import Mapping
+
+_PAYMENT_STATES = frozenset(("PENDING", "APPROVED", "REJECTED", "CANCELED", "REFUNDED"))
+_PREPARATION_STATES = frozenset(("PENDING_PAYMENT", "PAUSED_NO_PAYMENT", "CANCELED"))
+_HISTORY_LIMIT = 10
+
+
+def _history_record(row: Mapping, category: str, allowed: frozenset[str]) -> dict:
+    try:
+        event_id = row["id"]
+        when = row["created_at"]
+        if type(event_id) is not UUID or type(when) is not datetime or (
+            when.tzinfo is None or when.utcoffset() is None
+        ):
+            raise ValueError("Invalid documentary event")
+        state = row["status"] if category != "TENANT_COLLECTIVE_LEDGER" else "RECORDED_NOT_REMUNERATION"
+        if type(state) is not str or state not in allowed:
+            raise ValueError("Invalid documentary status")
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise HTTPException(503, "Histórico documental não comprovado.") from exc
+    return {
+        "id": str(event_id), "occurred_at": when.isoformat(),
+        "category": category, "state": state, "amount_cents": None,
+        "settlement_verified": False,
+    }
+
+
+def _history_response(scope: str, tenant_id: UUID | None, entries: list[dict]) -> dict:
+    return {
+        "source": "POSTGRESQL_RLS", "scope": scope,
+        "tenant_id": str(tenant_id) if tenant_id is not None else None,
+        "entries": entries, "available_balance_cents": None,
+        "cash_movement_verified": False, "transfer_enabled": False,
+        "status": "DOCUMENTARY_ONLY_NOT_RECONCILED",
+    }
+
+
+@master_router.get("/exclusive-cashbox/history")
+async def master_exclusive_cashbox_history(
+    response: Response,
+    session: AuthenticatedSession = Depends(require_master),
+    conn=Depends(get_rls_db_connection),
+):
+    """Limited SaaS event history; approved intent is NOT bank reconciliation."""
+    _disallow_financial_caching(response)
+    intents = await conn.fetch(
+        "SELECT id,created_at,status FROM public.saas_payment_intents "
+        "ORDER BY created_at DESC,id DESC LIMIT 10"
+    )
+    preparations = await conn.fetch(
+        "SELECT id,created_at,status FROM public.saas_subscription_preparations "
+        "ORDER BY created_at DESC,id DESC LIMIT 10"
+    )
+    if len(intents) > _HISTORY_LIMIT or len(preparations) > _HISTORY_LIMIT:
+        raise HTTPException(503, "Histórico documental excedeu o limite.")
+    records = [
+        _history_record(r, "SAAS_INTENT", _PAYMENT_STATES) for r in intents
+    ] + [
+        _history_record(r, "SAAS_PREPARATION", _PREPARATION_STATES)
+        for r in preparations
+    ]
+    # Stable sort with bounded output. Never include amount/tenant identity.
+    records.sort(key=lambda x: (x["occurred_at"], x["id"]), reverse=True)
+    return _history_response("MASTER_PLATFORM_SAAS_ONLY", None,
+                             records[:_HISTORY_LIMIT])
+
+
+@tenant_router.get("/admin-exclusive-cashbox/history")
+async def tenant_admin_exclusive_cashbox_history(
+    tenant_id: UUID,
+    response: Response,
+    session: AuthenticatedSession = Depends(get_current_session),
+    conn=Depends(get_rls_db_connection),
+):
+    """Collective ledger evidence only, never personal admin remuneration."""
+    _disallow_financial_caching(response)
+    require_tenant_access(str(tenant_id), session)
+    if session.role != "TENANT_ADMIN":
+        raise HTTPException(403, "Histórico restrito ao administrador titular.")
+    try:
+        actor = UUID(str(session.user_id))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise HTTPException(403, "Identidade inválida.") from exc
+    owner = await conn.fetchval(
+        "SELECT admin_user_id FROM public.tenants "
+        "WHERE id=$1 AND status='ATIVO'", tenant_id,
+    )
+    if owner != actor:
+        raise HTTPException(403, "Somente administrador titular autorizado.")
+    rows = await conn.fetch(
+        "SELECT id,created_at FROM public.ledger_transactions "
+        "WHERE tenant_id=$1 ORDER BY created_at DESC,id DESC LIMIT 10",
+        tenant_id,
+    )
+    if len(rows) > _HISTORY_LIMIT:
+        raise HTTPException(503, "Histórico documental excedeu o limite.")
+    records = [
+        _history_record(r, "TENANT_COLLECTIVE_LEDGER",
+                        frozenset(("RECORDED_NOT_REMUNERATION",)))
+        for r in rows
+    ]
+    return _history_response("TENANT_ADMIN_COLLECTIVE_REFERENCE_ONLY",
+                             tenant_id, records)
