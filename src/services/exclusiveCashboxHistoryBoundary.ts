@@ -56,6 +56,7 @@ export function parseExclusiveCashboxHistory(
   for(const item of root.entries){
     const e=exactRecord(item,entryFields);
     if(typeof e.id!=='string'||!uuid.test(e.id)||
+      typeof e.category!=='string'||
       typeof e.occurred_at!=='string'||!iso.test(e.occurred_at)||
       !Number.isFinite(Date.parse(e.occurred_at))||
       e.amount_cents!==null||e.settlement_verified!==false)
@@ -70,7 +71,7 @@ export function parseExclusiveCashboxHistory(
       allowed=['RECORDED_NOT_REMUNERATION'];
     if(!allowed.includes(e.state as string))
       throw Error('Origem ou estado financeiro não comprovado.');
-    const key=e.category+':'+e.id.toLowerCase();
+    const key=String(e.category)+':'+e.id.toLowerCase();
     if(seen.has(key))throw Error('Histórico duplicado.');
     seen.add(key);
   }
