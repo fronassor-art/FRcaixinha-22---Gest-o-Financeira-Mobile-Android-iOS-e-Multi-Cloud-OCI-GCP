@@ -1,0 +1,19 @@
+-- M40010: FAIL CLOSED gate for every disposable-only SQL script.
+-- No original FR Finance PostgreSQL or legacy Caixinha database access.
+\set ON_ERROR_STOP on
+\if :{?CI_M40010_DISPOSABLE}
+\else
+\echo M40010_BLOCKED_MISSING_CI_FLAG
+\quit 2
+\endif
+SELECT CASE WHEN current_database()='frcaixinha_ci'
+ AND inet_server_port()=5432
+ AND session_user='postgres'
+ AND current_setting('frfinance.m40010_ci',true)='DISPOSABLE_ONLY'
+ THEN 'true' ELSE 'false' END AS m40010_disposable_identity
+\gset
+\if :m40010_disposable_identity
+\else
+\echo M40010_BLOCKED_WRONG_CLUSTER
+\quit 2
+\endif
