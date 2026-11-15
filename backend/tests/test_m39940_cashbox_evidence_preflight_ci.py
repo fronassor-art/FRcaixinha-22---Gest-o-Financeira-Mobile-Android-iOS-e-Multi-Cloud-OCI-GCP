@@ -56,7 +56,8 @@ def sample(case=EVENTS[0]):
         extra=dict(expense_reference="invoice:2026:0001")
     if kind=="ANNUAL_CLOSING":
         extra=dict(cycle_id=CYCLE,policy_id=POLICY,
-                   net_profit_cents=10000,closing_year=2026)
+                   net_profit_cents=10000,
+                   proposed_members_pool_cents=8500,closing_year=2026)
     evidence=EvidenceDraft(
         scope=scope,tenant_id=tenant,event_type=event,
         journal_fingerprint=journal.fingerprint,
@@ -169,6 +170,9 @@ class M39940EvidencePreflight(unittest.TestCase):
         self.assertFalse(preflight_cashbox_evidence(journal,evidence).payout_authorized)
         for change in (
             dict(net_profit_cents=9999),
+            dict(proposed_members_pool_cents=8499),
+            dict(proposed_members_pool_cents=None),
+            dict(proposed_members_pool_cents=True),
             dict(net_profit_cents=0),
             dict(net_profit_cents=True),
             dict(net_profit_cents=10**13),
@@ -183,7 +187,8 @@ class M39940EvidencePreflight(unittest.TestCase):
                 self.assert_blocked(journal,replace(evidence,**change))
         # 15% of 10001 cents rounds to 1500, while 10004 gives 1501.
         self.assertFalse(preflight_cashbox_evidence(
-            journal,replace(evidence,net_profit_cents=10001)).payout_authorized)
+            journal,replace(evidence,net_profit_cents=10001,
+                            proposed_members_pool_cents=8501)).payout_authorized)
         self.assert_blocked(journal,replace(evidence,net_profit_cents=10004))
 
     def test_forged_journal_flags_and_unbalanced_lines_rejected(self):
