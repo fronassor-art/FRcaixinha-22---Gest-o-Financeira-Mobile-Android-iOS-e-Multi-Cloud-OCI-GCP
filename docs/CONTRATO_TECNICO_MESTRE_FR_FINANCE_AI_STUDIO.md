@@ -77,3 +77,12 @@
 - Contagens de `saas_payment_intents` ou `ledger_transactions` não são caixa financeiro, liquidez ou remuneração transferível. O módulo operacional com saldos, histórico de movimentos, recebimentos comprovados e pagamentos dependerá de migração, segurança financeira, conciliação e autorização específica.
 - Erro `404` em rotas versionadas de crédito não autoriza migração nem outro banco. Diagnóstico permitido: GET de `http://127.0.0.1:8000/openapi.json` local sem credenciais; nunca usar fallback para outra origem, papel ou tenant.
 - Produção, notificações externas, Pix e pagamentos reais seguem bloqueados; PR permanece draft e nenhuma migração local foi executada por M39090–M39091.
+
+## K. Caixa Master e Caixa do Administrador — histórico documental M39910
+
+- `GET /api/v1/master/exclusive-cashbox/history`: `require_master`, consultas SELECT exclusivamente às intenções SaaS e preparações de assinatura, limite dez eventos; sem tenant_id, valor, pagador, segredo ou saldo.
+- `GET /api/v1/tenants/{tenant_id}/admin-exclusive-cashbox/history`: `get_current_session`, `require_tenant_access`, titularidade ativa por `tenants.admin_user_id` e RLS; somente eventos temporais do Livro-Razão **coletivo** de um tenant; nunca afirmar remuneração própria.
+- O contrato de resposta exige `source=POSTGRESQL_RLS`, escopo exclusivo, categorias e estados de lista permitida, ID UUID, timestamp UTC, bloqueio de cache, `settlement_verified=false`, `cash_movement_verified=false`, `transfer_enabled=false`, `available_balance_cents=null` e `amount_cents=null`.
+- Nenhuma API é autorizada a converter `APPROVED` (status de intenção) em pagamento liquidado, nem a converter eventos do ledger coletivo em comissão pessoal. Registro desconhecido invalida o histórico (fail closed).
+- Persistência de despesas próprias, receitas efetivas, remuneração devida, transferências e extratos exigem novo contrato de dados, versionamento SQL e homologação com provedor/contabilidade, além de autorização de migração separada; este pacote é apenas leitura e não cria tabelas.
+- Rastreabilidade: `docs/FR_FINANCE_M39910_HISTORICO_DOCUMENTAL_CAIXAS.md`; produção, PIX real, pagamentos e ativação continuam OFF.
