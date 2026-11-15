@@ -89,8 +89,9 @@ CREATE TABLE m40000_ci.review_receipts (
 -- for that packet. This proves a structural cap, NOT external auth or signatures.
 CREATE FUNCTION m40000_ci.guard_two_claims() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
-DECLARE packet_preparer uuid;
-DECLARE existing_count integer;
+DECLARE
+ packet_preparer uuid;
+ existing_count integer;
 BEGIN
  SELECT prepared_by INTO packet_preparer
  FROM m40000_ci.review_packets
