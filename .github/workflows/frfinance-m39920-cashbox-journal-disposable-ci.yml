@@ -1,0 +1,99 @@
+name: FR Finance M39920 — Cashbox journal preflight and disposable PG18
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/exclusive_cashbox_journal_preflight.py'
+      - 'backend/tests/test_m39920_exclusive_cashbox_journal_preflight_ci.py'
+      - 'backend/tests/test_m39920_disposable_sql_source_ci.py'
+      - 'backend/tests/sql/m39920_three_cashbox_journal_disposable_ci.sql'
+      - '.github/workflows/frfinance-m39920-cashbox-journal-disposable-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/exclusive_cashbox_journal_preflight.py'
+      - 'backend/tests/test_m39920_exclusive_cashbox_journal_preflight_ci.py'
+      - 'backend/tests/test_m39920_disposable_sql_source_ci.py'
+      - 'backend/tests/sql/m39920_three_cashbox_journal_disposable_ci.sql'
+      - '.github/workflows/frfinance-m39920-cashbox-journal-disposable-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39920-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pure-journal-shape:
+    name: Validate segregated double-entry candidates, no database
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: No-IO journal and SQL guard tests
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39920_exclusive_cashbox_journal_preflight_ci.py' -v
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39920_disposable_sql_source_ci.py' -v
+          echo 'M39920_ACCOUNTING_PREVIEW_ONLY=PASS'
+          echo 'M39920_FINANCIAL_WRITES=NONE'
+
+  disposable-pg18:
+    name: PostgreSQL 18 isolated temporary tables and rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m39920_ci=DISPOSABLE_ONLY'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure disposable psql client
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Create CI-only DB and enforce identity
+        env:
+          PGDATABASE: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE frcaixinha_ci"
+      - name: Prove three scopes and anti-replay in TEMP tables
+        run: |
+          test "$PGDATABASE" = frcaixinha_ci
+          test "$PGPORT" = 5432
+          psql -X -v ON_ERROR_STOP=1 -v CI_M39920_DISPOSABLE=1 \
+            -f backend/tests/sql/m39920_three_cashbox_journal_disposable_ci.sql
+          echo 'M39920_TERMUX_CONNECTIONS=NONE'
+          echo 'M39920_MIGRATIONS_LOCAL=NONE'
+          echo 'M39920_PRODUCTION=BLOCKED'
