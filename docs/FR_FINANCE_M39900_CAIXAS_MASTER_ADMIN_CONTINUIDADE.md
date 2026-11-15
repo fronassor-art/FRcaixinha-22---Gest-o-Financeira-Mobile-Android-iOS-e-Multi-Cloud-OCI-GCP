@@ -70,10 +70,10 @@ a navegação no Android, pode autorizar acessos.
   qualquer migração original, validar controle de acesso por RLS e provas
   E2E de pagamentos, estornos e consentimento.
 - **Importante:** a API atual expõe percentuais 15%/85% estáticos na
-  consulta de administrador. Isso é apenas referência da caixinha
-  inaugural; **não foi comprovada** a leitura da política contratual
-  particular de todos os tenants. Não usar esses campos para apuração
-  ou liberação de remuneração até corrigir a origem autoritativa.
+  consulta de administrador, alinhados à regra normativa do produto.
+  **Não foi comprovada** a leitura da política versionada de cada ciclo.
+  Não usar esses campos para apuração ou liberação de remuneração sem
+  resultados reconciliados e confirmação da política autoritativa.
 
 ## Checkpoint e limites
 
