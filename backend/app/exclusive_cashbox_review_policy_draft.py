@@ -147,6 +147,8 @@ def assess_unapproved_review_policy(
 
     policy_id = _uuid(draft.policy_id)
     creator = _uuid(draft.created_by)
+    if creator == evidence.preparer_id:
+        raise DraftReviewPolicyDenied("Preparador não pode emitir sua própria política de revisão")
     if type(draft.policy_document_digest) is not str or (
         _DIGEST.fullmatch(draft.policy_document_digest) is None
     ):
