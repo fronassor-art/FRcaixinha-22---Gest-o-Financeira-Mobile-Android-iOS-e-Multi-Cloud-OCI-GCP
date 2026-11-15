@@ -86,3 +86,13 @@
 - Nenhuma API é autorizada a converter `APPROVED` (status de intenção) em pagamento liquidado, nem a converter eventos do ledger coletivo em comissão pessoal. Registro desconhecido invalida o histórico (fail closed).
 - Persistência de despesas próprias, receitas efetivas, remuneração devida, transferências e extratos exigem novo contrato de dados, versionamento SQL e homologação com provedor/contabilidade, além de autorização de migração separada; este pacote é apenas leitura e não cria tabelas.
 - Rastreabilidade: `docs/FR_FINANCE_M39910_HISTORICO_DOCUMENTAL_CAIXAS.md`; produção, PIX real, pagamentos e ativação continuam OFF.
+
+## L. M39920 — Pré-escrituração de caixas, sem persistência original
+
+- A função pura `review_journal_candidate` recebe exclusivamente candidatos classificados por `exclusive_cashbox_provenance.classify_cashbox_source`; rejeita evento e escopo incompatíveis, tenant sem UUID, conta fora do prefixo do domínio e valor inválido.
+- Cada linha possui `DR` ou `CR`; pelo menos duas linhas, contrapartida em conta distinta, somatórios exatos de centavos e ausência de combinação de fundos de caixinhas diferentes. Não há I/O nem gravação.
+- Um fingerprint SHA-256 determinístico somente identifica a forma de candidato; não representa assinatura digital, aceite, idempotência transacional, prova bancária ou política de conciliação.
+- O modelo experimental SQL cria somente `TEMP TABLE` com `ROLLBACK`, bloqueado fora de CI no PostgreSQL descartável `frcaixinha_ci`; **não é migration 114** e não deve executar no Termux.
+- Todos os retornos são obrigatoriamente `STRUCTURAL_PREVIEW_NO_POSTING` com `journal_posted=false`, `provider_reconciled=false`, `payment_enabled=false`, `withdrawal_enabled=false`. Não registrar saldo ou comissão efetiva.
+- Migrar futuramente exige DDL revisado, RLS real, FK por tenant, trigger diferida de partidas dobradas, diário append-only, estorno idempotente, trilha de origem, contratos e integração efetivamente homologada; aplicar no original somente com autorização específica.
+- Ver `docs/FR_FINANCE_M39920_ESCRITURACAO_PREPARACAO_CAIXAS.md`.
