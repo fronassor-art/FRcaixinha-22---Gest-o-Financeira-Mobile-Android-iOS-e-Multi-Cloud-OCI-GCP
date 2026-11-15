@@ -118,7 +118,11 @@ LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp
 AS $$
 DECLARE jid uuid; n integer; debit bigint; credit bigint;
 BEGIN
-  jid := COALESCE(NEW.journal_id,NEW.id);
+  IF TG_TABLE_NAME='journals' THEN
+    jid := NEW.id;
+  ELSE
+    jid := NEW.journal_id;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM m39930_ci.journals WHERE id=jid)
     THEN RETURN NULL;
   END IF;
@@ -170,6 +174,24 @@ SET CONSTRAINTS ALL IMMEDIATE;
 DO $$
 DECLARE blocked boolean;
 BEGIN
+  -- Deferred trigger must reject an incomplete journal on constraint check.
+  blocked := false;
+  BEGIN
+    EXECUTE 'SET CONSTRAINTS ALL DEFERRED';
+    INSERT INTO m39930_ci.journals
+      (id,scope,cashbox_key,event_type,evidence_reference)
+    VALUES ('88888888-8888-4888-8888-888888888888','PLATFORM_MASTER',
+      'platform','SAAS_SETTLEMENT','synthetic-incomplete-001');
+    INSERT INTO m39930_ci.entries
+      (id,journal_id,scope,cashbox_key,account_code,side,amount_cents)
+    VALUES ('99999999-9999-4999-8999-999999999999',
+      '88888888-8888-4888-8888-888888888888','PLATFORM_MASTER',
+      'platform','PM_ONLY_DEBIT','DR',777);
+    EXECUTE 'SET CONSTRAINTS ALL IMMEDIATE';
+  EXCEPTION WHEN check_violation THEN blocked:=true;
+  END;
+  IF NOT blocked THEN RAISE EXCEPTION 'M39930 unbalanced journal escaped'; END IF;
+
   -- A second posting for the same evidence must not be accepted.
   blocked := false;
   BEGIN
