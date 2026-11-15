@@ -60,7 +60,10 @@ def test_saas_master_cannot_read_ledgers_admin_cannot_read_other_tenant():
 
 def test_protection_against_cached_financial_evidence():
     source=ROUTER.read_text()
-    assert source.count("_disallow_financial_caching(response)")==2
+    # M39910 adds two documentary GETs; all four must set no-cache.
+    assert source.count("_disallow_financial_caching(response)")==4
+    assert '@master_router.get("/exclusive-cashbox/history")' in source
+    assert '@tenant_router.get("/admin-exclusive-cashbox/history")' in source
     assert 'response.headers["Cache-Control"] = "private, no-store, max-age=0"' in source
     assert 'response.headers["Vary"] = "Authorization"' in source
     assert 'response.headers["Pragma"] = "no-cache"' in source
