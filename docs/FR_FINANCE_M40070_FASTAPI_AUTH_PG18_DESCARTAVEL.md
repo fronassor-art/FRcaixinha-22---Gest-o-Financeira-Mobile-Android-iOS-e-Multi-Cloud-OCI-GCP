@@ -29,3 +29,7 @@ Guardas exigem `GITHUB_ACTIONS=true`, `PGHOST=127.0.0.1`, porta `5432`, usuário
 **Nenhuma migration em `backend/migrations`, `backend/local_migrations` ou banco do Termux**. Nenhum reinício do FastAPI, instalação APK, comunicação externa ou habilitação financeira. M39100 permanece intocado.
 
 `M40070_AUTH_INTEGRATION=DISPOSABLE_CI_ONLY`; `M40070_ORIGINAL_DB_ACCESS=NONE`; `M40070_LOCAL_MIGRATIONS=NONE`; `M40070_REAL_REVIEW_APPROVAL=FALSE`; `PIX_REAL=OFF`; `PAGAMENTOS_REAIS=OFF`; `ATIVACAO_REAL=OFF`; `PRODUCTION=BLOCKED`.
+
+## Ajuste de compatibilidade identificado pelo teste M40070
+
+A primeira execução da integração revelou HTTP 403 para um proprietário válido, embora uma consulta de controle confirmasse que a RLS do PostgreSQL 18 permitia a leitura do registro. O driver `asyncpg` entrega o identificador PostgreSQL em um tipo UUID compatível, mas a rota M40060 usava `type(owner) is UUID`, exigindo a classe exata. O controle foi ajustado para `isinstance(owner, UUID)` **mantendo a igualdade obrigatória com o UUID do ator de sessão**. Strings, valores nulos e proprietários divergentes continuam proibidos. Um teste de regressão com subtipo de UUID complementa a integração PostgreSQL real. Nenhum poder financeiro foi adicionado.

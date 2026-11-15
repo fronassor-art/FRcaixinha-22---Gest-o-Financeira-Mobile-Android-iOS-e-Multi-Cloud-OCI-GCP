@@ -137,6 +137,8 @@ async def tenant_admin_review_policy_gaps(
         actor_id = UUID(session.user_id)
     except (AttributeError, TypeError, ValueError) as exc:
         raise HTTPException(403, "Titularidade não comprovada.") from exc
-    if type(owner) is not UUID or owner != actor_id:
+    # asyncpg may return its own UUID subtype: accept UUID instances only,
+    # never a client string or an unrelated database value.
+    if not isinstance(owner, UUID) or owner != actor_id:
         raise HTTPException(403, "Titularidade ativa não comprovada.")
     return _view_only(TENANT_ADMIN_OWN, tenant_id)

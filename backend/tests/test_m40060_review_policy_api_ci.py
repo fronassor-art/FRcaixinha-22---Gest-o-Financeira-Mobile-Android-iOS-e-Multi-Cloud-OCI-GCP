@@ -179,6 +179,24 @@ def test_nonowner_and_unknown_owner_are_denied_without_financial_access():
             _clear()
 
 
+
+def test_asyncpg_compatible_uuid_subtype_is_accepted_without_relaxing_identity():
+    # A real asyncpg UUID can be a subclass rather than exactly uuid.UUID.
+    # A client-provided string must still fail the type check (covered above).
+    class AsyncpgUUIDShape(UUID):
+        pass
+
+    db=ReadOnlyOwnerDB(AsyncpgUUIDShape(str(ADMIN)))
+    _use(session(),db)
+    try:
+        with TestClient(app) as client:
+            response=client.get(TENANT_PATH)
+        _assert_blocked(response,TENANT_ADMIN_OWN,A)
+        assert len(db.queries)==1
+    finally:
+        _clear()
+
+
 def test_unauthenticated_requests_deny_before_db_or_return_unavailable():
     _clear()
     with TestClient(app) as client:
