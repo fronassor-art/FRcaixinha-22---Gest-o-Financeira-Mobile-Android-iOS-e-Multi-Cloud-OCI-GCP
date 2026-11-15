@@ -1,0 +1,39 @@
+-- M40040: independent second connection sees successful COMMIT despite no reply.
+\ir m40040_disposable_guard.psql
+BEGIN;
+SET LOCAL ROLE m40010_a_a;
+DO $$
+DECLARE result text;
+BEGIN
+ result := m40040_ci.inspect_uncertain_commit(
+  'e9111111-1111-4111-8111-111111111111'::uuid, repeat('a',64));
+ IF result <> 'EXISTING_UNVERIFIED_RECEIPT_NO_NEW_WRITE' THEN
+  RAISE EXCEPTION 'M40040_MISSING_COMMITTED_RESULT_%',result;
+ END IF;
+ result := m40040_ci.inspect_uncertain_commit(
+  'e9111111-1111-4111-8111-111111111111'::uuid, repeat('b',64));
+ IF result <> 'CONFLICT_DIFFERENT_REQUEST_NO_NEW_WRITE' THEN
+  RAISE EXCEPTION 'M40040_CHANGED_PAYLOAD_NOT_REJECTED_%',result;
+ END IF;
+ result := m40040_ci.inspect_uncertain_commit(
+  'e9222222-2222-4222-8222-222222222222'::uuid, repeat('a',64));
+ IF result <> 'NOT_FOUND_OR_NOT_VISIBLE' THEN
+  RAISE EXCEPTION 'M40040_UNKNOWN_KEY_WAS_VISIBLE_%',result;
+ END IF;
+ result := m40040_ci.inspect_uncertain_commit(
+  'e9111111-1111-4111-8111-111111111111'::uuid, repeat('A',64));
+ IF result <> 'INVALID_REQUEST_NO_EFFECT' THEN
+  RAISE EXCEPTION 'M40040_MALFORMED_DIGEST_ACCEPTED_%',result;
+ END IF;
+ IF (SELECT count(*) FROM m40040_ci.receipt_ack)<>1
+ OR (SELECT count(*) FROM m40010_ci.review_receipts
+     WHERE packet_id='44444444-4444-4444-8444-444444444444')<>1 THEN
+   RAISE EXCEPTION 'M40040_RETRY_INSERTED_DUPLICATE';
+ END IF;
+END;
+$$;
+COMMIT;
+\echo M40040_COMMIT_WITHOUT_RESPONSE_RECONCILED=PASS
+\echo M40040_SAME_REQUEST_RESOLVED_READ_ONLY=PASS
+\echo M40040_DIFFERENT_PAYLOAD=CONFLICT_NO_WRITE
+\echo M40040_UNKNOWN_KEY=NOT_FOUND_OR_NOT_VISIBLE
