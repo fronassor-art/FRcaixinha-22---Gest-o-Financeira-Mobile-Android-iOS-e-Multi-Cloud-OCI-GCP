@@ -2,6 +2,7 @@
 
 No live DB, no tokens or logged-in sessions, no POST, external delivery or Pix.
 """
+import ast
 from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app
@@ -131,6 +132,21 @@ def test_probe_has_no_mutating_or_other_network_implementation():
     assert "ProxyHandler({})" in source and "NoRedirect()" in source
     assert 'method="GET"' in source
     for unsafe in ("requests.post(", "Request(HOST + path, method=\"POST\"",
-                   "psycopg.connect(", "asyncpg.connect(", "subprocess.Popen(",
+                   "psycopg.connect(", "subprocess.Popen(",
                    "os.kill(", "pg_ctl start", "pg_ctl stop", "shell=True"):
         assert unsafe not in source
+
+# A literal string used to check auth-before-DB is NOT a connection call.
+def test_no_actual_asyncpg_connect_call_in_probe_source_ast():
+    source = (
+        ROOT / "backend/scripts/frfinance_m40220_anonymous_role_boundaries_readonly.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "asyncpg"
+        and node.func.attr == "connect"
+        for node in ast.walk(tree)
+    )
