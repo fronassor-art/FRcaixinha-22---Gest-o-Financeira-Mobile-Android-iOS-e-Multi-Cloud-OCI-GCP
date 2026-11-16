@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# FR Finance M40240 — fixed original cluster; catalogue queries only.
-# Password is prompted by psql, never read from environment, repo or argv.
+# FR Finance M40240/41 — fixed original PG18, catalog-only, read-only.
+# Password requested by psql -W; never saved or printed.
 set -eu
 umask 077
 
@@ -20,15 +20,30 @@ test "$(git branch --show-current)" = "atualizacao-ai-studio-9b46a63187" || {
   echo "M40240_STATUS=BLOCKED_WRONG_BRANCH"
   exit 2
 }
-test "$(git remote get-url origin)" =   "https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP" || {
-  echo "M40240_STATUS=BLOCKED_WRONG_REMOTE"
-  exit 2
-}
 
-if ! python -B backend/scripts/frfinance_m38794_project_isolation.py inspect     | grep -q '^M38794_PROJECT_SEPARATION=PASS_STATIC$'; then
+REPO="fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP"
+ORIGIN="$(git remote get-url origin)"
+case "$ORIGIN" in
+  "https://github.com/$REPO" | \
+  "https://github.com/$REPO.git" | \
+  "git@github.com:$REPO" | \
+  "git@github.com:$REPO.git") ;;
+  *)
+    echo "M40240_STATUS=BLOCKED_WRONG_REMOTE"
+    exit 2
+    ;;
+esac
+
+if ! ISOLATION="$(python -B backend/scripts/frfinance_m38794_project_isolation.py inspect)"; then
   echo "M40240_STATUS=BLOCKED_FR_FINANCE_IDENTITY"
   exit 2
 fi
+if ! printf '%s\n' "$ISOLATION" |
+    grep -Fxq 'M38794_PROJECT_SEPARATION=PASS_STATIC'; then
+  echo "M40240_STATUS=BLOCKED_FR_FINANCE_IDENTITY"
+  exit 2
+fi
+unset ISOLATION
 
 SQL="backend/scripts/frfinance_m40240_pg18_rls_catalog_readonly.sql"
 test -f "$SQL" && test ! -L "$SQL" || {
@@ -40,7 +55,19 @@ echo "M40240_CONNECTION=FR_FINANCE_127_0_0_1_PORT_5433_ONLY"
 echo "M40240_PASSWORD=PROMPTED_HIDDEN_NOT_STORED"
 echo "M40240_SCOPE=CATALOG_ONLY_NO_MEMBER_DATA"
 echo "M40240_TRANSACTION=DEFAULT_READ_ONLY"
-if env -i    HOME="$HOME"    PATH="$PREFIX/bin"    LANG=C    TMPDIR="${TMPDIR:-$PREFIX/tmp}"    PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=2000"    "$PREFIX/bin/psql"      -X -W -q -t -A -v ON_ERROR_STOP=1      -h 127.0.0.1 -p 5433      -U frc_ai_owner      -d frcaixinha_aistudio_dev      -f "$SQL"
+
+if env -i \
+    HOME="$HOME" \
+    PATH="$PREFIX/bin" \
+    LANG=C \
+    TMPDIR="${TMPDIR:-$PREFIX/tmp}" \
+    PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=2000" \
+    "$PREFIX/bin/psql" \
+      -X -W -q -t -A -v ON_ERROR_STOP=1 \
+      -h 127.0.0.1 -p 5433 \
+      -U frc_ai_owner \
+      -d frcaixinha_aistudio_dev \
+      -f "$SQL"
 then
   echo "M40240_STATUS=PASS_LIVE_RLS_CATALOG_ONLY"
 else
