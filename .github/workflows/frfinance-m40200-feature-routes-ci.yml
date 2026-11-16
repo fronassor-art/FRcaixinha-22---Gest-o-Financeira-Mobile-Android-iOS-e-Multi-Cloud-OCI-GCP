@@ -1,0 +1,52 @@
+name: FR Finance M40200 — Role feature route inventory read only
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40200_feature_routes_readonly.py'
+      - 'backend/tests/test_m40200_feature_routes_readonly_ci.py'
+      - '.github/workflows/frfinance-m40200-feature-routes-ci.yml'
+      - 'docs/FR_FINANCE_M40200_FEATURE_ROUTES.md'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40200_feature_routes_readonly.py'
+      - 'backend/tests/test_m40200_feature_routes_readonly_ci.py'
+      - '.github/workflows/frfinance-m40200-feature-routes-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  feature-routes-static-and-http-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned backend requirements
+        run: python -m pip install -r backend/requirements.txt
+      - name: Audit source decorators and synthetic docs
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40200_feature_routes_readonly_ci.py \
+            backend/tests/test_m40190_operational_readonly_checkpoint_ci.py \
+            backend/tests/test_m40180_launch_sandbox_guard_ci.py \
+            backend/tests/test_m40170_post_android_wal_ci.py
+          python -B backend/scripts/frfinance_m40200_feature_routes_readonly.py --source-only
+          echo M40200_CI=PASS
+          echo M40200_ROLE_AUTHENTICATION=NOT_TESTED
+          echo M40200_MEMBER_DATA=NOT_QUERIED
+          echo M40200_TERMINAL_DB_WRITES=NONE
+          echo M40200_REAL_PAYMENTS=OFF
+          echo M40200_PRODUCTION=BLOCKED
