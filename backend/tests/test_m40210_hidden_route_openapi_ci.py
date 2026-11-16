@@ -73,7 +73,8 @@ def test_absence_of_hidden_routes_does_not_fail_public_inventory():
 def test_missing_visible_route_fails_closed():
     doc = synthetic_visible_openapi()
     path = m.TENANT + "/special-credit/campaigns"
-    doc["paths"].pop(path)
+    # Same URL has both GET and POST: remove GET only, preserving POST.
+    doc["paths"][path].pop("get")
     _, missing, count = m.visible_schema(doc)
     assert missing == ("GET " + path,)
     assert count == 32
