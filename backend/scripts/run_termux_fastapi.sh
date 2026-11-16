@@ -29,18 +29,24 @@ if ! pg_isready -q -h 127.0.0.1 -p 5433 -U frc_ai_owner -d frcaixinha_aistudio_d
   exit 2
 fi
 # A listener on 8000 (even an unrelated process) must never be replaced.
-if "$PYTHON_BIN" - <<'PY'
-import socket, sys
+# M40180: only positive ECONNREFUSED means safe to attempt a bind.
+# Timeouts, Android restrictions and other failures are NOT a free port.
+if ! "$PYTHON_BIN" -B - <<'PY'
+import errno
+import socket
+import sys
 try:
-    with socket.create_connection(("127.0.0.1", 8000), timeout=1):
-        sys.exit(0)
-except OSError:
-    sys.exit(1)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1.5)
+        result = sock.connect_ex(("127.0.0.1", 8000))
+except (OSError, ValueError):
+    result = None
+sys.exit(0 if result == errno.ECONNREFUSED else 2)
 PY
 then
-  echo 'M38801_FASTAPI_8000=ALREADY_OCCUPIED_DO_NOT_START_DUPLICATE'
-  echo 'Execute M38800 para verificar a identidade da API existente.'
-  exit 0
+  echo 'M40180_FASTAPI_START=BLOCKED_PORT_8000_OCCUPIED_OR_UNVERIFIED'
+  echo 'Nao criar segundo FastAPI; identificar listener sem matar processos.'
+  exit 2
 fi
 config_file="$HOME/.config/frcaixinha-aistudio-mobile/api.env"
 
@@ -72,6 +78,21 @@ if [[ "${ENVIRONMENT:-homologation}" == 'production' ]]; then
 fi
 
 "$PYTHON_BIN" "$root/backend/scripts/validate_aistudio_database.py"
+
+# M40180: enforce the frozen financial / external delivery gates AFTER
+# sourcing private api.env. The guard reads only non-secret flag names and
+# values; no password, URL or DSN is displayed.
+if ! "$PYTHON_BIN" -B "$root/backend/scripts/frfinance_m40180_launch_sandbox_guard.py"; then
+  echo 'M40180_FASTAPI_START=BLOCKED_SANDBOX_FLAGS'
+  exit 2
+fi
+export PIX_REAL=OFF
+export PAGAMENTOS_REAIS=OFF
+export ATIVACAO_REAL=OFF
+export FR_FINANCE_ACCESS_MAIL_ENABLE=OFF
+export FR_FINANCE_ACCESS_MAIL_WORKER=OFF
+export FRCAIXINHA_CI_ISOLATED=0
+export AI_STUDIO_M2040_CI_EVIDENCE_READS=0
 export ENVIRONMENT=homologation
 export FRCAIXINHA_TERMUX_LOCAL_API=1
 export PYTHONPATH="$root/backend"

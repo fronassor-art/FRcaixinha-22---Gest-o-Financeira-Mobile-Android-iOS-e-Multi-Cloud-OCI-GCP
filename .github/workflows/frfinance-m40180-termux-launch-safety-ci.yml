@@ -1,0 +1,54 @@
+name: FR Finance M40180 — Safe original Termux FastAPI launch gates
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/run_termux_fastapi.sh'
+      - 'backend/scripts/frfinance_m40180_launch_sandbox_guard.py'
+      - 'backend/tests/test_m40180_launch_sandbox_guard_ci.py'
+      - '.github/workflows/frfinance-m40180-termux-launch-safety-ci.yml'
+      - 'docs/FR_FINANCE_M40180_TERMUX_FASTAPI_RESTART.md'
+  pull_request:
+    paths:
+      - 'backend/scripts/run_termux_fastapi.sh'
+      - 'backend/scripts/frfinance_m40180_launch_sandbox_guard.py'
+      - 'backend/tests/test_m40180_launch_sandbox_guard_ci.py'
+      - '.github/workflows/frfinance-m40180-termux-launch-safety-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-termux-launch-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned requirements
+        run: python -m pip install -r backend/requirements.txt
+      - name: Static launcher syntax and sandbox flag checks
+        run: |
+          set -euo pipefail
+          bash -n backend/scripts/run_termux_fastapi.sh
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40180_launch_sandbox_guard_ci.py \
+            backend/tests/test_m40170_post_android_wal_ci.py \
+            backend/tests/test_m40160_original_pg_control_offline_ci.py \
+            backend/tests/test_m40150_original_pg18_status_ci.py
+          python -B backend/scripts/frfinance_m40180_launch_sandbox_guard.py
+          echo M40180_CI=PASS
+          echo M40180_REAL_FINANCE=OFF
+          echo M40180_POSTGRESQL_START_STOP=NONE
+          echo M40180_FASTAPI_START_STOP_IN_CI=NONE
+          echo M40180_MIGRATIONS=NONE
