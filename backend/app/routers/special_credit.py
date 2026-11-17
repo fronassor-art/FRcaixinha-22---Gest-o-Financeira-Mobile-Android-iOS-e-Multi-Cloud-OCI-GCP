@@ -367,12 +367,17 @@ async def publish_campaign(tenant_id: UUID, campaign_id: UUID,
     invalid = await conn.fetchval(
         "SELECT count(*) FROM public.special_credit_recipients r "
         "JOIN public.special_credit_grants g ON g.id=r.grant_id "
+        "AND g.tenant_id=r.tenant_id AND g.member_id=r.member_id "
         "JOIN public.memberships m ON m.id=r.member_id "
+        "AND m.tenant_id=r.tenant_id AND m.user_id=r.user_id "
+        "AND m.role='TENANT_MEMBER' "
         "WHERE r.campaign_id=$1 AND r.tenant_id=$2 "
         "AND (g.status <> 'ACTIVE' OR g.expires_at <= now() "
         " OR g.expires_at < (SELECT c.expires_at FROM public.special_credit_campaigns c "
         " WHERE c.id=$1 AND c.tenant_id=$2) "
-        " OR m.status <> 'ATIVA' OR g.tenant_id<>r.tenant_id)", campaign_id, tenant_id)
+        " OR m.status <> 'ATIVA' OR g.tenant_id<>r.tenant_id "
+        " OR g.member_id<>r.member_id OR m.tenant_id<>r.tenant_id "
+        " OR m.user_id<>r.user_id OR m.role<>'TENANT_MEMBER')", campaign_id, tenant_id)
     if invalid:
         raise HTTPException(409, "Uma das autorizações ou adesões está inválida.")
     if c["status"] == "DRAFT":
@@ -455,8 +460,15 @@ async def reply(tenant_id: UUID, recipient_id: UUID, payload: OpportunityReply,
         "AND cy.status='ABERTO' AND cy.start_date<=CURRENT_DATE "
         "AND cy.end_date>=CURRENT_DATE) "
         "AND EXISTS (SELECT 1 FROM public.special_credit_grants g "
+        "JOIN public.memberships m ON m.id=g.member_id "
         "WHERE g.id=r.grant_id AND g.tenant_id=$3 "
-        " AND g.status='ACTIVE' AND g.expires_at>now()) "
+        "AND g.member_id=r.member_id AND m.tenant_id=$3 "
+        "AND m.user_id=$4 AND m.role='TENANT_MEMBER' "
+        "AND m.status='ATIVA' "
+        "AND g.status='ACTIVE' AND g.expires_at>now() "
+        "AND EXISTS (SELECT 1 FROM public.special_credit_campaigns c "
+        "WHERE c.id=r.campaign_id AND c.tenant_id=$3 "
+        "AND c.cycle_id=g.cycle_id)) "
         "RETURNING r.id", payload.status, recipient_id, tenant_id, _uid(session))
     if row is None:
         raise HTTPException(409, "Oferta indisponível ou já respondida.")

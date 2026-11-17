@@ -53,6 +53,11 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   const [simulation,setSimulation]=useState('');
   const [pushDiagnostic,setPushDiagnostic]=useState('');
   const pushCleanup=useRef<(()=>Promise<void>)|null>(null);
+  const operationEpoch=useRef(0);
+
+  // Trocar perfil/caixinha invalida o estado de espera da operação anterior.
+  // A resposta antiga não pode destravar uma operação nova nem exibir dados.
+  useEffect(()=>{operationEpoch.current++;setBusy(false);},[key]);
 
   useEffect(()=>{
     let active=true;
@@ -111,6 +116,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   async function run(task:()=>Promise<unknown>,success:string,refresh=true){
     if(!tenant||busy)return;
     const before=key; const snapshot=authService.captureSession();
+    const operation=++operationEpoch.current;
     setBusy(true);setMessage('');
     try{
       await task();
@@ -121,8 +127,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
       if(latest.current===before&&authService.isSessionSnapshotCurrent(snapshot))
         setMessage(error instanceof Error?error.message:'Operação recusada.');
     }finally{
-      if(latest.current===before&&authService.isSessionSnapshotCurrent(snapshot))
-        setBusy(false);
+      if(operationEpoch.current===operation)setBusy(false);
     }
   }
   const toggleMember=(id:string)=>setSelectedMembers(current=>

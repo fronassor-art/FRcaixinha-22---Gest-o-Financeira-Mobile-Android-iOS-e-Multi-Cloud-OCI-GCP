@@ -189,6 +189,8 @@ def capital_days_v2(
         day = event.effective_at.astimezone(BELEM).date()
         if day < start:
             raise ValueError("Saldo anterior deve entrar como movimento de abertura auditado")
+        if day >= end_exclusive:
+            raise ValueError("Movimento fora do ciclo: não ignorar evidência financeira")
         changes[day] = changes.get(day, 0) + event.delta_cents
     position = 0
     total = 0

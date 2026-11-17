@@ -20,6 +20,28 @@ export function scopedCreditPath(tenantId:string):string {
   return '/api/v1/tenants/' + encodeURIComponent(tenantId) + '/special-credit';
 }
 
+/** Somente operações próprias do módulo. O backend segue autoridade de RBAC/RLS.
+ * NENHUM bearer é enviado para path traversal nem rotas arbitrárias.
+ */
+const creditUuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+const adminRead = new Set(['/cycle-readiness','/members','/campaigns']);
+const memberRead = new Set(['/opportunities','/preferences']);
+const sharedRead = new Set(['/capabilities','/grants']);
+const adminWrite = new Set(['/grants','/campaigns']);
+const memberWrite = new Set(['/preferences','/simulate']);
+const adminDynamic = new RegExp('^/(?:grants/'+creditUuid+'/revoke|campaigns/'+creditUuid+'/(?:publish|cancel))$');
+const memberDynamic = new RegExp('^/opportunities/'+creditUuid+'/reply$');
+
+function assertCreditRoute(path:string,isWrite:boolean,role:string):void {
+  const valid =
+    (!isWrite && sharedRead.has(path) && (role==='TENANT_ADMIN'||role==='TENANT_MEMBER')) ||
+    (!isWrite && adminRead.has(path) && role==='TENANT_ADMIN') ||
+    (!isWrite && memberRead.has(path) && role==='TENANT_MEMBER') ||
+    (isWrite && role==='TENANT_ADMIN' && (adminWrite.has(path)||adminDynamic.test(path))) ||
+    (isWrite && role==='TENANT_MEMBER' && (memberWrite.has(path)||memberDynamic.test(path)));
+  if (!valid) throw new Error('Caminho de crédito ou perfil não permitido.');
+}
+
 /** Falha local antes de enviar bearer/URL ao backend com o tenant errado. */
 export async function requestSpecialCredit<T>(
   transport: SpecialCreditTransport,
@@ -41,8 +63,11 @@ export async function requestSpecialCredit<T>(
   if ((user.role !== 'TENANT_ADMIN' && user.role !== 'TENANT_MEMBER')
       || !user.tenantId || user.tenantId.toLowerCase() !== tenantId.toLowerCase())
     throw new Error('Acesso recusado: caixinha não corresponde à sessão ativa.');
+  assertCreditRoute(path,body !== undefined,user.role);
 
-  const response = await transport.send(base + endpoint + path, {
+  let response: Response;
+  try {
+    response = await transport.send(base + endpoint + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       Authorization: 'Bearer ' + snapshot.token,
@@ -53,7 +78,14 @@ export async function requestSpecialCredit<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: 'include',
     cache: 'no-store',
-  });
+    });
+  } catch {
+    if (!transport.isCurrent(snapshot))
+      throw new Error('A sessão mudou durante a consulta de crédito.');
+    // Suspensão do Termux/Android ou perda de rede não comprovam perda de dados.
+    // Jamais repetir um POST porque houve exceção de transporte.
+    throw new Error('Conexão com FR Finance indisponível. Confira FastAPI e PostgreSQL; ausência de resposta não indica perda do banco. Não repita a operação automaticamente.');
+  }
   if (!transport.isCurrent(snapshot))
     throw new Error('A sessão mudou. Reabra as oportunidades.');
   if (response.status === 401) {
