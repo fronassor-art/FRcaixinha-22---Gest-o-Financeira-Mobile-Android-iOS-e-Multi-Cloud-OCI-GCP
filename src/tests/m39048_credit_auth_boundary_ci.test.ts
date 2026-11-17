@@ -113,7 +113,7 @@ async function testExpiredAndStaleSessions(){
     parsing.setCurrent(false);
     return res;
   };
-  await assert.rejects(requestSpecialCredit(parsing.transport,A,'/opportunities'),
+  await assert.rejects(requestSpecialCredit(parsing.transport,A,'/campaigns'),
     /A sessão mudou/);
   assert.equal(parsing.invalidations(),0);
 

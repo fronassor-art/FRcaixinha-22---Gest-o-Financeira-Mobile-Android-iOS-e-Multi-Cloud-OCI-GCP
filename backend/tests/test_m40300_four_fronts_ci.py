@@ -19,7 +19,7 @@ import pytest
 from app.closing_contract_oracle import FinancialEvidence, simulate_contract_closing
 from app.member_cycle_rules import CapitalMovement, capital_days_v2
 from app.routers.loans import compute_price_schedule
-from app.routers import special_credit
+from backend.app.routers import special_credit
 from backend.tests.test_m39033_special_credit_route_flow_ci import (
     ADMIN, CAMPAIGN, GRANT, MEMBER_USER, MEMBERSHIP, PATH, RECIPIENT,
     TENANT, OTHER_TENANT, make_client,
