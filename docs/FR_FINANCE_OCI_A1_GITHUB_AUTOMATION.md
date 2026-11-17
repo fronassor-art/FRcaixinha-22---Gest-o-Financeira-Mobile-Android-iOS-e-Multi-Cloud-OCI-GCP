@@ -10,7 +10,7 @@ A automação fica em `.github/workflows/frfinance-oci-a1-autolaunch.yml`. O cro
 - Secrets necessários para o preflight: `FRF_OCI_USER_OCID`, `FRF_OCI_TENANCY_OCID`, `FRF_OCI_FINGERPRINT`, `FRF_OCI_PRIVATE_KEY_PEM`. O lançamento exige também `FRF_OCI_SSH_PUBLIC_KEY`, correspondente a uma chave privada guardada pelo operador. O conteúdo de nenhum secret deve ser registrado em logs.
 - `FR_FINANCE_OCI_MONITOR_ENABLED` é de outro fluxo e não habilita este criador.
 
-O preflight exige assinatura `FREE_TIER`, região `sa-saopaulo-1`, A1 Flex, rede existente e SSH 22 restrito a IPv4 /32. Exige ausência de outras instâncias e volumes ativos. O lançamento fixa 2 OCPUs, 12 GB de RAM, boot de 50 GB e imagem Ubuntu 24.04 ARM64. O runner não altera PIX, pagamentos, produção, banco de dados ou processos locais.
+O preflight exige assinatura `FREE_TIER`, confirmação de `sa-saopaulo-1` como home region, A1 Flex, rede existente e SSH 22 restrito a IPv4 /32. Exige ausência de outras instâncias e volumes ativos. O lançamento fixa 2 OCPUs, 12 GB de RAM, boot de 50 GB e imagem Ubuntu 24.04 ARM64. O runner não altera PIX, pagamentos, produção, banco de dados ou processos locais.
 
 ## Reconciliação e parada
 

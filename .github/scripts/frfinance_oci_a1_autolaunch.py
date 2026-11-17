@@ -124,6 +124,13 @@ def reconcile_existing(guard, instances):
     return True
 
 
+def verify_home_region(iam, tenancy):
+    regions = items(iam.list_region_subscriptions, tenancy)
+    homes = [region for region in regions if region.is_home_region]
+    require(len(homes) == 1 and homes[0].region_name == REGION
+            and homes[0].status == "READY", "HOME_REGION_NOT_VERIFIED")
+
+
 def main():
     required = ("FRF_OCI_USER_OCID", "FRF_OCI_TENANCY_OCID",
                 "FRF_OCI_FINGERPRINT", "FRF_OCI_PRIVATE_KEY_PEM")
@@ -152,6 +159,7 @@ def main():
         plans = subscription if isinstance(subscription, list) else getattr(subscription, "items", [])
         require([getattr(plan, "plan_type", "") for plan in plans] == ["FREE_TIER"],
                 "FREE_TIER_NOT_VERIFIED")
+        verify_home_region(iam, root)
 
         compartments = [root] + [
             compartment.id for compartment in items(
