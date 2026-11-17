@@ -76,7 +76,7 @@ def main():
 
  # Extra endpoints exist only in the CI process, never in deployed app code.
  @app.get("/__ci_m40340/rls",include_in_schema=False)
- async def probe(session:AuthenticatedSession=Depends(get_current_session),
+ async def probe(session=Depends(get_current_session),
                  conn=Depends(get_rls_db_connection)):
   context=await conn.fetchrow(
    "SELECT current_user,current_setting('app.current_user_id',true),"
@@ -93,7 +93,7 @@ def main():
   return {"role":session.role,"tenant":session.tenant_id,"counts":data}
 
  @app.get("/__ci_m40340/tenants/{tenant_id}/scope",include_in_schema=False)
- async def scope(tenant_id:UUID,session:AuthenticatedSession=Depends(get_current_session)):
+ async def scope(tenant_id:str,session=Depends(get_current_session)):
   require_tenant_access(str(tenant_id),session)
   return {"authorized":True}
 
