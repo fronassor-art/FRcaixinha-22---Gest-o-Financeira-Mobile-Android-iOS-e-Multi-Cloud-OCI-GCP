@@ -1,0 +1,129 @@
+name: FR Finance M40340 - Authenticated bearer and six real SQL110 RLS tables
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40340_bearer_credit_ci.sql'
+      - 'backend/tests/m40340_bearer_credit_runtime_ci.py'
+      - 'backend/tests/test_m40340_source_guards_ci.py'
+      - '.github/workflows/frfinance-m40340-bearer-credit-rls-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40340_bearer_credit_ci.sql'
+      - 'backend/tests/m40340_bearer_credit_runtime_ci.py'
+      - 'backend/tests/test_m40340_source_guards_ci.py'
+      - '.github/workflows/frfinance-m40340-bearer-credit-rls-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Review immutable test gates
+        run: python -B -m unittest discover -s backend/tests -p 'test_m40340_source_guards_ci.py' -v
+  postgres18-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: frfinance_ci_credit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frfinance_ci_credit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40340_DISPOSABLE: '1'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: frfinance_ci_credit
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGOPTIONS: '-c frfinance.m40340_ci=DISPOSABLE_ONLY'
+      DATABASE_URL: 'postgresql://frc_ai_app:m40340-app-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      AUTH_DATABASE_URL: 'postgresql://fr_m40340_auth:m40340-auth-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      ENVIRONMENT: development
+      FRCAIXINHA_TEST_AUTH: '1'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_ENABLE: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned API dependencies and psql
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python -m pip install -r backend/requirements.txt
+      - name: Guard GitHub disposable CI
+        run: |
+          test "$GITHUB_ACTIONS" = true
+          test "$CI_M40340_DISPOSABLE" = 1
+          test "$PGPORT" = 5432
+          test "$PGDATABASE" = frfinance_ci_credit
+      - name: Reuse M39020 minimal disposable schema
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE frc_ai_app NOLOGIN;
+          CREATE TABLE public.users (id uuid PRIMARY KEY);
+          CREATE TABLE public.tenants (
+            id uuid PRIMARY KEY,
+            admin_user_id uuid NOT NULL REFERENCES public.users(id),
+            status text NOT NULL DEFAULT 'ATIVO'
+          );
+          CREATE TABLE public.cycles (
+            id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            status text NOT NULL DEFAULT 'ABERTO'
+          );
+          CREATE TABLE public.memberships (
+            id uuid PRIMARY KEY,
+            tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            user_id uuid NOT NULL REFERENCES public.users(id),
+            role text NOT NULL DEFAULT 'TENANT_MEMBER',
+            status text NOT NULL DEFAULT 'ATIVA'
+          );
+          GRANT SELECT ON public.users,public.tenants,
+            public.cycles,public.memberships TO frc_ai_app;
+          SQL
+      - name: Existing migrations ONLY in disposable CI
+        run: |
+          psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -c "SET frfinance.m39020_migration_mode='CI_DISPOSABLE'" \
+            -f backend/migrations/110_fr_finance_special_credit_offline.sql \
+            -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
+      - name: Reuse M39020 synthetic two-tenant rows
+        run: psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m39020_special_credit_integrity_ci.sql
+      - name: Synthetic auth functions and published campaigns (runner only)
+        run: psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m40340_bearer_credit_ci.sql
+      - name: Actual FastAPI original auth and RLS route tests
+        run: |
+          python -B backend/tests/m40340_bearer_credit_runtime_ci.py
+          echo M40340_ORIGINAL_DB=UNTOUCHED
+          echo M40340_PIX_REAL=OFF
+          echo M40340_PRODUCTION=BLOCKED
