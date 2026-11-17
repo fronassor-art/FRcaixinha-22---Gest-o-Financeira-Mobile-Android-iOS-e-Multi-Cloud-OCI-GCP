@@ -133,6 +133,24 @@ def test_admin_cannot_replay_member_reply_before_sql():
     assert db.statements==[]
 
 
+def test_missing_recipient_relation_fails_closed_at_publish():
+    source=(ROOT/"backend/app/routers/special_credit.py").read_text()
+    start=source.index("async def publish_campaign(")
+    stop=source.index('@router.post("/campaigns/{campaign_id}/cancel")')
+    publish=source[start:stop]
+    # LEFT JOIN retains an orphaned recipient for the invalid count.
+    # INNER JOIN would silently drop the orphan and allow PUBLISHED.
+    for marker in ("LEFT JOIN public.special_credit_grants g",
+                   "LEFT JOIN public.memberships m",
+                   "g.id IS NULL OR m.id IS NULL",
+                   "g.member_id<>r.member_id",
+                   "m.user_id<>r.user_id",
+                   "m.role<>'TENANT_MEMBER'",
+                   "m.status <> 'ATIVA'"):
+        assert marker in publish
+    assert '"external_dispatch":False' in publish
+
+
 def test_missing_consent_no_external_delivery_even_for_push():
     db=PeriodAwareSyntheticRlsDb("current")
     db.campaign["status"]="DRAFT"

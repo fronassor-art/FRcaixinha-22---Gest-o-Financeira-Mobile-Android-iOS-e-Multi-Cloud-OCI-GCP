@@ -366,10 +366,13 @@ async def publish_campaign(tenant_id: UUID, campaign_id: UUID,
         raise HTTPException(409, "Campanha expirada.")
     invalid = await conn.fetchval(
         "SELECT count(*) FROM public.special_credit_recipients r "
-        "JOIN public.special_credit_grants g ON g.id=r.grant_id "
-        "JOIN public.memberships m ON m.id=r.member_id "
+        "LEFT JOIN public.special_credit_grants g ON g.id=r.grant_id "
+        "AND g.tenant_id=r.tenant_id "
+        "LEFT JOIN public.memberships m ON m.id=r.member_id "
+        "AND m.tenant_id=r.tenant_id "
         "WHERE r.campaign_id=$1 AND r.tenant_id=$2 "
-        "AND (g.status <> 'ACTIVE' OR g.expires_at <= now() "
+        "AND (g.id IS NULL OR m.id IS NULL "
+        " OR g.status <> 'ACTIVE' OR g.expires_at <= now() "
         " OR g.expires_at < (SELECT c.expires_at FROM public.special_credit_campaigns c "
         " WHERE c.id=$1 AND c.tenant_id=$2) "
         " OR m.status <> 'ATIVA' OR g.tenant_id<>r.tenant_id "
