@@ -1,0 +1,43 @@
+name: FR Finance CP20261117 — 330 requirements offline checkpoint no VM
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_cp20261117_offline_checkpoint.py'
+      - 'backend/tests/test_frfinance_cp20261117_offline_checkpoint_ci.py'
+      - 'docs/FR_FINANCE_CP20261117_AUDITORIA_GITHUB_SEM_VM.md'
+      - '.github/workflows/frfinance-cp20261117-no-vm-audit-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_cp20261117_offline_checkpoint.py'
+      - 'backend/tests/test_frfinance_cp20261117_offline_checkpoint_ci.py'
+      - 'docs/FR_FINANCE_CP20261117_AUDITORIA_GITHUB_SEM_VM.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FRF_OCI_LAUNCH_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test runner
+        run: python -m pip install pytest==8.3.4
+      - name: Audit 330 items and no-go markers with no services
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_frfinance_cp20261117_offline_checkpoint_ci.py
+          python -B backend/scripts/frfinance_cp20261117_offline_checkpoint.py --offline
+          echo CP20261117_CI=PASS_OFFLINE_NOT_PRODUCTION
+          echo CP20261117_VM=NOT_ATTESTED
+          echo CP20261117_REAL_PIX=OFF
