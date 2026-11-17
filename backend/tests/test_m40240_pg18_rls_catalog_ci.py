@@ -61,6 +61,10 @@ def test_roles_no_bypass_and_fail_closed_on_first_missing_catalog():
 
 def test_sql_has_no_dml_ddl_queries_or_secret_access():
     stripped = re.sub(r"(?m)^--.*$", "", SQL)
+    # Ignore SQL string literals and psql diagnostic messages, never SQL verbs.
+    stripped = re.sub(r"(?m)^\s*\\echo[^\n]*$", "", stripped)
+    stripped = re.sub(r"'(?:''|[^'])*'", "''", stripped)
+
     for pattern in (
         r"\b(?:INSERT|UPDATE|DELETE|TRUNCATE|CREATE|ALTER|DROP|GRANT|REVOKE|COPY)\b",
         r"\\(?:!|copy|gexec|include|i|setenv|o)\b",
