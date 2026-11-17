@@ -992,6 +992,27 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m2040_sandbox_persistence_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m2500_mp_connect_inbox_persistence_ci.py
+      - name: M40360 — login por senha e rota de Crédito Especial com funções SQL originais
+        env:
+          GITHUB_ACTIONS: 'true'
+          PYTHONPATH: backend
+          FRCAIXINHA_CI_ISOLATED: '1'
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_AUTH_DATABASE_URL: postgresql://frcaixinha_pg18_auth:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_pg18_verifier:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          AUTH_RATE_LIMIT_HMAC_KEY: ci-only-test-hmac-secret-of-40-bytes-placeholder
+          DATABASE_URL: postgresql://frcaixinha_pg18_app:ci-test-only@127.0.0.1:5432/frcaixinha_ci
+          FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+          PIX_REAL: 'OFF'
+          PAGAMENTOS_REAIS: 'OFF'
+          ATIVACAO_REAL: 'OFF'
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py -k test_m40360_real_password_login_special_credit_boundary
+          echo M40360_REAL_LOGIN_POSTGRESQL_18_DISPOSABLE=PASS
+          echo M40360_DATABASE_MIGRATIONS_ORIGINAL=NONE
+          echo M40360_PRODUCTION=BLOCKED
+
       - name: Verificar provas e rotacao P0-01g PostgreSQL 18 descartavel
         env:
           PYTHONPATH: backend

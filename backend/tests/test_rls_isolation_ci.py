@@ -256,6 +256,171 @@ async def test_experimental_login_real_database_roles_and_logout(isolated_rows, 
         await admin.close()
 
 
+
+async def test_m40360_real_password_login_special_credit_boundary(isolated_rows, monkeypatch):
+    """Bridge existing original SQL auth login to the ORIGINAL credit capabilities route.
+
+    No auth overrides, no fake SQL auth functions, no new DB or migration.
+    Only synthetic credentials/sessions in the existing disposable CI database.
+    Sandbox and all real delivery channels remain explicitly disabled.
+    """
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.config import settings
+    from app.database import close_db_pool
+    from app.security import hash_password_secure, hash_token
+
+    assert os.environ.get("GITHUB_ACTIONS") == "true"
+    assert os.environ.get("FRCAIXINHA_CI_ISOLATED") == "1"
+    dsns = {
+        key: _ci_dsn(key) for key in (
+            "CI_ADMIN_DATABASE_URL", "DATABASE_URL",
+            "CI_AUTH_DATABASE_URL", "CI_VERIFIER_DATABASE_URL",
+        )
+    }
+    parsed = {key: urlparse(value) for key, value in dsns.items()}
+    assert all(p.hostname == "127.0.0.1" and p.port == 5432
+               and p.path == "/frcaixinha_ci" for p in parsed.values())
+    assert len({parsed[key].username for key in parsed}) == 4
+    assert parsed["CI_ADMIN_DATABASE_URL"].username == "postgres"
+
+    monkeypatch.setattr(settings, "DATABASE_URL", dsns["DATABASE_URL"])
+    monkeypatch.setenv("AUTH_DATABASE_URL", dsns["CI_AUTH_DATABASE_URL"])
+    monkeypatch.setenv("AUTH_VERIFIER_DATABASE_URL", dsns["CI_VERIFIER_DATABASE_URL"])
+    monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("FR_FINANCE_SPECIAL_CREDIT_SANDBOX", "NO")
+    monkeypatch.setenv("PIX_REAL", "OFF")
+    monkeypatch.setenv("PAGAMENTOS_REAIS", "OFF")
+    monkeypatch.setenv("ATIVACAO_REAL", "OFF")
+    monkeypatch.setenv("FR_FINANCE_PIX_REAL", "OFF")
+    monkeypatch.setenv("FR_FINANCE_REAL_PAYMENTS", "OFF")
+    monkeypatch.setenv("FR_FINANCE_REAL_USER_ACTIVATION", "OFF")
+    monkeypatch.setenv("FR_FINANCE_ACCESS_MAIL_ENABLE", "OFF")
+    monkeypatch.setenv("FR_FINANCE_ACCESS_MAIL_WORKER", "OFF")
+    assert not app.dependency_overrides
+
+    _, ids = isolated_rows
+    admin = await asyncpg.connect(dsns["CI_ADMIN_DATABASE_URL"])
+    auth = await asyncpg.connect(dsns["CI_AUTH_DATABASE_URL"])
+    password = "m40360-synthetic-login-never-real"
+    actors = (
+        ("admin_a", "TENANT_ADMIN", "tenant_a", "tenant_b"),
+        ("admin_b", "TENANT_ADMIN", "tenant_b", "tenant_a"),
+        ("member_a", "TENANT_MEMBER", "tenant_a", "tenant_b"),
+        ("member_b", "TENANT_MEMBER", "tenant_b", "tenant_a"),
+        ("master", "MASTER", None, "tenant_a"),
+    )
+    checked = 0
+    try:
+        hashed = hash_password_secure(password)
+        for actor, _, _, _ in actors:
+            await admin.execute(
+                "INSERT INTO public.credentials(user_id,password_hash) VALUES($1,$2)",
+                ids[actor], hashed,
+            )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            for actor, role, tenant, other in actors:
+                request = {
+                    "usernameOrEmail": f"{ids[actor]}@example.com",
+                    "password": password,
+                    "requestedRole": role,
+                }
+                if tenant is not None:
+                    request["requestedTenantId"] = str(ids[tenant])
+                response = await client.post("/api/v1/auth/login", json=request)
+                assert response.status_code == 200, (actor, response.status_code)
+                result = response.json()
+                token = result["token"]
+                assert token and token != password
+                assert result["user"]["role"] == role
+                assert result["user"]["tenant_id"] == (
+                    str(ids[tenant]) if tenant else None
+                )
+                bearer = {"Authorization": "Bearer " + token}
+                stored = await auth.fetchrow(
+                    "SELECT user_id,active_role,active_tenant_id,revoked_at "
+                    "FROM public.sessions WHERE token_hash=$1", hash_token(token),
+                )
+                assert stored is not None and stored["user_id"] == ids[actor]
+                assert stored["active_role"] == role
+                assert stored["revoked_at"] is None
+                assert stored["active_tenant_id"] == (
+                    ids[tenant] if tenant else None
+                )
+                checked += 1
+
+                own = str(ids[tenant]) if tenant else str(ids["tenant_a"])
+                opposite = str(ids[other])
+                endpoint = f"/api/v1/tenants/{own}/special-credit/capabilities"
+                capability = await client.get(endpoint, headers=bearer)
+                assert capability.status_code == (
+                    403 if role == "MASTER" else 200
+                ), (actor, capability.status_code)
+                if role != "MASTER":
+                    body = capability.json()
+                    assert body["sandbox_enabled"] is False
+                    assert body["real_credit_enabled"] is False
+                    assert body["pix_real_enabled"] is False
+                    assert all(not x["real_delivery_enabled"]
+                               for x in body["channels"].values())
+                    checked += 1
+                denied = await client.get(
+                    f"/api/v1/tenants/{opposite}/special-credit/capabilities",
+                    headers={**bearer, "X-Tenant-ID": opposite,
+                             "X-Role": "TENANT_ADMIN"},
+                )
+                assert denied.status_code == 403, (actor, denied.status_code)
+                checked += 1
+                if role == "TENANT_ADMIN":
+                    # The original credit router denies writes/read when its
+                    # original-local-only sandbox gate is OFF, before any SQL.
+                    grants = await client.get(
+                        f"/api/v1/tenants/{own}/special-credit/grants",
+                        headers=bearer,
+                    )
+                    assert grants.status_code == 503
+                    checked += 1
+                logout = await client.post("/api/v1/auth/logout", headers=bearer)
+                assert logout.status_code == 200
+                assert (await client.get(
+                    endpoint, headers=bearer
+                )).status_code == 401
+                checked += 1
+
+            # Cross-tenant escalation is denied by ORIGINAL auth SQL function
+            # before token issuance, even with a valid synthetic password.
+            invalid = await client.post("/api/v1/auth/login", json={
+                "usernameOrEmail": f"{ids['member_a']}@example.com",
+                "password": password,
+                "requestedRole": "TENANT_ADMIN",
+                "requestedTenantId": str(ids["tenant_b"]),
+            })
+            assert invalid.status_code == 401
+            assert "token" not in invalid.json()
+            checked += 1
+
+            no_token = await client.get(
+                f"/api/v1/tenants/{ids['tenant_a']}/special-credit/capabilities"
+            )
+            assert no_token.status_code == 401
+            checked += 1
+        assert checked == 23, checked
+        print("M40360_REAL_PASSWORD_SQL_FUNCTIONS=PASS")
+        print("M40360_SAME_DATABASE_FOUR_SQL_ROLES=PASS")
+        print("M40360_ORIGINAL_SPECIAL_CREDIT_BOUNDARY=PASS")
+        print("M40360_AUTHENTICATED_HTTP_CHECKS=PASS_23_OF_23")
+        print("M40360_LOCAL_TERMUX_DATABASE=NOT_TOUCHED")
+        print("M40360_REAL_NOTIFICATIONS_AND_PAYMENTS=OFF")
+        print("M40360_PRODUCTION=BLOCKED")
+    finally:
+        await close_db_pool()
+        await auth.close()
+        await admin.close()
+
+
 async def test_persistent_sessions_contexts_expiry_and_revocation(isolated_rows, monkeypatch):
     """Duas caixinhas reais no PostgreSQL descartável, sem sessão de processo."""
     from datetime import datetime, timedelta, timezone
