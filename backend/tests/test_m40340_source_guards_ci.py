@@ -16,6 +16,33 @@ class TestM40340(unittest.TestCase):
   for x in ("frcaixinha_aistudio_dev","app.dependency_overrides[",
             "DROP DATABASE","subprocess.run(","os.kill("):
    self.assertNotIn(x,s)
+ def test_m40350_pool_boundaries_and_no_service_loss_false_positive(self):
+  s=(R/"backend/tests/m40340_bearer_credit_runtime_ci.py").read_text()
+  for expected in (
+   "from app.database import get_db_pool, get_rls_db_connection",
+   '/__ci_m40340/pool-clean',
+   '/__ci_m40340/abort',
+   "M40350_POOL_GUC_CLEAN_AFTER_CROSS_USER_AND_ROLLBACK=PASS",
+   "M40350_ORIGINAL_POOL_REUSED=YES",
+   "M40350_SQL_SESSION_SETTING_LEAK=DENIED",
+  ):
+   self.assertIn(expected,s)
+  service=(R/"backend/scripts/frfinance_m40300_termux_readonly.sh").read_text()
+  for expected in (
+   "pg_ctl -D \"$PGDATA\" status",
+   "pg_isready -q -h 127.0.0.1 -p 5433",
+   "http://127.0.0.1:8000/api/health",
+   "M40300_STATUS=SERVICES_INACTIVE_OR_UNVERIFIED_NOT_DATABASE_LOSS",
+   "ANDROID_TERMUX_TERMINATION_CAN_STOP_BOTH_SERVICES",
+   "M40300_NEW_DATABASES=NONE",
+   "M40300_FASTAPI_RESTART=NONE",
+   "M40300_POSTGRESQL_RESTART=NONE",
+  ):
+   self.assertIn(expected,service)
+  for forbidden in ("initdb ", "createdb ", "pg_ctl start",
+                    "pg_ctl restart", "pg_ctl stop", "dropdb "):
+   self.assertNotIn(forbidden,service)
+
  def test_sql(self):
   s=(R/"backend/tests/sql/m40340_bearer_credit_ci.sql").read_text()
   for x in ("current_database()<>'frfinance_ci_credit'",

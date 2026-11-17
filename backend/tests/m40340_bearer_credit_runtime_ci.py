@@ -50,10 +50,10 @@ def main():
  require_disposable_ci()  # Before importing any database or HTTP clients.
  from uuid import UUID
  import psycopg
- from fastapi import Depends
+ from fastapi import Depends, HTTPException
  from fastapi.testclient import TestClient
  from app.main import app
- from app.database import get_rls_db_connection
+ from app.database import get_db_pool, get_rls_db_connection
  from app.dependencies import AuthenticatedSession, get_current_session, require_tenant_access
 
  A = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -97,6 +97,28 @@ def main():
   require_tenant_access(str(tenant_id),session)
   return {"authorized":True}
 
+ # Reuse the same ORIGINAL asyncpg connection pool, never a new DB.
+ # Probe directly, without the RLS dependency, AFTER prior requests released
+ # their transaction-scoped credentials. No SQL modifications are allowed.
+ @app.get("/__ci_m40340/pool-clean",include_in_schema=False)
+ async def pool_clean(session=Depends(get_current_session)):
+  pool=await get_db_pool()
+  async with pool.acquire() as connection:
+   values=await connection.fetchrow(
+    "SELECT current_setting('app.current_user_id',true),"
+    "current_setting('app.current_role',true),"
+    "current_setting('app.current_tenant_id',true)")
+   clean=all(v is None or v=="" for v in values)
+   if not clean:
+    raise HTTPException(409,"M40350_RLS_CONTEXT_POOL_LEAK")
+   return {"clean":True}
+
+ @app.get("/__ci_m40340/abort",include_in_schema=False)
+ async def abort_probe(session=Depends(get_current_session),
+                       conn=Depends(get_rls_db_connection)):
+  await conn.fetchval("SELECT count(*) FROM public.special_credit_grants")
+  raise HTTPException(409,"M40350_SYNTHETIC_ROLLBACK")
+
  def token(name):
   return {"Authorization":"Bearer "+TOKENS[name]}
 
@@ -109,6 +131,8 @@ def main():
    assert response.status_code==200,(actor,response.status_code,response.text[:150])
    body=response.json()
    assert body["role"]==role and body["tenant"]==str(own)
+   cleaned=client.get("/__ci_m40340/pool-clean",headers=token(actor))
+   assert cleaned.status_code==200 and cleaned.json()=={"clean":True},actor
    for table in TABLES:
     may_read=role=="TENANT_ADMIN" or table not in (
        "special_credit_outbox","special_credit_audit")
@@ -132,6 +156,17 @@ def main():
     f"/api/v1/tenants/{other}/special-credit/capabilities",
     headers=token(actor)).status_code==403
 
+  # Verify cleanup after an exception while a real RLS transaction is open.
+  denied=client.get("/__ci_m40340/abort",headers=token("member_b"))
+  assert denied.status_code==409,denied.status_code
+  after_abort=client.get("/__ci_m40340/pool-clean",headers=token("admin_a"))
+  assert after_abort.status_code==200 and after_abort.json()=={"clean":True}
+  # Cross-user sequence A -> B -> member -> Master -> A has no inherited GUC.
+  for actor in ("admin_a","admin_b","member_a","master","admin_a"):
+   cleaner=client.get("/__ci_m40340/pool-clean",headers=token(actor))
+   assert cleaner.status_code==200 and cleaner.json()=={"clean":True},actor
+  print("M40350_POOL_GUC_CLEAN_AFTER_CROSS_USER_AND_ROLLBACK=PASS")
+
   master=client.get("/__ci_m40340/rls",headers=token("master"))
   assert master.status_code==200
   assert master.json()["role"]=="MASTER"
@@ -151,6 +186,9 @@ def main():
  print("M40340_AUTH_REAL_FASTAPI_DEPENDENCY=PASS")
  print("M40340_CREDIT_RLS=PASS_6_OF_6")
  print("M40340_SESSION_BOUND_VISIBILITY=PASS_60_OF_60")
+ print("M40350_ORIGINAL_POOL_REUSED=YES")
+ print("M40350_SQL_SESSION_SETTING_LEAK=DENIED")
+ print("M40350_LOCAL_SERVICES_RESTARTED=NO")
  print("M40340_EXPIRED_REVOKED_ANONYMOUS=DENIED")
  print("M40340_REAL_LOGIN=NOT_TESTED")
  print("M40340_AUTH_SQL_HELPERS=SYNTHETIC_NOT_PRODUCTION_PROOF")
