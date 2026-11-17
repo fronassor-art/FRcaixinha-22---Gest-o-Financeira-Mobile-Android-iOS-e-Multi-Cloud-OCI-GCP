@@ -507,12 +507,12 @@ async def test_m40360_real_password_login_special_credit_boundary(isolated_rows,
             )
             assert no_token.status_code == 401
             checked += 1
+            no_token_quotas = await client.get(
+                f"/api/v1/tenants/{ids['tenant_a']}/quotas"
+            )
+            assert no_token_quotas.status_code == 401
+            checked_rls += 1
         assert checked == 23, checked
-        no_token_quotas = await client.get(
-            f"/api/v1/tenants/{ids['tenant_a']}/quotas"
-        )
-        assert no_token_quotas.status_code == 401
-        checked_rls += 1
         assert checked_rls == 36, checked_rls
         print("M40370_ORIGINAL_TWO_TENANT_RLS=PASS")
         print("M40370_PASSWORD_BEARER_ROLES=5")
