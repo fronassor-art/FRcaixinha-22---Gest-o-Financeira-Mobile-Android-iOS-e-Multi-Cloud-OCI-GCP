@@ -85,6 +85,14 @@ class GuardTests(unittest.TestCase):
         accepted.assert_not_called()
 
 
+    def test_wrong_home_region_blocks_creation(self):
+        regions = [types.SimpleNamespace(region_name="us-ashburn-1",
+                                         is_home_region=True, status="READY")]
+        iam = types.SimpleNamespace(list_region_subscriptions=lambda tenancy: None)
+        with patch.object(runner, "items", return_value=regions):
+            with self.assertRaisesRegex(RuntimeError, "HOME_REGION_NOT_VERIFIED"):
+                runner.verify_home_region(iam, "tenancy")
+
     def test_homologation_preflight_never_calls_launch(self):
         ns = types.SimpleNamespace
         response = lambda data: ns(data=data)
@@ -92,6 +100,8 @@ class GuardTests(unittest.TestCase):
             list_compartments=lambda *args, **kwargs: response([]),
             list_availability_domains=lambda *args, **kwargs:
                 response([ns(name="SA-SAOPAULO-1-AD-1")]),
+            list_region_subscriptions=lambda *args, **kwargs:
+                response([ns(region_name=runner.REGION, is_home_region=True, status="READY")]),
         )
         compute = ns(
             list_instances=lambda *args, **kwargs: response([]),
