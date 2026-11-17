@@ -1,0 +1,32 @@
+name: FR Finance OCI A1 offline guard CI
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - '.github/scripts/frfinance_oci_a1_autolaunch.py'
+      - '.github/tests/test_oci_a1.py'
+      - '.github/workflows/frfinance-oci-a1-*.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/scripts/frfinance_oci_a1_autolaunch.py'
+      - '.github/tests/test_oci_a1.py'
+      - '.github/workflows/frfinance-oci-a1-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax and offline guard tests
+        run: |
+          python -m py_compile .github/scripts/frfinance_oci_a1_autolaunch.py
+          python -m unittest discover -s .github/tests -p 'test_oci_a1.py' -v
