@@ -7,6 +7,7 @@ on:
       - 'backend/scripts/frfinance_m40240_pg18_rls_catalog_readonly.sql'
       - 'backend/scripts/frfinance_m40240_pg18_rls_catalog_readonly.sh'
       - 'backend/tests/test_m40240_pg18_rls_catalog_ci.py'
+      - 'backend/tests/test_m40310_rls_catalog_semantics_ci.py'
       - '.github/workflows/frfinance-m40240-pg18-rls-catalog-ci.yml'
       - 'docs/FR_FINANCE_M40240_RLS_CATALOG.md'
   pull_request:
@@ -14,6 +15,7 @@ on:
       - 'backend/scripts/frfinance_m40240_pg18_rls_catalog_readonly.sql'
       - 'backend/scripts/frfinance_m40240_pg18_rls_catalog_readonly.sh'
       - 'backend/tests/test_m40240_pg18_rls_catalog_ci.py'
+      - 'backend/tests/test_m40310_rls_catalog_semantics_ci.py'
       - '.github/workflows/frfinance-m40240-pg18-rls-catalog-ci.yml'
   workflow_dispatch:
 
@@ -43,10 +45,12 @@ jobs:
           bash -n backend/scripts/frfinance_m40240_pg18_rls_catalog_readonly.sh
           python -B -m pytest -q -p no:cacheprovider \
             backend/tests/test_m40240_pg18_rls_catalog_ci.py \
+            backend/tests/test_m40310_rls_catalog_semantics_ci.py \
             backend/tests/test_m40230_role_tenant_boundaries_ci.py \
             backend/tests/test_m40220_anonymous_role_boundaries_ci.py \
             backend/tests/test_m39055_auth_roles_readonly_ci.py
           echo M40240_CI=PASS_STATIC_AND_SYNTHETIC_ONLY
+          echo M40310_CI=PASS_EXTENDED_CATALOG_STATIC_ONLY
           echo M40240_LIVE_PG18_CATALOG=NOT_QUERIED_BY_CI
           echo M40240_REAL_AUTHENTICATED_RLS=NOT_TESTED
           echo M40240_MIGRATIONS=NONE

@@ -53,8 +53,8 @@ def test_roles_no_bypass_and_fail_closed_on_first_missing_catalog():
     for role in ("frc_ai_app", "frc_ai_auth", "frc_ai_verifier"):
         assert role in SQL
     assert "NOT rolsuper AND NOT rolbypassrls" in SQL
-    assert SQL.count("SELECT 1 / CASE WHEN") == 4
-    assert SQL.count("THEN 1 ELSE 0 END") == 4
+    assert SQL.count("SELECT 1 / CASE WHEN") == 7
+    assert SQL.count("THEN 1 ELSE 0 END") == 7
     assert "M40240_LIVE_POLICY_CATALOG=PASS_METADATA_ONLY" in SQL
     assert "M40240_STATUS=PASS_LIVE_RLS_CATALOG_ONLY" in SHELL
 

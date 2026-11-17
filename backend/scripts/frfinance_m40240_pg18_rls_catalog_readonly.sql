@@ -79,9 +79,122 @@ LEFT JOIN pg_catalog.pg_policy p
   ON p.polrelid = c.oid AND p.polname = e.policy_name;
 \echo M40240_POLICY_CATALOG=PASS_16_OF_16_NAMED_POLICIES
 
+
+-- M40310: extended only-SELECT pg_catalog checks; same proven M40240 launcher.
+-- A policy-name existence check alone cannot identify an extra permissive
+-- policy or wrong SQL command / role. No application table rows are read.
+WITH expected(table_name,policy_name,operation) AS (
+ VALUES
+  ('special_credit_grants','sc_grant_read','r'),
+  ('special_credit_grants','sc_grant_admin_insert','a'),
+  ('special_credit_grants','sc_grant_admin_update','w'),
+  ('special_credit_campaigns','sc_campaign_read','r'),
+  ('special_credit_campaigns','sc_campaign_insert','a'),
+  ('special_credit_campaigns','sc_campaign_update','w'),
+  ('special_credit_recipients','sc_recipient_read','r'),
+  ('special_credit_recipients','sc_recipient_insert','a'),
+  ('special_credit_recipients','sc_recipient_reply','w'),
+  ('special_credit_preferences','sc_pref_read','r'),
+  ('special_credit_preferences','sc_pref_write','a'),
+  ('special_credit_preferences','sc_pref_update','w'),
+  ('special_credit_outbox','sc_outbox_read','r'),
+  ('special_credit_outbox','sc_outbox_insert','a'),
+  ('special_credit_audit','sc_audit_read','r'),
+  ('special_credit_audit','sc_audit_insert','a')
+), matched AS (
+ SELECT e.*,p.oid AS policy_oid,p.polcmd,p.polpermissive,p.polroles,
+        p.polqual,p.polwithcheck,r.oid AS app_role_oid,
+        coalesce(pg_catalog.pg_get_expr(p.polqual,p.polrelid),'') AS q,
+        coalesce(pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid),'') AS w
+ FROM expected e
+ LEFT JOIN pg_catalog.pg_class c
+   ON c.oid=pg_catalog.to_regclass('public.'||e.table_name)
+ LEFT JOIN pg_catalog.pg_policy p
+   ON p.polrelid=c.oid AND p.polname=e.policy_name
+ LEFT JOIN pg_catalog.pg_roles r ON r.rolname='frc_ai_app'
+)
+SELECT 1 / CASE WHEN (
+   (SELECT count(*)=16 AND coalesce(bool_and(
+      policy_oid IS NOT NULL
+      AND polcmd=operation
+      AND polpermissive IS TRUE
+      AND polroles=ARRAY[app_role_oid]
+      AND (operation='a' OR polqual IS NOT NULL)
+      AND (operation='r' OR polwithcheck IS NOT NULL)
+      AND (q||w) LIKE '%app.current_tenant_id%'
+      AND (q||w) LIKE '%app.current_user_id%'
+      AND (q||w) LIKE '%app.current_role%'
+   ),FALSE) FROM matched)
+   AND
+   (SELECT count(*)=16
+      FROM pg_catalog.pg_policy p
+      JOIN pg_catalog.pg_class c ON c.oid=p.polrelid
+      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public'
+      AND c.relname IN (
+        'special_credit_grants','special_credit_campaigns',
+        'special_credit_recipients','special_credit_preferences',
+        'special_credit_outbox','special_credit_audit'))
+) THEN 1 ELSE 0 END AS m40310_policy_shape_guard;
+\echo M40310_POLICY_SHAPE=PASS_16_COMMAND_ROLE_CONTEXT_NO_EXTRA_POLICY
+
+-- SQL111 trigger identity/status check; does not fire triggers or read rows.
+WITH expected(table_name,trigger_name,function_name) AS (
+ VALUES
+  ('special_credit_grants','sc_m39020_grant_transition','sc_m39020_guard_grant_update'),
+  ('special_credit_campaigns','sc_m39020_campaign_transition','sc_m39020_guard_campaign_update'),
+  ('special_credit_recipients','sc_m39020_recipient_insert','sc_m39020_recipient_consistency'),
+  ('special_credit_recipients','sc_m39020_reply_transition','sc_m39020_guard_reply'),
+  ('special_credit_outbox','sc_m39020_outbox_insert','sc_m39020_outbox_consistency')
+)
+SELECT 1 / CASE WHEN (
+ count(*)=5 AND coalesce(bool_and(
+  t.oid IS NOT NULL AND t.tgenabled='O'
+  AND t.tgisinternal IS FALSE
+  AND (t.tgtype::integer & 1)=1
+  AND (t.tgtype::integer & 2)=2
+  AND f.proname=e.function_name AND fnsp.nspname='public'
+ ),FALSE)
+) THEN 1 ELSE 0 END AS m40310_sql111_triggers_guard
+FROM expected e
+LEFT JOIN pg_catalog.pg_class c
+  ON c.oid=pg_catalog.to_regclass('public.'||e.table_name)
+LEFT JOIN pg_catalog.pg_trigger t
+  ON t.tgrelid=c.oid AND t.tgname=e.trigger_name
+LEFT JOIN pg_catalog.pg_proc f ON f.oid=t.tgfoid
+LEFT JOIN pg_catalog.pg_namespace fnsp ON fnsp.oid=f.pronamespace;
+\echo M40310_SQL111_TRIGGERS=PASS_5_ENABLED_INTEGRITY_TRIGGERS
+
+-- The original app role must not gain destructive table-level privileges.
+WITH expected(table_name) AS (
+ VALUES ('special_credit_grants'),('special_credit_campaigns'),
+        ('special_credit_recipients'),('special_credit_preferences'),
+        ('special_credit_outbox'),('special_credit_audit')
+)
+SELECT 1 / CASE WHEN (
+ count(*)=6 AND coalesce(bool_and(
+  c.oid IS NOT NULL
+  AND pg_catalog.has_table_privilege('frc_ai_app',c.oid,'SELECT')
+  AND pg_catalog.has_table_privilege('frc_ai_app',c.oid,'INSERT')
+  AND NOT pg_catalog.has_table_privilege('frc_ai_app',c.oid,'DELETE')
+  AND NOT pg_catalog.has_table_privilege('frc_ai_app',c.oid,'TRUNCATE')
+  AND NOT pg_catalog.has_table_privilege('frc_ai_app',c.oid,'REFERENCES')
+  AND NOT pg_catalog.has_table_privilege('frc_ai_app',c.oid,'TRIGGER')
+ ),FALSE)
+) THEN 1 ELSE 0 END AS m40310_app_privilege_guard
+FROM expected e
+LEFT JOIN pg_catalog.pg_class c
+  ON c.oid=pg_catalog.to_regclass('public.'||e.table_name);
+\echo M40310_APP_PRIVILEGES=PASS_SELECT_INSERT_NO_DESTRUCTIVE_GRANTS
+
 ROLLBACK;
 \echo M40240_TRANSACTION=ROLLBACK_READ_ONLY
 \echo M40240_LIVE_POLICY_CATALOG=PASS_METADATA_ONLY
+\echo M40310_STATUS=PASS_EXTENDED_CATALOG_METADATA_ONLY
+\echo M40310_AUTHENTICATED_RLS_ENFORCEMENT=NOT_TESTED
+\echo M40310_REAL_SESSIONS=NONE
+\echo M40310_MIGRATIONS=NONE
+\echo M40310_PRODUCTION=BLOCKED
 \echo M40240_AUTHENTICATED_RLS_DATA_PLANE=NOT_TESTED
 \echo M40240_REAL_LOGIN_SESSIONS=NOT_CREATED
 \echo M40240_DATABASE_WRITES=NONE

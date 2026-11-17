@@ -31,3 +31,12 @@ Se surgir `M40240_STATUS=BLOCKED_LIVE_RLS_CATALOG_OR_CONNECTION`, não aplicar m
 Nenhum novo SQL de migração. Nenhuma alteração em `backend/app/main.py` ou routers. A CI audita apenas forma de SQL, sintaxe shell e regressões sintéticas: não acessa o celular.
 
 `PIX_REAL=OFF`; `PAGAMENTOS_REAIS=OFF`; `ATIVACAO_REAL=OFF`; `PRODUCTION=BLOCKED`.
+
+
+## Adendo M40310 após a aprovação real do M40240
+
+O operador confirmou em 17/11/2026 o M40240 PASS no cluster original: identidade PostgreSQL 18/5433, três papéis técnicos, seis tabelas com FORCE RLS, dezesseis políticas e ROLLBACK READ ONLY.
+
+O M40310 amplia o **mesmo SQL e o mesmo launcher** M40240, sem scripts de migração nem ambiente adicional. Confere os comandos, papéis destino e contexto de sessão das 16 políticas (inclusive ausência de política inesperada), os cinco triggers SQL111 habilitados e os privilégios mínimos de frc_ai_app. Se falhar, diagnosticar a divergência; nunca corrigir automaticamente ou reexecutar migrações.
+
+Esse resultado continua **somente de catálogo**, não é teste de RLS efetivo com usuários autenticados ou leitura de dados pessoais. Mesmo um PASS não autoriza produção, canais reais, PIX ou criação da VM OCI. A rotina solicita a senha preexistente de frc_ai_owner, sem armazená-la.
