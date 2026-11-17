@@ -992,7 +992,7 @@ jobs:
           python -m pytest -q --asyncio-mode=auto backend/tests/test_member_lifecycle_reviews_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m2040_sandbox_persistence_ci.py
           python -m pytest -q --asyncio-mode=auto backend/tests/test_m2500_mp_connect_inbox_persistence_ci.py
-      - name: M40360 — login por senha e rota de Crédito Especial com funções SQL originais
+      - name: M40360/M40370 — login original, Crédito Especial e dados RLS de duas caixinhas
         env:
           GITHUB_ACTIONS: 'true'
           PYTHONPATH: backend
@@ -1010,6 +1010,8 @@ jobs:
           set -euo pipefail
           python -B -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py -k test_m40360_real_password_login_special_credit_boundary
           echo M40360_REAL_LOGIN_POSTGRESQL_18_DISPOSABLE=PASS
+          echo M40370_AUTHENTICATED_RLS_POSTGRESQL_18_DISPOSABLE=PASS
+          echo M40370_NO_SECOND_DATABASE=YES
           echo M40360_DATABASE_MIGRATIONS_ORIGINAL=NONE
           echo M40360_PRODUCTION=BLOCKED
 

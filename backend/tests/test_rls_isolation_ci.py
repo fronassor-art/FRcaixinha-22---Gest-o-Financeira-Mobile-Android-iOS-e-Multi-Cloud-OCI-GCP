@@ -312,6 +312,15 @@ async def test_m40360_real_password_login_special_credit_boundary(isolated_rows,
         ("master", "MASTER", None, "tenant_a"),
     )
     checked = 0
+    checked_rls = 0
+    # M40370: UUIDs are from the ORIGINAL two-tenant disposable fixture.
+    expected_quota_keys = {
+        "admin_a": ("quota_a", "quota_a2"),
+        "admin_b": ("quota_b",),
+        "member_a": ("quota_a",),
+        "member_b": ("quota_b",),
+        "master": (),
+    }
     try:
         hashed = hash_password_secure(password)
         for actor, _, _, _ in actors:
@@ -383,12 +392,103 @@ async def test_m40360_real_password_login_special_credit_boundary(isolated_rows,
                     )
                     assert grants.status_code == 503
                     checked += 1
+                # M40370: the very same password-authenticated bearer must
+                # reach ORIGINAL RLS-backed data endpoints, not just the
+                # credit feature's metadata-only capabilities endpoint.
+                quota_url = f"/api/v1/tenants/{own}/quotas"
+                dashboard_url = f"/api/v1/tenants/{own}/dashboard"
+                members_url = f"/api/v1/tenants/{own}/members"
+                expected_ids = {str(ids[k]) for k in expected_quota_keys[actor]}
+
+                quotas = await client.get(quota_url, headers=bearer)
+                assert quotas.status_code == (403 if role == "MASTER" else 200), (
+                    actor, "quotas", quotas.status_code,
+                )
+                checked_rls += 1
+                dashboard = await client.get(dashboard_url, headers=bearer)
+                assert dashboard.status_code == (403 if role == "MASTER" else 200), (
+                    actor, "dashboard", dashboard.status_code,
+                )
+                checked_rls += 1
+                members = await client.get(members_url, headers=bearer)
+                assert members.status_code == (
+                    200 if role == "TENANT_ADMIN" else 403
+                ), (actor, "members", members.status_code)
+                checked_rls += 1
+
+                # These headers must never impersonate a different tenant or
+                # elevate a MEMBER to ADMIN / a MASTER to MEMBER.
+                spoof_headers = {
+                    **bearer,
+                    "X-Tenant-ID": opposite,
+                    "X-Role": "MASTER" if role == "TENANT_ADMIN" else "TENANT_ADMIN",
+                }
+                other_quotas = await client.get(
+                    f"/api/v1/tenants/{opposite}/quotas", headers=spoof_headers,
+                )
+                assert other_quotas.status_code == 403, (
+                    actor, "cross_tenant_quotas", other_quotas.status_code,
+                )
+                checked_rls += 1
+                other_dashboard = await client.get(
+                    f"/api/v1/tenants/{opposite}/dashboard",
+                    headers=spoof_headers,
+                )
+                assert other_dashboard.status_code == 403, (
+                    actor, "cross_tenant_dashboard", other_dashboard.status_code,
+                )
+                checked_rls += 1
+                same_tenant_spoof = await client.get(
+                    quota_url, headers=spoof_headers,
+                )
+                assert same_tenant_spoof.status_code == (
+                    403 if role == "MASTER" else 200
+                ), (actor, "spoofed_own_quotas", same_tenant_spoof.status_code)
+                if role != "MASTER":
+                    assert {q["id"] for q in quotas.json()} == expected_ids, actor
+                    assert {q["id"] for q in same_tenant_spoof.json()} == expected_ids, actor
+                    overview = dashboard.json()
+                    assert overview["source"] == "POSTGRESQL_RLS", actor
+                    assert overview["tenant_id"] == own and overview["role"] == role
+                    assert overview["quota_count_visible"] == len(expected_ids), actor
+                    assert overview["financial_operations"] == "PENDING_BANK_RECONCILIATION"
+                    if role == "TENANT_ADMIN":
+                        allowed_members = {
+                            str(ids[k]) for k in (
+                                ("membership_admin_a", "membership_a",
+                                 "membership_a2", "membership_master")
+                                if actor == "admin_a"
+                                else ("membership_admin_b", "membership_b")
+                            )
+                        }
+                        exposed = members.json()
+                        assert exposed["tenant_id"] == own
+                        assert {m["id"] for m in exposed["members"]} <= allowed_members
+                        assert {m["id"] for m in exposed["members"]} >= {
+                            str(ids["membership_admin_a" if actor == "admin_a"
+                                    else "membership_admin_b"])
+                        }
+                        assert all(
+                            "email" not in m and "cpf" not in m and "phone" not in m
+                            for m in exposed["members"]
+                        )
+                        assert overview["member_count_visible"] == (
+                            4 if actor == "admin_a" else 2
+                        )
+                    else:
+                        assert "member_count_visible" not in overview
+                checked_rls += 1
+
                 logout = await client.post("/api/v1/auth/logout", headers=bearer)
                 assert logout.status_code == 200
                 assert (await client.get(
                     endpoint, headers=bearer
                 )).status_code == 401
                 checked += 1
+                assert (await client.get(
+                    quota_url, headers=bearer
+                )).status_code == 401, actor
+                checked_rls += 1
 
             # Cross-tenant escalation is denied by ORIGINAL auth SQL function
             # before token issuance, even with a valid synthetic password.
@@ -408,6 +508,17 @@ async def test_m40360_real_password_login_special_credit_boundary(isolated_rows,
             assert no_token.status_code == 401
             checked += 1
         assert checked == 23, checked
+        no_token_quotas = await client.get(
+            f"/api/v1/tenants/{ids['tenant_a']}/quotas"
+        )
+        assert no_token_quotas.status_code == 401
+        checked_rls += 1
+        assert checked_rls == 36, checked_rls
+        print("M40370_ORIGINAL_TWO_TENANT_RLS=PASS")
+        print("M40370_PASSWORD_BEARER_ROLES=5")
+        print("M40370_DATA_PLANE_CHECKS=PASS_36_OF_36")
+        print("M40370_HEADERS_CANNOT_ELEVATE=PASS")
+        print("M40370_SQL110_AUTHENTICATED_ROWS=NOT_ATTESTED")
         print("M40360_REAL_PASSWORD_SQL_FUNCTIONS=PASS")
         print("M40360_SAME_DATABASE_FOUR_SQL_ROLES=PASS")
         print("M40360_ORIGINAL_SPECIAL_CREDIT_BOUNDARY=PASS")
