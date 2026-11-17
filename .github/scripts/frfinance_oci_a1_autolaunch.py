@@ -2,6 +2,7 @@
 """FR Finance OCI A1 GitHub runner. Fail-closed; no credentials in source."""
 import ipaddress
 import os
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -21,6 +22,37 @@ def require(cond, message):
 
 def items(fn, *args, **kwargs):
     return oci.pagination.list_call_get_all_results(fn, *args, **kwargs).data
+
+GUARD_TITLE = "FR Finance — OCI A1 launch pending reconciliation"
+
+def gh(*args):
+    env = os.environ.copy()
+    require(bool(env.get("GH_TOKEN")), "GITHUB_TOKEN_MISSING")
+    result = subprocess.run(["gh", *args], text=True, capture_output=True,
+                            timeout=30, env=env, check=False)
+    require(result.returncode == 0, "GITHUB_GUARD_UNAVAILABLE")
+    return result.stdout.strip()
+
+def open_guard():
+    result = gh("issue", "list", "--state", "open", "--limit", "100",
+                "--json", "number,title")
+    import json
+    guards = [x for x in json.loads(result) if x["title"] == GUARD_TITLE]
+    require(not guards, "PREVIOUS_LAUNCH_REQUIRES_RECONCILIATION")
+    # Create a durable guard BEFORE making the OCI launch request.
+    url = gh("issue", "create", "--title", GUARD_TITLE,
+             "--body", "An OCI A1 launch request is pending. Do not retry until reconciled.")
+    require(url.startswith("https://github.com/"), "GITHUB_GUARD_CREATION_NOT_CONFIRMED")
+    return url
+
+def close_guard(url):
+    gh("issue", "close", url, "--comment",
+       "Oracle confirmed OUT_OF_HOST_CAPACITY; no launch accepted on this attempt.")
+
+def mark_accepted(url, state):
+    gh("issue", "edit", url, "--title", "FR Finance — OCI A1 launch accepted",
+       "--body", "OCI accepted the A1 launch request. State: " + state +
+       ". Verify in Oracle Console. No OCIDs or credentials included.")
 
 def main():
     required = ("FRF_OCI_USER_OCID", "FRF_OCI_TENANCY_OCID", "FRF_OCI_FINGERPRINT",
@@ -109,16 +141,18 @@ def main():
             create_vnic_details=oci.core.models.CreateVnicDetails(
                 subnet_id=subnet.id, assign_public_ip=True),
             metadata={"ssh_authorized_keys": key})
-        # A transport failure is ambiguous. Never automatically retry the same run.
+        guard_url = open_guard()
+        # The open issue blocks subsequent runs on timeout, cancellation or uncertainty.
         try:
             response = compute.launch_instance(
-                details, opc_retry_token=os.environ["FRF_OCI_LAUNCH_TOKEN"],
+                details, opc_retry_token=__import__("uuid").uuid4().hex,
                 retry_strategy=oci.retry.NoneRetryStrategy())
         except oci.exceptions.ServiceError as exc:
             msg = (exc.message or "").lower()
             if exc.code in ("InternalError", "OutOfHostCapacity") and (
                 "out of host capacity" in msg or "outofhostcapacity" in msg):
                 log("OUT_OF_HOST_CAPACITY=CONFIRMED")
+                close_guard(guard_url)
                 return
             log("LAUNCH_RESULT=UNCERTAIN MANUAL_REVIEW_REQUIRED=YES")
             raise RuntimeError("OCI_SERVICE_ERROR_REVIEW_REQUIRED") from None
@@ -126,6 +160,7 @@ def main():
             log("LAUNCH_RESULT=UNCERTAIN MANUAL_REVIEW_REQUIRED=YES")
             raise RuntimeError("OCI_TRANSPORT_REVIEW_REQUIRED") from None
         log("VM_LAUNCH_ACCEPTED=YES STATE=" + response.data.lifecycle_state)
+        mark_accepted(guard_url, response.data.lifecycle_state)
 
 if __name__ == "__main__":
     try:
