@@ -100,7 +100,17 @@ def test_runner_uses_existing_api_only_and_blocks_duplicate():
     assert 'pg_ctl -D "$PGDATA" status' in source
     assert 'pg_isready -q -h 127.0.0.1 -p 5433' in source
     assert '"127.0.0.1", 8000' in source
-    assert "ALREADY_OCCUPIED_DO_NOT_START_DUPLICATE" in source
+    # M40180 replaced the historical string with a stricter no-duplicate
+    # policy: only explicit ECONNREFUSED is an unoccupied port. Every other
+    # socket result (including timeout and Android permission restrictions)
+    # blocks startup without ending the unknown process.
+    assert "connect_ex" in source
+    assert "errno.ECONNREFUSED" in source
+    assert "sys.exit(0 if result == errno.ECONNREFUSED else 2)" in source
+    assert "BLOCKED_PORT_8000_OCCUPIED_OR_UNVERIFIED" in source
+    assert "Nao criar segundo FastAPI; identificar listener sem matar processos." in source
+    assert "kill -9" not in source
+    assert "pkill " not in source
     assert "backend/scripts/validate_aistudio_database.py" in source
     assert '"$PYTHON_BIN" -m uvicorn app.main:app' in source
     assert 'exec "$PYTHON_BIN" -m uvicorn app.main:app' in source
