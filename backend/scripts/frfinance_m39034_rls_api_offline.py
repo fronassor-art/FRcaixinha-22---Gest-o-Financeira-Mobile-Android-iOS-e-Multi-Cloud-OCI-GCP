@@ -43,11 +43,15 @@ def audit_local_rls(conn) -> None:
                 or row[3] != 5433 or row[4] != DATA_DIRECTORY
                 or not 180000 <= row[5] < 190000 or row[6] != "on"):
             raise RuntimeError("ORIGINAL_PG18_READONLY_IDENTITY_INVALID")
+        # M40320: validate only the six necessary tables; unrelated migrations
+        # must not cause a false "database lost" alarm.
         count = conn.execute(
-            "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'"
+            "SELECT count(*) FROM pg_catalog.pg_tables "
+            "WHERE schemaname='public' AND tablename=ANY(%s)",
+            (list(SPECIAL),),
         ).fetchone()[0]
-        if count != 53:
-            raise RuntimeError("POST_MIGRATION_TABLE_COUNT_NOT_53")
+        if count != len(SPECIAL):
+            raise RuntimeError("M40320_REQUIRED_CREDIT_TABLES_NOT_SIX")
 
         conn.execute("SET LOCAL ROLE frc_ai_app")
         role = conn.execute("SELECT current_user,session_user").fetchone()
@@ -88,12 +92,40 @@ def audit_local_rls(conn) -> None:
             ).fetchone()[0]
             if count != 0:
                 raise RuntimeError("RLS_SYNTHETIC_CONTEXT_VISIBILITY_" + table)
+
+        # M40320: negative data-plane contexts for two NONEXISTENT tenants.
+        # These are not verified real accounts: do not report authenticated
+        # user/tenant isolation as proven by this non-invasive audit.
+        contexts = (
+            ("TENANT_ADMIN", NO_ONE_TENANT, NO_ONE_USER),
+            ("TENANT_MEMBER", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", NO_ONE_USER),
+            ("MASTER", "", NO_ONE_USER),
+            ("", "", ""),
+        )
+        for simulated_role, tenant_id, user_id in contexts:
+            for var, value in (
+                ("app.current_tenant_id", tenant_id),
+                ("app.current_user_id", user_id),
+                ("app.current_role", simulated_role),
+            ):
+                conn.execute("SELECT set_config(%s,%s,true)", (var, value))
+            for table in SPECIAL:
+                count = conn.execute(
+                    "SELECT count(*) FROM public." + table
+                ).fetchone()[0]
+                if count != 0:
+                    raise RuntimeError("M40320_CONTEXT_ISOLATION_FAILED_" + table)
     print("M39034_PG18_ORIGINAL=PASS")
     print("M39034_APP_ROLE=frc_ai_app")
     print("M39034_RLS_ACTIVE=6_OF_6")
     print("M39034_NO_CONTEXT_VISIBILITY=0_OF_6")
     print("M39034_SYNTHETIC_CONTEXT_VISIBILITY=0_OF_6")
     print("M39034_PG_READ_ONLY=PASS")
+    print("M40320_NEGATIVE_ROLE_CONTEXTS=PASS_4_OF_4_SYNTHETIC_ONLY")
+    print("M40320_CONTEXT_TABLE_CHECKS=PASS_36_OF_36_ZERO_AGGREGATE")
+    print("M40320_AUTHENTICATED_USER_ISOLATION=NOT_TESTED")
+    print("M40320_DATABASE_WRITES=NONE")
+    print("M40320_PRODUCTION=BLOCKED")
 
 
 def audit_api_offline() -> None:

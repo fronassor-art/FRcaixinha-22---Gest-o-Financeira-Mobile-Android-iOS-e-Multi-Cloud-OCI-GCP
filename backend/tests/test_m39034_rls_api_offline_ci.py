@@ -17,7 +17,7 @@ class Rows:
 
 
 class FakePg:
-    def __init__(self, *, table_count=53, rls_enabled=True,
+    def __init__(self, *, table_count=6, rls_enabled=True,
                  context_leak=False, bad_role=False, identity_ok=True):
         self.table_count = table_count
         self.rls_enabled = rls_enabled
@@ -26,6 +26,8 @@ class FakePg:
         self.identity_ok = identity_ok
         self.role_switched = False
         self.queries = []
+        self.context = {}
+        self.leak_on_fake_admin = False
 
     def transaction(self):
         return nullcontext()
@@ -46,6 +48,7 @@ class FakePg:
                 "127.0.0.1", 5433, m.DATA_DIRECTORY, 180006, "on",
             ))
         if "FROM pg_catalog.pg_tables" in query:
+            assert args == (list(m.SPECIAL),)
             return Rows((self.table_count,))
         if "SELECT current_user,session_user" in query:
             return Rows((
@@ -56,8 +59,13 @@ class FakePg:
         if "row_security_active" in query:
             return Rows((self.rls_enabled,))
         if "SELECT count(*) FROM public.special_credit_" in query:
-            return Rows((1 if self.context_leak else 0,))
+            if self.context_leak or (
+                self.leak_on_fake_admin and self.context.get("app.current_role") == "TENANT_ADMIN"
+            ):
+                return Rows((1,))
+            return Rows((0,))
         if "SELECT set_config" in query:
+            self.context[args[0]] = args[1]
             return Rows((args[1],))
         raise AssertionError("Unrecognized statement: " + query)
 
@@ -73,11 +81,11 @@ def test_m39034_readonly_app_role_rls_six_tables(capsys):
     assert f.role_switched is True
     assert len([q for q,_ in f.queries if "row_security_active" in q])==6
     assert len([q for q,_ in f.queries
-                if "SELECT count(*) FROM public.special_credit_" in q])==12
+                if "SELECT count(*) FROM public.special_credit_" in q])==36
 
 
 @pytest.mark.parametrize("settings,error",[
-    ({"table_count":52}, "POST_MIGRATION_TABLE_COUNT_NOT_53"),
+    ({"table_count":5}, "M40320_REQUIRED_CREDIT_TABLES_NOT_SIX"),
     ({"rls_enabled":False}, "RLS_NOT_ACTIVE_FOR_APP"),
     ({"context_leak":True}, "RLS_NO_CONTEXT_VISIBILITY"),
     ({"bad_role":True}, "APPLICATION_ROLE_NOT_ACTIVE"),
@@ -86,6 +94,26 @@ def test_m39034_readonly_app_role_rls_six_tables(capsys):
 def test_m39034_blocks_if_pg18_rls_or_identity_unsafe(settings,error):
     with pytest.raises(RuntimeError,match=error):
         m.audit_local_rls(FakePg(**settings))
+
+
+def test_m40320_context_resets_and_no_data_leak_are_checked():
+    f = FakePg()
+    m.audit_local_rls(f)
+    assert f.context == {
+        "app.current_tenant_id": "",
+        "app.current_user_id": "",
+        "app.current_role": "",
+    }
+    assert len([1 for q, args in f.queries if q.startswith("SELECT set_config")]) == 15
+    assert all(not q.lstrip().startswith(("INSERT", "UPDATE", "DELETE", "CREATE", "DROP"))
+               for q, _ in f.queries)
+
+
+def test_m40320_admin_context_leak_is_denied():
+    f = FakePg()
+    f.leak_on_fake_admin = True
+    with pytest.raises(RuntimeError, match="M40320_CONTEXT_ISOLATION_FAILED_"):
+        m.audit_local_rls(f)
 
 
 def test_m39034_real_fastapi_router_requires_auth_and_sandbox_off(monkeypatch,capsys):
