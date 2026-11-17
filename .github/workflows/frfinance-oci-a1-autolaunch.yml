@@ -6,12 +6,13 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: write
 concurrency:
   group: frfinance-oci-a1-creation
   cancel-in-progress: false
 jobs:
   attempt:
-    if: ${{ vars.FR_FINANCE_OCI_CREATOR_ENABLED == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.FR_FINANCE_OCI_CREATOR_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -29,7 +30,7 @@ jobs:
           FRF_OCI_FINGERPRINT: ${{ secrets.FRF_OCI_FINGERPRINT }}
           FRF_OCI_PRIVATE_KEY_PEM: ${{ secrets.FRF_OCI_PRIVATE_KEY_PEM }}
           FRF_OCI_SSH_PUBLIC_KEY: ${{ secrets.FRF_OCI_SSH_PUBLIC_KEY }}
-          FRF_OCI_LAUNCH_ENABLED: ${{ vars.FR_FINANCE_OCI_LAUNCH_ENABLED }}
+          FRF_OCI_LAUNCH_ENABLED: ${{ github.event_name == 'schedule' && vars.FR_FINANCE_OCI_LAUNCH_ENABLED == 'true' && 'true' || 'false' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail

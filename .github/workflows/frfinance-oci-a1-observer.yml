@@ -1,6 +1,6 @@
 name: FR Finance — observar VM A1 OCI
 
-# O Github nunca cria maquinas. O Termux M28619 continua como criador unico.
+# Este workflow apenas observa. O criador A1 separado possui gates de ativacao.
 # O agendamento so executa quando a variable FR_FINANCE_OCI_MONITOR_ENABLED=true.
 on:
   schedule:
