@@ -1,0 +1,36 @@
+name: FR Finance — OCI A1 autolaunch (guarded)
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frfinance-oci-a1-creation
+  cancel-in-progress: false
+jobs:
+  attempt:
+    if: ${{ vars.FR_FINANCE_OCI_CREATOR_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: atualizacao-ai-studio-9b46a63187
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check 'oci==2.190.0'
+      - name: OCI guarded preflight and optional single launch
+        env:
+          FRF_OCI_USER_OCID: ${{ secrets.FRF_OCI_USER_OCID }}
+          FRF_OCI_TENANCY_OCID: ${{ secrets.FRF_OCI_TENANCY_OCID }}
+          FRF_OCI_FINGERPRINT: ${{ secrets.FRF_OCI_FINGERPRINT }}
+          FRF_OCI_PRIVATE_KEY_PEM: ${{ secrets.FRF_OCI_PRIVATE_KEY_PEM }}
+          FRF_OCI_SSH_PUBLIC_KEY: ${{ secrets.FRF_OCI_SSH_PUBLIC_KEY }}
+          FRF_OCI_LAUNCH_ENABLED: ${{ vars.FR_FINANCE_OCI_LAUNCH_ENABLED }}
+          FRF_OCI_LAUNCH_TOKEN: ${{ secrets.FRF_OCI_LAUNCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/frfinance_oci_a1_autolaunch.py
