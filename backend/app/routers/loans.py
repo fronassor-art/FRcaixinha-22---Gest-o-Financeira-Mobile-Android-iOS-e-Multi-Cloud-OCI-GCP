@@ -218,7 +218,10 @@ async def list_tenant_loans(
             detail="Acesso Proibido: Master não possui acesso a empréstimos de caixinhas."
         )
 
-    query = """
+    # M40590: SQL always literal; only parameter values depend on the verified
+    # server session. No query string concatenation or user-provided identifiers.
+    rows = await conn.fetch(
+        """
         SELECT l.id, l.tenant_id, l.cycle_id, l.borrower_membership_id, u.full_name as borrower_name,
                l.is_admin_loan, l.principal, l.monthly_rate, l.term_months,
                l.monthly_payment, l.last_payment, l.total_interest, l.status,
@@ -227,16 +230,15 @@ async def list_tenant_loans(
         JOIN memberships m ON l.borrower_membership_id = m.id
         JOIN users u ON m.user_id = u.id
         WHERE l.tenant_id = $1
-    """
-    params = [uuid.UUID(tenant_id)]
-
-    if session.role == "TENANT_MEMBER":
-        query += " AND m.user_id = $2 AND m.role = 'TENANT_MEMBER' AND m.status = 'ATIVA'"
-        params.append(uuid.UUID(session.user_id))
-
-    query += " ORDER BY l.created_at DESC;"
-
-    rows = await conn.fetch(query, *params)
+          AND ($2::boolean = FALSE OR (
+               m.user_id = $3::uuid AND m.role = 'TENANT_MEMBER'
+               AND m.status = 'ATIVA'))
+        ORDER BY l.created_at DESC;
+        """,
+        uuid.UUID(tenant_id),
+        session.role == "TENANT_MEMBER",
+        uuid.UUID(session.user_id),
+    )
     results = []
 
     for r in rows:
