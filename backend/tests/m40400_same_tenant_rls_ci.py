@@ -167,7 +167,7 @@ def main():
                         expected=set()
                     elif role=="TENANT_ADMIN":
                         if table in FINGERPRINT:
-                            expected=FINGERPRINT[table][tenant]
+                            expected=FINGERPRINT[table][1][tenant]
                         else:
                             expected_count=2 if tenant==A else 1
                             assert len(actual)==expected_count,(name,table)
@@ -179,7 +179,7 @@ def main():
                             index=1 if uid==A2 else 0
                         else:
                             index=0
-                        expected={sorted(FINGERPRINT[table][tenant])[index]}
+                        expected={sorted(FINGERPRINT[table][1][tenant])[index]}
                     assert actual==expected,(name,table,tenant,actual,expected)
                     checks+=1
             assert client.post("/api/v1/auth/logout",headers=headers).status_code==200
