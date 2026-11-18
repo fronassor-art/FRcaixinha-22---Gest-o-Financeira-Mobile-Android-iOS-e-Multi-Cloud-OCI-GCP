@@ -44,7 +44,7 @@ assert.match(app,/isRoleTabAllowed\(state\.currentRole, activeTab\)/);
 assert.match(app,/navItems\.slice\(3\)\.map/);
 assert.match(app,/setMoreOpen\(false\); if\(item\.id === 'AUDITORIA'\)/);
 assert.match(app,/resumeValidationPending && \(/);
-assert.match(app,/inert=\{resumeValidationPending\}/);
+assert.match(app,/inert=\{resumeValidationPending \|\| biometricLocked\}/);
 
 assert.match(dash,/onNavigateTab\(member \? 'MINHAS_OPORTUNIDADES' : 'CAMPANHAS_MEMBROS'\)/);
 assert(dash.includes("member ? 'Minhas oportunidades' : 'Campanhas para membros'"));

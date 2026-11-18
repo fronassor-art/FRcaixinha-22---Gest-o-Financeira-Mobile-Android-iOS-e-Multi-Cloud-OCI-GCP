@@ -77,8 +77,8 @@ const app=readFileSync('src/App.tsx','utf8');
 const panel=readFileSync('src/components/SaasPromotionsPanel.tsx','utf8');
 const auth=readFileSync('src/services/authService.ts','utf8');
 assert.match(app,/resumeValidationPending && \(/);
-assert.match(app,/inert=\{resumeValidationPending\}/);
-assert.match(app,/aria-hidden=\{resumeValidationPending\}/);
+assert.match(app,/inert=\{resumeValidationPending \|\| biometricLocked\}/);
+assert.match(app,/aria-hidden=\{resumeValidationPending \|\| biometricLocked\}/);
 assert.doesNotMatch(app,/if \(resumeValidationPending\)\s*\{\s*return\s*\(/,
   'não desmontar views ao voltar do segundo plano');
 assert.match(app,/hasSavedMasterCampaignDraft\(masterCampaignDraftStorage\(\), user\.id\)/,
