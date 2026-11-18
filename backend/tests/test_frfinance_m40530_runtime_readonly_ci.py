@@ -100,3 +100,23 @@ def test_no_mutators_in_source():
               "pg_ctl restart", "requests.post(", "urllib.request.urlopen(",
               "run_migration("):
         assert s not in code
+
+
+def test_original_cli_bootstraps_repo_import_without_pythonpath(tmp_path):
+    """Termux script path must work with isolated Python import paths."""
+    code = (
+        "import runpy, sys; "
+        "ns=runpy.run_path(sys.argv[1], run_name='m40530_import_probe'); "
+        "import backend.scripts.frfinance_m40150_original_pg18_status_readonly; "
+        "print('M40530_ORIGINAL_IMPORTS=PASS')"
+    )
+    process = subprocess.run(
+        [sys.executable, "-I", "-c", code, str(SOURCE)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert process.returncode == 0, process.stderr
+    assert "M40530_ORIGINAL_IMPORTS=PASS" in process.stdout
