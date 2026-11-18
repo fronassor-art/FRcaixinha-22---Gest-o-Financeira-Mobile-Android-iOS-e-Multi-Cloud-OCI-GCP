@@ -93,7 +93,8 @@ def test_no_mutators_in_source():
     code = SOURCE.read_text(encoding="utf-8")
     for s in ("native_termux", "identity", "pg_ctl_status", "pg_isready_status",
               "M40530_MIGRATIONS=NONE", "M40530_PG_5432_FR22=NOT_ACCESSED",
-              "M40530_FASTAPI_RESTART=NONE", "M40530_POSTGRESQL_RESTART=NONE",\n              "M40530_HTTP_READY_ROUTE=NEVER_CALLED"):
+              "M40530_FASTAPI_RESTART=NONE", "M40530_POSTGRESQL_RESTART=NONE",
+              "M40530_HTTP_READY_ROUTE=NEVER_CALLED"):
         assert s in code
     for s in ("psycopg.connect(", "asyncpg.connect(", "subprocess.Popen(",
               "os.kill(", "shell=True", "pg_ctl start", "pg_ctl stop",
