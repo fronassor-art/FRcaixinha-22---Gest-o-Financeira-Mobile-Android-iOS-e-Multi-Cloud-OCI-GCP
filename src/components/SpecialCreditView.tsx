@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import type {AppState} from '../services/store';
 import {authService} from '../services/authService';
 import {diagnoseAndroidPush} from '../services/specialCreditPushNative';
-import {creditReplyLabel,creditOpportunityCanReply,creditOpportunityCanSimulate} from '../services/specialCreditPresentation';
+import {creditReplyLabel,creditOpportunityCanReply,creditOpportunityCanSimulate,creditContextCanRender,creditMessageForContext} from '../services/specialCreditPresentation';
 import {
   specialCreditApi, type CreditCampaign, type CreditGrant,
   type CreditOpportunity, type EligibleMember, type MarketingChannel,
@@ -37,6 +37,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState(false);
   const [enabled,setEnabled]=useState(false);
+  const [loadedContext,setLoadedContext]=useState<string|null>(null);
   const [cycleReady,setCycleReady]=useState(false);
   const [members,setMembers]=useState<EligibleMember[]>([]);
   const [selectedMembers,setSelectedMembers]=useState<string[]>([]);
@@ -67,7 +68,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     setLoading(true);
     if(messageContext.current!==key)setMessage('');
     messageContext.current=key;
-    setEnabled(false);setCycleReady(false);
+    setEnabled(false);setLoadedContext(null);setCycleReady(false);
     setMembers([]);setSelectedMembers([]);setSelectedGrants([]);setGrants([]);setCampaigns([]);
     setOpportunities([]);setPrefs(initialPrefs);setSimulation('');setPushDiagnostic('');
     if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}
@@ -94,7 +95,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
             throw new Error('Pré-condição do ciclo inconsistente. Cadastro bloqueado.');
           if(active&&latest.current===key&&authService.isSessionSnapshotCurrent(snapshot)){
             setMembers(ms);setGrants(gs);setCampaigns(cs);
-            setCycleReady(readiness.current_open_cycle);setEnabled(true);
+            setCycleReady(readiness.current_open_cycle);setLoadedContext(key);setEnabled(true);
           }
         }else if(role==='TENANT_MEMBER'){
           const [op,p]=await Promise.all([
@@ -102,7 +103,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
             specialCreditApi.preferences(tenant),
           ]);
           if(active&&latest.current===key&&authService.isSessionSnapshotCurrent(snapshot)){
-            setOpportunities(op);setPrefs(p.preferences);setEnabled(true);
+            setOpportunities(op);setPrefs(p.preferences);setLoadedContext(key);setEnabled(true);
           }
         }
       }catch(error){
@@ -119,7 +120,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   useEffect(()=>()=>{if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}},[]);
 
   async function run(task:()=>Promise<unknown>,success:string,refresh=true){
-    if(!tenant||busy)return;
+    if(!tenant||busy||!creditContextCanRender(loadedContext,key,enabled,loading))return;
     const before=key; const snapshot=authService.captureSession();
     const operation=++operationEpoch.current;
     setBusy(true);setMessage('');
@@ -141,15 +142,16 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     current.includes(id)?current.filter(x=>x!==id):[...current,id]);
 
   async function verifyPushRegistration(){
+    if(!creditContextCanRender(loadedContext,key,enabled,loading))return;
     if(!prefs.PUSH){
       setPushDiagnostic('Ative a preferência Push antes do diagnóstico.');
       return;
     }
     const before=key;
+    const session=authService.captureSession();
     try{
       if(pushCleanup.current)await pushCleanup.current();
       pushCleanup.current=null;
-      const session=authService.captureSession();
       const diagnostic=await diagnoseAndroidPush(true,(_phase,detail)=>{
         if(latest.current===before&&authService.isSessionSnapshotCurrent(session))
           setPushDiagnostic(detail);
@@ -160,11 +162,13 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
       pushCleanup.current=diagnostic.stop;
       setPushDiagnostic(diagnostic.detail);
     }catch{
-      if(latest.current===before)
+      if(latest.current===before&&authService.isSessionSnapshotCurrent(session))
         setPushDiagnostic('Não foi possível consultar o plugin push neste aparelho.');
     }
   }
 
+  const canShow=creditContextCanRender(loadedContext,key,enabled,loading);
+  const currentMessage=creditMessageForContext(message,messageContext.current,key);
   if(role==='MASTER') return null;
   return <section aria-labelledby="special-credit-title"
     className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-5">
@@ -185,9 +189,9 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
       {role==='TENANT_ADMIN'?'Atualizar campanhas':'Atualizar oportunidades'}
     </button>
     {loading&&<p role="status">Consultando o banco de homologação...</p>}
-    {message&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{message}</p>}
+    {currentMessage&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{currentMessage}</p>}
 
-    {!loading&&enabled&&role==='TENANT_ADMIN'&&tenant&&<>
+    {canShow&&role==='TENANT_ADMIN'&&tenant&&<>
       {!cycleReady&&<p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
         Nenhum ciclo vigente e aberto nesta caixinha. Criar autorizações, rascunhos
         ou publicar campanhas está bloqueado. Em Contribuições, a prévia do próximo ciclo
@@ -292,7 +296,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
       </p>
     </>}
 
-    {!loading&&enabled&&role==='TENANT_MEMBER'&&tenant&&<>
+    {canShow&&role==='TENANT_MEMBER'&&tenant&&<>
       {opportunities.length===0&&<p className="rounded-lg border p-3 text-sm">
         Não há oportunidades especiais publicadas para esta conta.
       </p>}

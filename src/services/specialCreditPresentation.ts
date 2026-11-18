@@ -101,3 +101,20 @@ export function creditOpportunityCanSimulate(
   return offer.response_status!=='DECLINED' &&
     Number.isFinite(nowMs)&&Date.parse(offer.expires_at)>nowMs;
 }
+
+
+/** M40430 — fail-closed render when identity/tenant/role changes BEFORE
+ * React effects clear cached data. Authentication still belongs to backend.
+ */
+export function creditContextCanRender(
+  loadedKey:string|null,currentKey:string,enabled:boolean,loading:boolean,
+):boolean{
+  return !loading && enabled === true &&
+    typeof loadedKey === 'string' && loadedKey.length > 0 &&
+    loadedKey === currentKey;
+}
+export function creditMessageForContext(
+  message:string,messageKey:string|null,currentKey:string,
+):string{
+  return messageKey===currentKey?message:'';
+}
