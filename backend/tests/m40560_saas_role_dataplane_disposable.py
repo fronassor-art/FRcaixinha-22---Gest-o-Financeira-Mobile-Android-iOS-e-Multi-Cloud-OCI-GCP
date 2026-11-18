@@ -13,13 +13,6 @@ from pathlib import Path
 import sys
 from uuid import uuid4
 
-import psycopg
-from psycopg.conninfo import conninfo_to_dict
-
-from m39067_postgres18_disposable_runtime import (
-    bootstrap, isolate_only_identity_do, restricted_connection,
-)
-
 ROOT = Path(__file__).resolve().parents[2]
 DB_NAME = "fr_m39067_disposable_ci"
 DB_PORT = 55433
@@ -33,6 +26,7 @@ def require_disposable() -> None:
             or os.environ.get("PAGAMENTOS_REAIS") != "OFF"
             or os.environ.get("ATIVACAO_REAL") != "OFF"):
         raise RuntimeError("M40560_NOT_DISPOSABLE_GITHUB_CI")
+    from psycopg.conninfo import conninfo_to_dict
     parsed = conninfo_to_dict(os.environ.get("CI_PROMOTIONS_DATABASE_URL", ""))
     if (parsed.get("host") != "127.0.0.1"
             or int(parsed.get("port", "0")) != DB_PORT
@@ -51,6 +45,7 @@ def set_identity(conn, actor_role: str, actor_id: str, tenant_id: str = "") -> N
 
 
 def expect_denied(conn, statement: str, params: tuple, label: str) -> None:
+    import psycopg
     try:
         with conn.transaction():
             conn.execute(statement, params)
@@ -65,6 +60,7 @@ def expect_denied(conn, statement: str, params: tuple, label: str) -> None:
 
 
 def run(conn) -> None:
+    from m39067_postgres18_disposable_runtime import bootstrap, isolate_only_identity_do
     # All objects, roles, and rows are synthetic and are created only in CI.
     bootstrap(conn)
     master = uuid4()
@@ -227,6 +223,7 @@ def run(conn) -> None:
 def main() -> int:
     try:
         require_disposable()
+        from m39067_postgres18_disposable_runtime import restricted_connection
         with restricted_connection() as conn:
             run(conn)
     except Exception as exc:
