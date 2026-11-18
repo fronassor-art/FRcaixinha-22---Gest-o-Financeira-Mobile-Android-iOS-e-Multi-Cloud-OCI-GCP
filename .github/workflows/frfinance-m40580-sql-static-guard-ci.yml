@@ -8,6 +8,8 @@ on:
       - 'backend/app/database.py'
       - 'backend/app/dependencies.py'
       - 'backend/app/routers/saas_promotions.py'
+      - 'backend/app/routers/loans.py'
+      - 'backend/app/routers/contributions.py'
       - '.github/workflows/frfinance-m40580-sql-static-guard-ci.yml'
   pull_request:
     paths:
@@ -16,6 +18,8 @@ on:
       - 'backend/app/database.py'
       - 'backend/app/dependencies.py'
       - 'backend/app/routers/saas_promotions.py'
+      - 'backend/app/routers/loans.py'
+      - 'backend/app/routers/contributions.py'
       - '.github/workflows/frfinance-m40580-sql-static-guard-ci.yml'
   workflow_dispatch:
 permissions:
