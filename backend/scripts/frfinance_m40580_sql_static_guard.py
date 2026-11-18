@@ -38,10 +38,8 @@ def audit_source(path: Path) -> tuple[int, list[str]]:
             continue
         if node.func.attr not in SQL_METHODS:
             continue
-        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "conn":
-            # Explicitly covers the project's conn query surface. A rename
-            # of the SQL connection variable requires revising this scope.
-            continue
+        # Examine all receivers, not just variables named "conn". This
+        # catches a future refactor from conn.fetch(...) to db.fetch(...).
         checked += 1
         if not node.args or not is_literal_sql(node.args[0]):
             problems.append(f"{path.name}:{node.lineno}:DYNAMIC_SQL_ARGUMENT")
