@@ -4,6 +4,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {SpecialCreditView} from '../components/SpecialCreditView';
 import type {AppState} from '../services/store';
+import type {CreditOpportunity} from '../services/specialCreditApi';
 import {
  parseCreditOpportunities,parseCreditCampaigns,parseCreditPreferences,
  creditReplyLabel,creditOpportunityCanReply,creditOpportunityCanSimulate,
@@ -12,7 +13,7 @@ const UUID='11111111-1111-4111-8111-111111111111';
 const TENANT='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const future=new Date(Date.now()+86400_000).toISOString();
 const past=new Date(Date.now()-86400_000).toISOString();
-const opportunity={recipient_id:UUID,campaign_id:UUID,grant_id:UUID,
+const opportunity:CreditOpportunity={recipient_id:UUID,campaign_id:UUID,grant_id:UUID,
  title:'Oportunidade sintética',message:'Simulação sem dinheiro real',
  ceiling_brl:'3500.00',expires_at:future,response_status:'PENDING'};
 const campaign={id:UUID,title:'Campanha sintética',status:'DRAFT',
