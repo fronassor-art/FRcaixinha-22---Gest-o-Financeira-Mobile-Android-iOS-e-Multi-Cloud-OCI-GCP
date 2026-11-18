@@ -199,6 +199,8 @@ jobs:
         run: npx tsx src/tests/m40420_credit_presentation_ci.test.ts
       - name: M40430 — bloquear apresentação de dados ao trocar sessão ou caixinha
         run: npx tsx src/tests/m40430_credit_context_ci.test.ts
+      - name: M40440 — isolamento de duas sessoes distintas da mesma conta
+        run: npx tsx src/tests/m40440_same_account_session_ui_ci.test.ts
       - name: Build web
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}

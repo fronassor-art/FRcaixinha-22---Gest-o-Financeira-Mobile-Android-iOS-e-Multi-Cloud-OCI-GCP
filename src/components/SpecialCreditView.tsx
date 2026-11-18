@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import type {AppState} from '../services/store';
 import {authService} from '../services/authService';
 import {diagnoseAndroidPush} from '../services/specialCreditPushNative';
-import {creditReplyLabel,creditOpportunityCanReply,creditOpportunityCanSimulate,creditContextCanRender,creditMessageForContext} from '../services/specialCreditPresentation';
+import {creditReplyLabel,creditOpportunityCanReply,creditOpportunityCanSimulate,creditSessionContextKey,creditSessionCanRender,creditMessageForContext} from '../services/specialCreditPresentation';
 import {
   specialCreditApi, type CreditCampaign, type CreditGrant,
   type CreditOpportunity, type EligibleMember, type MarketingChannel,
@@ -30,7 +30,8 @@ const toUtc=(local:string)=>{
 export const SpecialCreditView:React.FC<Props>=({state})=>{
   const tenant=state.currentTenantId;
   const role=state.currentRole;
-  const key=[state.currentUserId,tenant,role].join(':');
+  const activeSession=authService.captureSession();
+  const key=creditSessionContextKey(state.currentUserId,tenant,role,activeSession.generation);
   const latest=useRef(key); latest.current=key;
   const [revision,setRevision]=useState(0);
   const [loading,setLoading]=useState(true);
@@ -72,7 +73,8 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     setMembers([]);setSelectedMembers([]);setSelectedGrants([]);setGrants([]);setCampaigns([]);
     setOpportunities([]);setPrefs(initialPrefs);setSimulation('');setPushDiagnostic('');
     if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}
-    if(!tenant || role==='MASTER' || !state.currentUserId){
+    if(!tenant || role==='MASTER' || !state.currentUserId || !snapshot.token ||
+       snapshot.generation!==activeSession.generation){
       setMessage('Selecione uma caixinha e entre como administrador ou membro.');
       setLoading(false);return()=>{active=false;};
     }
@@ -120,7 +122,8 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   useEffect(()=>()=>{if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}},[]);
 
   async function run(task:()=>Promise<unknown>,success:string,refresh=true){
-    if(!tenant||busy||!creditContextCanRender(loadedContext,key,enabled,loading))return;
+    if(!tenant||busy||!authService.isSessionSnapshotCurrent(activeSession)||
+       !creditSessionCanRender(loadedContext,key,enabled,loading,!!activeSession.token))return;
     const before=key; const snapshot=authService.captureSession();
     const operation=++operationEpoch.current;
     setBusy(true);setMessage('');
@@ -142,7 +145,8 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     current.includes(id)?current.filter(x=>x!==id):[...current,id]);
 
   async function verifyPushRegistration(){
-    if(!creditContextCanRender(loadedContext,key,enabled,loading))return;
+    if(!authService.isSessionSnapshotCurrent(activeSession)||
+       !creditSessionCanRender(loadedContext,key,enabled,loading,!!activeSession.token))return;
     if(!prefs.PUSH){
       setPushDiagnostic('Ative a preferência Push antes do diagnóstico.');
       return;
@@ -167,7 +171,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
     }
   }
 
-  const canShow=creditContextCanRender(loadedContext,key,enabled,loading);
+  const canShow=creditSessionCanRender(loadedContext,key,enabled,loading,!!activeSession.token);
   const currentMessage=creditMessageForContext(message,messageContext.current,key);
   if(role==='MASTER') return null;
   return <section aria-labelledby="special-credit-title"

@@ -118,3 +118,19 @@ export function creditMessageForContext(
 ):string{
   return messageKey===currentKey?message:'';
 }
+
+
+/** M40440: isolate repeated logins of the SAME account without storing tokens. */
+export function creditSessionContextKey(
+  userId:string,tenantId:string,role:string,generation:number,
+):string{
+  if(!Number.isSafeInteger(generation)||generation<0)return '';
+  return [userId,tenantId,role,'g'+generation].join(':');
+}
+export function creditSessionCanRender(
+  loadedKey:string|null,currentKey:string,enabled:boolean,loading:boolean,
+  hasActiveToken:boolean,
+):boolean{
+  return hasActiveToken === true &&
+    creditContextCanRender(loadedKey,currentKey,enabled,loading);
+}
