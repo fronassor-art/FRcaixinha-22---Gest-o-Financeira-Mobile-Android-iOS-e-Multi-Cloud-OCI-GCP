@@ -43,21 +43,22 @@ async def list_tenant_quotas(
             detail="Acesso Proibido: Master não possui autorização para consultar cotas patrimoniais de caixinhas."
         )
 
-    query = """
+    # M40590: fixed query; member restriction is a bound, server-derived flag.
+    rows = await conn.fetch(
+        """
         SELECT q.id, q.tenant_id, q.membership_id, q.quota_number, q.value_brl, q.status, q.created_at
         FROM quotas q
         JOIN memberships m ON q.membership_id = m.id
         WHERE q.tenant_id = $1
-    """
-    params = [uuid.UUID(tenant_id)]
-
-    if session.role == "TENANT_MEMBER":
-        query += " AND m.user_id = $2 AND m.role = 'TENANT_MEMBER' AND m.status = 'ATIVA'"
-        params.append(uuid.UUID(session.user_id))
-
-    query += " ORDER BY q.quota_number ASC;"
-
-    rows = await conn.fetch(query, *params)
+          AND ($2::boolean = FALSE OR (
+               m.user_id = $3::uuid AND m.role = 'TENANT_MEMBER'
+               AND m.status = 'ATIVA'))
+        ORDER BY q.quota_number ASC;
+        """,
+        uuid.UUID(tenant_id),
+        session.role == "TENANT_MEMBER",
+        uuid.UUID(session.user_id),
+    )
     if any(to_cents(r['value_brl'])<Decimal('150.00') for r in rows):
         raise HTTPException(409,'Cotas de desenvolvimento fora do mínimo contratual. Saneamento necessário.')
     return [
@@ -92,7 +93,9 @@ async def list_tenant_contributions(
             detail="Acesso Proibido: Master não possui autorização para consultar contribuições de caixinhas."
         )
 
-    query = """
+    # M40590: identical tenant/member predicate, without building SQL text.
+    rows = await conn.fetch(
+        """
         SELECT c.id, c.tenant_id, c.cycle_id, c.membership_id, u.full_name as member_name,
                c.competence, c.due_date, c.amount_due, c.amount_paid,
                c.payment_status, c.due_status, c.paid_at
@@ -100,16 +103,15 @@ async def list_tenant_contributions(
         JOIN memberships m ON c.membership_id = m.id
         JOIN users u ON m.user_id = u.id
         WHERE c.tenant_id = $1
-    """
-    params = [uuid.UUID(tenant_id)]
-
-    if session.role == "TENANT_MEMBER":
-        query += " AND m.user_id = $2 AND m.role = 'TENANT_MEMBER' AND m.status = 'ATIVA'"
-        params.append(uuid.UUID(session.user_id))
-
-    query += " ORDER BY c.competence DESC, c.due_date ASC;"
-
-    rows = await conn.fetch(query, *params)
+          AND ($2::boolean = FALSE OR (
+               m.user_id = $3::uuid AND m.role = 'TENANT_MEMBER'
+               AND m.status = 'ATIVA'))
+        ORDER BY c.competence DESC, c.due_date ASC;
+        """,
+        uuid.UUID(tenant_id),
+        session.role == "TENANT_MEMBER",
+        uuid.UUID(session.user_id),
+    )
     if any(to_cents(r['amount_due'])<Decimal('150.00') for r in rows):
         raise HTTPException(409,'Contribuições de desenvolvimento fora do mínimo contratual. Saneamento necessário.')
     return [
