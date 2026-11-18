@@ -2,6 +2,7 @@
  * Sessão no backend + tenant explícito. Sem mocks, sem envio real, sem Pix.
  */
 import { authService, getApiBaseUrl } from './authService';
+import {parseCreditOpportunities,parseCreditCampaigns,parseCreditPreferences} from './specialCreditPresentation';
 import {
   requestSpecialCredit, assertSandboxCreditCapabilities,
 } from './specialCreditRequestBoundary';
@@ -64,7 +65,7 @@ export const specialCreditApi={
       reason,request_id:crypto.randomUUID(),
     }),
   revoke:(tenant:string,id:string)=>call(tenant,'/grants/'+encodeURIComponent(id)+'/revoke',{}),
-  campaigns:(tenant:string)=>call<CreditCampaign[]>(tenant,'/campaigns'),
+  campaigns:async (tenant:string)=>parseCreditCampaigns(await call<unknown>(tenant,'/campaigns')),
   createCampaign:(tenant:string,grantIds:string[],title:string,message:string,expiry:string)=>
     call<{id:string;status:string}>(tenant,'/campaigns',{
       grant_ids:grantIds,title,body:message,expires_at:expiry,
@@ -74,10 +75,10 @@ export const specialCreditApi={
     call<{status:string;external_dispatch:boolean}>(tenant,'/campaigns/'+encodeURIComponent(id)+'/publish',{}),
   cancel:(tenant:string,id:string)=>
     call(tenant,'/campaigns/'+encodeURIComponent(id)+'/cancel',{}),
-  opportunities:(tenant:string)=>call<CreditOpportunity[]>(tenant,'/opportunities'),
+  opportunities:async (tenant:string)=>parseCreditOpportunities(await call<unknown>(tenant,'/opportunities')),
   reply:(tenant:string,id:string,status:CreditReply)=>
     call(tenant,'/opportunities/'+encodeURIComponent(id)+'/reply',{status}),
-  preferences:(tenant:string)=>call<{preferences:Record<MarketingChannel,boolean>;external_dispatch:boolean}>(tenant,'/preferences'),
+  preferences:async (tenant:string)=>parseCreditPreferences(await call<unknown>(tenant,'/preferences')),
   changePreference:(tenant:string,channel:MarketingChannel,optedIn:boolean)=>
     call(tenant,'/preferences',{channel,opted_in:optedIn}),
   simulate:(tenant:string,grantId:string,principal:string,months:number)=>

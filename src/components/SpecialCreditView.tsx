@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import type {AppState} from '../services/store';
 import {authService} from '../services/authService';
 import {diagnoseAndroidPush} from '../services/specialCreditPushNative';
+import {creditReplyLabel,creditOpportunityCanReply,creditOpportunityCanSimulate} from '../services/specialCreditPresentation';
 import {
   specialCreditApi, type CreditCampaign, type CreditGrant,
   type CreditOpportunity, type EligibleMember, type MarketingChannel,
@@ -54,6 +55,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   const [pushDiagnostic,setPushDiagnostic]=useState('');
   const pushCleanup=useRef<(()=>Promise<void>)|null>(null);
   const operationEpoch=useRef(0);
+  const messageContext=useRef<string|null>(null);
 
   // Trocar perfil/caixinha invalida o estado de espera da operação anterior.
   // A resposta antiga não pode destravar uma operação nova nem exibir dados.
@@ -62,7 +64,10 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
   useEffect(()=>{
     let active=true;
     const snapshot=authService.captureSession();
-    setLoading(true);setMessage('');setEnabled(false);setCycleReady(false);
+    setLoading(true);
+    if(messageContext.current!==key)setMessage('');
+    messageContext.current=key;
+    setEnabled(false);setCycleReady(false);
     setMembers([]);setSelectedMembers([]);setSelectedGrants([]);setGrants([]);setCampaigns([]);
     setOpportunities([]);setPrefs(initialPrefs);setSimulation('');setPushDiagnostic('');
     if(pushCleanup.current){void pushCleanup.current();pushCleanup.current=null;}
@@ -299,8 +304,8 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
           Limite para simulação até {new Date(o.expires_at).toLocaleString('pt-BR')}.
           Nenhum valor aprovado ou liberado.
         </p>
-        <p className="text-xs">Resposta: {o.response_status}</p>
-        {o.response_status==='PENDING'&&<div className="flex flex-wrap gap-2">
+        <p className="text-xs">Resposta: {creditReplyLabel(o.response_status)}</p>
+        {creditOpportunityCanReply(o)&&<div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy}
             onClick={()=>void run(()=>specialCreditApi.reply(tenant,o.recipient_id,'INTERESTED'),
               'Interesse registrado; nenhuma contratação ocorreu.')}
@@ -310,7 +315,7 @@ export const SpecialCreditView:React.FC<Props>=({state})=>{
               'Oportunidade recusada, sem prejuízo aos seus direitos.')}
             className="rounded-lg border px-3 py-2 text-sm">Não tenho interesse</button>
         </div>}
-        {o.response_status!=='DECLINED'&&<div className="space-y-2 border-t pt-2">
+        {creditOpportunityCanSimulate(o)&&<div className="space-y-2 border-t pt-2">
           <label className="flex items-center gap-2 text-sm">Parcelas para simulação
             <select value={months} onChange={e=>setMonths(Number(e.target.value))}
               className="rounded-lg border p-2">
