@@ -8,6 +8,14 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from pathlib import Path
+import sys
+
+# Invoked as `python -B backend/scripts/...py` from the original worktree.
+# Python otherwise sets sys.path[0] to backend/scripts, not the repo root.
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 EXPECTED_PROJECT = "PASS_STATIC_ORIGINAL_FR_FINANCE_PG18"
 EXPECTED_BINARIES = "TERMUX_POSTGRES_BINARIES_PRESENT_NOT_EXECUTED"
