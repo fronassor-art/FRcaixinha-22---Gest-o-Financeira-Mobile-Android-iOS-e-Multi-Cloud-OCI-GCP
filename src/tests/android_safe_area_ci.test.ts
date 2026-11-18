@@ -34,8 +34,8 @@ assert.match(nav,/className="fr-app-header relative/);
 assert.doesNotMatch(nav,/fr-app-header sticky/);
 // M39087: M39075 preserves the mounted shell during session revalidation.
 assert.match(app,/className=\{'fr-app-shell [^']+'\s*\+/);
-assert.match(app,/resumeValidationPending \? ' invisible pointer-events-none select-none' : ''/);
-assert.match(app,/aria-hidden=\{resumeValidationPending\} inert=\{resumeValidationPending\}/);
+assert.match(app,/resumeValidationPending \|\| biometricLocked/);
+assert.match(app,/aria-hidden=\{resumeValidationPending \|\| biometricLocked\} inert=\{resumeValidationPending \|\| biometricLocked\}/);
 assert.doesNotMatch(app,/className="fr-app-shell /);
 assert.match(app,/<main className="fr-app-main /);
 assert.match(app,/fr-mobile-nav relative/);
@@ -53,4 +53,7 @@ const login=renderToStaticMarkup(React.createElement(LoginView,{
  onLoginSuccess:()=>undefined
 }));
 assert.match(login,/fr-page fr-sheen/);
+assert.match(login,/justify-start/);
+assert.match(login,/my-auto/);
+assert.doesNotMatch(login,/<main className="[^"]*justify-center/);
 console.log('PACOTE_16_ANDROID_SAFE_AREA_CI=PASS');

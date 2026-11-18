@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=(f:string)=>readFileSync(f,'utf8');
-const token='fr-finance-m21400';
+const token='fr-finance-m40500';
 const publicIcon=read('public/icon.svg');
 assert.match(publicIcon,/>FR Finance<\/text>/);
+assert.equal((publicIcon.match(/>FR<\/text>/g)||[]).length,2,'monograma deve apresentar as letras FR');
+assert.doesNotMatch(publicIcon,/>R<\/text>/,'monograma R isolado deve ser substituido');
 assert.doesNotMatch(publicIcon,/>FRcaixinha<\/text>/);
 const sw=read('public/sw.js');
 assert.ok(sw.includes("const CACHE_NAME = '"+token+"-static'"));

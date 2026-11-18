@@ -1,5 +1,5 @@
 // Service Worker for FR Finance Mobile (Android & iOS)
-const CACHE_NAME = 'fr-finance-m21400-static';
+const CACHE_NAME = 'fr-finance-m40500-static';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

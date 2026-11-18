@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {ChevronLeft,ChevronRight} from 'lucide-react';
 import {startTabHistory,visitTab,stepTab,canStepTab} from './services/tabHistory';
 import {
@@ -54,6 +54,8 @@ import { MobileDevicePreviewModal } from './components/MobileDevicePreviewModal'
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { LoginView } from './components/LoginView';
 import { SessionSecurityPanel } from './components/SessionSecurityPanel';
+import { ProfilePanel } from './components/ProfilePanel';
+import {biometricEnabled,biometricChallenge,deviceAccountKey,readPrivateAvatar} from './services/deviceSecurity';
 import { NotificationsView } from './components/NotificationsView';
 import { isRoleTabAllowed, initialRoleTab } from './services/roleScope';
 import { authService, AuthenticatedUser } from './services/authService';
@@ -76,6 +78,13 @@ export default function App() {
   const [resumeValidationPending, setResumeValidationPending] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [avatarSrc,setAvatarSrc] = useState<string|null>(null);
+  const [biometricLocked,setBiometricLocked] = useState(false);
+  const [biometricBusy,setBiometricBusy] = useState(false);
+  const [biometricError,setBiometricError] = useState('');
+  const biometricEnabledRef=useRef(false);
+
 
   // Modais globais
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -109,6 +118,27 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Android-only, on-device encrypted avatar & optional biometric screen lock.
+  // The server remains authoritative. A new identity cannot receive old state.
+  useEffect(()=>{
+    const accountKey=deviceAccountKey(authenticatedUser);
+    biometricEnabledRef.current=false;
+    setAvatarSrc(null);
+    setProfileOpen(false);
+    if(!accountKey)return;
+    let active=true;
+    const snapshot=authService.captureSession();
+    void Promise.allSettled([
+      readPrivateAvatar(accountKey),
+      biometricEnabled(accountKey),
+    ]).then(results=>{
+      if(!active||!authService.isSessionSnapshotCurrent(snapshot))return;
+      if(results[0].status==='fulfilled')setAvatarSrc(results[0].value);
+      if(results[1].status==='fulfilled')biometricEnabledRef.current=results[1].value;
+    });
+    return()=>{active=false;};
+  },[authenticatedUser?.id,authenticatedUser?.role,authenticatedUser?.tenantId]);
+
   // Monitorar ciclo de vida de autenticação e expiração de sessão
   useEffect(() => {
     // Resposta da inicialização nunca pode apagar um novo login que chegou
@@ -131,6 +161,9 @@ export default function App() {
       setAuthenticatedUser(user);
       if (!user) {
         setSecurityOpen(false);
+        setProfileOpen(false);
+        setBiometricLocked(false);
+        biometricEnabledRef.current=false;
         appStore.clearAuthenticatedContext();
       }
     });
@@ -144,12 +177,20 @@ export default function App() {
     // tela protegida aparece até que /auth/me confirme a sessão atual.
     const resumeGuard = createForegroundSessionGuard(authService, setResumeValidationPending);
     const onVisible = () => {
-      if (document.visibilityState === 'visible') {
+      if(document.visibilityState==='hidden'){
+        // Lock synchronously when Android goes to the background.
+        if(biometricEnabledRef.current && authService.getUser())
+          setBiometricLocked(true);
+      }else if(document.visibilityState==='visible'){
         void resumeGuard.revalidate();
       }
     };
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) void resumeGuard.revalidate();
+      if(event.persisted){
+        if(biometricEnabledRef.current && authService.getUser())
+          setBiometricLocked(true);
+        void resumeGuard.revalidate();
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('pageshow', onPageShow);
@@ -165,6 +206,10 @@ export default function App() {
   }, []);
 
   const handleLoginSuccess = (user: AuthenticatedUser) => {
+    biometricEnabledRef.current=false;
+    setBiometricLocked(false);
+    setBiometricError('');
+    setProfileOpen(false);
     setAuthenticatedUser(user);
     setSessionExpiredNotice(false);
     appStore.setAuthenticatedContext(user);
@@ -188,10 +233,38 @@ export default function App() {
     }
     await authService.logout();
     setAuthenticatedUser(null);
+    biometricEnabledRef.current=false;
+    setBiometricLocked(false);
+    setBiometricError('');
+    setAvatarSrc(null);
+    setProfileOpen(false);
     appStore.clearAuthenticatedContext();
     setTabHistory(startTabHistory('DASHBOARD'));
     setSecurityOpen(false);
     setMoreOpen(false);
+  };
+
+  const unlockBiometricSession=async()=>{
+    if(biometricBusy||resumeValidationPending)return;
+    const user=authService.getUser(),key=deviceAccountKey(user);
+    const session=authService.captureSession();
+    if(!user||!key||!authService.isSessionSnapshotCurrent(session)){
+      setBiometricError('Sessão expirada. Entre novamente com sua senha.');
+      return;
+    }
+    setBiometricBusy(true);setBiometricError('');
+    try{
+      await biometricChallenge(key);
+      if(!authService.isSessionSnapshotCurrent(session))
+        throw new Error('Sua sessão mudou. Entre novamente.');
+      const verified=await authService.checkCurrentUser();
+      if(!verified||verified.id!==user.id||
+         !authService.isSessionSnapshotCurrent(session))
+        throw new Error('O servidor não confirmou a sessão. Use sua senha.');
+      setBiometricLocked(false);
+    }catch(error){
+      setBiometricError(error instanceof Error?error.message:'Biometria recusada.');
+    }finally{setBiometricBusy(false);}
   };
 
   // Papel ativo validado no servidor; bloqueia renderizacoes de outras funcoes.
@@ -278,6 +351,27 @@ export default function App() {
 
   return (
     <>
+      {biometricLocked && (
+        <section role="dialog" aria-modal="true" aria-label="Desbloquear FR Finance"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-[#03291f] px-5 py-8 text-[#fff4d2]">
+          <div className="w-full max-w-sm space-y-4 rounded-3xl border border-[#c7a057] bg-[#073c2d] p-6 text-center">
+            <ShieldCheck className="mx-auto h-12 w-12 text-[#f4d689]"/>
+            <h2 className="text-xl font-bold">FR Finance protegido</h2>
+            <p className="text-sm">Confirme a biometria do Android para voltar à sua sessão autenticada.</p>
+            {biometricError&&<p role="alert" className="text-sm text-amber-200">{biometricError}</p>}
+            {resumeValidationPending&&<p role="status">Verificando sessão no servidor...</p>}
+            <button type="button" disabled={biometricBusy||resumeValidationPending}
+              onClick={()=>void unlockBiometricSession()}
+              className="fr-gold-button min-h-12 w-full rounded-xl px-4 disabled:opacity-50">
+              {biometricBusy?'Verificando biometria...':'Desbloquear com biometria'}
+            </button>
+            <button type="button" onClick={()=>void handleLogout()}
+              className="min-h-11 w-full rounded-xl border border-amber-200/50 px-4">
+              Sair e entrar com senha
+            </button>
+          </div>
+        </section>
+      )}
       {resumeValidationPending && (
         <main role="status" aria-live="polite"
           className="fixed inset-0 z-[100] flex items-center justify-center bg-[#edf5ed] p-6">
@@ -287,12 +381,13 @@ export default function App() {
           </div>
         </main>
       )}
-      <div aria-hidden={resumeValidationPending} inert={resumeValidationPending}
+      <div aria-hidden={resumeValidationPending || biometricLocked} inert={resumeValidationPending || biometricLocked}
         className={'fr-app-shell min-w-0 max-w-full bg-[#f3f7f1] flex flex-col font-sans text-slate-900 selection:bg-[#cbab59] selection:text-[#063d2e]' +
-          (resumeValidationPending ? ' invisible pointer-events-none select-none' : '')}>
+          ((resumeValidationPending || biometricLocked) ? ' invisible pointer-events-none select-none' : '')}>
       {/* Top Navbar */}
       <Navbar
         state={state}
+        authenticatedName={authenticatedUser.name}
         onOpenManual={() => setIsManualOpen(true)}
         onOpenAudit={() => setIsAuditOpen(true)}
         onOpenMobileInstall={() => setIsMobileInstallOpen(true)}
@@ -305,22 +400,33 @@ export default function App() {
       {/* Sessao de papel imutavel: para outra area, sair e autenticar de novo. */}
       <div className="fr-app-profile shrink-0 border-b border-[#a88a4c]/40 bg-[#073c2c] px-4 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div aria-label="Perfil autenticado" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 py-2 text-xs sm:text-sm text-[#fff2cf]">
-            {state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
+          <button type="button" disabled={state.currentRole==='MASTER'}
+            onClick={()=>{setProfileOpen(value=>!value);setSecurityOpen(false);}}
+            aria-label="Abrir meu perfil e foto"
+            aria-expanded={profileOpen}
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#c09b53]/50 bg-[#0b523a] px-3 py-2 text-left text-xs sm:text-sm text-[#fff2cf] disabled:cursor-default">
+            {avatarSrc && state.currentRole!=='MASTER' ? <img src={avatarSrc} alt="Minha foto" className="h-8 w-8 shrink-0 rounded-full border border-amber-300 object-cover"/> :
+             state.currentRole === 'MASTER' ? <Crown className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
               state.currentRole === 'TENANT_ADMIN' ? <BriefcaseBusiness className="h-4 w-4 shrink-0 text-[#f0ce78]"/> :
                 <UserRound className="h-4 w-4 shrink-0 text-[#f0ce78]"/>}
             <span className="min-w-0 whitespace-normal break-words leading-4">
               {state.currentRole === 'MASTER' ? 'Administrador Master — Plataforma' :
-                state.currentRole === 'TENANT_ADMIN' ? 'Administrador — Minha caixinha' : 'Membro — Minha caixinha'}
+                state.currentRole === 'TENANT_ADMIN' ? 'Administrador — ' + (authenticatedUser.name || 'Conta autenticada') : 'Membro — ' + (authenticatedUser.name || 'Conta autenticada')}
             </span>
-          </div>
-          <button type="button" onClick={() => setSecurityOpen(value => !value)}
+          </button>
+          <button type="button" onClick={() => {setSecurityOpen(value => !value);setProfileOpen(false);}}
             aria-expanded={securityOpen}
             className="min-h-10 shrink-0 px-2 text-xs text-[#f1d58d] underline underline-offset-4">
             Sessões
           </button>
         </div>
       </div>
+      {profileOpen && state.currentRole!=='MASTER' && (
+        <ProfilePanel user={authenticatedUser}
+          onClose={()=>setProfileOpen(false)}
+          onAvatarChanged={setAvatarSrc}
+          onBiometricChanged={value=>{biometricEnabledRef.current=value;}} />
+      )}
       {securityOpen && <SessionSecurityPanel onClose={() => setSecurityOpen(false)} />}
       <div role="note" className="shrink-0 bg-[#eaf4e8] px-4 py-1 text-center text-[11px] text-[#42664b]">
         Ambiente de homologação · operações financeiras reais indisponíveis
@@ -380,6 +486,7 @@ export default function App() {
         {visibleTab === 'DASHBOARD' && state.currentRole === 'MASTER' && (
           <DashboardView
             state={state}
+            authenticatedName={authenticatedUser.name}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
@@ -410,6 +517,7 @@ export default function App() {
         {visibleTab === 'DASHBOARD' && state.currentRole === 'TENANT_ADMIN' && (
           <DashboardView
             state={state}
+            authenticatedName={authenticatedUser.name}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />
@@ -448,6 +556,7 @@ export default function App() {
         {visibleTab === 'MEU_PAINEL' && (
           <DashboardView
             state={state}
+            authenticatedName={authenticatedUser.name}
             onNavigateTab={tab => setActiveTab(tab)}
             onOpenPixModal={openPixModal}
           />

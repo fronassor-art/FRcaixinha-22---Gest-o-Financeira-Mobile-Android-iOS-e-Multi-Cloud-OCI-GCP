@@ -5,6 +5,7 @@ import { AppState } from '../services/store';
 
 interface DashboardViewProps {
   state: AppState;
+  authenticatedName?: string;
   onNavigateTab: (tab: string) => void;
   onOpenPixModal: (params: {
     title: string; amount: number; description: string;
@@ -22,13 +23,12 @@ type Result = {
 };
 
 /** Somente indicadores do backend, sem saldos, progresso ou pagamentos seed. */
-export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateTab }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ state, onNavigateTab, authenticatedName }) => {
   const role = state.currentRole;
   const scope = [state.currentUserId, role, state.currentTenantId].join(':');
   const [result, setResult] = useState<Result>({ scope: '', status: 'loading' });
   const [revision, setRevision] = useState(0);
-  const currentUser = state.users.find(user => user.id === state.currentUserId);
-  const firstName = currentUser?.name?.trim().split(/\s+/)[0] || 'você';
+  const firstName = authenticatedName?.trim().split(/\s+/)[0] || 'você';
 
   useEffect(() => {
     let alive = true;

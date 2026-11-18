@@ -14,8 +14,8 @@
   <ellipse cx="256" cy="251" rx="203" ry="78" fill="none" stroke="#e9b24b" stroke-width="4" opacity=".55" transform="rotate(-13 256 251)"/>
   <ellipse cx="256" cy="251" rx="189" ry="69" fill="none" stroke="#a1dd42" stroke-width="2" opacity=".36" transform="rotate(-13 256 251)"/>
   <g filter="url(#shadow)">
-    <text x="256" y="330" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="302" font-weight="bold" font-style="italic" fill="#5e3b09" stroke="#683f07" stroke-width="8">R</text>
-    <text x="254" y="322" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="302" font-weight="bold" font-style="italic" fill="url(#gold)" stroke="#ffe7a0" stroke-width="1.7">R</text>
+    <text x="256" y="330" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="228" letter-spacing="-20" font-weight="bold" font-style="italic" fill="#5e3b09" stroke="#683f07" stroke-width="8">FR</text>
+    <text x="254" y="322" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="228" letter-spacing="-20" font-weight="bold" font-style="italic" fill="url(#gold)" stroke="#ffe7a0" stroke-width="1.7">FR</text>
     <path d="M111 301 C167 318 255 242 362 175" fill="none" stroke="#81521a" stroke-width="27" stroke-linecap="round"/>
     <path d="M111 294 C176 310 260 225 366 170" fill="none" stroke="url(#gold)" stroke-width="20" stroke-linecap="round"/>
     <path d="M198 255 C172 222 192 188 253 167 C253 208 234 237 198 255Z" fill="url(#leaf)" stroke="#d0e987" stroke-width="2"/>

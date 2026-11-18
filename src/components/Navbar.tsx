@@ -4,6 +4,7 @@ import { AppState } from '../services/store';
 
 interface NavbarProps {
   state: AppState;
+  authenticatedName?: string;
   onOpenManual: () => void;
   onOpenAudit: () => void;
   onOpenMobileInstall: () => void;
@@ -14,12 +15,12 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  state, onOpenManual, onOpenAudit, onOpenMobileInstall,
+  state, authenticatedName, onOpenManual, onOpenAudit, onOpenMobileInstall,
   onOpenMobilePreview, onNavigateCloud, onOpenGitHub, onLogout,
 }) => {
   const [toolsOpen, setToolsOpen] = useState(false);
-  const currentUser = state.users.find(user => user.id === state.currentUserId);
-  const displayName = (currentUser?.name || 'Sua conta').trim().split(' ')[0];
+  // Authenticated identity from the server, never demonstration seed users.
+  const displayName = authenticatedName?.trim().split(/\s+/)[0] || 'sua conta';
   const build = String(import.meta.env?.VITE_APP_BUILD_REF || 'local').slice(0, 7);
   const master = state.currentRole === 'MASTER';
 
@@ -35,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="fr-app-header relative z-40 shrink-0 border-b border-[#9f7a38]/35 bg-[#032d21] text-[#fff2cd] shadow-lg">
       <div className="mx-auto flex h-[66px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <img src="/icon.svg?v=fr-finance-m21400" alt="FR Finance" width="44" height="44"
+          <img src="/icon.svg?v=fr-finance-m40500" alt="FR Finance" width="44" height="44"
             className="h-11 w-11 shrink-0 rounded-xl border border-[#b99444]/60" />
           <div className="min-w-0">
             <div className="flex items-center gap-2">

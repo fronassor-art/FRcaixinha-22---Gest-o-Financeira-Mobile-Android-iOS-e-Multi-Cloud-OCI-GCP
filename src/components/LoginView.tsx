@@ -158,12 +158,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   }
 
   return (
-    <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-8 sm:py-10 flex flex-col items-center justify-center">
-      <div className="relative z-10 w-full max-w-sm">
+    <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-6 sm:py-10 flex flex-col items-center justify-start">
+      <div className="relative z-10 my-auto w-full max-w-sm">
         <div className="flex flex-col items-center pb-6">
           <button type="button" onClick={openReservedAccess} aria-label="Logotipo FR Finance"
             className="rounded-[26px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f3d483]">
-            <img src="/icon.svg?v=fr-finance-m21400" alt="FR Finance — monograma dourado e folhas"
+            <img src="/icon.svg?v=fr-finance-m40500" alt="FR Finance — monograma dourado e folhas"
               width="120" height="120" className="h-24 w-24 rounded-[26px] shadow-2xl shadow-amber-600/20" />
           </button>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight">

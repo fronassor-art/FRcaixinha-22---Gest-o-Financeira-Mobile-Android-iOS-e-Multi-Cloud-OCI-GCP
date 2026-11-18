@@ -55,6 +55,10 @@ main.fr-page {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   padding-bottom: max(2rem, var(--fr-safe-bottom));
+  /* Flex auto margins center small login cards without hiding their tops. */
+  scroll-padding-top: 1rem;
+  align-items: center;
+  justify-content: flex-start;
 }
 button { touch-action: manipulation; }
 .fr-page { background: radial-gradient(ellipse at top left, #0b6441 0, #063c2d 35%, #03251e 78%); color: #fff7e6; }
