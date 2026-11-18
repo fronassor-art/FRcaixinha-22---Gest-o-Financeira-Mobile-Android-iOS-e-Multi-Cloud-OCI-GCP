@@ -8,6 +8,8 @@ on:
       - 'backend/tests/test_m40340_source_guards_ci.py'
       - 'backend/tests/m40380_real_auth_credit_rls_ci.py'
       - 'backend/tests/m40400_same_tenant_rls_ci.py'
+      - 'backend/tests/m40410_campaign_lifecycle_ci.py'
+      - 'docs/FR_FINANCE_M40410_CAMPAIGN_LIFECYCLE.md'
       - 'docs/FR_FINANCE_M40400_SAME_TENANT_PRIVACY.md'
       - 'src/tests/m40390_mobile_negative_ci.test.ts'
       - 'docs/FR_FINANCE_M40390_NEGATIVE_ANDROID_API.md'
@@ -20,6 +22,8 @@ on:
       - 'backend/tests/test_m40340_source_guards_ci.py'
       - 'backend/tests/m40380_real_auth_credit_rls_ci.py'
       - 'backend/tests/m40400_same_tenant_rls_ci.py'
+      - 'backend/tests/m40410_campaign_lifecycle_ci.py'
+      - 'docs/FR_FINANCE_M40410_CAMPAIGN_LIFECYCLE.md'
       - 'docs/FR_FINANCE_M40400_SAME_TENANT_PRIVACY.md'
       - 'src/tests/m40390_mobile_negative_ci.test.ts'
       - 'docs/FR_FINANCE_M40390_NEGATIVE_ANDROID_API.md'
@@ -241,6 +245,7 @@ jobs:
           set -euo pipefail
           python -B backend/tests/m40380_real_auth_credit_rls_ci.py
           python -B backend/tests/m40400_same_tenant_rls_ci.py
+          python -B backend/tests/m40410_campaign_lifecycle_ci.py
           echo M40380_TERMUX_DB=NOT_CONNECTED
           echo M40380_LOCAL_MIGRATIONS=NONE
           echo M40380_DISPATCH=OFF
