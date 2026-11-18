@@ -21,7 +21,50 @@ EXPECTED_PROJECT = "PASS_STATIC_ORIGINAL_FR_FINANCE_PG18"
 EXPECTED_BINARIES = "TERMUX_POSTGRES_BINARIES_PRESENT_NOT_EXECUTED"
 EXPECTED_CTL = "ORIGINAL_PGDATA_PROCESS_REPORTED_RUNNING"
 EXPECTED_READY = "PORT_5433_ACCEPTING_UNAUTHENTICATED"
-EXPECTED_API = "PASS_LOCAL_READONLY_FUNCTIONAL_SMOKE"
+EXPECTED_API = "PASS_API_GET_ONLY_NO_DATABASE_READINESS"
+
+
+def api_no_database_probe() -> dict[str, str]:
+    """Only four GET endpoints proven not to open database connections.
+
+    In particular, NEVER call /api/health/ready, which directly opens
+    asyncpg connections from the running FastAPI configuration. We must
+    not risk reaching the independent FR Caixinha 2.2 PostgreSQL.
+    """
+    from backend.scripts.frfinance_m40190_operational_readonly_checkpoint import (
+        HEALTH, CHECKPOINT, MARKER, ROUTES, guarded, safe_get,
+    )
+    from backend.scripts.frfinance_m40080_loaded_source_readonly import (
+        local_hashes, classify_marker,
+    )
+    from backend.app.m39700_runtime_contract import (
+        classify_health, classify_checkpoint, classify_routes,
+    )
+    result = {"M40530_API_STATUS": "BLOCKED_API_MARKERS"}
+    try:
+        local = local_hashes()
+        if type(local) is not dict or len(local) != 3:
+            return result
+        health_code, health = guarded(safe_get, HEALTH)
+        if health_code != 200 or classify_health(health) != "FR_FINANCE_ONLINE":
+            return result
+        checkpoint_code, checkpoint = guarded(safe_get, CHECKPOINT)
+        if checkpoint_code != 200 or classify_checkpoint(checkpoint) != (
+                "M39700_RUNNING_CODE_LOADED"):
+            return result
+        marker_code, marker = guarded(safe_get, MARKER)
+        if classify_marker(marker_code, marker, local) != (
+                "M40080_IMPORT_SNAPSHOT_MATCHES_LOCAL_FILES"):
+            return result
+        routes_code, routes = guarded(safe_get, ROUTES)
+        if routes_code != 200:
+            return result
+        route_state, missing = classify_routes(routes)
+        if route_state != "GET_ROUTES_PRESENT" or missing:
+            return result
+    except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+        return result
+    return {"M40530_API_STATUS": "PASS_API_GET_ONLY_NO_DATABASE_READINESS"}
 
 
 def assess(
@@ -70,7 +113,7 @@ def assess(
         return out
     try:
         api = api_report()
-        outcome = api.get("M40190_STATUS") if type(api) is dict else None
+        outcome = api.get("M40530_API_STATUS") if type(api) is dict else None
     except Exception:
         outcome = None
     out["M40530_API"] = outcome if outcome == EXPECTED_API else "NOT_ATTESTED_LOCAL_API"
@@ -99,8 +142,8 @@ def main(argv: list[str] | None = None) -> int:
         from backend.scripts.frfinance_m40150_original_pg18_status_readonly import (
             identity, allowed_executables, pg_ctl_status, pg_isready_status,
         )
-        from backend.scripts.frfinance_m40190_operational_readonly_checkpoint import report
-        result = assess(identity, allowed_executables, pg_ctl_status, pg_isready_status, report)
+        result = assess(identity, allowed_executables, pg_ctl_status, pg_isready_status,
+                        api_no_database_probe)
         for key, value in result.items():
             print(f"{key}={value}")
         return 0 if result["M40530_STATUS"] == "PASS_LOCAL_READONLY_NOT_PRODUCTION" else 2
@@ -109,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         print("M40530_PG_5432_FR22=NOT_ACCESSED")
         print("M40530_DB_SQL=NONE")
         print("M40530_DB_WRITES=NONE")
-        print("M40530_HTTP=GET_FIXED_LOOPBACK_ONLY_IF_ISOLATION_PASSED")
+        print("M40530_HTTP=FOUR_FIXED_GETS_ONLY_AFTER_ISOLATION")\n        print("M40530_HTTP_READY_ROUTE=NEVER_CALLED")\n        print("M40530_BACKEND_DB_READINESS=NOT_ACCESSED")
         print("M40530_HTTP_POST=NONE")
         print("M40530_MIGRATIONS=NONE")
         print("M40530_FASTAPI_RESTART=NONE")
