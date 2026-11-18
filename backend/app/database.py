@@ -15,6 +15,7 @@ from typing import AsyncGenerator, Optional
 from fastapi import Depends, HTTPException, status
 from .config import settings
 from .dependencies import get_current_session, AuthenticatedSession
+from .m40610_verified_rls_session import UnverifiedRLSSession, require_verified_rls_session
 
 # Variável de pool global
 _db_pool = None
@@ -57,6 +58,14 @@ async def get_rls_db_connection(
     Injeta conexão transacional com RLS configurado de forma estrita no PostgreSQL.
     Os parâmetros são extraídos EXCLUSIVAMENTE da sessão autenticada no servidor.
     """
+    # M40610: fail before pool acquisition when the evidence is legacy/stale.
+    try:
+        require_verified_rls_session(session)
+    except UnverifiedRLSSession:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão financeira não verificada ou expirada."
+        ) from None
     if not settings.is_database_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
