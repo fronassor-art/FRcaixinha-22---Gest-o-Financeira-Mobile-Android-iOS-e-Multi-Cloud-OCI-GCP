@@ -12,6 +12,8 @@ SENSITIVE_PATHS = (
     "backend/app/database.py",
     "backend/app/dependencies.py",
     "backend/app/routers/saas_promotions.py",
+    "backend/app/routers/loans.py",
+    "backend/app/routers/contributions.py",
 )
 SQL_METHODS = frozenset(("execute", "fetch", "fetchrow", "fetchval", "executemany"))
 
@@ -60,7 +62,7 @@ def main() -> int:
     counts = [r[k][0] for k in SENSITIVE_PATHS]
     safe = all(count > 0 and not r[path][1] for path, count in zip(SENSITIVE_PATHS, counts))
     print("M40580_STATUS=" + ("PASS_STATIC_LITERAL_SQL_ONLY" if safe else "BLOCKED_DYNAMIC_SQL"))
-    print("M40580_SCOPE=THREE_CRITICAL_FILES_NOT_WHOLE_REPOSITORY")
+    print("M40580_SCOPE=FIVE_CRITICAL_FILES_NOT_WHOLE_REPOSITORY")
     print("M40580_SQL_EXECUTION=NONE")
     print("M40580_ORIGINAL_DB=NOT_ACCESSED")
     print("M40580_GUC_SPOOF_EXPOSURE=NOT_REMEDIATED")
