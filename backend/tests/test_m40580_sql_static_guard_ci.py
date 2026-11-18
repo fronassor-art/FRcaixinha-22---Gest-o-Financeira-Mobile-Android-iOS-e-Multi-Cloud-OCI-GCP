@@ -44,6 +44,13 @@ def test_guard_detects_a_new_fstring_sql_call(tmp_path):
     assert count==1 and "DYNAMIC_SQL_ARGUMENT" in issues[0]
 
 
+def test_guard_catches_renamed_connection_alias(tmp_path):
+    path=tmp_path/"db_alias.py"
+    path.write_text("def handler(db,sql):\n  db.fetch(sql)\n")
+    count,issues=audit_source(path)
+    assert count==1 and len(issues)==1
+
+
 def test_guard_detects_new_variable_query_argument(tmp_path):
     path=tmp_path/"queries.py"
     path.write_text("def handler(conn,user_sql):\n  conn.execute(user_sql)\n")
