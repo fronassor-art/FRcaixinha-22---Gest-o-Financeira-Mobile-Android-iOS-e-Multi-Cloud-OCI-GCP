@@ -82,8 +82,8 @@ const markup=renderToStaticMarkup(React.createElement(
 check(()=>assert.match(markup,/Push, e-mail, WhatsApp, SMS e Pix reais não são enviados/));
 check(()=>assert.doesNotMatch(markup,/Registrar autorização especial/));
 check(()=>assert.doesNotMatch(markup,/Tenho interesse<\/button>/));
-assert.equal(checks,49,'M40420 test case count drift '+checks);
-console.log('M40420_UI_PRESENTATION_AND_INVALID_PAYLOADS=PASS_49_OF_49');
+assert.equal(checks,50,'M40420 test case count drift '+checks);
+console.log('M40420_UI_PRESENTATION_AND_INVALID_PAYLOADS=PASS_50_OF_50');
 console.log('M40420_MALFORMED_OFFERS_AND_REAL_DELIVERY=FAIL_CLOSED');
 console.log('M40420_MEMBER_DECLINE_AND_EXPIRY=NO_ACTIONS');
 console.log('M40420_MASTER_RENDER=BLOCKED');
