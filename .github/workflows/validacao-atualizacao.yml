@@ -203,6 +203,8 @@ jobs:
         run: npx tsx src/tests/m40440_same_account_session_ui_ci.test.ts
       - name: M40500 — 5 pendencias Android, identidade, biometria e perfil
         run: npx tsx src/tests/m40500_consolidated_ui_identity_ci.test.ts
+      - name: M40510 — retorno ao topo login Android e teclado visual
+        run: npx tsx src/tests/m40510_android_login_viewport_ci.test.ts
       - name: Build web
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -57,6 +57,10 @@ main.fr-page {
   padding-bottom: max(2rem, var(--fr-safe-bottom));
   /* Flex auto margins center small login cards without hiding their tops. */
   scroll-padding-top: 1rem;
+  padding-top: max(1.5rem, var(--fr-safe-top));
+  /* Android IME viewport is updated by LoginView; prevent visual overflow. */
+  max-height: 100%;
+  overflow-anchor: none;
   align-items: center;
   justify-content: flex-start;
 }

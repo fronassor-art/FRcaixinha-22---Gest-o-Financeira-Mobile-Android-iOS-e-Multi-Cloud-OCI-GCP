@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users, BriefcaseBusiness, AlertCircle } from 'lucide-react';
 import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform } from '../services/authService';
 import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
 import {probeMobileBackendHealth} from '../services/mobileBackendProbe';
 import { AccessLinkView, parseAccessLink, type AccessLink } from './AccessLinkView';
+import {resetLoginScroll,visibleLoginHeight} from '../services/loginViewport';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthenticatedUser) => void;
@@ -53,6 +54,51 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   // A navegacao reservada nao e uma credencial: o backend e a unica autoridade.
   const ownerRoute = '#/acesso-proprietario';
   const logoTaps = useRef({ count: 0, last: 0 });
+  const loginScrollRef = useRef<HTMLElement|null>(null);
+  // Restore the real visible top of the login (including immediately after
+  // logout). Android may otherwise retain scrollTop from the old WebView.
+  useLayoutEffect(() => {
+    const node=loginScrollRef.current;
+    if(!node)return;
+    let alive=true;
+    const fitVisualViewport=()=>{
+      if(!alive)return;
+      const parent=node.parentElement;
+      const layoutAvailable=parent
+        ? parent.getBoundingClientRect().bottom-node.getBoundingClientRect().top
+        : window.innerHeight;
+      const visual=window.visualViewport;
+      const visibleHeight=visibleLoginHeight(
+        layoutAvailable,
+        visual?.height ?? window.innerHeight,
+        visual?.offsetTop ?? 0,
+        node.getBoundingClientRect().top,
+      );
+      node.style.maxHeight=visibleHeight+'px';
+      // The role selector has no inputs that require keeping the keyboard
+      // anchor. Always show FR Finance and the full top after logout.
+      if(selectedRole===null)resetLoginScroll(node);
+    };
+    resetLoginScroll(node);
+    fitVisualViewport();
+    const frame=window.requestAnimationFrame(()=>{
+      if(alive){fitVisualViewport();resetLoginScroll(node);}
+    });
+    window.addEventListener('resize',fitVisualViewport);
+    window.addEventListener('pageshow',fitVisualViewport);
+    const visual=window.visualViewport;
+    visual?.addEventListener('resize',fitVisualViewport);
+    visual?.addEventListener('scroll',fitVisualViewport);
+    return()=>{
+      alive=false;
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize',fitVisualViewport);
+      window.removeEventListener('pageshow',fitVisualViewport);
+      visual?.removeEventListener('resize',fitVisualViewport);
+      visual?.removeEventListener('scroll',fitVisualViewport);
+      node.style.removeProperty('max-height');
+    };
+  },[mode,selectedRole]);
   useEffect(() => {
     const syncReservedRoute = () => {
       if (window.location.hash !== ownerRoute) return;
@@ -158,7 +204,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   }
 
   return (
-    <main className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-6 sm:py-10 flex flex-col items-center justify-start">
+    <main ref={loginScrollRef} data-fr-login-scroll="true" className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-6 sm:py-10 flex flex-col items-center justify-start">
       <div className="relative z-10 my-auto w-full max-w-sm">
         <div className="flex flex-col items-center pb-6">
           <button type="button" onClick={openReservedAccess} aria-label="Logotipo FR Finance"
