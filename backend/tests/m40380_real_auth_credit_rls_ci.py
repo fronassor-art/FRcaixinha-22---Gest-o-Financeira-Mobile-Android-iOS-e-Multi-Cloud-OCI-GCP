@@ -184,6 +184,82 @@ def main():
    "password":"m40380-synthetic-password","requestedRole":"TENANT_ADMIN",
    "requestedTenantId":str(B)})
   assert invalid.status_code==401 and "token" not in invalid.json()
+  # M40390 negative FastAPI checks only on disposable PostgreSQL18.
+  wrong=client.post("/api/v1/auth/login",json={
+   "usernameOrEmail":str(ACTORS["admin_a"])+"@example.com",
+   "password":"M40390-wrong-password","requestedRole":"TENANT_ADMIN",
+   "requestedTenantId":str(A)})
+  assert wrong.status_code==401 and "token" not in wrong.json(),wrong.status_code
+  bad=client.get(f"/api/v1/tenants/{A}/special-credit/capabilities",
+    headers={"Authorization":"Bearer invalid-m40390"})
+  assert bad.status_code==401
+  grant={"member_ids":[str(LINKS["member_a"])],"ceiling_brl":"1800.00",
+   "expires_at":"2027-06-01T12:00:00Z",
+   "reason":"M40390 offline synthetic check, never real credit",
+   "request_id":"40380909-0000-4000-8000-000000000001"}
+  campaign={"grant_ids":["40380101-0000-4000-8000-000000000001"],
+   "title":"M40390 offline test","body":"No external delivery or finance.",
+   "expires_at":"2027-06-01T12:00:00Z",
+   "request_id":"40380909-0000-4000-8000-000000000002"}
+  cases=[
+   ("admin_a",A,"TENANT_ADMIN",[
+    ("GET",A,"/members",None,503),
+    ("GET",A,"/campaigns",None,503),
+    ("POST",A,"/grants",grant,503),
+    ("POST",A,"/campaigns",campaign,503),
+    ("POST",A,"/campaigns/40380202-0000-4000-8000-000000000001/publish",{},503),
+    ("GET",B,"/capabilities",None,403),
+    ("POST",B,"/grants",grant,403),
+    ("GET",A,"/opportunities",None,403),
+    ("POST",A,"/preferences",{"channel":"PUSH","opted_in":True},403),
+   ]),
+   ("member_a",A,"TENANT_MEMBER",[
+    ("GET",A,"/opportunities",None,503),
+    ("GET",A,"/preferences",None,503),
+    ("POST",A,"/preferences",{"channel":"PUSH","opted_in":False},503),
+    ("POST",A,"/opportunities/40380303-0000-4000-8000-000000000001/reply",
+      {"status":"DECLINED"},503),
+    ("GET",A,"/campaigns",None,403),
+    ("POST",A,"/grants",grant,403),
+    ("GET",B,"/capabilities",None,403),
+    ("POST",B,"/preferences",{"channel":"PUSH","opted_in":False},403),
+   ]),
+   ("master",None,"MASTER",[
+    ("GET",A,"/capabilities",None,403),
+    ("POST",A,"/grants",grant,403),
+    ("GET",B,"/opportunities",None,403),
+   ]),
+  ]
+  decisions=0
+  for name,own,role,requests in cases:
+   payload={"usernameOrEmail":str(ACTORS[name])+"@example.com",
+    "password":"m40380-synthetic-password","requestedRole":role}
+   if own is not None:payload["requestedTenantId"]=str(own)
+   logged=client.post("/api/v1/auth/login",json=payload)
+   assert logged.status_code==200,(name,logged.status_code)
+   headers={"Authorization":"Bearer "+logged.json()["token"]}
+   for method,tenant,path,body,expected in requests:
+    kwargs={"headers":headers}
+    if body is not None:kwargs["json"]=body
+    response=client.request(method,
+      f"/api/v1/tenants/{tenant}/special-credit"+path,**kwargs)
+    assert response.status_code==expected,(name,method,path,response.status_code,expected)
+    decisions+=1
+   assert client.post("/api/v1/auth/logout",headers=headers).status_code==200
+  assert decisions==20,decisions
+  with psycopg.connect(host="127.0.0.1",port=5432,dbname=DB,
+       user="postgres",password="postgres",connect_timeout=3) as verify:
+   for table in TABLES:
+    value=verify.execute("SELECT count(*) FROM public."+table).fetchone()[0]
+    assert value==2,(table,value)
+   blocked=verify.execute("SELECT count(*) FROM public.special_credit_outbox "
+      "WHERE state='BLOCKED_EXTERNAL'").fetchone()[0]
+   assert blocked==2,blocked
+  print("M40390_REAL_FASTAPI_NEGATIVE_HTTP=PASS_20_OF_20")
+  print("M40390_WRONG_PASSWORD_BEARER_AND_CROSS_TENANT=DENIED")
+  print("M40390_SANDBOX_MUTATIONS=DENIED_NO_CREDIT_WRITES")
+  print("M40390_SQL110_SIX_TABLES=UNCHANGED")
+
  assert checks==60,checks
  print("M40380_REAL_PASSWORD_AUTH_SQL_FUNCTIONS=PASS")
  print("M40380_SQL110_FORCE_RLS=PASS_6_OF_6")

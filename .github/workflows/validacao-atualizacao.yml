@@ -193,6 +193,8 @@ jobs:
           npx tsx src/tests/m39091_special_credit_route_404_ci.test.ts
           npx tsx src/tests/m39076_tenant_campaigns_navigation_ci.test.ts
           npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
+      - name: M40390 — 44 cenarios negativos de sessao e credito Android
+        run: npx tsx src/tests/m40390_mobile_negative_ci.test.ts
       - name: Build web
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
