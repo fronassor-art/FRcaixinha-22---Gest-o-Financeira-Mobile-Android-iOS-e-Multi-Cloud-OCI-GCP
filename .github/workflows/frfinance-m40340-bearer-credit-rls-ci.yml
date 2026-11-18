@@ -7,6 +7,8 @@ on:
       - 'backend/tests/m40340_bearer_credit_runtime_ci.py'
       - 'backend/tests/test_m40340_source_guards_ci.py'
       - 'backend/tests/m40380_real_auth_credit_rls_ci.py'
+      - 'backend/tests/m40400_same_tenant_rls_ci.py'
+      - 'docs/FR_FINANCE_M40400_SAME_TENANT_PRIVACY.md'
       - 'src/tests/m40390_mobile_negative_ci.test.ts'
       - 'docs/FR_FINANCE_M40390_NEGATIVE_ANDROID_API.md'
       - 'docs/FR_FINANCE_M40380_AUTH_SQL110.md'
@@ -17,6 +19,8 @@ on:
       - 'backend/tests/m40340_bearer_credit_runtime_ci.py'
       - 'backend/tests/test_m40340_source_guards_ci.py'
       - 'backend/tests/m40380_real_auth_credit_rls_ci.py'
+      - 'backend/tests/m40400_same_tenant_rls_ci.py'
+      - 'docs/FR_FINANCE_M40400_SAME_TENANT_PRIVACY.md'
       - 'src/tests/m40390_mobile_negative_ci.test.ts'
       - 'docs/FR_FINANCE_M40390_NEGATIVE_ANDROID_API.md'
       - 'docs/FR_FINANCE_M40380_AUTH_SQL110.md'
@@ -236,6 +240,7 @@ jobs:
         run: |
           set -euo pipefail
           python -B backend/tests/m40380_real_auth_credit_rls_ci.py
+          python -B backend/tests/m40400_same_tenant_rls_ci.py
           echo M40380_TERMUX_DB=NOT_CONNECTED
           echo M40380_LOCAL_MIGRATIONS=NONE
           echo M40380_DISPATCH=OFF
