@@ -87,7 +87,8 @@ def bootstrap(conn) -> None:
             AND s.active_role IN ('TENANT_MEMBER','TENANT_ADMIN')
             AND s.active_tenant_id=p_tenant;
           IF NOT FOUND THEN RETURN NULL; END IF;
-          v_ticket=pg_catalog.encode(pg_catalog.gen_random_bytes(32),'hex');
+          v_ticket=pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','') ||
+                   pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
           INSERT INTO m40650.m40680_tickets
             (digest,session_digest,tenant_id,expires_at)
           VALUES (
