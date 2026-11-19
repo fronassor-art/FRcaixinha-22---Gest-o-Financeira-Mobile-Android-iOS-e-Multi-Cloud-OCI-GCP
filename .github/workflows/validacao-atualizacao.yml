@@ -32,6 +32,9 @@ on:
       - 'backend/app/m40830_financial_envelope_prototype.py'
       - 'backend/tests/test_m40830_sealed_reads_no_go_ci.py'
       - '.github/workflows/frfinance-m40830-sealed-reads-no-go-ci.yml'
+      - 'backend/app/m40840_financial_sql_release_no_go.py'
+      - 'backend/tests/test_m40840_financial_sql_release_ci.py'
+      - '.github/workflows/frfinance-m40840-financial-sql-release-no-go-ci.yml'
   pull_request:
     branches:
       - main

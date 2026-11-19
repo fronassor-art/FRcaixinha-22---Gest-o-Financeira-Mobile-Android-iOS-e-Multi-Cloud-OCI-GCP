@@ -23,6 +23,9 @@ _db_pool = None
 async def get_db_pool():
     """Inicializa e retorna o pool de conexões PostgreSQL (asyncpg)."""
     global _db_pool
+    # M40840: prevent even an already-cached pool from being used in production.
+    from .m40840_financial_sql_release_no_go import require_nonproduction_financial_sql
+    require_nonproduction_financial_sql(os.environ)
     if _db_pool is None:
         if not settings.DATABASE_URL or not settings.DATABASE_URL.startswith("postgres"):
             raise RuntimeError(
@@ -83,6 +86,17 @@ async def get_rls_db_connection(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Banco de dados PostgreSQL não conectado. Operação financeira ou de dados recusada com segurança."
         )
+    # M40840: this role/GUC data plane is not yet approved for production.
+    from .m40840_financial_sql_release_no_go import (
+        FinancialSQLReleaseBlocked, require_nonproduction_financial_sql,
+    )
+    try:
+        require_nonproduction_financial_sql(os.environ)
+    except FinancialSQLReleaseBlocked:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Acesso financeiro bloqueado até revisão da fronteira SQL."
+        ) from None
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         # Inicia transação explícita
