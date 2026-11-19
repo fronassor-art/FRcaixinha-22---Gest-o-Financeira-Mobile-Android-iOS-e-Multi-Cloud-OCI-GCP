@@ -55,7 +55,10 @@ def require_verified_rls_session(session: object, *, now: datetime | None = None
         if is_master is not True or tenant is not None:
             raise UnverifiedRLSSession("UNVERIFIED_RLS_SESSION")
     elif role in ("TENANT_ADMIN", "TENANT_MEMBER"):
-        if is_master is not False or not _valid_uuid(tenant):
+        # is_master describes the account, not its active session role.
+        # A Master account may also authenticate in an explicitly verified
+        # tenant membership; the active role/tenant is separately attested.
+        if not isinstance(is_master, bool) or not _valid_uuid(tenant):
             raise UnverifiedRLSSession("UNVERIFIED_RLS_SESSION")
     else:
         raise UnverifiedRLSSession("UNVERIFIED_RLS_SESSION")
