@@ -104,11 +104,12 @@ def audit(conn) -> None:
     ).fetchone()[0]
     assert visible_before == 0
 
-    # Non-superuser SQL roles can set custom GUC values. This is a known,
-    # unmitigated failure of treating GUC claims as independent authentication.
-    conn.execute("SELECT set_config('app.current_role','MASTER',true)")
+    # Non-superuser SQL roles can set custom GUC values. The disposable
+    # connection is autocommit=True, so false is required to persist each GUC
+    # across SQL statements. This is a known unmitigated trust boundary.
+    conn.execute("SELECT set_config('app.current_role','MASTER',false)")
     conn.execute(
-        "SELECT set_config('app.current_user_id',%s,true)",
+        "SELECT set_config('app.current_user_id',%s,false)",
         (str(master_id),),
     )
     visible_after = conn.execute(

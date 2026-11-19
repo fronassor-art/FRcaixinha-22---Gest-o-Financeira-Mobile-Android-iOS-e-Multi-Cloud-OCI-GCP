@@ -98,3 +98,8 @@ def test_ci_uses_only_synthetic_postgres_and_no_live_provider():
     assert "ssh " not in WF
     assert "pg_ctl" not in WF
     assert "kubectl" not in WF
+
+def test_autocommit_guc_spoof_uses_session_scope_not_transaction_local():
+    assert "set_config('app.current_role','MASTER',false)" in SOURCE
+    assert "set_config('app.current_user_id',%s,false)" in SOURCE
+    assert "set_config('app.current_role','MASTER',true)" not in SOURCE
