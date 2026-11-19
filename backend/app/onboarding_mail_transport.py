@@ -136,6 +136,11 @@ def submit_access_message(
     Only a post-commit trusted worker with durable idempotent outbox may call
     this. No SMTP exception or token is returned/logged to HTTP callers.
     """
+    # M40820: the adapter must not open a real SMTP socket by default.
+    # Explicit injected CI fakes remain supported for offline regression.
+    # A custom Python factory is NOT independently proven network-free.
+    if smtp_factory is smtplib.SMTP or smtp_factory is smtplib.SMTP_SSL:
+        raise MailConfigurationBlocked("M40820_REAL_SMTP_TRANSPORT_BLOCKED")
     mailbox = _mailbox(recipient)
     if not isinstance(config, SmtpSubmissionConfig) or config.port != 587:
         raise MailConfigurationBlocked("SMTP_TLS_CONFIG_UNVERIFIED")

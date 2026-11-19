@@ -26,6 +26,9 @@ on:
       - 'backend/app/m40810_bearer_input_guard.py'
       - 'backend/tests/test_m40810_bearer_input_no_go_ci.py'
       - '.github/workflows/frfinance-m40810-bearer-ambiguity-ci.yml'
+      - 'backend/app/onboarding_mail_transport.py'
+      - 'backend/tests/test_m40820_smtp_real_no_go_ci.py'
+      - '.github/workflows/frfinance-m40820-smtp-egress-no-go-ci.yml'
   pull_request:
     branches:
       - main
