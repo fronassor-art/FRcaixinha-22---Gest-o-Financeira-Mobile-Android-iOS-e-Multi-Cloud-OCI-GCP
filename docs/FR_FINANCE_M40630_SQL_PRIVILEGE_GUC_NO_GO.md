@@ -17,3 +17,7 @@ Resultado esperado: ACL/RLS são camadas relevantes, mas o desenho atual **não 
 Projetar um canal de consulta protegido contra SQL arbitrário, por exemplo com papéis e funções PostgreSQL de autoridade delimitada, levando em conta privilégios \`EXECUTE\`, \`SECURITY DEFINER\`, conexões de runtime separadas, risco de funções invocáveis e efeitos de \`SET ROLE\`; rodar prova negativa em PG18 descartável. Somente após revisão de arquitetura, teste de integração com bearer e consentimento explícito para migração no PostgreSQL original considerar produção. Não usar GUC simples como prova de identidade.
 
 **Ambientes locais preservados:** FR Finance PG18 \`frcaixinha_aistudio_dev\` porta 5433, FR Caixinha 2.2 independente. Sem aplicação de SQL local, reinício FastAPI/PostgreSQL, migrações, comunicações, Pix ou pagamentos reais. \`PIX_REAL=OFF\`, \`PAGAMENTOS_REAIS=OFF\`, \`ATIVACAO_REAL=OFF\`, \`PRODUCTION=BLOCKED\`.
+
+## Revisão da CI: INSERT restrito por coluna
+
+A primeira execução do M40630 expôs uma incorreção **no teste**, não uma falha de permissão: SQL113 concede INSERT apenas em 14 colunas nomeadas, portanto `has_table_privilege(...,'INSERT')` deve retornar falso. O teste foi ajustado para exigir ausência de INSERT geral, verificar as 14 colunas permitidas, bloquear INSERT direto em `id` e `created_at` e rejeitar INSERT no papel de autenticação. Isso preserva a implementação SQL113 e melhora a precisão do diagnóstico.

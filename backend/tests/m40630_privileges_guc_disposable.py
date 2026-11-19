@@ -73,13 +73,30 @@ def audit(conn) -> None:
             (role,table,privilege),
         ).fetchone()[0]
 
-    for permission in ("SELECT","INSERT"):
-        assert can_table(app,permission), permission
-    for permission in ("UPDATE","DELETE","TRUNCATE","REFERENCES","TRIGGER"):
+    # SQL113 intentionally grants INSERT on an allowlist of COLUMNS.
+    # The application must NOT have blanket table INSERT permission.
+    assert can_table(app, "SELECT")
+    for permission in ("INSERT","UPDATE","DELETE","TRUNCATE","REFERENCES","TRIGGER"):
         assert not can_table(app,permission), permission
     for permission in ("SELECT","INSERT","UPDATE","DELETE","TRUNCATE"):
         assert not can_table(auth,permission), permission
-    print("M40630_SYNTHETIC_TABLE_ACL=PASS")
+
+    def can_column(role: str, column: str, privilege: str) -> bool:
+        return conn.execute(
+            "SELECT has_column_privilege(%s,%s,%s,%s)",
+            (role, table, column, privilege),
+        ).fetchone()[0]
+
+    for column in ("campaign_id","revision","plan_tier","billing_period",
+                   "base_price_version_id","promotional_price","audience",
+                   "title","benefit_description","starts_at","ends_at",
+                   "state","reason","created_by"):
+        assert can_column(app,column,"INSERT"), column
+        assert not can_column(auth,column,"INSERT"), column
+    for column in ("id","created_at"):
+        assert not can_column(app,column,"INSERT"), column
+        assert not can_column(auth,column,"INSERT"), column
+    print("M40630_SYNTHETIC_TABLE_AND_COLUMN_ACL=PASS")
 
     function = "public.frfinance_saas_new_admin_published_promotions()"
     def can_execute(role: str) -> bool:

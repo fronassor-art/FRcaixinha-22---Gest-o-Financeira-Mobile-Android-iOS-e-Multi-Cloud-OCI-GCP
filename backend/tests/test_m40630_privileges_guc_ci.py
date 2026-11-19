@@ -103,3 +103,10 @@ def test_autocommit_guc_spoof_uses_session_scope_not_transaction_local():
     assert "set_config('app.current_role','MASTER',false)" in SOURCE
     assert "set_config('app.current_user_id',%s,false)" in SOURCE
     assert "set_config('app.current_role','MASTER',true)" not in SOURCE
+
+def test_column_scoped_sql113_insert_is_not_table_insert():
+    assert "assert not can_table(app,permission), permission" in SOURCE
+    assert "has_column_privilege" in SOURCE
+    assert '"id","created_at"' in SOURCE
+    sql=(ROOT/"backend/migrations/113_frfinance_saas_new_admin_promotions.sql").read_text()
+    assert "GRANT INSERT(campaign_id,revision,plan_tier" in sql
