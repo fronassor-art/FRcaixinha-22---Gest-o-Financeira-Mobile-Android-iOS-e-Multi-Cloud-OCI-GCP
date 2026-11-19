@@ -26,6 +26,11 @@ async def get_db_pool():
     # M40840: prevent even an already-cached pool from being used in production.
     from .m40840_financial_sql_release_no_go import require_nonproduction_financial_sql
     require_nonproduction_financial_sql(os.environ)
+    # M40850: revalidate target even if a pool is already cached. In
+    # particular, environment downgrades must not reuse privileged DSNs.
+    if _db_pool is not None and settings.DATABASE_URL:
+        from .m40800_financial_dsn_guard import require_financial_dsn_shape
+        require_financial_dsn_shape(settings.DATABASE_URL, os.environ)
     if _db_pool is None:
         if not settings.DATABASE_URL or not settings.DATABASE_URL.startswith("postgres"):
             raise RuntimeError(

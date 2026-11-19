@@ -50,6 +50,19 @@ def require_financial_dsn_shape(dsn: object, env: Mapping[str, str]) -> str:
                 or env.get("DATABASE_URL") != dsn):
             raise FinancialDSNBlocked("M40800_PRODUCTION_FINANCIAL_ROLE_DENIED")
         return "PRODUCTION_SHAPE_REQUIRES_EXTERNAL_REVIEW"
+    # M40850: a forged "development" environment must never make an
+    # apparent production target or privileged DB role acceptable.
+    # This is a DSN syntax gate, NOT a network/server identity proof.
+    if (
+        user in {"postgres", "root", "frc_ai_owner", "frc_ai_auth", "frc_ai_verifier"}
+        or db in {"postgres", "template0", "template1"}
+        or db.endswith(("_prod", "_production"))
+        or db.startswith(("frcaixinha_2_2", "frcaixinha22"))
+        or (host in {"127.0.0.1", "localhost", "::1"} and port == 5433
+            and (user != "frc_ai_app"
+                 or db != "frcaixinha_aistudio_dev"))
+    ):
+        raise FinancialDSNBlocked("M40850_UNTRUSTED_NONPROD_DB_TARGET")
     if env.get("FRCAIXINHA_TERMUX_LOCAL_API") != "1":
         return "NONPRODUCTION_UNATTESTED"
     if (user != "frc_ai_app" or host != "127.0.0.1"
