@@ -32,6 +32,15 @@ def test_verified_master_and_tenant_principals_accepted(role):
     assert require_verified_rls_session(principal(role), now=NOW) is None
 
 
+@pytest.mark.parametrize("role", ["TENANT_ADMIN", "TENANT_MEMBER"])
+def test_master_account_with_explicit_tenant_membership_accepted(role):
+    # is_master is a property of the account, not the active session role.
+    # Access stays bound to the verified role and tenant of this session.
+    assert require_verified_rls_session(
+        principal(role, is_master=True), now=NOW
+    ) is None
+
+
 @pytest.mark.parametrize("bad", [
     {"verification_source":"LEGACY_NO_SESSION_BINDING"},
     {"verified_session_id":None},
@@ -53,7 +62,8 @@ def test_missing_forged_stale_or_naive_evidence_denied(bad):
 @pytest.mark.parametrize("role,fields", [
     ("MASTER", {"is_master":False}),
     ("MASTER", {"tenant_id":str(uuid4())}),
-    ("TENANT_ADMIN", {"is_master":True}),
+    ("TENANT_ADMIN", {"is_master":"true"}),
+    ("TENANT_MEMBER", {"is_master":None}),
     ("TENANT_MEMBER", {"tenant_id":None}),
     ("TENANT_MEMBER", {"tenant_id":"not-uuid"}),
     ("TENANT_MEMBER", {"tenant_id":"00000000-0000-0000-0000-000000000000"}),
