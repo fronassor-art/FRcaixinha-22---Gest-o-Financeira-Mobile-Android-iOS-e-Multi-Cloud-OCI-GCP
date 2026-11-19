@@ -1,6 +1,22 @@
 name: Validação da atualização AI Studio
 
 on:
+  # M40770: PR metadata can lag behind direct non-force branch updates.
+  # Verify the exact branch HEAD after changes to payment-network boundaries.
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - '.github/workflows/validacao-atualizacao.yml'
+      - 'backend/app/mp_pix_execution.py'
+      - 'backend/app/mp_connect_http_runtime.py'
+      - 'backend/app/mp_readonly_gateway.py'
+      - 'backend/tests/test_m40740_pix_network_no_go_ci.py'
+      - 'backend/tests/test_m40750_oauth_egress_no_go_ci.py'
+      - 'backend/tests/test_m40760_readonly_egress_ci.py'
+      - '.github/workflows/frfinance-m40740-pix-network-no-go-ci.yml'
+      - '.github/workflows/frfinance-m40750-oauth-egress-no-go-ci.yml'
+      - '.github/workflows/frfinance-m40760-readonly-egress-no-go-ci.yml'
   pull_request:
     branches:
       - main
