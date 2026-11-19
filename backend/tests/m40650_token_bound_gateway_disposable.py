@@ -255,6 +255,12 @@ def main() -> int:
         with psycopg.connect(os.environ["CI_M40650_DATABASE_URL"], autocommit=True) as conn:
             proof(conn)
     except Exception as exc:
+        # Only a source line/function is emitted; never SQL parameters or tokens.
+        import traceback
+        frames = traceback.extract_tb(exc.__traceback__)
+        if frames:
+            site = frames[-1]
+            print("M40650_FAILURE_SITE=" + site.name + ":" + str(site.lineno))
         print("M40650_STATUS=BLOCKED_" + type(exc).__name__)
         return 2
     finally:
