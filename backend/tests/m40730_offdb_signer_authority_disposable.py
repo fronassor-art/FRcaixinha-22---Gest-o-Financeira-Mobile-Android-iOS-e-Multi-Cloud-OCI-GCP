@@ -276,14 +276,23 @@ async def proof(owner):
     # Verify SQL structural separation through actual low-privilege logins.
     with psycopg.connect(auth_dsn,autocommit=True) as auth:
         auth.execute("SET ROLE m40680_auth")
-        for func in (
-            "m40650.m40680_issue(text,uuid)",
-            "m40730.issue_if_unused(text,uuid,uuid,bigint)",
-        ):
-            assert not auth.execute(
-                "SELECT pg_catalog.has_function_privilege(%s,%s,'EXECUTE')",
-                ("m40680_auth",func),
-            ).fetchone()[0]
+        assert not auth.execute(
+            "SELECT pg_catalog.has_function_privilege("
+            "'m40680_auth','m40650.m40680_issue(text,uuid)','EXECUTE')"
+        ).fetchone()[0]
+        assert not auth.execute(
+            "SELECT pg_catalog.has_schema_privilege("
+            "'m40680_auth','m40730','USAGE')"
+        ).fetchone()[0]
+        # Check protected function by OID; regprocedure text can throw on
+        # schema USAGE absence, which is an expected and desired denial.
+        assert not auth.execute(
+            "SELECT pg_catalog.has_function_privilege("
+            "'m40680_auth',p.oid,'EXECUTE') "
+            "FROM pg_catalog.pg_proc AS p "
+            "JOIN pg_catalog.pg_namespace AS n ON n.oid=p.pronamespace "
+            "WHERE n.nspname='m40730' AND p.proname='issue_if_unused'"
+        ).fetchone()[0]
     with psycopg.connect(fin_dsn,autocommit=True) as fin:
         fin.execute("SET ROLE m40650_app")
         assert not fin.execute(
