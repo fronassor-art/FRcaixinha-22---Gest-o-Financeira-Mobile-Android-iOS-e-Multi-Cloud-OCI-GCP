@@ -44,6 +44,9 @@ on:
       - 'backend/scripts/frfinance_m40870_sql113_guc_inventory.py'
       - 'backend/tests/test_m40870_sql113_guc_inventory_ci.py'
       - '.github/workflows/frfinance-m40880-android-sql-inventory-ci.yml'
+      - 'backend/tests/m40900_sql113_acl_fence_disposable.py'
+      - 'backend/tests/test_m40900_sql113_acl_fence_ci.py'
+      - '.github/workflows/frfinance-m40900-sql113-acl-fence-disposable.yml'
   pull_request:
     branches:
       - main
