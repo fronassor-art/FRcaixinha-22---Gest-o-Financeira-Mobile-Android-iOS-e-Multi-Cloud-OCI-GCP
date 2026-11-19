@@ -305,8 +305,17 @@ async def proof(owner):
             "'m40730_signer','m40730.issue_if_unused(text,uuid,uuid,bigint)','EXECUTE')"
         ).fetchone()[0]
         assert not signer.execute(
+            "SELECT pg_catalog.has_schema_privilege("
+            "'m40730_signer','m40650','USAGE')"
+        ).fetchone()[0]
+        # Without USAGE on m40650, regprocedure text lookup would itself
+        # raise 42501. Use catalog OID, never grant schema access.
+        assert not signer.execute(
             "SELECT pg_catalog.has_function_privilege("
-            "'m40730_signer','m40650.m40680_issue(text,uuid)','EXECUTE')"
+            "'m40730_signer',p.oid,'EXECUTE') "
+            "FROM pg_catalog.pg_proc AS p "
+            "JOIN pg_catalog.pg_namespace AS n ON n.oid=p.pronamespace "
+            "WHERE n.nspname='m40650' AND p.proname='m40680_issue'"
         ).fetchone()[0]
         assert not signer.execute(
             "SELECT pg_catalog.has_table_privilege("
