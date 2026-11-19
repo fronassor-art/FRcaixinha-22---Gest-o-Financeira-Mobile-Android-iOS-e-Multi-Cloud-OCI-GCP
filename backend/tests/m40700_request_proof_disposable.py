@@ -103,9 +103,9 @@ def bootstrap(owner, verifier_secret: bytes) -> None:
              OR p_expiry IS NULL OR p_scope IS DISTINCT FROM 'READ_ENTRIES'
              OR p_proof IS NULL OR p_proof !~ '^[0-9a-f]{64}$'
              OR p_expiry<=pg_catalog.floor(
-                    pg_catalog.extract(epoch from pg_catalog.clock_timestamp()))::bigint
+                    pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint
              OR p_expiry>pg_catalog.floor(
-                    pg_catalog.extract(epoch from pg_catalog.clock_timestamp()))::bigint+30
+                    pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint+30
           THEN RETURN NULL; END IF;
 
           SELECT k.key INTO v_secret FROM m40700.verifier_secret AS k
