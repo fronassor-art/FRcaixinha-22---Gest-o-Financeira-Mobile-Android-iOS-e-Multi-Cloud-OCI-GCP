@@ -85,7 +85,8 @@ async def preview_sandbox_provider_get(
         or type(access_token) is not str
         or not 20 <= len(access_token) <= 4096
         or any(x.isspace() for x in access_token)
-        or not isinstance(transport, httpx.AsyncBaseTransport)
+        # M40760: deny network-capable/custom transports; synthetic mock only.
+        or type(transport) is not httpx.MockTransport
         or not callable(sleep)
     ):
         raise ValueError("GET sandbox: tenant, seller or token invalid")
