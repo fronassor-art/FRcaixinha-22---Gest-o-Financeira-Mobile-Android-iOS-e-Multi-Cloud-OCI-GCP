@@ -110,3 +110,9 @@ def test_column_scoped_sql113_insert_is_not_table_insert():
     assert '"id","created_at"' in SOURCE
     sql=(ROOT/"backend/migrations/113_frfinance_saas_new_admin_promotions.sql").read_text()
     assert "GRANT INSERT(campaign_id,revision,plan_tier" in sql
+
+def test_custom_guc_cleanup_uses_sql_literals_and_not_unquoted_reset():
+    assert 'RESET app.current_role' not in SOURCE
+    assert 'RESET app.current_user_id' not in SOURCE
+    assert "set_config('app.current_role','',false)" in SOURCE
+    assert "set_config('app.current_user_id','',false)" in SOURCE

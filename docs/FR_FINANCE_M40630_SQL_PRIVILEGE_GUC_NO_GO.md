@@ -21,3 +21,7 @@ Projetar um canal de consulta protegido contra SQL arbitrário, por exemplo com 
 ## Revisão da CI: INSERT restrito por coluna
 
 A primeira execução do M40630 expôs uma incorreção **no teste**, não uma falha de permissão: SQL113 concede INSERT apenas em 14 colunas nomeadas, portanto `has_table_privilege(...,'INSERT')` deve retornar falso. O teste foi ajustado para exigir ausência de INSERT geral, verificar as 14 colunas permitidas, bloquear INSERT direto em `id` e `created_at` e rejeitar INSERT no papel de autenticação. Isso preserva a implementação SQL113 e melhora a precisão do diagnóstico.
+
+## Validação da fronteira de confiança após correção de CI
+
+A execução descartável pós-revisão de ACL passou nas etapas de papéis mínimos, FORCE RLS, permissões de colunas, EXECUTE e **reproduziu GUC spoofing com papel app sintético**. A execução finalizou com erro de sintaxe em `RESET app.current_role` durante a limpeza, pois o identificador `current_role` é um token reservado nesse contexto; a limpeza foi alterada para `set_config(..., '', false)` e será novamente verificada exclusivamente na CI. O achado de risco continua NO-GO.

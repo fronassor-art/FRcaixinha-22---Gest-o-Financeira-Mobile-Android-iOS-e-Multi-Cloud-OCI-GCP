@@ -140,9 +140,11 @@ def audit(conn) -> None:
     print("M40630_GUC_SPOOF_EXPOSURE=NOT_REMEDIATED")
 
     conn.execute("RESET ROLE")
-    conn.execute("RESET app.current_role")
-    conn.execute("RESET app.current_user_id")
-    conn.execute("RESET app.current_tenant_id")
+    # These custom GUCs are safely cleared through set_config: app.current_role
+    # contains a SQL keyword and does not parse as an unquoted RESET target.
+    conn.execute("SELECT set_config('app.current_role','',false)")
+    conn.execute("SELECT set_config('app.current_user_id','',false)")
+    conn.execute("SELECT set_config('app.current_tenant_id','',false)")
 
 
 def main() -> int:
