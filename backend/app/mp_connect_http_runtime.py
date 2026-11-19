@@ -133,11 +133,11 @@ async def _send_token_post(
     transport: httpx.AsyncBaseTransport | None = None,
     real_https_authorized: bool = False,
 ) -> OAuthTokens:
-    # Network is disabled unless the server explicitly opts in at deployment.
-    if transport is None and real_https_authorized is not True:
-        raise OAuthConnectionBlocked("Real HTTPS transport not authorized")
-    if transport is not None and not isinstance(transport, httpx.AsyncBaseTransport):
-        raise OAuthConnectionBlocked("OAuth HTTP transport invalid")
+    # M40750: no live OAuth token exchange or refresh before signed release.
+    # The legacy approval boolean is NOT authority to perform network I/O.
+    # Accept only a concrete test MockTransport; never a custom transport.
+    if type(transport) is not httpx.MockTransport:
+        raise OAuthConnectionBlocked("M40750_OAUTH_REAL_HTTPS_BLOCKED")
     try:
         async with httpx.AsyncClient(
             transport=transport, trust_env=False,
