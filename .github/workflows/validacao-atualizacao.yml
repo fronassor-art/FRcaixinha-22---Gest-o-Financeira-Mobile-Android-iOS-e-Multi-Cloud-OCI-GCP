@@ -22,6 +22,10 @@ on:
       - 'backend/scripts/frfinance_m40800_migration_delta_readonly.py'
       - 'backend/tests/test_m40800_security_migration_offline.py'
       - '.github/workflows/frfinance-m40800-security-migration-preflight-ci.yml'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/m40810_bearer_input_guard.py'
+      - 'backend/tests/test_m40810_bearer_input_no_go_ci.py'
+      - '.github/workflows/frfinance-m40810-bearer-ambiguity-ci.yml'
   pull_request:
     branches:
       - main

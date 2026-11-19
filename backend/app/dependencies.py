@@ -74,12 +74,15 @@ def auth_verifier_database_url() -> str:
 
 
 def bearer_token(request: Request) -> str:
-    header = request.headers.get('Authorization', '')
-    if header.startswith('Bearer ') and len(header.split(' ', 1)[1]) > 0:
-        return header.split(' ', 1)[1]
-    if settings.SESSION_COOKIE_NAME in request.cookies:
-        return request.cookies[settings.SESSION_COOKIE_NAME]
-    raise HTTPException(status_code=401, detail='Autenticação necessária. Sessão ausente.', headers={'WWW-Authenticate': 'Bearer'})
+    # M40810: reject duplicate/invalid Authorization instead of silently
+    # falling back to a cookie; do not hash unbounded or binary input.
+    from .m40810_bearer_input_guard import BearerInputBlocked, strict_bearer_candidate
+    try:
+        headers = request.headers.getlist('authorization')
+        cookie = request.cookies.get(settings.SESSION_COOKIE_NAME)
+        return strict_bearer_candidate(headers, cookie)
+    except BearerInputBlocked:
+        raise HTTPException(status_code=401, detail='Autenticação necessária. Sessão ausente.', headers={'WWW-Authenticate': 'Bearer'}) from None
 
 
 async def get_current_session(request: Request) -> AuthenticatedSession:
