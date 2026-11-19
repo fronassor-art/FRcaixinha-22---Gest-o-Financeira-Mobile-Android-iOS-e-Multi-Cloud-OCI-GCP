@@ -65,6 +65,12 @@ def schema(conn) -> None:
         )
     """)
     conn.execute("""
+        CREATE TABLE m40650.users (
+          id uuid PRIMARY KEY, status text NOT NULL,
+          is_master boolean NOT NULL DEFAULT FALSE
+        )
+    """)
+    conn.execute("""
         CREATE TABLE m40650.memberships (
           user_id uuid NOT NULL,
           tenant_id uuid NOT NULL,
@@ -79,7 +85,7 @@ def schema(conn) -> None:
           user_id uuid NOT NULL, amount numeric(12,2) NOT NULL
         )
     """)
-    for table in ("sessions", "memberships", "entries"):
+    for table in ("sessions", "users", "memberships", "entries"):
         conn.execute(f"ALTER TABLE m40650.{table} OWNER TO m40650_owner")
     conn.execute("REVOKE ALL ON ALL TABLES IN SCHEMA m40650 FROM PUBLIC, m40650_app")
     conn.execute("""
@@ -98,6 +104,9 @@ def schema(conn) -> None:
             -- No client-controlled custom GUC provides authentication here.
             SELECT s.user_id, s.active_role INTO v_user, v_role
             FROM m40650.sessions AS s
+            JOIN m40650.users AS u
+              ON u.id = s.user_id
+             AND u.status = 'ACTIVE'
             JOIN m40650.memberships AS m
               ON m.user_id = s.user_id
              AND m.tenant_id = s.active_tenant_id
@@ -146,11 +155,18 @@ def proof(conn) -> None:
     tenant_a, tenant_b = uuid4(), uuid4()
     entries = [(uuid4(), tenant_a, member_a, 120),
                (uuid4(), tenant_a, member_b, 240),
-               (uuid4(), tenant_b, member_c, 360)]
+               (uuid4(), tenant_b, member_c, 360),
+               (uuid4(), tenant_a, master, 480),
+               (uuid4(), tenant_b, member_a, 150)]
     now = datetime.now(timezone.utc)
+
+    for user in (member_a, member_b, admin_a, member_c, master):
+        conn.execute("INSERT INTO m40650.users VALUES (%s,'ACTIVE',%s)",
+                     (user, user == master))
 
     for user, tenant, role, status in (
         (member_a, tenant_a, "TENANT_MEMBER", "ATIVA"),
+        (member_a, tenant_b, "TENANT_MEMBER", "ATIVA"),
         (member_b, tenant_a, "TENANT_MEMBER", "ATIVA"),
         (admin_a, tenant_a, "TENANT_ADMIN", "ATIVA"),
         (member_c, tenant_b, "TENANT_MEMBER", "ATIVA"),
@@ -169,6 +185,7 @@ def proof(conn) -> None:
         ("admin_a", admin_a, "TENANT_ADMIN", tenant_a, now + timedelta(hours=1), None),
         ("member_c", member_c, "TENANT_MEMBER", tenant_b, now + timedelta(hours=1), None),
         ("master", master, "MASTER", None, now + timedelta(hours=1), None),
+        ("master_member", master, "TENANT_MEMBER", tenant_a, now + timedelta(hours=1), None),
         ("expired", member_a, "TENANT_MEMBER", tenant_a, now - timedelta(hours=1), None),
         ("revoked", member_a, "TENANT_MEMBER", tenant_a, now + timedelta(hours=1), now),
     ):
@@ -200,7 +217,7 @@ def proof(conn) -> None:
             "SELECT pg_catalog.pg_has_role('m40650_app','m40650_owner','MEMBER')"
         ).fetchone()[0]
 
-        for table in ("sessions", "memberships", "entries"):
+        for table in ("sessions", "users", "memberships", "entries"):
             assert not conn.execute(
                 "SELECT pg_catalog.has_table_privilege('m40650_app',%s,'SELECT')",
                 ("m40650." + table,),
@@ -218,15 +235,19 @@ def proof(conn) -> None:
 
         assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
         assert visible(tokens["member_b"], tenant_a) == {entries[1][0]}
-        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
+        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0], entries[3][0]}
         assert visible(tokens["member_c"], tenant_b) == {entries[2][0]}
         assert visible(tokens["member_a"], tenant_b) == set()
         assert visible(tokens["admin_a"], tenant_b) == set()
         assert visible(tokens["master"], tenant_a) == set()
+        assert visible(tokens["master_member"], tenant_a) == {entries[3][0]}
+        assert visible(tokens["master_member"], tenant_b) == set()
         assert visible(tokens["expired"], tenant_a) == set()
         assert visible(tokens["revoked"], tenant_a) == set()
         assert visible(secrets.token_urlsafe(40), tenant_a) == set()
         print("M40650_TOKEN_ROLE_MEMBERSHIP_TENANT_DENIAL=PASS")
+        print("M40660_DUAL_TENANT_MEMBERSHIP_LOCK=PASS")
+        print("M40660_MASTER_ACCOUNT_MEMBER_SESSION=PASS")
 
         # The application role can spoof custom GUCs but cannot use them to widen
         # the fixed SECURITY DEFINER function's token-scoped results.
@@ -238,7 +259,7 @@ def proof(conn) -> None:
             conn.execute("SELECT pg_catalog.set_config(%s,%s,false)", (key, value))
         assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
         assert visible(tokens["member_a"], tenant_b) == set()
-        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
+        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0], entries[3][0]}
         print("M40650_SYNTHETIC_GUC_SPOOF_CANNOT_WIDEN_GATEWAY=PASS")
 
         conn.execute("SET search_path = pg_temp, public, m40650")
@@ -246,13 +267,49 @@ def proof(conn) -> None:
         assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
         print("M40650_SEARCH_PATH_TEMP_SHADOW=DENIED")
 
+        # A real account suspension overrides an otherwise-valid token.
+        owner_conn.execute(
+            "UPDATE m40650.users SET status='SUSPENDED' WHERE id=%s",
+            (member_b,),
+        )
+        assert visible(tokens["member_b"], tenant_a) == set()
+        owner_conn.execute(
+            "UPDATE m40650.users SET status='ACTIVE' WHERE id=%s",
+            (member_b,),
+        )
+        assert visible(tokens["member_b"], tenant_a) == {entries[1][0]}
+        print("M40660_DISABLED_ACCOUNT_DENIED=PASS")
+
+        # Active context is token-bound: arbitrary app GUC edits do not switch it.
+        owner_conn.execute(
+            "UPDATE m40650.sessions SET active_role='TENANT_ADMIN' "
+            "WHERE token_digest=%s",
+            (sha256(tokens["member_b"].encode("utf-8")).hexdigest(),),
+        )
+        assert visible(tokens["member_b"], tenant_a) == set()
+        owner_conn.execute(
+            "UPDATE m40650.sessions SET active_role='TENANT_MEMBER' "
+            "WHERE token_digest=%s",
+            (sha256(tokens["member_b"].encode("utf-8")).hexdigest(),),
+        )
+        assert visible(tokens["member_b"], tenant_a) == {entries[1][0]}
+        print("M40660_UNAUTHORIZED_ROLE_SWITCH_DENIED=PASS")
+
+        owner_conn.execute(
+            "UPDATE m40650.sessions SET revoked_at=%s WHERE token_digest=%s",
+            (datetime.now(timezone.utc),
+             sha256(tokens["member_b"].encode("utf-8")).hexdigest()),
+        )
+        assert visible(tokens["member_b"], tenant_a) == set()
+        print("M40660_LIVE_SESSION_REVOCATION_DENIED=PASS")
+
         owner_conn.execute(
             "UPDATE m40650.memberships SET status='DESLIGADA' "
             "WHERE user_id=%s AND tenant_id=%s",
             (member_a, tenant_a),
         )
         assert visible(tokens["member_a"], tenant_a) == set()
-        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
+        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0], entries[3][0]}
         print("M40650_REVOKED_MEMBERSHIP_ACCESS=DENIED")
         conn.execute("RESET ROLE")
         print("M40650_EXISTING_APPLICATION_RLS=NOT_REMEDIATED")
