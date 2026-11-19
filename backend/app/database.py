@@ -28,6 +28,18 @@ async def get_db_pool():
             raise RuntimeError(
                 "DATABASE_URL não configurada ou não aponta para instância PostgreSQL válida."
             )
+        # M40800: syntax/identity preflight before ANY financial pool open.
+        # This does not attest SQL privileges or fix GUC spoofing.
+        from .m40800_financial_dsn_guard import (
+            FinancialDSNBlocked, require_financial_dsn_shape,
+        )
+        try:
+            require_financial_dsn_shape(settings.DATABASE_URL, os.environ)
+            if os.environ.get("ENVIRONMENT") == "production":
+                from .production_auth_gate import require_production_auth
+                require_production_auth(os.environ)
+        except (FinancialDSNBlocked, ValueError, RuntimeError) as exc:
+            raise RuntimeError("M40800_FINANCIAL_DSN_BLOCKED") from None
         try:
             import asyncpg
             _db_pool = await asyncpg.create_pool(

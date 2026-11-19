@@ -17,6 +17,11 @@ on:
       - '.github/workflows/frfinance-m40740-pix-network-no-go-ci.yml'
       - '.github/workflows/frfinance-m40750-oauth-egress-no-go-ci.yml'
       - '.github/workflows/frfinance-m40760-readonly-egress-no-go-ci.yml'
+      - 'backend/app/database.py'
+      - 'backend/app/m40800_financial_dsn_guard.py'
+      - 'backend/scripts/frfinance_m40800_migration_delta_readonly.py'
+      - 'backend/tests/test_m40800_security_migration_offline.py'
+      - '.github/workflows/frfinance-m40800-security-migration-preflight-ci.yml'
   pull_request:
     branches:
       - main
