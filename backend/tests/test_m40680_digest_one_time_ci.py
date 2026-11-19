@@ -65,7 +65,6 @@ def test_raw_bearer_is_only_hashed_in_python_not_sql_parameters():
         assert marker in SOURCE
     assert "(raw,tenant)" not in SOURCE
     assert "(raw, tenant)" not in SOURCE
-    assert "m40680_issue(%s,%s)\",(digest,tenant) if False else True  # fail-fast contract marker above
 
 
 def test_sql_roles_ticket_atomicity_and_guc_no_go():
