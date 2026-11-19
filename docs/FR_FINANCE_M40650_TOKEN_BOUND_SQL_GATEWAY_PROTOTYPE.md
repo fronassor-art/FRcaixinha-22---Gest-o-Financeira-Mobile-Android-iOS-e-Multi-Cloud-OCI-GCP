@@ -24,3 +24,10 @@ A função `SECURITY DEFINER`, com `search_path` restrito e consultas fixas/qual
 4. Executar regressões completas, revisar SQL, aprovar formalmente eventual migração e somente então considerar implantação no banco original em janela autorizada. Não usar resultado verde deste protótipo como autorização.
 
 **Guardas preservadas:** nenhuma conexão com FR Finance PostgreSQL local :5433, FR Caixinha 2.2, Termux, OCI, provedores ou FastAPI. Nenhum restart, nenhuma migração local, nenhum PIX/pagamento/ativação real. `PIX_REAL=OFF`, `PAGAMENTOS_REAIS=OFF`, `ATIVACAO_REAL=OFF`, `PRODUCTION=BLOCKED`.
+
+## M40660 — extensão adversarial sem acesso ao banco original
+
+O protótipo sintético agora inclui uma tabela de contas com status `ACTIVE`/`SUSPENDED`. A função de leitura exige **conta ativa**, além de token válido, vínculo ativo, papel da sessão e tenant. A prova negativa verifica: conta suspensa, mesma identidade com vínculos ativos em **duas caixinhas**, conta Master autenticada explicitamente com papel `TENANT_MEMBER`, tentativa de promover o papel da sessão sem vínculo e revogação de sessão após autenticação. O papel de aplicação continua sem SELECT nas tabelas de contas e sessões.
+
+Esse teste apenas amplia a cobertura do protótipo e não altera `backend/app/routers`, migrações nem configurações do PostgreSQL local. PASS na CI não equivale à implementação de uma fronteira de confiança no código real, nem valida tratamento de concorrência, rotação de tokens ou o fluxo HTTP bearer completo.
+
