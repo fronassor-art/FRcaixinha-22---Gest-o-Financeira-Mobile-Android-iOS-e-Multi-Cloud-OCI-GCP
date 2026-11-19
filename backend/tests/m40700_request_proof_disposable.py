@@ -238,13 +238,25 @@ def proof(owner) -> None:
     print("M40700_PHASE=AUTH_ROLE_PRIVILEGES_COMPLETED")
     with psycopg.connect(app_dsn,autocommit=True) as a:
         a.execute("SET ROLE m40650_app")
+        # Catalog OID lookup avoids resolving protected schema names through
+        # regprocedure/regclass under a role that intentionally has NO USAGE.
+        assert not a.execute(
+            "SELECT pg_catalog.has_schema_privilege("
+            "'m40650_app','m40700','USAGE')"
+        ).fetchone()[0]
         assert not a.execute(
             "SELECT pg_catalog.has_function_privilege("
-            "'m40650_app','m40700.issue_bound(text,uuid,uuid,bigint,text,text)','EXECUTE')"
+            "'m40650_app',p.oid,'EXECUTE') "
+            "FROM pg_catalog.pg_proc AS p "
+            "JOIN pg_catalog.pg_namespace AS n ON n.oid=p.pronamespace "
+            "WHERE n.nspname='m40700' AND p.proname='issue_bound'"
         ).fetchone()[0]
         assert not a.execute(
             "SELECT pg_catalog.has_table_privilege("
-            "'m40650_app','m40700.verifier_secret','SELECT')"
+            "'m40650_app',c.oid,'SELECT') "
+            "FROM pg_catalog.pg_class AS c "
+            "JOIN pg_catalog.pg_namespace AS n ON n.oid=c.relnamespace "
+            "WHERE n.nspname='m40700' AND c.relname='verifier_secret'"
         ).fetchone()[0]
     print("M40700_PHASE=FINANCIAL_ROLE_PRIVILEGES_COMPLETED")
     print("M40700_SIGNING_SECRET_AND_ROLE_ACL_DENIED=PASS")
