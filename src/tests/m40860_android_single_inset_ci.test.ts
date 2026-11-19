@@ -10,7 +10,7 @@ import {visibleLoginHeight,resetLoginScroll} from '../services/loginViewport';
 
 const css=readFileSync('src/index.css','utf8');
 const code=readFileSync('src/components/LoginView.tsx','utf8');
-const root=css.match(/#root\s*\{([^}]*)\}/s)?.[1];
+const root=css.match(/^#root\s*\{([^}]*)\}/ms)?.[1];
 const login=css.match(/main\.fr-page\s*\{([^}]*)\}/s)?.[1];
 assert.ok(root && login);
 assert.match(root,/padding-top:\s*var\(--fr-safe-top\)/);
