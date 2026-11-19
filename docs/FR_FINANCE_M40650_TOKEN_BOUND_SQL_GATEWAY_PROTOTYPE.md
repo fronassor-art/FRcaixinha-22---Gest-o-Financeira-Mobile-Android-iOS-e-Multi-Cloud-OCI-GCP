@@ -10,7 +10,7 @@
 
 ## Experimento M40650
 
-Apenas o PostgreSQL 18 descartável do GitHub Actions recebe roles e tabelas **sintéticas** em um schema próprio. O papel `m40650_app` é `NOLOGIN`, sem privilégio direto de leitura das tabelas de sessão, vínculo e lançamentos, e sem associação ao papel proprietário. Pode apenas chamar `m40650.read_entries(token, tenant)`.
+Apenas o PostgreSQL 18 descartável do GitHub Actions recebe roles e tabelas **sintéticas** em um schema próprio. O preparo do fixture ocorre sob o proprietário descartável, mas os testes de ataque utilizam **outra conexão autenticada como `m40650_ci_login` sem superusuário**, que somente pode assumir `m40650_app`; isso evita uma falsa demonstração de elevação de privilégio ao executar `SET ROLE` de uma sessão superusuária. O papel `m40650_app` é `NOLOGIN`, sem privilégio direto de leitura das tabelas de sessão, vínculo e lançamentos, e sem associação ao papel proprietário. Pode apenas chamar `m40650.read_entries(token, tenant)`.
 
 A função `SECURITY DEFINER`, com `search_path` restrito e consultas fixas/qualificadas, calcula o SHA-256 de um token de teste, confere sessão não revogada/não expirada, role ativo, tenant escolhido e vínculo `ATIVA`, e então retorna somente lançamentos correspondentes ao tenant e papel autenticado. Não utiliza custom GUCs como autoridade. O teste tenta SELECT/UPDATE direto, SET ROLE, falsificação dos GUCs, troca de tenant, token desconhecido, sessão revogada/expirada, papel Master e objeto temporário em `search_path`.
 
