@@ -49,7 +49,7 @@ check(()=>assert.match(login,/selectedRole===null\)resetLoginScroll/));
 check(()=>assert.match(login,/node\.style\.maxHeight=visibleHeight\+'px'/));
 check(()=>assert.match(css,/main\.fr-page\s*\{[^}]*overflow-y:\s*auto/s));
 check(()=>assert.match(css,/main\.fr-page\s*\{[^}]*overflow-anchor:\s*none/s));
-check(()=>assert.match(css,/main\.fr-page\s*\{[^}]*padding-top:\s*max\(1\.5rem,\s*var\(--fr-safe-top\)\)/s));
+check(()=>assert.match(css,/main\.fr-page\s*\{[^}]*padding-top:\s*1\.5rem/s));
 check(()=>assert.match(css,/#root\s*\{[^}]*padding-top:\s*var\(--fr-safe-top\)/s));
 check(()=>assert.match(android,/insetsHandling:\s*'css'/));
 check(()=>assert.match(html,/viewport-fit=cover/));

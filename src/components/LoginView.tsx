@@ -204,7 +204,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   }
 
   return (
-    <main ref={loginScrollRef} data-fr-login-scroll="true" className="fr-page fr-sheen min-h-dvh min-w-0 overflow-x-hidden px-4 py-6 sm:py-10 flex flex-col items-center justify-start">
+    <main ref={loginScrollRef} data-fr-login-scroll="true" className="fr-page fr-sheen min-h-0 h-full min-w-0 overflow-x-hidden px-4 py-6 sm:py-10 flex flex-col items-center justify-start">
       <div className="relative z-10 my-auto w-full max-w-sm">
         <div className="flex flex-col items-center pb-6">
           <button type="button" onClick={openReservedAccess} aria-label="Logotipo FR Finance"

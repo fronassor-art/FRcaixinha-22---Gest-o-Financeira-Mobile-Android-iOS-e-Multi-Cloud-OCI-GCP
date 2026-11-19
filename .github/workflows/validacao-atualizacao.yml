@@ -38,6 +38,12 @@ on:
       - 'backend/app/m40800_financial_dsn_guard.py'
       - 'backend/tests/test_m40850_dsn_downgrade_ci.py'
       - '.github/workflows/frfinance-m40850-dsn-downgrade-no-go-ci.yml'
+      - 'src/index.css'
+      - 'src/components/LoginView.tsx'
+      - 'src/tests/m40860_android_single_inset_ci.test.ts'
+      - 'backend/scripts/frfinance_m40870_sql113_guc_inventory.py'
+      - 'backend/tests/test_m40870_sql113_guc_inventory_ci.py'
+      - '.github/workflows/frfinance-m40880-android-sql-inventory-ci.yml'
   pull_request:
     branches:
       - main
@@ -242,6 +248,8 @@ jobs:
         run: npx tsx src/tests/m40500_consolidated_ui_identity_ci.test.ts
       - name: M40510 — retorno ao topo login Android e teclado visual
         run: npx tsx src/tests/m40510_android_login_viewport_ci.test.ts
+      - name: M40860 Android login single safe top and IME
+        run: npx tsx src/tests/m40860_android_single_inset_ci.test.ts
       - name: Build web
         env:
           VITE_APP_BUILD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
