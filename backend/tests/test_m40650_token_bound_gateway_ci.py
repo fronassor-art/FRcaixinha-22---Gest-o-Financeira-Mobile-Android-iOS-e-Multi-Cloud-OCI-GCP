@@ -86,6 +86,17 @@ def test_sql_function_makes_token_the_only_identity_authority():
         assert marker in SOURCE
 
 
+def test_adversary_has_independent_non_superuser_session():
+    for marker in (
+        "m40650_ci_login LOGIN NOINHERIT NOBYPASSRLS",
+        "GRANT m40650_app TO m40650_ci_login",
+        "with psycopg.connect(app_dsn, autocommit=True) as conn:",
+        'assert conn.execute("SELECT session_user").fetchone()[0] == "m40650_ci_login"',
+        'expect_denied(conn, "SET ROLE m40650_owner")',
+    ):
+        assert marker in SOURCE
+
+
 def test_adversarial_proof_is_explicit_and_not_a_false_prod_go():
     for marker in (
         "M40650_DIRECT_TABLE_AND_OWNER_ESCALATION=DENIED",
