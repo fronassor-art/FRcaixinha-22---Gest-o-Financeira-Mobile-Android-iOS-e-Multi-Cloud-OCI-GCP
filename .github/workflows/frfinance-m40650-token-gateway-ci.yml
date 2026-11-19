@@ -1,0 +1,70 @@
+name: FR Finance M40650 opaque token SQL gateway synthetic proof
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40650_token_bound_gateway_disposable.py'
+      - 'backend/tests/test_m40650_token_bound_gateway_ci.py'
+      - '.github/workflows/frfinance-m40650-token-gateway-ci.yml'
+      - 'docs/FR_FINANCE_M40650_TOKEN_BOUND_SQL_GATEWAY_PROTOTYPE.md'
+  pull_request:
+    paths:
+      - 'backend/tests/m40650_token_bound_gateway_disposable.py'
+      - 'backend/tests/test_m40650_token_bound_gateway_ci.py'
+      - '.github/workflows/frfinance-m40650-token-gateway-ci.yml'
+      - 'docs/FR_FINANCE_M40650_TOKEN_BOUND_SQL_GATEWAY_PROTOTYPE.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40650_token_bound_gateway_ci.py
+
+  pg18-disposable-negative-proof:
+    needs: offline-fail-closed
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m40650_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m40650_synthetic_ci
+        ports:
+          - 55435:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m40650_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40650_DISPOSABLE: '1'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      CI_M40650_DATABASE_URL: postgresql://postgres:only_m40650_synthetic_ci@127.0.0.1:55435/fr_m40650_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'psycopg[binary]==3.2.4'
+      - run: |
+          python -B backend/tests/m40650_token_bound_gateway_disposable.py
+          echo M40650_ORIGINAL_DB=NEVER_CONNECTED
+          echo M40650_EXISTING_GUC_RISK=NOT_REMEDIATED
+          echo M40650_PRODUCTION=BLOCKED
