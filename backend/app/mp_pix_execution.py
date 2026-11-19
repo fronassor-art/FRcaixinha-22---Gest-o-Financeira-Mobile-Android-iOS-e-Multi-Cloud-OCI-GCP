@@ -158,8 +158,11 @@ def _read_json(response: httpx.Response) -> dict:
 
 
 def _client(transport):
-    if transport is not None and not isinstance(transport,httpx.AsyncBaseTransport):
-        raise ProviderRequestBlocked("Canal HTTP não confiável")
+    # M40740: autorizacao em memoria nao habilita rede externa enquanto
+    # a credencial SQL emissora e a fronteira GUC permanecerem NO-GO.
+    # Apenas httpx.MockTransport exato e aceito neste adaptador.
+    if type(transport) is not httpx.MockTransport:
+        raise ProviderRequestBlocked("M40740_REDE_FINANCEIRA_REAL_BLOQUEADA")
     return httpx.AsyncClient(
         transport=transport,trust_env=False,follow_redirects=False,
         timeout=httpx.Timeout(6.0),
@@ -170,8 +173,10 @@ async def _send(
     request: httpx.Request, *, transport: httpx.AsyncBaseTransport | None,
     approved_network: bool,
 ) -> httpx.Response:
+    # Bloquear inclusive AsyncHTTPTransport e transportes personalizados
+    # capazes de I/O real, mesmo se approved_network=True.
     if (request.url.scheme!="https" or request.url.host!="api.mercadopago.com"
-            or transport is None and approved_network is not True):
+            or type(transport) is not httpx.MockTransport):
         raise ProviderRequestBlocked("Canal real não autorizado")
     try:
         async with _client(transport) as client:
