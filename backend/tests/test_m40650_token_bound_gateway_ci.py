@@ -111,6 +111,26 @@ def test_adversarial_proof_is_explicit_and_not_a_false_prod_go():
         assert marker in SOURCE
 
 
+def test_m40660_account_status_dual_tenant_and_session_context():
+    for marker in (
+        "CREATE TABLE m40650.users",
+        "JOIN m40650.users AS u",
+        "u.status = 'ACTIVE'",
+        "(member_a, tenant_b, \"TENANT_MEMBER\", \"ATIVA\")",
+        '"master_member", master, "TENANT_MEMBER", tenant_a',
+        'UPDATE m40650.users SET status=\'SUSPENDED\' WHERE id=%s',
+        "UPDATE m40650.sessions SET active_role='TENANT_ADMIN'",
+        "UPDATE m40650.sessions SET revoked_at=%s",
+        "M40660_DUAL_TENANT_MEMBERSHIP_LOCK=PASS",
+        "M40660_MASTER_ACCOUNT_MEMBER_SESSION=PASS",
+        "M40660_DISABLED_ACCOUNT_DENIED=PASS",
+        "M40660_UNAUTHORIZED_ROLE_SWITCH_DENIED=PASS",
+        "M40660_LIVE_SESSION_REVOCATION_DENIED=PASS",
+        "M40650_EXISTING_APPLICATION_RLS=NOT_REMEDIATED",
+    ):
+        assert marker in SOURCE
+
+
 def test_workflow_disposable_only_no_local_execution():
     yaml = WORKFLOW.read_text(encoding="utf-8")
     for marker in (
