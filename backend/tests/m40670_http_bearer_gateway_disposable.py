@@ -77,7 +77,7 @@ def create_http_function(owner) -> None:
             RETURN pg_catalog.jsonb_build_object('authorized',false);
           END IF;
 
-          SELECT pg_catalog.coalesce(
+          SELECT COALESCE(
             pg_catalog.jsonb_agg(
               pg_catalog.jsonb_build_object('id',e.id,'amount',e.amount)
               ORDER BY e.id
