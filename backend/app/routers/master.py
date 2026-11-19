@@ -176,21 +176,20 @@ async def get_master_admin_registry(
     Usa exclusivamente public.tenants, sob RLS e papel MASTER validado.
     """
     term = search.strip().lower()
-    filter_sql = (
-        " FROM public.tenants "
-        "WHERE strpos(lower(admin_user_id::text), $1::text) > 0"
-    )
     total = await conn.fetchval(
-        "SELECT count(DISTINCT admin_user_id)" + filter_sql, term
+        "SELECT count(DISTINCT admin_user_id) FROM public.tenants "
+        "WHERE strpos(lower(admin_user_id::text), $1::text) > 0",
+        term,
     )
     rows = await conn.fetch(
         "SELECT admin_user_id,count(*)::int AS tenant_count,"
         "count(*) FILTER (WHERE status='ATIVO')::int AS active_count,"
         "count(*) FILTER (WHERE status='SUSPENSO')::int AS suspended_count,"
         "count(*) FILTER (WHERE status='RASCUNHO_INATIVO')::int AS draft_count,"
-        "count(*) FILTER (WHERE status='ENCERRADO')::int AS closed_count"
-        + filter_sql +
-        " GROUP BY admin_user_id"
+        "count(*) FILTER (WHERE status='ENCERRADO')::int AS closed_count "
+        "FROM public.tenants "
+        "WHERE strpos(lower(admin_user_id::text), $1::text) > 0 "
+        "GROUP BY admin_user_id"
         " ORDER BY count(*) DESC, admin_user_id"
         " LIMIT $2 OFFSET $3",
         term, page_size, (page - 1) * page_size,
@@ -237,15 +236,17 @@ async def get_master_tenant_registry(
     """
     term = search.strip()
     state = "" if tenant_status == "TODOS" else tenant_status
-    filter_sql = (
-        " FROM public.tenants "
+    total = await conn.fetchval(
+        "SELECT count(*) FROM public.tenants "
+        "WHERE strpos(lower(display_name), lower($1::text)) > 0 "
+        "AND ($2::text = '' OR status = $2::text)",
+        term, state,
+    )
+    rows = await conn.fetch(
+        "SELECT id,display_name,status,is_owner_box,admin_user_id,created_at "
+        "FROM public.tenants "
         "WHERE strpos(lower(display_name), lower($1::text)) > 0 "
         "AND ($2::text = '' OR status = $2::text)"
-    )
-    total = await conn.fetchval("SELECT count(*)" + filter_sql, term, state)
-    rows = await conn.fetch(
-        "SELECT id,display_name,status,is_owner_box,admin_user_id,created_at"
-        + filter_sql +
         " ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4",
         term, state, page_size, (page - 1) * page_size,
     )
@@ -298,13 +299,13 @@ async def get_master_saas_portfolio(
     persistido. Por isso nunca inferir vagas a partir de limite de membros/cotas.
     """
     term = search.strip()
-    predicate = (
-        " FROM public.tenants t WHERE ("
+    total = await conn.fetchval(
+        "SELECT count(*) FROM public.tenants t WHERE ("
         "strpos(lower(t.display_name),lower($1::text))>0 OR "
         "strpos(lower(t.admin_user_id::text),lower($1::text))>0) "
-        "AND ($2::text='TODOS' OR t.status=$2::text)"
+        "AND ($2::text='TODOS' OR t.status=$2::text)",
+        term, tenant_status,
     )
-    total = await conn.fetchval("SELECT count(*)" + predicate, term, tenant_status)
     rows = await conn.fetch("""
         SELECT t.id,t.display_name,t.status AS tenant_status,t.created_at,
                t.admin_user_id,

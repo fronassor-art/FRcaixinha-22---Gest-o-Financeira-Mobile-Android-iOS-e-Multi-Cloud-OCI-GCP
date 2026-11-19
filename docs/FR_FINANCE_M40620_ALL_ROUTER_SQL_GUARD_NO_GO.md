@@ -13,3 +13,7 @@ Exceção explícita e limitada: member_lifecycle_sandbox.py possui um encaminha
 O M40620 é guard de regressão estática, não faz tracing dinâmico, não prova ausência de SQL injection e não corrige a capacidade de alterar custom GUCs \`app.current_*\` sob comandos SQL arbitrários do papel app. O achado M40570 continua \`GUC_SPOOF_EXPOSURE=NOT_REMEDIATED\`. O M40610 continua exigindo sessão verificada no código; a mudança só estará efetiva no FastAPI quando autorizado um reload/restart.
 
 Testes somente em GitHub Actions, leitura AST, sem banco de dados, sem credenciais, sem migração, sem reinícios; Termux e os dois PostgreSQL originais preservados. PIX_REAL=OFF; PAGAMENTOS_REAIS=OFF; ATIVACAO_REAL=OFF; PRODUCTION=BLOCKED.
+
+## M40620 — correção após primeiro bloqueio da CI
+
+A primeira execução encontrou **5 chamadas de SQL dinâmico estático por concatenação** em `routers/master.py` (registro de administradores, registro de caixinhas e contagem de portfólio SaaS). Esses cinco trechos foram substituídos por consultas SQL literais, mantendo os mesmos filtros e parâmetros `$1` a `$4`. Não houve evidência de SQL injection explorável nos trechos originais; a alteração visa impedir que concatenações futuras de valores de usuário sejam introduzidas sem serem detectadas. A guarda deve agora validar todas as 25 rotas e a exceção restrita do encaminhador de homologação. A aplicação original não foi recarregada, nem o PostgreSQL alterado.

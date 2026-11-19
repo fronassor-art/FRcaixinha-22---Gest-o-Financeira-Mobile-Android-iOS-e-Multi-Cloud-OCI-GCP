@@ -99,3 +99,15 @@ def test_cli_fails_closed_and_reports_no_go():
         "M40620_PRODUCTION=BLOCKED",
     ):
         assert marker in r.stdout
+
+def test_master_registry_queries_remain_literal_and_keep_filters():
+    master=(ROOT/"backend/app/routers/master.py").read_text(encoding="utf-8")
+    assert "filter_sql" not in master
+    assert "SELECT count(DISTINCT admin_user_id) FROM public.tenants" in master
+    assert "WHERE strpos(lower(admin_user_id::text), $1::text) > 0" in master
+    assert master.count("WHERE strpos(lower(display_name), lower($1::text)) > 0") == 2
+    assert "AND ($2::text = '' OR status = $2::text)" in master
+    assert "AND ($2::text='TODOS' OR t.status=$2::text)" in master
+    assert "LIMIT $3 OFFSET $4" in master
+    _, _, findings=audit_router(ROOT/"backend/app/routers/master.py")
+    assert not findings,findings
