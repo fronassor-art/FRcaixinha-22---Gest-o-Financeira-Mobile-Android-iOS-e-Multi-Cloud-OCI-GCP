@@ -1,0 +1,71 @@
+name: FR Finance M40690 concurrent SQL ticket and digest-equivalence negative proof
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40690_concurrent_ticket_digest_risk_disposable.py'
+      - 'backend/tests/test_m40690_concurrent_ticket_digest_risk_ci.py'
+      - '.github/workflows/frfinance-m40690-concurrent-ticket-ci.yml'
+      - 'docs/FR_FINANCE_M40690_CONCURRENT_TICKET_DIGEST_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/tests/m40690_concurrent_ticket_digest_risk_disposable.py'
+      - 'backend/tests/test_m40690_concurrent_ticket_digest_risk_ci.py'
+      - '.github/workflows/frfinance-m40690-concurrent-ticket-ci.yml'
+      - 'docs/FR_FINANCE_M40690_CONCURRENT_TICKET_DIGEST_NO_GO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40690_concurrent_ticket_digest_risk_ci.py
+
+  disposable-pg18-race-and-replay:
+    needs: offline-fail-closed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m40690_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m40690_synthetic_ci
+        ports:
+          - 55438:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m40690_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40690_DISPOSABLE: '1'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      CI_M40690_DATABASE_URL: postgresql://postgres:only_m40690_synthetic_ci@127.0.0.1:55438/fr_m40690_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'psycopg[binary]==3.2.4'
+      - run: |
+          python -B backend/tests/m40690_concurrent_ticket_digest_risk_disposable.py
+          echo M40690_DIGEST_REPLAY_RISK=NO_GO
+          echo M40690_ORIGINAL_DATABASE=NEVER_CONNECTED
+          echo M40690_REAL_ROUTES=NOT_MODIFIED
+          echo M40690_PRODUCTION=BLOCKED
