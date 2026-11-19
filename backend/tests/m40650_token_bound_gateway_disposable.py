@@ -45,6 +45,12 @@ def schema(conn) -> None:
     # All DDL is synthetic and permitted exclusively in the disposable CI DB.
     conn.execute("CREATE ROLE m40650_owner NOLOGIN NOINHERIT NOBYPASSRLS")
     conn.execute("CREATE ROLE m40650_app NOLOGIN NOINHERIT NOBYPASSRLS")
+    # The adversary is a real non-superuser login, never SET ROLE from postgres.
+    conn.execute(
+        "CREATE ROLE m40650_ci_login LOGIN NOINHERIT NOBYPASSRLS "
+        "PASSWORD 'synthetic-only-m40650-ci-not-a-real-credential'"
+    )
+    conn.execute("GRANT m40650_app TO m40650_ci_login")
     conn.execute("CREATE SCHEMA m40650 AUTHORIZATION m40650_owner")
     conn.execute("REVOKE ALL ON SCHEMA m40650 FROM PUBLIC")
     conn.execute("GRANT USAGE ON SCHEMA m40650 TO m40650_app")
@@ -173,77 +179,85 @@ def proof(conn) -> None:
             (sha256(token.encode("utf-8")).hexdigest(), user, role, tenant, expiry, revoked),
         )
 
-    conn.execute("SET ROLE m40650_app")
-    assert conn.execute("SELECT current_user").fetchone()[0] == "m40650_app"
-    attributes = conn.execute(
-        "SELECT rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolcanlogin "
-        "FROM pg_catalog.pg_roles WHERE rolname='m40650_app'"
-    ).fetchone()
-    assert attributes == (False, False, False, False, False)
-    assert not conn.execute(
-        "SELECT pg_catalog.pg_has_role('m40650_app','m40650_owner','MEMBER')"
-    ).fetchone()[0]
-
-    for table in ("sessions", "memberships", "entries"):
-        assert not conn.execute(
-            "SELECT pg_catalog.has_table_privilege('m40650_app',%s,'SELECT')",
-            ("m40650." + table,),
-        ).fetchone()[0]
-        expect_denied(conn, f"SELECT * FROM m40650.{table}")
-    expect_denied(conn, "UPDATE m40650.sessions SET revoked_at=NULL")
-    expect_denied(conn, "SET ROLE m40650_owner")
-    print("M40650_DIRECT_TABLE_AND_OWNER_ESCALATION=DENIED")
-
-    def visible(token: str, tenant) -> set:
-        rows = conn.execute(
-            "SELECT entry_id FROM m40650.read_entries(%s,%s)", (token, tenant)
-        ).fetchall()
-        return {row[0] for row in rows}
-
-    assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
-    assert visible(tokens["member_b"], tenant_a) == {entries[1][0]}
-    assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
-    assert visible(tokens["member_c"], tenant_b) == {entries[2][0]}
-    assert visible(tokens["member_a"], tenant_b) == set()
-    assert visible(tokens["admin_a"], tenant_b) == set()
-    assert visible(tokens["master"], tenant_a) == set()
-    assert visible(tokens["expired"], tenant_a) == set()
-    assert visible(tokens["revoked"], tenant_a) == set()
-    assert visible(secrets.token_urlsafe(40), tenant_a) == set()
-    print("M40650_TOKEN_ROLE_MEMBERSHIP_TENANT_DENIAL=PASS")
-
-    # The application role can spoof custom GUCs but cannot use them to widen
-    # the fixed SECURITY DEFINER function's token-scoped results.
-    for key, value in (
-        ("app.current_role", "MASTER"),
-        ("app.current_user_id", str(admin_a)),
-        ("app.current_tenant_id", str(tenant_b)),
-    ):
-        conn.execute("SELECT pg_catalog.set_config(%s,%s,false)", (key, value))
-    assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
-    assert visible(tokens["member_a"], tenant_b) == set()
-    assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
-    print("M40650_SYNTHETIC_GUC_SPOOF_CANNOT_WIDEN_GATEWAY=PASS")
-
-    conn.execute("SET search_path = pg_temp, public, m40650")
-    conn.execute("CREATE TEMP TABLE entries (id uuid, tenant_id uuid, amount numeric)")
-    assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
-    print("M40650_SEARCH_PATH_TEMP_SHADOW=DENIED")
-
-    conn.execute("RESET ROLE")
-    conn.execute(
-        "UPDATE m40650.memberships SET status='DESLIGADA' "
-        "WHERE user_id=%s AND tenant_id=%s",
-        (member_a, tenant_a),
+    owner_conn = conn
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+    app_dsn = make_conninfo(
+        os.environ["CI_M40650_DATABASE_URL"],
+        user="m40650_ci_login",
+        password="synthetic-only-m40650-ci-not-a-real-credential",
     )
-    conn.execute("SET ROLE m40650_app")
-    assert visible(tokens["member_a"], tenant_a) == set()
-    assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
-    print("M40650_REVOKED_MEMBERSHIP_ACCESS=DENIED")
-    conn.execute("RESET ROLE")
-    print("M40650_EXISTING_APPLICATION_RLS=NOT_REMEDIATED")
-    print("M40650_PROPOSED_GATEWAY=ISOLATED_PROTOTYPE_ONLY")
-    print("M40650_HTTP_BEARER_INTEGRATION=NOT_TESTED")
+    with psycopg.connect(app_dsn, autocommit=True) as conn:
+        conn.execute("SET ROLE m40650_app")
+        assert conn.execute("SELECT current_user").fetchone()[0] == "m40650_app"
+        assert conn.execute("SELECT session_user").fetchone()[0] == "m40650_ci_login"
+        attributes = conn.execute(
+            "SELECT rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolcanlogin "
+            "FROM pg_catalog.pg_roles WHERE rolname='m40650_app'"
+        ).fetchone()
+        assert attributes == (False, False, False, False, False)
+        assert not conn.execute(
+            "SELECT pg_catalog.pg_has_role('m40650_app','m40650_owner','MEMBER')"
+        ).fetchone()[0]
+
+        for table in ("sessions", "memberships", "entries"):
+            assert not conn.execute(
+                "SELECT pg_catalog.has_table_privilege('m40650_app',%s,'SELECT')",
+                ("m40650." + table,),
+            ).fetchone()[0]
+            expect_denied(conn, f"SELECT * FROM m40650.{table}")
+        expect_denied(conn, "UPDATE m40650.sessions SET revoked_at=NULL")
+        expect_denied(conn, "SET ROLE m40650_owner")
+        print("M40650_DIRECT_TABLE_AND_OWNER_ESCALATION=DENIED")
+
+        def visible(token: str, tenant) -> set:
+            rows = conn.execute(
+                "SELECT entry_id FROM m40650.read_entries(%s,%s)", (token, tenant)
+            ).fetchall()
+            return {row[0] for row in rows}
+
+        assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
+        assert visible(tokens["member_b"], tenant_a) == {entries[1][0]}
+        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
+        assert visible(tokens["member_c"], tenant_b) == {entries[2][0]}
+        assert visible(tokens["member_a"], tenant_b) == set()
+        assert visible(tokens["admin_a"], tenant_b) == set()
+        assert visible(tokens["master"], tenant_a) == set()
+        assert visible(tokens["expired"], tenant_a) == set()
+        assert visible(tokens["revoked"], tenant_a) == set()
+        assert visible(secrets.token_urlsafe(40), tenant_a) == set()
+        print("M40650_TOKEN_ROLE_MEMBERSHIP_TENANT_DENIAL=PASS")
+
+        # The application role can spoof custom GUCs but cannot use them to widen
+        # the fixed SECURITY DEFINER function's token-scoped results.
+        for key, value in (
+            ("app.current_role", "MASTER"),
+            ("app.current_user_id", str(admin_a)),
+            ("app.current_tenant_id", str(tenant_b)),
+        ):
+            conn.execute("SELECT pg_catalog.set_config(%s,%s,false)", (key, value))
+        assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
+        assert visible(tokens["member_a"], tenant_b) == set()
+        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
+        print("M40650_SYNTHETIC_GUC_SPOOF_CANNOT_WIDEN_GATEWAY=PASS")
+
+        conn.execute("SET search_path = pg_temp, public, m40650")
+        conn.execute("CREATE TEMP TABLE entries (id uuid, tenant_id uuid, amount numeric)")
+        assert visible(tokens["member_a"], tenant_a) == {entries[0][0]}
+        print("M40650_SEARCH_PATH_TEMP_SHADOW=DENIED")
+
+        owner_conn.execute(
+            "UPDATE m40650.memberships SET status='DESLIGADA' "
+            "WHERE user_id=%s AND tenant_id=%s",
+            (member_a, tenant_a),
+        )
+        assert visible(tokens["member_a"], tenant_a) == set()
+        assert visible(tokens["admin_a"], tenant_a) == {entries[0][0], entries[1][0]}
+        print("M40650_REVOKED_MEMBERSHIP_ACCESS=DENIED")
+        conn.execute("RESET ROLE")
+        print("M40650_EXISTING_APPLICATION_RLS=NOT_REMEDIATED")
+        print("M40650_PROPOSED_GATEWAY=ISOLATED_PROTOTYPE_ONLY")
+        print("M40650_HTTP_BEARER_INTEGRATION=NOT_TESTED")
 
 
 def main() -> int:
