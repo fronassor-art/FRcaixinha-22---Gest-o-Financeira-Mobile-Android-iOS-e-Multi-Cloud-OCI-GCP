@@ -1,0 +1,71 @@
+name: FR Finance M40670 synthetic HTTP Bearer to SQL token gateway
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40670_http_bearer_gateway_disposable.py'
+      - 'backend/tests/test_m40670_http_bearer_gateway_ci.py'
+      - '.github/workflows/frfinance-m40670-http-bearer-disposable-ci.yml'
+      - 'docs/FR_FINANCE_M40670_HTTP_BEARER_SQL_PROTOTYPE_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/tests/m40670_http_bearer_gateway_disposable.py'
+      - 'backend/tests/test_m40670_http_bearer_gateway_ci.py'
+      - '.github/workflows/frfinance-m40670-http-bearer-disposable-ci.yml'
+      - 'docs/FR_FINANCE_M40670_HTTP_BEARER_SQL_PROTOTYPE_NO_GO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40670_http_bearer_gateway_ci.py
+
+  synthetic-http-pg18:
+    needs: offline-fail-closed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m40670_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m40670_synthetic_ci
+        ports:
+          - 55436:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m40670_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40670_DISPOSABLE: '1'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      CI_M40670_DATABASE_URL: postgresql://postgres:only_m40670_synthetic_ci@127.0.0.1:55436/fr_m40670_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'psycopg[binary]==3.2.4' 'fastapi==0.115.12' 'httpx==0.28.1'
+      - run: |
+          python -B backend/tests/m40670_http_bearer_gateway_disposable.py
+          echo M40670_ORIGINAL_DB=NEVER_CONNECTED
+          echo M40670_BEARER_SQL_LOG_RISK=NOT_RESOLVED
+          echo M40670_GUC_SPOOF_RISK_IN_APP=NOT_REMEDIATED
+          echo M40670_PRODUCTION=BLOCKED
