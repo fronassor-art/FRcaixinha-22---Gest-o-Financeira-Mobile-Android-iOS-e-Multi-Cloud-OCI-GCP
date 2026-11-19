@@ -166,6 +166,7 @@ def proof(owner) -> None:
     from psycopg.conninfo import make_conninfo
     verifier_secret = secrets.token_bytes(32)
     bootstrap(owner, verifier_secret)
+    print("M40700_PHASE=BOOTSTRAP_COMPLETED")
     ta, tb = uuid4(), uuid4()
     member, other, admin = uuid4(), uuid4(), uuid4()
     e1, e2 = uuid4(), uuid4()
@@ -234,6 +235,7 @@ def proof(owner) -> None:
             "SELECT pg_catalog.has_function_privilege("
             "'m40680_auth','m40650.m40680_issue(text,uuid)','EXECUTE')"
         ).fetchone()[0]
+    print("M40700_PHASE=AUTH_ROLE_PRIVILEGES_COMPLETED")
     with psycopg.connect(app_dsn,autocommit=True) as a:
         a.execute("SET ROLE m40650_app")
         assert not a.execute(
@@ -244,6 +246,7 @@ def proof(owner) -> None:
             "SELECT pg_catalog.has_table_privilege("
             "'m40650_app','m40700.verifier_secret','SELECT')"
         ).fetchone()[0]
+    print("M40700_PHASE=FINANCIAL_ROLE_PRIVILEGES_COMPLETED")
     print("M40700_SIGNING_SECRET_AND_ROLE_ACL_DENIED=PASS")
 
     # An attacker with only the bearer digest and the auth SQL role
@@ -308,6 +311,8 @@ def main() -> int:
         if frames:
             last = frames[-1]
             print("M40700_FAILURE_SITE=" + last.name + ":" + str(last.lineno))
+        if getattr(exc, "sqlstate", None):
+            print("M40700_SQLSTATE=" + exc.sqlstate)
         print("M40700_STATUS=BLOCKED_" + type(exc).__name__)
         return 2
     finally:
