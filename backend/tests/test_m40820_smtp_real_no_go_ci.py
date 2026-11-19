@@ -93,7 +93,7 @@ def test_no_default_live_transport_source_assertion():
     source = SOURCE.read_text(encoding="utf-8")
     assert 'smtp_factory is smtplib.SMTP or smtp_factory is smtplib.SMTP_SSL' in source
     assert "M40820_REAL_SMTP_TRANSPORT_BLOCKED" in source
-    assert "not independently proven network-free" in source
+    assert "not independently proven network-free" in source.lower()
 
 
 def test_ci_and_docs_keep_external_mail_and_money_no_go():
