@@ -604,6 +604,11 @@ async def proof(conn) -> None:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 out,err=proc.communicate(timeout=5)
+            # Worker exceptions are reduced to class names; these tails
+            # never include the synthetic SQL DSN or private signing keys.
+            print("M40928_GUARDIAN_WORKER_EXIT="+str(proc.returncode))
+            print("M40928_GUARDIAN_WORKER_STDOUT="+out[-500:])
+            print("M40928_GUARDIAN_WORKER_STDERR="+err[-500:])
             if "M40928_GUARDIAN_HAS_NO_ROOT_ISSUER_APP_DSN=PASS" not in out:
                 raise AssertionError(
                     "M40928_WORKER_ENV_ISOLATION_NOT_PROVED "
