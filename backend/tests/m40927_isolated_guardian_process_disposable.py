@@ -214,6 +214,11 @@ async def proof(conn) -> None:
     install_gate(conn)
     install_issuer(conn)
     install_guardian(conn)
+    # Function EXECUTE is not enough without USAGE on its containing schema.
+    # This isolated role still cannot read approvals or execute Master writes.
+    conn.execute(
+        "GRANT USAGE ON SCHEMA m40924 TO m40926_guardian_writer"
+    )
     conn.execute(
         "GRANT EXECUTE ON FUNCTION "
         "m40924.draft_digest(character varying,character varying,uuid,"
