@@ -56,7 +56,7 @@ def test_orchestrator_boundaries_and_negative_cases(needle):
     "CI_M40927_APP_DSN",
     "CI_M40927_ISSUER_DSN",
     "CI_M40927_PRIVATE_KEY",
-    "CI_M40927_GUARDIAN_DATABASE_IDENTITY_DENIED",
+    "M40927_GUARDIAN_DATABASE_IDENTITY_DENIED",
     "m40926_guardian_login",
     "m40923_offdb_master_action_gate import",
     "EphemeralApprovalGate",
