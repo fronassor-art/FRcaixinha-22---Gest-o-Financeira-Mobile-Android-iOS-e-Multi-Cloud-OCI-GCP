@@ -56,7 +56,7 @@ def test_worker_enforces_identity_and_tight_config(marker):
     "from m40926_dual_custody_master_disposable import require_disposable",
     "CI_M40928_GUARDIAN_UID",
     "gateway_uid=os.geteuid()",
-    "guardian_uid!=gateway_uid",
+    "gateway_uid!=guardian_uid",
     "os.chmod(config_path,0o600)",
     "sudo","frf_m40928_guardian",
     '"/usr/bin/env","-i"',
