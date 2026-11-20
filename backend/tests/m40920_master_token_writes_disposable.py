@@ -139,7 +139,7 @@ def install_broker(conn) -> None:
         SET search_path=pg_catalog,pg_temp
         AS $body$
         DECLARE actor uuid; prior public.platform_saas_promotion_revisions%ROWTYPE;
-        DECLARE target text;
+        target text;
         BEGIN
           IF p_token IS NULL OR pg_catalog.length(p_token) NOT BETWEEN 32 AND 256
           THEN
