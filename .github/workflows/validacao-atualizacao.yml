@@ -47,6 +47,9 @@ on:
       - 'backend/tests/m40900_sql113_acl_fence_disposable.py'
       - 'backend/tests/test_m40900_sql113_acl_fence_ci.py'
       - '.github/workflows/frfinance-m40900-sql113-acl-fence-disposable.yml'
+      - 'backend/tests/m40910_saas_token_gateway_disposable.py'
+      - 'backend/tests/test_m40910_saas_token_gateway_ci.py'
+      - '.github/workflows/frfinance-m40910-saas-token-gateway-pg18-ci.yml'
   pull_request:
     branches:
       - main
