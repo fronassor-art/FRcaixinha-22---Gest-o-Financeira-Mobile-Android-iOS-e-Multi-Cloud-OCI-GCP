@@ -1,0 +1,36 @@
+name: FR Finance M40929 same-UID SO_PEERCRED NO-GO offline CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40929_same_uid_peercred_no_go.py'
+      - 'backend/tests/test_m40929_same_uid_no_go.py'
+      - '.github/workflows/frfinance-m40929-same-uid-peercred-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40929_AUDITORIA_PRODUCAO_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/tests/m40929_same_uid_peercred_no_go.py'
+      - 'backend/tests/test_m40929_same_uid_no_go.py'
+      - '.github/workflows/frfinance-m40929-same-uid-peercred-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40929_AUDITORIA_PRODUCAO_NO_GO.md'
+permissions:
+  contents: read
+jobs:
+  offline-same-uid-no-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CI_M40929_OFFLINE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Independent Linux socket adversarial proof
+        run: python -B -m unittest discover -s backend/tests -p 'test_m40929_same_uid_no_go.py' -v
+      - name: Repeat NO-GO evidence (does not attest production)
+        run: python -B backend/tests/m40929_same_uid_peercred_no_go.py --proof
