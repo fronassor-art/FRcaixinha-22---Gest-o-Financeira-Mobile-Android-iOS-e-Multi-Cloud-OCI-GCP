@@ -329,11 +329,13 @@ async def proof(conn) -> None:
             ["sudo","-n","chown",str(guardian_uid),config_path],
             check=True,capture_output=True,
         )
+        # Set traverse permissions WHILE the runner still owns the folder.
+        # After chown, the runner must not be able to chmod it.
+        os.chmod(tmp,0o711)
         subprocess.run(
             ["sudo","-n","chown",str(guardian_uid),tmp],
             check=True,capture_output=True,
         )
-        os.chmod(tmp,0o711)
         # Neither the guardian DSN nor the public registry appears in the
         # child process command line or its environment. Config is 0600 and
         # guardian-owned. Parent CI harness still knows all synthetic creds.
