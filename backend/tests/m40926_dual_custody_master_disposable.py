@@ -529,7 +529,7 @@ async def proof(conn) -> None:
             deny_sql(
                 guardian,
                 "INSERT INTO m40924.approvals ("+ISSUER_COLS+") "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 values,"GUARDIAN_FORGED_ISSUER",
             )
         print("M40926_STOLEN_GUARDIAN_APP_BEARER_NO_ISSUER=DENIED")
