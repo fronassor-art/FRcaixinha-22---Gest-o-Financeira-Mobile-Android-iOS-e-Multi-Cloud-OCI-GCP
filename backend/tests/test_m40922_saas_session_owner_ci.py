@@ -39,7 +39,7 @@ def test_roles_only_read_tokens_not_issue_them():
     assert "for role in (READER,WRITER)" in SRC
     for op in ("INSERT","UPDATE","DELETE","TRUNCATE","REFERENCES","TRIGGER"):
         assert '"'+op+'"' in SRC
-    assert '"MEMBER"' in SRC
+    assert "'MEMBER'" in SRC
     assert "CREATE ROLE m40922_session_owner LOGIN" not in SRC
     assert "GRANT m40922_session_owner TO" not in SRC
     assert "current_setting('app.current_" not in SRC
