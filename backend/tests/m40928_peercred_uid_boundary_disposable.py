@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -323,6 +324,19 @@ async def proof(conn) -> None:
 
     with guarded_ci_tempdir() as tmp:
         sock_path=str(Path(tmp)/"guardian.sock")
+        # The checkout may be private to the runner UID. Copy ONLY the
+        # tested Python worker and its two import dependencies into the
+        # guardian-owned CI fixture; never chmod the Git checkout itself.
+        guardian_worker=Path(tmp)/WORKER.name
+        approved_modules=[
+            WORKER,
+            ROOT/"backend/tests/m40923_offdb_master_action_gate.py",
+            ROOT/"backend/tests/m40925_signed_master_sql_bridge_disposable.py",
+        ]
+        for source in approved_modules:
+            destination=Path(tmp)/source.name
+            shutil.copyfile(source,destination)
+            os.chmod(destination,0o644)
         # Dedicated unprivileged OS identity exists ONLY in the ephemeral
         # GitHub runner, created by this workflow, never on the user's device.
         gateway_uid=os.geteuid()
@@ -377,7 +391,7 @@ async def proof(conn) -> None:
              "PIX_REAL=OFF","PAGAMENTOS_REAIS=OFF","ATIVACAO_REAL=OFF",
              "PYTHONDONTWRITEBYTECODE=1",
              "PATH="+os.environ.get("PATH",""),
-             sys.executable,"-B",str(WORKER),sock_path,config_path],
+             sys.executable,"-B",str(guardian_worker),sock_path,config_path],
             env=child_env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
             text=True,
         )
