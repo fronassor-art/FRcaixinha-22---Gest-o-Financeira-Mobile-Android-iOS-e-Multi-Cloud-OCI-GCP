@@ -228,7 +228,8 @@ def proof(conn) -> None:
 
         def visible(token,tenant):
             return app.execute(
-              f"SELECT campaign_id,promotional_price FROM {FUNC}(%s,%s)",
+              "SELECT campaign_id,promotional_price FROM "
+              "m40910.read_new_admin_offers(%s,%s)",
               (token,tenant),
             ).fetchall()
 
