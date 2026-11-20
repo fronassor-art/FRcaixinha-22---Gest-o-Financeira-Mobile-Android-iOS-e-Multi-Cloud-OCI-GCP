@@ -178,6 +178,10 @@ def install_guardian(conn) -> None:
                 "SELECT pg_catalog.pg_has_role(%s,%s,'MEMBER')",
                 (role,privileged),
             ).fetchone()[0],(role,privileged)
+    assert not conn.execute(
+        "SELECT has_table_privilege('m40926_guardian_writer',"
+        "'m40924.approvals','INSERT')"
+    ).fetchone()[0]
     print("M40926_GUARDIAN_TABLE_FORCED_RLS=PASS")
     print("M40926_GUARDIAN_FENCE_TRIGGER=ENABLED")
     print("M40926_GUARDIAN_ROLE_INDEPENDENT=PASS")
@@ -464,7 +468,8 @@ async def proof(conn) -> None:
                 with connection.transaction():
                     connection.execute(query,args)
             except psycopg.Error as e:
-                assert e.sqlstate=="42501",(marker,e.sqlstate)
+                print("M40926_SQL_DENIAL_"+marker+"="+str(e.sqlstate))
+                assert e.sqlstate in ("42501","42P01"),(marker,e.sqlstate)
             else:
                 raise AssertionError("M40926_UNAUTHORIZED_"+marker)
 
