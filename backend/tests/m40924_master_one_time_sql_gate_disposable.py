@@ -110,8 +110,8 @@ def install_gate(conn) -> None:
             pg_catalog.jsonb_build_array(
                 p_tier,p_period,p_version::text,p_price::text,
                 p_title,p_benefit,
-                pg_catalog.extract(epoch FROM p_start)::text,
-                pg_catalog.extract(epoch FROM p_end)::text,p_reason
+                EXTRACT(EPOCH FROM p_start)::text,
+                EXTRACT(EPOCH FROM p_end)::text,p_reason
             )::text,'UTF8')),'hex')
         $body$
     """)
