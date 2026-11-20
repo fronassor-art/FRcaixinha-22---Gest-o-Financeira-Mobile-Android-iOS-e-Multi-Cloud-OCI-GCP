@@ -98,7 +98,7 @@ def create_broker(conn) -> None:
            OR pg_catalog.length(p_token)>256 THEN
           RETURN;
         END IF;
-        -- No app.current_* GUC is an authorization input.
+        -- Only the protected session row provides identity; no GUC is trusted.
         SELECT s.user_id INTO actor
         FROM m40910.sessions AS s
         JOIN public.tenants AS t
