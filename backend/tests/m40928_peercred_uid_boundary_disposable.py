@@ -8,6 +8,7 @@ bootstrap all three roles and remains privileged; NOT production isolation.
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 import base64
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -186,6 +187,20 @@ def app_factory(*,issuer_dsn,app_dsn,guardian_socket_path):
 
     return api
 
+@contextmanager
+def guarded_ci_tempdir():
+    """Own CI tempdir even when guardian startup or subprocess assertions fail."""
+    with tempfile.TemporaryDirectory(prefix="m40928_",dir="/tmp") as tmp:
+        try:
+            yield tmp
+        finally:
+            # Only the test's private tempdir in the disposable CI runner.
+            subprocess.run(
+                ["sudo","-n","chown","-R",str(os.geteuid()),tmp],
+                check=True,capture_output=True,
+            )
+            os.chmod(tmp,0o700)
+
 async def proof(conn) -> None:
     import psycopg
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -306,7 +321,7 @@ async def proof(conn) -> None:
         }
         return ({"command":command,"payload":body},sign(signer,command))
 
-    with tempfile.TemporaryDirectory(prefix="m40928_",dir="/tmp") as tmp:
+    with guarded_ci_tempdir() as tmp:
         sock_path=str(Path(tmp)/"guardian.sock")
         # Dedicated unprivileged OS identity exists ONLY in the ephemeral
         # GitHub runner, created by this workflow, never on the user's device.
@@ -590,9 +605,15 @@ async def proof(conn) -> None:
                 proc.kill()
                 out,err=proc.communicate(timeout=5)
             if "M40928_GUARDIAN_HAS_NO_ROOT_ISSUER_APP_DSN=PASS" not in out:
-                raise AssertionError("M40928_WORKER_ENV_ISOLATION_NOT_PROVED")
+                raise AssertionError(
+                    "M40928_WORKER_ENV_ISOLATION_NOT_PROVED "
+                    +"out="+out[-400:]+" err="+err[-400:]
+                )
             if "M40928_GUARDIAN_PUBLIC_KEYS_ONLY=PASS" not in out:
-                raise AssertionError("M40928_WORKER_KEY_BOUNDARY_NOT_PROVED")
+                raise AssertionError(
+                    "M40928_WORKER_KEY_BOUNDARY_NOT_PROVED "
+                    +"out="+out[-400:]+" err="+err[-400:]
+                )
             if proc.returncode not in (-15,-9,137,143):
                 raise AssertionError(
                     "M40928_WORKER_EXIT_"+str(proc.returncode)+":"+err[-200:]
