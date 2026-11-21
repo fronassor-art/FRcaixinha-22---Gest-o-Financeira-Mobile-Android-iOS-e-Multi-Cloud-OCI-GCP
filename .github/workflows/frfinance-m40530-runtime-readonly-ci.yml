@@ -1,0 +1,45 @@
+name: FR Finance M40530 — guarded original runtime offline CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40530_runtime_readonly.py'
+      - 'backend/tests/test_frfinance_m40530_runtime_readonly_ci.py'
+      - '.github/workflows/frfinance-m40530-runtime-readonly-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40530_runtime_readonly.py'
+      - 'backend/tests/test_frfinance_m40530_runtime_readonly_ci.py'
+      - '.github/workflows/frfinance-m40530-runtime-readonly-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-runtime-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: '.'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar pytest
+        run: python -m pip install pytest==8.3.4
+      - name: Testar condicoes fail-closed sem acessar servicos
+        run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_frfinance_m40530_runtime_readonly_ci.py
+      - name: Modo fonte apenas sem rede e sem banco
+        run: |
+          python -B backend/scripts/frfinance_m40530_runtime_readonly.py
+          echo M40530_CI=PASS_OFFLINE_NOT_RUNTIME_ATTESTED
+          echo M40530_LOCAL_DATABASE=NOT_ACCESSED
+          echo M40530_FINANCIAL_OPERATIONS=OFF
+          echo M40530_PRODUCTION=BLOCKED

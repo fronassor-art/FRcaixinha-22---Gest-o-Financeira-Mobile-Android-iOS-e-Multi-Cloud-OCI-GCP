@@ -1,0 +1,48 @@
+name: FR Finance M40580 critical SQL origin/static query guard CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40580_sql_static_guard.py'
+      - 'backend/tests/test_m40580_sql_static_guard_ci.py'
+      - 'backend/app/database.py'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/routers/saas_promotions.py'
+      - 'backend/app/routers/loans.py'
+      - 'backend/app/routers/contributions.py'
+      - '.github/workflows/frfinance-m40580-sql-static-guard-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40580_sql_static_guard.py'
+      - 'backend/tests/test_m40580_sql_static_guard_ci.py'
+      - 'backend/app/database.py'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/routers/saas_promotions.py'
+      - 'backend/app/routers/loans.py'
+      - 'backend/app/routers/contributions.py'
+      - '.github/workflows/frfinance-m40580-sql-static-guard-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-sql-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - name: Reject dynamic SQL and verify server-only context
+        run: |
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40580_sql_static_guard_ci.py
+          python -B backend/scripts/frfinance_m40580_sql_static_guard.py
+          echo M40580_ORIGINAL_POSTGRESQL=NOT_ACCESSED
+          echo M40580_GUC_SPOOF_EXPOSURE=NOT_REMEDIATED
+          echo M40580_PRODUCTION=BLOCKED

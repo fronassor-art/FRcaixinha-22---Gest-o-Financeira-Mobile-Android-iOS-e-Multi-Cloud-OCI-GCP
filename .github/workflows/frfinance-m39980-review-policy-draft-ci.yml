@@ -1,0 +1,64 @@
+name: FR Finance M39980 — Unapproved review policy and segregation checks
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/exclusive_cashbox_review_policy_draft.py'
+      - 'backend/app/exclusive_cashbox_review_session_pair.py'
+      - 'backend/tests/test_m39980_review_policy_draft_ci.py'
+      - 'backend/tests/test_m39970_review_session_pair_ci.py'
+      - '.github/workflows/frfinance-m39980-review-policy-draft-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/exclusive_cashbox_review_policy_draft.py'
+      - 'backend/app/exclusive_cashbox_review_session_pair.py'
+      - 'backend/tests/test_m39980_review_policy_draft_ci.py'
+      - 'backend/tests/test_m39970_review_session_pair_ci.py'
+      - '.github/workflows/frfinance-m39980-review-policy-draft-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39980-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unapproved-policy-only:
+    name: Role/tenant/event drafts and deny-by-default authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend:.
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies only
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest==8.3.4
+      - name: Evaluate draft-only review policy and prior preflights
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39980_review_policy_draft_ci.py \
+            backend/tests/test_m39970_review_session_pair_ci.py \
+            backend/tests/test_m39950_documentary_review_chain_ci.py
+          echo 'M39980_REVIEW_POLICY_DRAFT_CHECK=PASS'
+          echo 'M39980_REAL_REVIEWER_AUTHORIZATION=FALSE'
+          echo 'M39980_CASHBOX_POSTING=BLOCKED'
+          echo 'M39980_DATABASE_CONNECTIONS=NONE'
+          echo 'M39980_SQL_MIGRATIONS=NONE'
+          echo 'M39980_ORIGINAL_DB_WRITES=NONE'
+          echo 'M39980_PIX_REAL=OFF'
+          echo 'M39980_PRODUCTION=BLOCKED'

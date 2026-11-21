@@ -1,0 +1,42 @@
+name: FR Finance M39088 premium brand and member opportunities role scope
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'src/tests/premium_brand_ui.test.ts'
+      - 'src/services/roleScope.ts'
+      - '.github/workflows/frfinance-m39088-premium-brand-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branded-role-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependencies pinned by lockfile
+        run: npm ci
+      - name: Official TypeScript 7
+        run: npm run lint
+      - name: Brand and role isolation
+        run: |
+          npx tsx src/tests/premium_brand_ui.test.ts
+          npx tsx src/tests/role_scope_ui.test.ts
+          npx tsx src/tests/m39076_tenant_campaigns_navigation_ci.test.ts
+          npx tsx src/tests/m39083_cycle_readiness_ui_ci.test.ts
+          npx tsx src/tests/android_safe_area_ci.test.ts
+          echo 'M39088_BRAND_MEMBER_TAB=VALIDATED'
+          echo 'M39088_MASTER_TENANT_ISOLATION=TESTED'
+          echo 'M39088_FINANCIAL_ACTIVATION=OFF'

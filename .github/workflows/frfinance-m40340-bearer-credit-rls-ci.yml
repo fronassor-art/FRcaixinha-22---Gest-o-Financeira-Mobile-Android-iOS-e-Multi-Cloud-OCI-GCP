@@ -1,0 +1,252 @@
+name: FR Finance M40340 - Authenticated bearer and six real SQL110 RLS tables
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40340_bearer_credit_ci.sql'
+      - 'backend/tests/m40340_bearer_credit_runtime_ci.py'
+      - 'backend/tests/test_m40340_source_guards_ci.py'
+      - 'backend/tests/m40380_real_auth_credit_rls_ci.py'
+      - 'backend/tests/m40400_same_tenant_rls_ci.py'
+      - 'backend/tests/m40410_campaign_lifecycle_ci.py'
+      - 'docs/FR_FINANCE_M40410_CAMPAIGN_LIFECYCLE.md'
+      - 'docs/FR_FINANCE_M40400_SAME_TENANT_PRIVACY.md'
+      - 'src/tests/m40390_mobile_negative_ci.test.ts'
+      - 'docs/FR_FINANCE_M40390_NEGATIVE_ANDROID_API.md'
+      - 'docs/FR_FINANCE_M40380_AUTH_SQL110.md'
+      - '.github/workflows/frfinance-m40340-bearer-credit-rls-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40340_bearer_credit_ci.sql'
+      - 'backend/tests/m40340_bearer_credit_runtime_ci.py'
+      - 'backend/tests/test_m40340_source_guards_ci.py'
+      - 'backend/tests/m40380_real_auth_credit_rls_ci.py'
+      - 'backend/tests/m40400_same_tenant_rls_ci.py'
+      - 'backend/tests/m40410_campaign_lifecycle_ci.py'
+      - 'docs/FR_FINANCE_M40410_CAMPAIGN_LIFECYCLE.md'
+      - 'docs/FR_FINANCE_M40400_SAME_TENANT_PRIVACY.md'
+      - 'src/tests/m40390_mobile_negative_ci.test.ts'
+      - 'docs/FR_FINANCE_M40390_NEGATIVE_ANDROID_API.md'
+      - 'docs/FR_FINANCE_M40380_AUTH_SQL110.md'
+      - '.github/workflows/frfinance-m40340-bearer-credit-rls-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Review immutable test gates
+        run: python -B -m unittest discover -s backend/tests -p 'test_m40340_source_guards_ci.py' -v
+  postgres18-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: frfinance_ci_credit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frfinance_ci_credit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40340_DISPOSABLE: '1'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: frfinance_ci_credit
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGOPTIONS: '-c frfinance.m40340_ci=DISPOSABLE_ONLY'
+      DATABASE_URL: 'postgresql://frc_ai_app:m40340-app-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      AUTH_DATABASE_URL: 'postgresql://fr_m40340_auth:m40340-auth-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      ENVIRONMENT: development
+      FRCAIXINHA_TEST_AUTH: '1'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_ENABLE: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned API dependencies and psql
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python -m pip install -r backend/requirements.txt
+      - name: Guard GitHub disposable CI
+        run: |
+          test "$GITHUB_ACTIONS" = true
+          test "$CI_M40340_DISPOSABLE" = 1
+          test "$PGPORT" = 5432
+          test "$PGDATABASE" = frfinance_ci_credit
+      - name: Reuse M39020 minimal disposable schema
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE frc_ai_app NOLOGIN;
+          CREATE TABLE public.users (id uuid PRIMARY KEY);
+          CREATE TABLE public.tenants (
+            id uuid PRIMARY KEY,
+            admin_user_id uuid NOT NULL REFERENCES public.users(id),
+            status text NOT NULL DEFAULT 'ATIVO'
+          );
+          CREATE TABLE public.cycles (
+            id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            status text NOT NULL DEFAULT 'ABERTO'
+          );
+          CREATE TABLE public.memberships (
+            id uuid PRIMARY KEY,
+            tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            user_id uuid NOT NULL REFERENCES public.users(id),
+            role text NOT NULL DEFAULT 'TENANT_MEMBER',
+            status text NOT NULL DEFAULT 'ATIVA'
+          );
+          GRANT SELECT ON public.users,public.tenants,
+            public.cycles,public.memberships TO frc_ai_app;
+          SQL
+      - name: Existing migrations ONLY in disposable CI
+        run: |
+          psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -c "SET frfinance.m39020_migration_mode='CI_DISPOSABLE'" \
+            -f backend/migrations/110_fr_finance_special_credit_offline.sql \
+            -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
+      - name: Reuse M39020 synthetic two-tenant rows
+        run: psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m39020_special_credit_integrity_ci.sql
+      - name: Synthetic auth functions and published campaigns (runner only)
+        run: psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m40340_bearer_credit_ci.sql
+      - name: Actual FastAPI original auth and RLS route tests
+        run: |
+          python -B backend/tests/m40340_bearer_credit_runtime_ci.py
+          echo M40340_ORIGINAL_DB=UNTOUCHED
+          echo M40340_PIX_REAL=OFF
+          echo M40340_PRODUCTION=BLOCKED
+
+  m40380-real-auth-credit:
+    name: M40380 original auth + SQL110 RLS (disposable PG18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: frfinance_ci_credit
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frfinance_ci_credit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40380_DISPOSABLE: '1'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frfinance_ci_credit
+      PGOPTIONS: '-c frfinance.m40380_ci=DISPOSABLE_ONLY'
+      DATABASE_URL: 'postgresql://frc_ai_app:m40380-app-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      AUTH_DATABASE_URL: 'postgresql://fr_m40380_auth:m40380-auth-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      AUTH_VERIFIER_DATABASE_URL: 'postgresql://fr_m40380_verifier:m40380-verifier-ci-only@127.0.0.1:5432/frfinance_ci_credit'
+      AUTH_RATE_LIMIT_HMAC_KEY: 'm40380-ci-only-test-hmac-secret-placeholder-40'
+      PYTHONPATH: 'backend:backend/tests:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      ENVIRONMENT: development
+      FRCAIXINHA_TEST_AUTH: '1'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_ENABLE: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+      AI_STUDIO_IN_APP_NOTIFICATIONS: 'NO'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned dependencies and PostgreSQL client
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python -m pip install -r backend/requirements.txt
+      - name: M40380 strict disposable DB identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$CI_M40380_DISPOSABLE" = 1
+          test "$PGDATABASE" = frfinance_ci_credit
+          test "$PGPORT" = 5432
+          test "$PIX_REAL" = OFF
+          test "$PAGAMENTOS_REAIS" = OFF
+          test "$ATIVACAO_REAL" = OFF
+          psql -X -v ON_ERROR_STOP=1 -tAc "SELECT current_database(),session_user,inet_server_port(),current_setting('frfinance.m40380_ci',true)" |
+            grep -Fx 'frfinance_ci_credit|postgres|5432|DISPOSABLE_ONLY'
+          test "$(psql -X -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+      - name: Reuse original SQL authentication migrations 001-027 in disposable PG18
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_app LOGIN PASSWORD 'm40380-app-ci-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE frc_ai_auth LOGIN PASSWORD 'm40380-internal-ci-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          set --
+          for i in $(seq 1 27); do
+            n=$(printf '%03d' "$i")
+            file=$(find backend/migrations -maxdepth 1 -name "$n"'_*.sql' -print -quit)
+            test -f "$file"
+            set -- "$@" -f "$file"
+          done
+          psql -X -v ON_ERROR_STOP=1 --single-transaction "$@"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_app_role TO frc_ai_app"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO frc_ai_auth"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE fr_m40380_auth LOGIN PASSWORD 'm40380-auth-ci-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE fr_m40380_verifier LOGIN PASSWORD 'm40380-verifier-ci-only' NOSUPERUSER NOBYPASSRLS INHERIT"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_auth_role TO fr_m40380_auth"
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT frcaixinha_verifier_role TO fr_m40380_verifier"
+      - name: Original SQL110 and SQL111 in same disposable PG18 DB
+        run: |
+          set -euo pipefail
+          PGOPTIONS='-c frfinance.m40380_ci=DISPOSABLE_ONLY -c frfinance.m39020_migration_mode=CI_DISPOSABLE' \
+            psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -f backend/migrations/110_fr_finance_special_credit_offline.sql \
+            -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
+      - name: M40380 original login and M40390 negative permissions
+        run: |
+          set -euo pipefail
+          python -B backend/tests/m40380_real_auth_credit_rls_ci.py
+          python -B backend/tests/m40400_same_tenant_rls_ci.py
+          python -B backend/tests/m40410_campaign_lifecycle_ci.py
+          echo M40380_TERMUX_DB=NOT_CONNECTED
+          echo M40380_LOCAL_MIGRATIONS=NONE
+          echo M40380_DISPATCH=OFF
+          echo M40380_PRODUCTION=BLOCKED

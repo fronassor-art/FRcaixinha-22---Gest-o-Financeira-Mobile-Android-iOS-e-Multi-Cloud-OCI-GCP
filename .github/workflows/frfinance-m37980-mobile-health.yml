@@ -1,0 +1,42 @@
+name: FR Finance M37980 diagnostic mobile API sem credenciais
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile-health-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: TypeScript 7 oficial
+        run: npm run lint
+      - name: Teste funcional e adversarial do cliente Android
+        run: |
+          npx tsx src/tests/m37980_mobile_backend_probe_ci.test.ts
+          npx tsx src/tests/m37447_mobile_backend_diagnostic_ci.test.ts
+          npx tsx src/tests/m37974_api_origin_notification_guard_ci.test.ts
+  backend-health-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Validar cabeçalhos e modo somente leitura
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m37980_health_cache_ci.py
+          echo "M37986_PG_MIGRATIONS=NONE"
+          echo "M37986_PIX_REAL=OFF"
+          echo "M37986_ACTIVATION_REAL=OFF"

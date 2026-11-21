@@ -1,0 +1,35 @@
+name: FR Finance M40840 financial SQL production hard NO-GO CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/database.py'
+      - 'backend/app/m40840_financial_sql_release_no_go.py'
+      - 'backend/tests/test_m40840_financial_sql_release_ci.py'
+      - '.github/workflows/frfinance-m40840-financial-sql-release-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40840_FINANCIAL_RLS_PRODUCTION_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/database.py'
+      - 'backend/app/m40840_financial_sql_release_no_go.py'
+      - 'backend/tests/test_m40840_financial_sql_release_ci.py'
+      - '.github/workflows/frfinance-m40840-financial-sql-release-no-go-ci.yml'
+permissions:
+  contents: read
+jobs:
+  runtime-no-go-guard-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4 pytest-asyncio==0.25.3 fastapi==0.115.8 pydantic==2.10.6 asyncpg==0.30.0
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40840_financial_sql_release_ci.py

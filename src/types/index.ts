@@ -89,7 +89,7 @@ export interface TenantPolicyVersion {
   version: number;
   monthly_interest_rate: number; // Ex: 0.20 para 20% a.m.
   max_installments: number; // Ex: 6 (inaugural) ou até 12
-  contribution_per_quota: number; // Ex: 100.00
+  contribution_per_quota: number; // valor escolhido por ciclo: mínimo R$ 150,00
   flat_fine_amount: number; // Ex: 10.00
   daily_mora_rate: number; // Ex: monthly_interest_rate / 30
   admin_pct: number; // Ex: 15 para 15%
@@ -238,7 +238,7 @@ export interface LedgerTransaction {
   id: string;
   tenant_id: string;
   cycle_id: string;
-  business_type: 'CONTRIBUTION_PAYMENT' | 'LOAN_DISBURSEMENT' | 'LOAN_INSTALLMENT_PAYMENT' | 'YEAR_END_DISTRIBUTION' | 'EXPENSE' | 'ADJUSTMENT';
+  business_type: 'CONTRIBUTION_PAYMENT' | 'LOAN_DISBURSEMENT' | 'LOAN_INSTALLMENT_PAYMENT' | 'LOAN_EARLY_SETTLEMENT' | 'YEAR_END_DISTRIBUTION' | 'EXPENSE' | 'ADJUSTMENT';
   business_id: string;
   posted_at: string;
   reversal_of_id?: string;

@@ -1,0 +1,38 @@
+{
+  "schema": "FR_FINANCE_PROJECT_ISOLATION_V1",
+  "purpose": "Immutable expected identities; not authorization to start/migrate/use a server",
+  "active_project": {
+    "id": "FR_FINANCE_AI_STUDIO",
+    "display_name": "FR Finance",
+    "former_name": "FRcaixinha AI Studio",
+    "repository": "fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP",
+    "branch": "atualizacao-ai-studio-9b46a63187",
+    "termux_worktree": "fr-finance",
+    "postgresql": {
+      "host": "127.0.0.1",
+      "port": 5433,
+      "major_version": 18,
+      "pgdata": "/data/data/com.termux/files/usr/var/lib/frcaixinha_aistudio_pg18",
+      "database": "frcaixinha_aistudio_dev",
+      "owner": "frc_ai_owner"
+    }
+  },
+  "excluded_project": {
+    "id": "FR_CAIXINHA_2_2",
+    "display_name": "FR Caixinha 2.2",
+    "repository": "fronassor-art/FRcaixinha-2.2",
+    "termux_worktree": "FRcaixinha_2.2",
+    "postgresql": {
+      "host": "127.0.0.1",
+      "port": 5432,
+      "major_version": 18,
+      "pgdata": "/data/data/com.termux/files/usr/var/lib/frcaixinha_2_2_pg18",
+      "database": "frcaixinha_2_2_dev",
+      "owner": "frc22_owner"
+    }
+  },
+  "never_start_server_from_project_identity": true,
+  "never_cross_connect_to_excluded_project": true,
+  "never_apply_migrations_during_preflight": true,
+  "production_authorized": false
+}

@@ -1,0 +1,75 @@
+name: FR Finance M40926 dual SQL custody Master Ed25519 PG18 disposable CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40926_dual_custody_master_disposable.py'
+      - 'backend/tests/test_m40926_dual_custody_master_ci.py'
+      - '.github/workflows/frfinance-m40926-dual-custody-master-pg18-ci.yml'
+      - 'docs/FR_FINANCE_M40926_DUAL_CUSTODY_MASTER_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/tests/m40926_dual_custody_master_disposable.py'
+      - 'backend/tests/test_m40926_dual_custody_master_ci.py'
+      - '.github/workflows/frfinance-m40926-dual-custody-master-pg18-ci.yml'
+permissions:
+  contents: read
+jobs:
+  offline-fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40926_dual_custody_master_ci.py
+  pg18-dual-sql-custody-adversarial:
+    needs: offline-fail-closed
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m39067_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m40926_disposable_ci
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m39067_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40926_DISPOSABLE: '1'
+      CI_M40925_DISPOSABLE: '1'
+      CI_M40924_DISPOSABLE: '1'
+      CI_M40923_DISPOSABLE: '1'
+      CI_M40922_DISPOSABLE: '1'
+      CI_M40921_DISPOSABLE: '1'
+      CI_M40920_DISPOSABLE: '1'
+      CI_M40910_DISPOSABLE: '1'
+      CI_M40900_DISPOSABLE: '1'
+      CI_M40560_DISPOSABLE: '1'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      CI_PROMOTIONS_DATABASE_URL: postgresql://postgres:only_m40926_disposable_ci@127.0.0.1:55433/fr_m39067_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'psycopg[binary]==3.2.4' 'fastapi==0.115.12' 'httpx==0.28.1' 'cryptography==45.0.7'
+      - run: python -B backend/tests/m40926_dual_custody_master_disposable.py

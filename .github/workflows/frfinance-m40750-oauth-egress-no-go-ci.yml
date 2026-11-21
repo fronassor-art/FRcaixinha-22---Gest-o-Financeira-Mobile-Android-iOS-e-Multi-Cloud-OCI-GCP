@@ -1,0 +1,36 @@
+name: FR Finance M40750 OAuth token real egress NO-GO offline CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/mp_connect_http_runtime.py'
+      - 'backend/app/mp_pix_execution.py'
+      - 'backend/tests/test_m40750_oauth_egress_no_go_ci.py'
+      - '.github/workflows/frfinance-m40750-oauth-egress-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40750_OAUTH_REAL_NETWORK_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/mp_connect_http_runtime.py'
+      - 'backend/app/mp_pix_execution.py'
+      - 'backend/tests/test_m40750_oauth_egress_no_go_ci.py'
+      - '.github/workflows/frfinance-m40750-oauth-egress-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40750_OAUTH_REAL_NETWORK_NO_GO.md'
+permissions:
+  contents: read
+jobs:
+  oauth-offline-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4 httpx==0.28.1
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40750_oauth_egress_no_go_ci.py

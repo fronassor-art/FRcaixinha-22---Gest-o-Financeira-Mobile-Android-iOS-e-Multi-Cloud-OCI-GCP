@@ -13,7 +13,8 @@ import {
   Percent,
   Calendar,
   Sparkles,
-  Info
+  Info,
+  ShieldAlert
 } from 'lucide-react';
 import { AppState, appStore } from '../services/store';
 import { calculatePriceSimulation, formatBRL, formatDateBR, roundCents } from '../services/financialEngine';
@@ -75,30 +76,40 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
     tenantLoans = tenantLoans.filter(l => l.borrower_membership_id === currentMember?.id);
   }
 
-  const handleRequestLoan = (e: React.FormEvent) => {
+  const [errorModal, setErrorModal] = useState<{ title: string; message: string; detail?: string } | null>(null);
+
+  const handleRequestLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const borrower = state.memberships.find(m => m.id === selectedBorrowerId);
       if (!borrower) throw new Error('Selecione um mutuário membro da caixinha');
 
-      appStore.requestLoan({
+      await appStore.requestLoan({
         membershipId: borrower.id,
         principal: simPrincipal,
         termMonths: simTerm,
       });
 
       alert('Solicitação de empréstimo registrada com sucesso! Aguardando aprovação e reserva.');
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        alert(err.message);
-      } else {
-        alert('Erro ao solicitar empréstimo.');
-      }
+    } catch (err: any) {
+      setErrorModal({
+        title: 'Operação de Crédito Bloqueada',
+        message: err?.message || 'Falha ao solicitar empréstimo no backend.',
+        detail: err?.detail || 'O Contrato Técnico Mestre exige persistência transacional com RLS. Gravações locais foram bloqueadas com segurança.'
+      });
     }
   };
 
-  const handleApprove = (loanId: string) => {
-    appStore.approveLoan(loanId);
+  const handleApprove = async (loanId: string) => {
+    try {
+      await appStore.approveLoan(loanId);
+    } catch (err: any) {
+      setErrorModal({
+        title: 'Aprovação de Empréstimo Bloqueada',
+        message: err?.message || 'Falha ao aprovar empréstimo no backend.',
+        detail: err?.detail || 'Apenas o backend oficial com banco de dados conectado pode efetivar a aprovação.'
+      });
+    }
   };
 
   const handleDisbursePix = (loan: Loan) => {
@@ -108,8 +119,16 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
       description: `Liberação de crédito aprovado para ${loan.borrower_name}`,
       recipientName: loan.borrower_name,
       referenceId: loan.id,
-      onConfirm: () => {
-        appStore.disburseLoanPix(loan.id);
+      onConfirm: async () => {
+        try {
+          await appStore.disburseLoanPix(loan.id);
+        } catch (err: any) {
+          setErrorModal({
+            title: 'Desembolso Financeiro Bloqueado',
+            message: err?.message || 'Falha no desembolso.',
+            detail: err?.detail || 'Desembolsos exigem validação transacional e lançamento contábil no PostgreSQL.'
+          });
+        }
       },
     });
   };
@@ -124,15 +143,92 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
       description: `Amortização parcela ${seq} de ${loan.borrower_name}`,
       recipientName: currentTenant?.display_name || 'Caixinha',
       referenceId: `${loan.id}-seq-${seq}`,
-      onConfirm: () => {
-        appStore.payLoanInstallment(loan.id, seq, customAmount);
-        setRepayInstallmentModal(null);
+      onConfirm: async () => {
+        try {
+          await appStore.payLoanInstallment(loan.id, seq, customAmount);
+          setRepayInstallmentModal(null);
+        } catch (err: any) {
+          setErrorModal({
+            title: 'Amortização de Parcela Bloqueada',
+            message: err?.message || 'Falha ao amortizar parcela.',
+            detail: err?.detail || 'A imputação em 4 etapas requer persistência no PostgreSQL.'
+          });
+        }
+      },
+    });
+  };
+
+  const handleEarlySettlement = (loan: Loan) => {
+    let remainingPrincipal = 0;
+    let overdueInterest = 0;
+    let overdueMora = 0;
+    let overdueFine = 0;
+    let futureUnaccruedInterest = 0;
+    const now = new Date();
+
+    loan.installments.forEach(inst => {
+      if (inst.status !== 'QUITADA') {
+        const unpaidPrincipal = roundCents(inst.principal_due - inst.paid_principal);
+        remainingPrincipal = roundCents(remainingPrincipal + unpaidPrincipal);
+        const dueDate = new Date(inst.due_date);
+        if (dueDate < now) {
+          overdueInterest = roundCents(overdueInterest + (inst.interest_due - inst.paid_interest));
+          overdueMora = roundCents(overdueMora + (inst.mora_amount - inst.paid_mora));
+          overdueFine = roundCents(overdueFine + (inst.fine_amount - inst.paid_fine));
+        } else {
+          futureUnaccruedInterest = roundCents(futureUnaccruedInterest + (inst.interest_due - inst.paid_interest));
+        }
+      }
+    });
+
+    const totalToSettle = roundCents(remainingPrincipal + overdueInterest + overdueMora + overdueFine);
+
+    onOpenPixModal({
+      title: 'Quitação Antecipada de Empréstimo (Cláusula 8.6)',
+      amount: totalToSettle,
+      description: `Quitação integral sem juros futuros (desconto de R$ ${futureUnaccruedInterest.toFixed(2)} em juros vincendos não incorridos)`,
+      recipientName: currentTenant?.display_name || 'Caixinha',
+      referenceId: `early-settle-${loan.id}`,
+      onConfirm: async () => {
+        try {
+          await appStore.settleLoanEarly(loan.id);
+        } catch (err: any) {
+          setErrorModal({
+            title: 'Quitação Antecipada Bloqueada',
+            message: err?.message || 'Falha ao liquidar empréstimo.',
+            detail: err?.detail || 'Liquidação contábil e abatimento de juros vincendos requerem persistência no backend oficial.'
+          });
+        }
       },
     });
   };
 
   return (
     <div className="space-y-6">
+      {/* Banner de Estado do Backend Contratual */}
+      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow-xs flex items-start gap-3">
+        <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-950">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="font-bold text-sm text-amber-900">
+              {state.isDataLoadedFromServer
+                ? 'Fronteira Transacional Oficial: FastAPI (Python) + PostgreSQL RLS'
+                : 'Ambiente Desconectado do Servidor — Simulador Matemático Didático'}
+            </span>
+            {!state.isDataLoadedFromServer && (
+              <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                Sem Persistência Contábil
+              </span>
+            )}
+          </div>
+          <p>
+            {state.isDataLoadedFromServer
+              ? 'Todas as operações financeiras reais (solicitação, aprovação, desembolso, amortização com imputação e quitação antecipada) são processadas exclusivamente pelo servidor backend com isolamento RLS.'
+              : 'O backend oficial FastAPI / PostgreSQL não está conectado neste ambiente. Os cálculos abaixo operam como simulador matemático estritamente didático. Em estrita conformidade com o Contrato Técnico Mestre, transações financeiras reais (solicitação, aprovação, desembolso e quitação) exigem persistência autoritativa com RLS e encontram-se bloqueadas.'}
+          </p>
+        </div>
+      </div>
+
       {/* Header com Regras Centrais de Crédito e Aviso de Isenção de Taxas */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -140,14 +236,14 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
             <h2 className="text-lg font-bold text-slate-900">Simulação de Empréstimo — Tabela Price</h2>
             <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Sem Cobrança de Taxa</span>
+              <span>Tarifa Adm: R$ 0,00 (Isento)</span>
             </span>
             <span className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
-              Períodos Mensais Completos
+              Juros: {(monthlyRate * 100).toFixed(0)}% a.m.
             </span>
           </div>
           <p className="text-xs text-slate-600 mt-1">
-            Juros de <strong>{(monthlyRate * 100).toFixed(0)}% ao mês</strong> sobre o saldo devedor restante utilizando a Tabela Price • Sem taxas adicionais ou IOF.
+            Juros remuneratórios de <strong>{(monthlyRate * 100).toFixed(0)}% ao mês</strong> sobre o saldo devedor restante utilizando a Tabela Price • Isenção total de tarifas administrativas, TAC ou IOF.
           </p>
         </div>
 
@@ -198,7 +294,7 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
               <span>Parâmetros do Empréstimo</span>
             </h3>
             <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-              Taxa ZERO
+              Tarifa: R$ 0,00 • {(monthlyRate * 100).toFixed(0)}% a.m.
             </span>
           </div>
 
@@ -357,7 +453,8 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
               </span>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Visualização em Tabela para Desktop / Tablet com rolagem horizontal */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
                   <tr>
@@ -399,6 +496,41 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
                   </tr>
                 </tfoot>
               </table>
+            </div>
+
+            {/* Visualização Mobile em Cards (Anti-Truncamento em Smartphones) */}
+            <div className="block sm:hidden space-y-2.5">
+              {simResult.installments.map(inst => (
+                <div
+                  key={inst.sequence}
+                  className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-1.5">
+                    <span className="font-bold text-slate-900 text-sm">{inst.sequence}ª Parcela</span>
+                    <span className="font-extrabold text-emerald-700 font-mono text-sm">
+                      {formatBRL(inst.payment)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block">Juros ({(monthlyRate * 100).toFixed(0)}%):</span>
+                      <strong className="text-teal-700 font-mono">{formatBRL(inst.interestDue)}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Amortização:</span>
+                      <strong className="text-slate-800 font-mono">{formatBRL(inst.principalDue)}</strong>
+                    </div>
+                  </div>
+                  <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Saldo Devedor Restante:</span>
+                    <strong className="text-slate-900 font-mono">{formatBRL(inst.remainingBalance)}</strong>
+                  </div>
+                </div>
+              ))}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs font-bold text-emerald-950">
+                <span>Total a Pagar ({simTerm}x):</span>
+                <span className="text-sm font-black text-emerald-800 font-mono">{formatBRL(simResult.totalPayment)}</span>
+              </div>
             </div>
 
             {/* Texto Explicativo Oficial de Funcionamento */}
@@ -474,6 +606,17 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
                       >
                         <Send className="w-3.5 h-3.5" />
                         <span>Liberar Empréstimo via Pix</span>
+                      </button>
+                    )}
+
+                    {loan.status === 'DESEMBOLSADO' && (
+                      <button
+                        onClick={() => handleEarlySettlement(loan)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"
+                        title="Quitação com isenção total de juros futuros não incorridos (Cláusula 8.6)"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Quitar Antecipadamente</span>
                       </button>
                     )}
                   </div>
@@ -574,6 +717,33 @@ export const LoansView: React.FC<LoansViewProps> = ({ state, onOpenPixModal }) =
                 className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer shadow-xs"
               >
                 Confirmar Pagamento Pix
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Bloqueio por Backend Não Conectado */}
+      {errorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 text-rose-700">
+              <ShieldAlert className="w-6 h-6 shrink-0" />
+              <h3 className="font-bold text-base text-slate-900">{errorModal.title}</h3>
+            </div>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-950 space-y-1.5">
+              <span className="font-bold block text-rose-900">{errorModal.message}</span>
+              {errorModal.detail && <p className="text-[11px] text-rose-800">{errorModal.detail}</p>}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Para proteger os dados e o patrimônio da caixinha, nenhuma operação foi gravada em modo offline ou contingência local.
+            </p>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setErrorModal(null)}
+                className="px-5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl cursor-pointer"
+              >
+                Compreendi
               </button>
             </div>
           </div>

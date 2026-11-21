@@ -1,0 +1,33 @@
+name: FR Finance M37693 auditoria contratual e producao (offline)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-release-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Instalar dependencias da API para leitura estatica
+        run: python -m pip install -r backend/requirements.txt pytest
+      - name: Validar 281 itens e travas de producao
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m37693_production_contract_audit_ci.py
+          python backend/scripts/aistudio_m37693_contract_release_checkpoint.py summary
+          python backend/scripts/aistudio_m37693_contract_release_checkpoint.py checklist > /tmp/frfinance-m37693-checklist.md
+          test "$(grep -c '^- \[ \] M' /tmp/frfinance-m37693-checklist.md)" = "281"
+          echo "M37693_PRODUCTION=BLOCKED"
+          echo "M37693_ORIGINAL_DB=NOT_ACCESSED"
+          echo "M37693_PIX_REAL=OFF"

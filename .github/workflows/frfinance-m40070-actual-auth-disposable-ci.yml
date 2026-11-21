@@ -1,0 +1,129 @@
+name: FR Finance M40070 — Original FastAPI auth and RLS on disposable PG18
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40070_pg18_policy_runtime_ci.py'
+      - 'backend/tests/sql/m40070_disposable_auth_policy_pg18_ci.sql'
+      - 'backend/tests/test_m40070_disposable_source_ci.py'
+      - '.github/workflows/frfinance-m40070-actual-auth-disposable-ci.yml'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/database.py'
+      - 'backend/app/routers/exclusive_cashbox_review_gaps.py'
+  pull_request:
+    paths:
+      - 'backend/tests/m40070_pg18_policy_runtime_ci.py'
+      - 'backend/tests/sql/m40070_disposable_auth_policy_pg18_ci.sql'
+      - 'backend/tests/test_m40070_disposable_source_ci.py'
+      - '.github/workflows/frfinance-m40070-actual-auth-disposable-ci.yml'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/database.py'
+      - 'backend/app/routers/exclusive_cashbox_review_gaps.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40070-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    name: Static no-production, synthetic fixtures, not an application migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Static no IO and least privilege source assertions
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m40070_disposable_source_ci.py' -v
+          echo M40070_STATIC_GUARDS=PASS
+
+  real-fastapi-postgres18:
+    name: Real bearer-token hash, tenant ownership, and RLS in disposable PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI_M40070_DISPOSABLE: '1'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m40070_ci=DISPOSABLE_ONLY'
+      ENVIRONMENT: development
+      FRCAIXINHA_TEST_AUTH: '1'
+      AUTH_DATABASE_URL: 'postgresql://fr_m40070_auth:m40070-auth-ci-only@127.0.0.1:5432/frcaixinha_ci'
+      DATABASE_URL: 'postgresql://fr_m40070_app:m40070-app-ci-only@127.0.0.1:5432/frcaixinha_ci'
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_ENABLE: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned backend test dependencies and psql
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          python -m pip install -r backend/requirements.txt
+      - name: Create synthetic database and minimal RLS authentication fixture
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$CI_M40070_DISPOSABLE" = 1
+          test "$PGHOST" = 127.0.0.1
+          test "$PGPORT" = 5432
+          test "$PGDATABASE" = frcaixinha_ci
+          PGDATABASE=postgres psql -X -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE frcaixinha_ci'
+          psql -X -v ON_ERROR_STOP=1 \
+            -f backend/tests/sql/m40070_disposable_auth_policy_pg18_ci.sql
+      - name: HTTP test through original actual auth dependency and RLS
+        run: |
+          set -euo pipefail
+          python -B backend/tests/m40070_pg18_policy_runtime_ci.py
+          echo M40070_REAL_FASTAPI_AUTH_IN_CI=PASS
+          echo M40070_REAL_TENANT_RLS_IN_CI=PASS
+          echo M40070_SYNTHETIC_AUTH_SCHEMA_ONLY=TRUE
+          echo M40070_ORIGINAL_DATABASE_ACCESS=NONE
+          echo M40070_TERMUX_ACCESS=NONE
+          echo M40070_LOCAL_MIGRATIONS=NONE
+          echo M40070_REAL_APPROVAL=FALSE
+          echo M40070_REAL_PIX=OFF
+          echo M40070_PRODUCTION=BLOCKED

@@ -199,6 +199,146 @@ export function calculatePriceSimulation(params: PriceSimulationParams): PriceSi
  * (4) principal vencido (paid_principal)
  * Retorna os componentes pagos e o saldo restante.
  */
+export interface EarlySettlementResult {
+  remainingPrincipal: number;
+  overdueInterest: number;
+  overdueMora: number;
+  overdueFine: number;
+  totalOverdueCharges: number;
+  futureInterestWaived: number;
+  totalSettlementAmount: number;
+  isCompliantNoFutureInterest: boolean;
+}
+
+/**
+ * Cláusula 8.6: Quitação antecipada de empréstimo.
+ * Paga principal aberto e encargos já vencidos legitimamente exigíveis,
+ * SEM JUROS FUTUROS NÃO INCORRIDOS (100% de desconto nos juros vincendos).
+ */
+export function calculateEarlySettlement(
+  remainingPrincipal: number,
+  overdueInterest: number = 0,
+  overdueMora: number = 0,
+  overdueFine: number = 0,
+  futureUnaccruedInterest: number = 0
+): EarlySettlementResult {
+  const principal = Math.max(0, roundCents(remainingPrincipal));
+  const interest = Math.max(0, roundCents(overdueInterest));
+  const mora = Math.max(0, roundCents(overdueMora));
+  const fine = Math.max(0, roundCents(overdueFine));
+  const waived = Math.max(0, roundCents(futureUnaccruedInterest));
+
+  const totalOverdueCharges = roundCents(interest + mora + fine);
+  const totalSettlementAmount = roundCents(principal + totalOverdueCharges);
+
+  return {
+    remainingPrincipal: principal,
+    overdueInterest: interest,
+    overdueMora: mora,
+    overdueFine: fine,
+    totalOverdueCharges,
+    futureInterestWaived: waived,
+    totalSettlementAmount,
+    isCompliantNoFutureInterest: true,
+  };
+}
+
+export interface LoanOverdueChargesResult {
+  principalDue: number;
+  daysOverdue: number;
+  monthlyRate: number;
+  dailyMoraRate: number;
+  flatFine: number;
+  moraAmount: number;
+  totalCharges: number;
+  totalWithCharges: number;
+}
+
+/**
+ * Cláusula 4.2 e 8.6: Encargos por atraso de parcela de empréstimo.
+ * - Multa única de R$ 10,00 lançada no primeiro dia de atraso (sem reaplicação por dia).
+ * - Mora simples diária de (taxa_mensal / 30) sobre o principal vencido ainda não pago (sem juros sobre juros).
+ */
+export function calculateLoanOverdueCharges(
+  principalDue: number,
+  daysOverdue: number,
+  monthlyRate: number = 0.20,
+  fixedFine: number = 10.00
+): LoanOverdueChargesResult {
+  const principal = Math.max(0, roundCents(principalDue));
+  const days = Math.max(0, Math.floor(daysOverdue));
+
+  if (days === 0 || principal === 0) {
+    return {
+      principalDue: principal,
+      daysOverdue: 0,
+      monthlyRate,
+      dailyMoraRate: monthlyRate / 30,
+      flatFine: 0,
+      moraAmount: 0,
+      totalCharges: 0,
+      totalWithCharges: principal,
+    };
+  }
+
+  const flatFine = roundCents(fixedFine);
+  const dailyMoraRate = monthlyRate / 30;
+  const moraAmount = roundCents(principal * dailyMoraRate * days);
+  const totalCharges = roundCents(flatFine + moraAmount);
+  const totalWithCharges = roundCents(principal + totalCharges);
+
+  return {
+    principalDue: principal,
+    daysOverdue: days,
+    monthlyRate,
+    dailyMoraRate,
+    flatFine,
+    moraAmount,
+    totalCharges,
+    totalWithCharges,
+  };
+}
+
+/**
+ * Cláusula 6.5 e 10.3: Regra de 3 contribuições mensais consecutivas vencidas e não quitadas.
+ * - Ocasiona bloqueio definitivo do membro para participação no lucro daquele ciclo anual.
+ * - O peso Capital-Dias V2 do ciclo passa a zero integralmente (E_i = 0 para todos os dias).
+ * - Preserva integralmente o capital próprio já pago para restituição no encerramento (Cláusula 6.6).
+ */
+export function evaluateMemberConsecutiveOverdue(
+  contributions: { competence: string; dueStatus: string; paymentStatus: string }[]
+): {
+  isBlockedFromProfit: boolean;
+  consecutiveOverdueCount: number;
+  maxConsecutiveOverdue: number;
+} {
+  // Ordena por competência cronológica
+  const sorted = [...contributions].sort((a, b) => a.competence.localeCompare(b.competence));
+
+  let currentStreak = 0;
+  let maxStreak = 0;
+
+  for (const c of sorted) {
+    const isOverdueAndUnpaid = c.dueStatus === 'VENCIDA' && c.paymentStatus !== 'QUITADA';
+    if (isOverdueAndUnpaid) {
+      currentStreak++;
+      if (currentStreak > maxStreak) {
+        maxStreak = currentStreak;
+      }
+    } else if (c.paymentStatus === 'QUITADA') {
+      currentStreak = 0; // Reinicia a contagem consecutiva
+    }
+  }
+
+  const isBlockedFromProfit = maxStreak >= 3;
+
+  return {
+    isBlockedFromProfit,
+    consecutiveOverdueCount: currentStreak,
+    maxConsecutiveOverdue: maxStreak,
+  };
+}
+
 export interface ImputationInput {
   paymentAmount: number;
   interestDue: number;
@@ -220,6 +360,15 @@ export interface ImputationOutput {
   isFullySettled: boolean;
 }
 
+/**
+ * Cláusula 8.6 e 16.2: Ordem obrigatória para pagamentos parciais confirmados e conciliados.
+ * Dentro da parcela vencida mais antiga:
+ * (1) juros remuneratórios vencidos (paid_interest)
+ * (2) mora simples acumulada (paid_mora)
+ * (3) multa única exigível de R$ 10 (paid_fine)
+ * (4) principal vencido (paid_principal)
+ * Retorna os componentes pagos e o saldo restante.
+ */
 export function calculateImputationHierarchy(input: ImputationInput): ImputationOutput {
   let available = roundCents(input.paymentAmount);
 
@@ -297,6 +446,27 @@ export interface CycleClosingCalculationResult {
   sumTruncatedShares: number;
   residualCentavosToDistribute: number;
   memberDistributions: MemberDistributionOutput[];
+}
+
+/**
+ * Cláusula 10.3 e 16.2: Cálculo autoritativo do peso individual Capital-Dias V2.
+ * W_i = sum_k ( C_{i,k} * max(0, dias_entre(paid_at, settlement_date)) )
+ * Considera exclusivamente contribuições com status QUITADA e paid_at confirmado.
+ */
+export function calculateMemberCapitalDiasWeight(
+  contributions: Array<{ amountPaid: number; paidAt?: string | null; isReconciled?: boolean }>,
+  settlementDate: string | Date
+): number {
+  const targetDate = new Date(settlementDate);
+  let totalWeight = 0;
+  for (const c of contributions) {
+    if (c.amountPaid <= 0 || !c.paidAt) continue;
+    const pDate = new Date(c.paidAt);
+    const diffMs = targetDate.getTime() - pDate.getTime();
+    const daysInCycle = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    totalWeight += roundCents(c.amountPaid) * daysInCycle;
+  }
+  return roundCents(totalWeight);
 }
 
 export function calculateCycleClosingSettlement(

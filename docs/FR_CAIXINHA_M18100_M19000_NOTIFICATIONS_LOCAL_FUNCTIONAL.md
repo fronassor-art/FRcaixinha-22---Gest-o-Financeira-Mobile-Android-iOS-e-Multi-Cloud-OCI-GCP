@@ -1,0 +1,23 @@
+# FR Caixinha AI Studio — M18100–M19000: notificações internas funcionais
+
+Checkpoint Termux reportado: e643c7e, FastAPI PID 24236, PostgreSQL 18.6 exclusivo AI Studio em 127.0.0.1:5433, M7900 a M18000 12/12 PASS, sem migração local 041 ou notificações reais.
+
+## Entregas implementadas
+- Migração local 031_notification_inbox_local_sandbox.sql: tabela durável, RLS ENABLE/FORCE por sessão e vínculo ativo, índices, limite de 10 testes por 24h, papel app sem INSERT/UPDATE direto e marcação de leitura idempotente por função. Separada da migração 031 do sandbox Mercado Pago.
+- Login real de homologação confirmado no PostgreSQL gera SECURITY_SESSION_ALERT automaticamente após promoção do token por função exclusiva do papel Auth; o destinatário é obtido da sessão no banco, não de parâmetro do cliente. Botão SELF_TEST é restrito à própria sessão e não movimenta dinheiro.
+- GET /api/v1/notifications pagina usando cursor HMAC por destinatário, role e tenant, com contador real de não lidas. POST /self-test registra evento interno. POST /{id}/read confirma leitura. Sem login é 401, modo local indisponível é 503, usuário de outro tenant nunca acessa avisos.
+- Frontend React/Capacitor tem central com histórico, contador, atualização, paginação, envio interno de teste e marcação de lida, sem mocks.
+- Android debug permite HTTP APENAS para 127.0.0.1 e localhost, não para domínios externos; build usa VITE_API_URL=http://127.0.0.1:8000 e package com.frcaixinha.app.aistudio.
+- PostgreSQL 16/18 descartáveis, API, frontend, APK debug e ZIP devem passar antes da execução local.
+
+## Sequência no Termux (somente após CI e sincronização SHA confirmados)
+1. Executar bash backend/scripts/aistudio_db_local.sh check. Verificar banco frcaixinha_aistudio_dev, porta 5433, caminho PGDATA exclusivo, roles limitadas e contagem de tabelas. Se tabelas_public não for zero, NÃO executar migração inicial.
+2. Se banco vazio, rodar AI_STUDIO_APPROVED_SHA=SHA40 bash backend/scripts/aistudio_local_migration.sh preflight, e depois AI_STUDIO_APPROVED_SHA=SHA40 AI_STUDIO_LOCAL_MIGRATION=YES bash backend/scripts/aistudio_local_migration.sh apply. É interativo, faz backup cifrado age validado com pg_restore --list e executa SOMENTE 001-027 + 031 em uma transação, com rollback em qualquer erro. Não copiar senhas nem backup ao chat.
+3. Conferir bash backend/scripts/aistudio_db_local.sh verify. Não executar 028–030, pois seus próprios arquivos as classificam como CI; não aplicar 034–041 nem OCI. Não recriar Master se já existir; documento AI Studio não prova a presença do cadastro no PostgreSQL local.
+4. Se não existir api.env, configurar com AI_STUDIO_LOCAL_API_SETUP=YES python3 backend/scripts/aistudio_local_api_setup.py. O script não cria Master e exige papéis e senhas pré-existentes. Se já existir api.env, rodar AI_STUDIO_APPROVED_SHA=SHA40 python3 backend/scripts/aistudio_notifications_api_env_upgrade.py; acrescenta as flags e chave de cursor em arquivo privado 0600 sem expor credenciais.
+5. Reiniciar API com AI_STUDIO_APPROVED_SHA=SHA40 AI_STUDIO_OLD_FASTAPI_PID=24236 python3 backend/scripts/aistudio_termux_api_control.py restart. Não matar PID desconhecido. Confirmar health /api/health/features/m19000 com local_notification_flag_configured, local_inbox_schema_verified e local_in_app_ready igual true; envios externos e flags de dinheiro real igual false.
+6. Baixar e instalar o APK debug mais recente assinado da CI APENAS após 6/6 PASS. Atualização do package existente depende da MESMA assinatura; não desinstalar sem backup. Login e teste devem ocorrer com API ativa no MESMO telefone.
+7. Testar separadamente Master, Administrador e Membro com contas realmente existentes no PostgreSQL local: login gera aviso de novo acesso; tela mostra aviso e contagem; SELF_TEST gera aviso interno; marcar como lida atualiza contador; reiniciar app mantém histórico; trocar de usuário nunca exibe notificações anteriores; parar a API produz erro visível; reiniciá-la restaura consulta. Registrar PASS/FALHA para cada caso.
+
+## Escopo e pendências
+Somente notificações IN-APP estão autorizadas para homologação local. E-mail, FCM/APNs, WhatsApp e lembretes automáticos de contribuições/licenças/empréstimos aguardam integrações reais, consentimento LGPD, provas de origem, escalonamentos e aprovação. O ambiente local não deve ser exposto publicamente: contexto SQL por GUC não resiste à divulgação da senha do papel app. Mercado Pago real, conciliação bancária, ledger, fechamento financeiro, OCI apply e dinheiro real permanecem bloqueados. Testes físicos, AT-01–AT-50 e avaliação das demais cláusulas ainda são pendentes até a execução no aparelho.

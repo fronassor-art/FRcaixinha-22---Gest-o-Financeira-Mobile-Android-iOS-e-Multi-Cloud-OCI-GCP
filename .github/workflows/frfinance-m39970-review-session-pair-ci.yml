@@ -1,0 +1,68 @@
+name: FR Finance M39970 — Session-pair review preflight (no approval)
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/exclusive_cashbox_review_session_pair.py'
+      - 'backend/app/exclusive_cashbox_review_readiness.py'
+      - 'backend/app/exclusive_cashbox_documentary_review.py'
+      - 'backend/tests/test_m39970_review_session_pair_ci.py'
+      - 'backend/tests/test_m39950_documentary_review_chain_ci.py'
+      - 'backend/tests/test_m39960_exclusive_cashbox_readiness_ci.py'
+      - '.github/workflows/frfinance-m39970-review-session-pair-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/exclusive_cashbox_review_session_pair.py'
+      - 'backend/app/exclusive_cashbox_review_readiness.py'
+      - 'backend/app/exclusive_cashbox_documentary_review.py'
+      - 'backend/tests/test_m39970_review_session_pair_ci.py'
+      - 'backend/tests/test_m39950_documentary_review_chain_ci.py'
+      - 'backend/tests/test_m39960_exclusive_cashbox_readiness_ci.py'
+      - '.github/workflows/frfinance-m39970-review-session-pair-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39970-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-claim-session-correlation:
+    name: Distinct actors, distinct sessions, matching tenants, never payout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend:.
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install offline test dependencies
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest==8.3.4
+      - name: New session pair tests plus M39950 and M39960 regression
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39970_review_session_pair_ci.py \
+            backend/tests/test_m39950_documentary_review_chain_ci.py \
+            backend/tests/test_m39960_exclusive_cashbox_readiness_ci.py
+          echo 'M39970_SESSION_CLAIM_SHAPE=PASS'
+          echo 'M39970_REAL_REVIEWER_SIGNATURES=NONE'
+          echo 'M39970_INDEPENDENT_APPROVAL=BLOCKED'
+          echo 'M39970_DATABASE_CONNECTIONS=NONE'
+          echo 'M39970_SQL_MIGRATIONS=NONE'
+          echo 'M39970_ORIGINAL_DB_WRITES=NONE'
+          echo 'M39970_PIX_REAL=OFF'
+          echo 'M39970_PRODUCTION=BLOCKED'

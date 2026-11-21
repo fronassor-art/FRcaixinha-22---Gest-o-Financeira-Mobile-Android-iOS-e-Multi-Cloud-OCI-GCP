@@ -1,0 +1,87 @@
+name: FR Finance M39090 M39091 Exclusive Cashboxes and Credit 404 Safe CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/routers/exclusive_cashboxes.py'
+      - 'backend/app/main.py'
+      - 'backend/scripts/frfinance_m39091_api_route_probe_readonly.py'
+      - 'backend/tests/test_m39090_exclusive_cashboxes_ci.py'
+      - 'backend/tests/test_m39091_local_api_route_probe_ci.py'
+      - 'src/components/ExclusiveCashboxView.tsx'
+      - 'src/components/SpecialCreditView.tsx'
+      - 'src/services/exclusiveCashboxBoundary.ts'
+      - 'src/services/financialApiService.ts'
+      - 'src/services/roleScope.ts'
+      - 'src/services/specialCreditRequestBoundary.ts'
+      - 'src/App.tsx'
+      - 'src/components/DashboardView.tsx'
+      - 'src/tests/m39090_exclusive_cashboxes_ci.test.ts'
+      - 'src/tests/m39091_special_credit_route_404_ci.test.ts'
+      - '.github/workflows/frfinance-m39090-m39091-cashbox-credit-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-roles-offline:
+    name: Read-only FastAPI role gates and 404 probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned backend and pytest
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest==8.3.4
+      - name: Synthetic RLS and route-drift tests
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39090_exclusive_cashboxes_ci.py \
+            backend/tests/test_m39091_local_api_route_probe_ci.py \
+            backend/tests/test_cashbox_segregation_and_profit_ci.py \
+            backend/tests/test_m39020_special_credit_api_ci.py
+          echo 'M39090_M39091_DATABASE_WRITES=NONE'
+          echo 'M39090_M39091_MIGRATIONS=NONE'
+          echo 'M39090_M39091_REAL_PIX=OFF'
+
+  frontend-tenant-roles:
+    name: Official TypeScript and role navigation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npm run lint
+      - name: Role and safe response regressions
+        run: |
+          npx tsx src/tests/m39090_exclusive_cashboxes_ci.test.ts
+          npx tsx src/tests/m39091_special_credit_route_404_ci.test.ts
+          npx tsx src/tests/role_scope_ui.test.ts
+          npx tsx src/tests/m39076_tenant_campaigns_navigation_ci.test.ts
+          npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
+          npx tsx src/tests/ledger_menu_visibility_ci.test.ts
+          npx tsx src/tests/premium_brand_ui.test.ts
+          npx tsx src/tests/android_safe_area_ci.test.ts
+          echo 'M39090_M39091_ROLE_BOUNDARIES=PASS'

@@ -1,0 +1,3 @@
+FR Finance M37443 - Auditoria pos-saneamento no PostgreSQL 18 original.
+
+M37442 foi concluido localmente com M37439_TRANSACTION=COMMITTED_AND_VERIFIED. O script M37443 usa apenas SELECT na base atual frcaixinha_aistudio_dev (porta 5433) para confirmar ausencia dos registros experimentais, usuario, caixinha, 2 vinculos e sessoes presentes. Comprova 6 eventos gerais, 1 evento de reset com SHA do backup, 4 eventos no tenant e 2 fora, 2 triggers de auditoria habilitados e 2 constraints do piso minimo R$150 validadas, sem preco default. Nenhum pagamento, Pix, ledger ou emprestimo registrado. Nao cria ciclo nem banco e nao escreve no PostgreSQL. O teste funcional da abertura real do ciclo sera etapa distinta.

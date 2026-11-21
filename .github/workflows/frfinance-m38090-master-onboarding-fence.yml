@@ -1,0 +1,28 @@
+name: FR Finance M38090 Master onboarding session and tenant fence
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  master-onboarding-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Tipagem oficial e protecao contra resultado tardio
+        run: |
+          npm run lint
+          npx tsx src/tests/m38090_master_onboarding_request_fence_ci.test.ts
+          npx tsx src/tests/m38014_contract_review_scope_ci.test.ts
+          npx tsx src/tests/m37977_notification_race_ci.test.ts
+          echo "M38109_REAL_USERS=OFF"
+          echo "M38109_REAL_EMAIL=OFF"
+          echo "M38109_REAL_PIX=OFF"
+          echo "M38109_PRODUCTION=BLOCKED"

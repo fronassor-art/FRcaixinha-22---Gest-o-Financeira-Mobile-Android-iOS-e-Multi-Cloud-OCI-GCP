@@ -1,0 +1,75 @@
+name: FR Finance M40560 SaaS roles/RLS real SQL112-113 disposable PG18
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/m40560_saas_role_dataplane_disposable.py'
+      - 'backend/tests/test_m40560_saas_role_dataplane_guards_ci.py'
+      - '.github/workflows/frfinance-m40560-saas-role-rls-disposable.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/m40560_saas_role_dataplane_disposable.py'
+      - 'backend/tests/test_m40560_saas_role_dataplane_guards_ci.py'
+      - '.github/workflows/frfinance-m40560-saas-role-rls-disposable.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: '.'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40560_saas_role_dataplane_guards_ci.py
+  disposable-roles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: offline-guard
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m39067_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m40560_disposable_ci
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m39067_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CI_M40560_DISPOSABLE: '1'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      GITHUB_ACTIONS: 'true'
+      CI_PROMOTIONS_DATABASE_URL: postgresql://postgres:only_m40560_disposable_ci@127.0.0.1:55433/fr_m39067_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned disposable-only psycopg
+        run: python -m pip install 'psycopg[binary]==3.2.4'
+      - name: Enforce exact disposable CI identity
+        run: |
+          test "$GITHUB_ACTIONS" = true
+          test "$CI_M40560_DISPOSABLE" = 1
+          test "$PIX_REAL" = OFF
+          test "$PAGAMENTOS_REAIS" = OFF
+          test "$ATIVACAO_REAL" = OFF
+          python -B backend/tests/m40560_saas_role_dataplane_disposable.py
+          echo M40560_ORIGINAL_POSTGRESQL_5433=NEVER_CONNECTED
+          echo M40560_CI_DB=DISPOSABLE_ONLY
+          echo M40560_PRODUCTION=BLOCKED

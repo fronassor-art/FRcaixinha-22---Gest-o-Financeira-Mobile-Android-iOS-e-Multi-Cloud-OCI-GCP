@@ -1,0 +1,27 @@
+name: FR Finance M38030 prova de conta existente CI-only
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  existing-identity-proof-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Guardar reuso de identidade sem banco
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38030_existing_identity_password_proof_ci.py \
+            backend/tests/test_m24500_existing_identity_versioned_consent_ci.py \
+            backend/tests/test_m24400_explicit_invite_acceptance_ci.py
+          echo "M38049_EXISTING_IDENTITY=CI_ONLY"
+          echo "M38049_PRODUCTION=BLOCKED"

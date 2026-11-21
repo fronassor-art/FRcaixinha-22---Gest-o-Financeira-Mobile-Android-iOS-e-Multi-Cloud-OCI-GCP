@@ -1,0 +1,133 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "com.frcaixinha.app"
+    // Assinatura duravel para o pacote de homologacao. A chave jamais fica no Git.
+    def stableSigningRequired = System.getenv("FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING") == "1"
+    def stableKeyFile = System.getenv("FRCAIXINHA_ANDROID_KEYSTORE_FILE")
+    def stableStorePassword = System.getenv("FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD")
+    def stableKeyAlias = System.getenv("FRCAIXINHA_ANDROID_KEY_ALIAS")
+    def stableKeyPassword = System.getenv("FRCAIXINHA_ANDROID_KEY_PASSWORD")
+    def androidCiBuildNumber = System.getenv("FRCAIXINHA_ANDROID_VERSION_CODE")
+    // Variant isolate a diagnostic APK without touching the already installed
+    // com.frcaixinha.app.aistudio data and signing identity.
+    // This is ONLY a debug variant; a permanent signing key is still needed.
+    def diagnosticParallel = System.getenv("FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC") == "1"
+    // Separate production signing. Debug key is never reused.
+    def releaseRequested = gradle.startParameter.taskNames.any {
+        it.toLowerCase(java.util.Locale.ROOT).contains("release")
+    }
+    def releaseKeyFile = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEYSTORE_FILE")
+    def releaseStorePassword = System.getenv("FR_FINANCE_ANDROID_RELEASE_STORE_PASSWORD")
+    def releaseAlias = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEY_ALIAS")
+    def releaseKeyPassword = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEY_PASSWORD")
+    if (releaseRequested && diagnosticParallel) {
+        throw new GradleException("M39052: pacote diagnostico nao permite release.")
+    }
+    if (releaseRequested) {
+        if (!releaseKeyFile || !releaseStorePassword || !releaseAlias ||
+                !releaseKeyPassword || !(new File(releaseKeyFile).isFile())) {
+            throw new GradleException("M21700: assinatura release separada obrigatoria.")
+        }
+        def nativeConfig = file("src/main/assets/capacitor.config.json")
+        if (!nativeConfig.isFile()) {
+            throw new GradleException("M21700: sincronize Capacitor com release HTTPS.")
+        }
+        def parsed = new groovy.json.JsonSlurper().parse(nativeConfig)
+        if (parsed.server?.androidScheme != "https" || parsed.server?.cleartext != false) {
+            throw new GradleException("M21700: Release requer HTTPS sem cleartext.")
+        }
+        def bundled = fileTree(dir: "src/main/assets/public/assets", includes: ["**/*.js"])
+        if (bundled.files.any { it.getText("UTF-8").contains("http://127.0.0.1:8000") }) {
+            throw new GradleException("M21700: API local bloqueada no APK release.")
+        }
+    }
+    if (stableSigningRequired && (!stableKeyFile || !stableStorePassword ||
+            !stableKeyAlias || !stableKeyPassword || !(new File(stableKeyFile).isFile()))) {
+        throw new GradleException("Assinatura Android permanente nao configurada. Configure os segredos de assinatura no GitHub.")
+    }
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.frcaixinha.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // versionCode monotonicamente crescente no CI, sem downgrade acidental.
+        versionCode androidCiBuildNumber ? Integer.parseInt(androidCiBuildNumber) : 1
+        versionName androidCiBuildNumber ? "1.0.${androidCiBuildNumber}" : "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Gradle so configura a chave quando o CI exigiu assinatura persistente.
+    if (stableSigningRequired) {
+        signingConfigs {
+            stableDebug {
+                storeFile file(stableKeyFile)
+                storePassword stableStorePassword
+                keyAlias stableKeyAlias
+                keyPassword stableKeyPassword
+                storeType "PKCS12"
+            }
+        }
+    }
+    if (releaseRequested) {
+        signingConfigs {
+            productionRelease {
+                storeFile file(releaseKeyFile)
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+                storeType "PKCS12"
+            }
+        }
+    }
+    buildTypes {
+        // MESMO applicationId em todas as atualizacoes Android AI Studio.
+        debug {
+            applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"
+            versionNameSuffix "-AI-STUDIO-TEST"
+            if (stableSigningRequired) {
+                signingConfig signingConfigs.stableDebug
+            }
+        }
+        release {
+            minifyEnabled false
+            if (releaseRequested) {
+                signingConfig signingConfigs.productionRelease
+            }
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

@@ -1,94 +1,95 @@
-# FRcaixinha 2.2 — Gestão Financeira Mobile (Android & iOS) e Multi-Cloud (OCI + GCP)
+# FR Finance — frente de desenvolvimento Google AI Studio
 
-Sistema financeiro completo para caixinhas de empréstimos (Tabela Price), cotas, rifas com rateio proporcional, bolões oficiais (Quina de São João, Lotofácil da Independência, Mega da Virada) e arquitetura em nuvem híbrida com custódia e auditoria imutável (Oracle Cloud Infrastructure WORM SHA-256 + Google Cloud Platform).
+> **Identidade vigente:** **FR Finance** — aplicação de gestão financeira da frente **Google AI Studio**, independente do **FR Caixinha 2.2** (outro projeto). O nome técnico legado do repositório, do APK e do PostgreSQL fica preservado SOMENTE por compatibilidade.
+> **Frente FR Finance AI Studio independente do FR Caixinha 2.2.** Seu repositório, branch, código, banco, credenciais, backups e infraestrutura são exclusivos, sem sincronização com o projeto 2.2.
+> **Documentação própria:** [Caderno Mestre FR Finance](docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md) e [Contrato Técnico Mestre FR Finance](docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md). Fontes antigas FRcaixinha 2.2 presentes em `public/assets/aistudio/` são histórico técnico, NÃO passam a ser documentos novos aprovados por mera troca de nome.
+> O registro das 147 cláusulas é baseline histórico para reauditoria individual. Não importar automaticamente código ou dados de outra frente e não promover bloqueios a PASS por inferência.
+>
+> **Implantação:** React + Capacitor identifica-se como FR Finance. OCI/GCP, cadastro de pessoas e operações financeiras reais ainda não estão homologados.
 
----
+## Repositório e fluxo oficial
 
-## 📱 Execução no Celular via Termux (Android)
+**Diretório canônico no Termux:** `$HOME/fr-finance`. Para migrar a pasta existente sem clonar novamente, use `bash backend/scripts/frfinance_rename_termux_directory.sh` uma única vez, ainda na pasta antiga, e depois `cd "$HOME/fr-finance"`. O script impede colisão de pastas e verifica origem Git/branch. Não renomeia o repositório remoto.
 
-Você pode rodar o **FRcaixinha 2.2** 100% nativo dentro do seu celular Android utilizando o **Termux**, sem precisar de computador.
+- **Repositório:** `fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP`
+- **Branch de desenvolvimento:** `atualizacao-ai-studio-9b46a63187`
+- **PR de integração:** [#2](https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP/pull/2), mantida **em rascunho** até autorização expressa.
+- **Fonte do desenvolvimento:** commits efetuados diretamente no GitHub, acompanhados por GitHub Actions.
+- **Termux (Android):** clone local `~/fr-finance` apenas para sincronização, conferências e homologação especificamente autorizada, via `git fetch` e `git merge --ff-only`.
+- **Separação obrigatória:** não misturar bancos, clusters, credenciais, backups, repositórios ou código do FR Finance AI Studio com o FR Caixinha 2.2. Para decisões atuais, usar os dois documentos mestres exclusivos do FR Finance; as fontes antigas são referências históricas, sujeitas à revisão por cláusula.
 
-### Passo 1: Instale os pacotes necessários no Termux
-Abra o Termux e digite:
-```bash
-pkg update -y && pkg install -y nodejs git unzip curl
-```
+**Não executar `git branch -M main`, `git push` do Termux, `git reset --hard`, `git clean` ou migrações para realizar a sincronização ordinária.** A branch de trabalho é a da PR #2 e a `main` permanece preservada.
 
-### Passo 2: Dê permissão de acesso aos arquivos
-```bash
-termux-setup-storage
-```
-*(Toque em "Permitir" na janela que abrir no Android)*
+## Situação técnica documentada
 
-### Passo 3: Baixe e extraia o projeto
-Se você baixou o arquivo `FRcaixinha_2.2_Projeto_Completo.zip` pelo navegador do celular:
-```bash
-mkdir -p ~/frcaixinha && cd ~/frcaixinha
-cp ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip .
-unzip -o FRcaixinha_2.2_Projeto_Completo.zip
-```
+O checkpoint de 01/11/2026, publicado antes desta correção do README, registra:
 
-### Passo 4: Como Rodar no Celular (2 Métodos)
+| Verificação | Situação registrada |
+|---|---|
+| Matriz contratual | 147 cláusulas inventariadas |
+| Classificação histórica | 58 parciais; 50 bloqueadas; 34 não verificadas; 5 divergentes |
+| Backlog identificado | 37 tarefas: 8 P0, 14 P1, 6 P2, 5 P3, 4 P4 |
+| Migrações versionadas | 001–025; 020–024 restringem sessão e 025 exige prova efêmera de verificação por papel técnico independente antes da emissão, apenas em CI |
+| Banco exclusivo AI Studio no Termux | PostgreSQL 18.6, `127.0.0.1:5433/frcaixinha_aistudio_dev`, **46 tabelas**, conforme checkpoint local da migração 044 verificado pelo operador em 05/11/2026 |
+| CI no checkpoint | 5 verificações aprovadas; isso não constitui aprovação para produção |
 
-#### Método A (Recomendado — Sem Node.js, Sem Erros de C++):
-Como o projeto já inclui a pasta `dist/` pré-compilada, você pode usar o servidor embutido do Python que não requer compilação:
-```bash
-pkg install -y python
-cd ~/frcaixinha/dist
-python -m http.server 3000
-```
+**Importante:** as contagens de requisitos representam uma **fotografia documental histórica**, não um índice de conclusão recalculado após cada pacote. Confira evidências por cláusula antes de mudar os estados.
 
-#### Método B (Com Node.js):
-```bash
-cd ~/frcaixinha
-npm install
-npm run dev
-```
+Referência consolidada atual: [Macropacote M300 — checklist amplo, entregas e pendências](docs/FR_CAIXINHA_MACROPACOTE_300_CHECKLIST_CONSOLIDADO.md). Este documento preserva a matriz histórica sem inflar sua conclusão.
 
-> **Apareceu o erro "CANNOT LINK EXECUTABLE node"?**
-> Esse erro ocorre quando a biblioteca `libc++` do Termux está desatualizada. Para corrigir:
-> ```bash
-> pkg update -y && pkg upgrade -y
-> pkg install -y libc++ nodejs-lts
-> ```
-> *(Dica: Se o seu Termux veio da Google Play Store, ele foi descontinuado em 2020. Instale a versão moderna pelo F-Droid ou GitHub).*
+Evolução de homologação: [Macropacote M320 — diretório contábil sem saldos e gates](docs/FR_CAIXINHA_MACROPACOTE_320_LEDGER_EMPTY_GATES.md). APK 211 recebeu 4/7 PASS físicos (três testes de contas/paginação ainda não exercitados); a CI da versão M320 deve ser analisada separadamente antes de qualquer sincronização.
 
-### Passo 5: Abra no celular
-Abra o **Google Chrome** no seu celular e acesse:
-```
-http://localhost:3000
-```
-O aplicativo abrirá instantaneamente em alta performance, funcionando mesmo sem internet (offline).
+Referências de trabalho:
+- [Checkpoint executivo de pendências](docs/CHECKPOINT_EXECUTIVO_PENDENCIAS_AI_STUDIO_2026-11-01.md)
+- [Matriz das 147 cláusulas](docs/MATRIZ_147_PENDENCIAS_AI_STUDIO_2026-11-01.md)
+- [Integração AI Studio / Termux](docs/AI_STUDIO_MASTER_TERMUX.md)
+- [Checkpoint contratual e evidências](docs/CHECKPOINT_CONTRATO_2026-11-01.md)
 
----
+## Arquitetura e limites
 
-## 💻 Execução no Computador (Windows / macOS / Linux)
+- **Frontend:** React + TypeScript + Capacitor, com compilação Android de depuração no CI. APK compilado não equivale a APK homologado ou publicado.
+- **Backend:** FastAPI, PostgreSQL e políticas de isolamento por tenant (RLS) em desenvolvimento e testes.
+- **Acesso único:** identidade individual com contextos explícitos `MASTER`, `TENANT_ADMIN` e `TENANT_MEMBER`; não misturar dados de caixinhas.
+- **Licenciamento SaaS e Mercado Pago:** partes preparadas/testadas sinteticamente; integração produtiva e conciliação real não liberadas.
+- **Pix, desembolso, fechamento financeiro, convites públicos, recuperação por e-mail e operações de bolões/rifas reais:** não liberados para produção. Bolões/rifas permanecem apenas demonstrativos.
+- **OCI/GCP e recuperação de desastre:** arquitetura/documentação não comprovam failover produtivo.
 
-### Pré-requisitos
-- **Node.js LTS (v18+)**
-- **Git**
+## Exemplo matemático de Tabela Price — apenas simulação
 
-### Comandos
-```bash
-npm install
-npm run dev
-```
-Acesse `http://localhost:3000`.
+Para principal de **R$ 500,00**, taxa **hipotética de 20% a.m.** e **cinco períodos regulares**, o cálculo em `backend/app/routers/loans.py` usa `Decimal`, `ROUND_HALF_UP` e ajusta a última prestação para zerar o saldo:
 
----
+| Prestação | Valor |
+|---|---:|
+| 1 a 4 | R$ 167,19 cada |
+| 5 (ajuste de centavo) | R$ 167,20 |
+| **Total pago** | **R$ 835,96** |
+| **Juros totais** | **R$ 335,96** |
 
-## 🚀 Publicar no seu GitHub a partir do Termux ou PC
+O teste `backend/tests/test_price_contract.py` verifica esses valores. Portanto, **não** descrever o caso como cinco prestações exatamente iguais de R$ 167,19. A simulação via API deve usar a **política ativa do ciclo do tenant**, não uma taxa arbitrária informada pelo cliente. O exemplo não autoriza empréstimos reais nem substitui regras de datas do ciclo.
+
+## Como sincronizar com segurança no Termux
+
+No terminal do Android (fora do Debian), primeiro conferir branch e alterações:
 
 ```bash
-git remote add origin https://github.com/SEU_USUARIO/frcaixinha-22.git
-git branch -M main
-git push -u origin main
+cd "$HOME/fr-finance" || exit 1
+git status --short --branch
+git branch --show-current
 ```
 
----
+Se a branch exibida for `atualizacao-ai-studio-9b46a63187` e o diretório estiver limpo, buscar e aplicar apenas atualização fast-forward:
 
-## 🛡️ Cláusulas e Regras de Negócio Implementadas
-- **Empréstimo Tabela Price:** 5 parcelas de R$ 167,19 com taxa de juros 20% a.m. decrescente sobre saldo devedor, juros totais R$ 335,96, sem taxas administrativas.
-- **Módulo de Rifas:** 3 campanhas anuais (Março, Junho, Setembro - dia 20), R$ 50,00 por cota (10 bilhetes de R$ 5,00), premiação configurável.
-- **Bolões Oficiais:** Quina de São João, Lotofácil da Independência e Mega da Virada com margem de 20% para a caixinha e rateio estrito de prêmios.
-- **Multi-Cloud Híbrido:** Failover automático GCP <-> OCI e logs de auditoria imutável (WORM).
+```bash
+git fetch origin
+git merge --ff-only origin/atualizacao-ai-studio-9b46a63187
+git log -1 --oneline
+bash backend/scripts/aistudio_db_local.sh check
+```
+
+Se aparecerem divergências, **interromper sem forçar** e investigar. O comando `check` é somente leitura; **não executar `apply`, `verify` ou bootstrap do Master** por causa de uma atualização documental.
+
+## Gates de segurança
+
+Qualquer migração no banco local, provisionamento de contas humanas, cobrança, conexão real com provedor, disparo de convites, instalação de APK, publicação ou merge à `main` exige a autorização específica correspondente. O desenvolvimento na branch e os testes em ambientes descartáveis não equivalem a essas autorizações.
+
+**Fonte de verdade para avanço técnico:** código e commits na branch AI Studio + testes no GitHub Actions + comparação com a matriz contratual + sincronização segura no Termux.

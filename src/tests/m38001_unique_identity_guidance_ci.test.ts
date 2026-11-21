@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const ui=readFileSync('src/components/LoginView.tsx','utf8');
+const service=readFileSync('src/services/authService.ts','utf8');
+assert(ui.includes('Uma única identidade pode participar de mais de uma caixinha'));
+assert(ui.includes('Não crie outra'));
+assert(ui.includes('Os convites eletrônicos e a ativação por e-mail ainda não foram habilitados.'));
+assert(ui.includes("setSelectedRole(option.role)"));
+assert(service.includes('requestedRole, requestedTenantId'));
+assert(service.includes('Saia da conta antes de entrar em outro perfil.'));
+assert(!ui.includes('localStorage.setItem'));
+console.log('M38001 identity reuse and explicit tenant choice PASS');

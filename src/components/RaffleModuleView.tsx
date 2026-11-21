@@ -79,7 +79,9 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
   const [annualQuotasInput, setAnnualQuotasInput] = useState<number>(20);
   const [annualPrizeInput, setAnnualPrizeInput] = useState<number>(200.00);
 
-  const currentCampaign = state.raffleCampaigns.find(c => c.id === selectedCampaignId) || state.raffleCampaigns[0];
+  const visibleCampaigns = state.raffleCampaigns.filter(c => c.tenant_id === state.currentTenantId);
+  const currentCampaign = visibleCampaigns.find(c => c.id === selectedCampaignId) || visibleCampaigns[0];
+  if (!currentCampaign) return <div role="status" className="p-4 text-sm">Nenhuma rifa demonstrativa nesta caixinha.</div>;
   const campaignCards = state.raffleCards.filter(c => c.campaign_id === currentCampaign.id);
 
   // Se o usuário for membro regular, destacamos ou filtramos suas cartelas
@@ -190,12 +192,15 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
     appStore.drawRaffleWinner(
       currentCampaign.id,
       randomNum,
-      'Extração Simulada Oficial (Concurso Loteria Federal)'
+      'Extração simulada sem vínculo com concurso oficial'
     );
   };
 
   return (
     <div className="space-y-6">
+      <div role="note" className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+        DEMONSTRAÇÃO — dados fictícios e ações locais. Não há bilhete, aposta, sorteio, cobrança ou pagamento real neste módulo.
+      </div>
       {/* Banner de Cabeçalho Oficial */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white border border-indigo-900/60 shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-96 bg-gradient-to-l from-indigo-500/10 to-transparent pointer-events-none" />
@@ -203,7 +208,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
-                <Ticket className="w-3.5 h-3.5" /> Módulo de Rifas Homologado
+                <Ticket className="w-3.5 h-3.5" /> Rifas — demonstração
               </span>
               <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">
                 Regra FRcaixinha 2.2
@@ -264,7 +269,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
 
         {/* Calendário Central das 3 Campanhas Anuais (Seção 2 do Documento) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6 pt-5 border-t border-slate-800/80">
-          {state.raffleCampaigns.map(camp => {
+          {visibleCampaigns.map(camp => {
             const isSelected = camp.id === selectedCampaignId;
             return (
               <div
@@ -416,7 +421,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
             </div>
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
-                Sorteio Oficial Homologado
+                Sorteio simulado, sem homologação
               </span>
               <h3 className="text-lg font-black text-slate-900 mt-1">
                 Bilhete Premiado: #{currentCampaign.winning_number?.toString().padStart(3, '0')}
@@ -1221,7 +1226,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
                     }}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                   >
-                    <QrCode className="w-3.5 h-3.5" /> Pagar R$ 5,00 via Pix
+                    <QrCode className="w-3.5 h-3.5" /> Ver Pix demonstrativo
                   </button>
                 ) : (
                   <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
@@ -1267,7 +1272,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
             {/* Cabeçalho da Cartela Impressa */}
             <div className="border-b-2 border-dashed border-slate-200 pb-5 text-center">
               <span className="text-[11px] font-black tracking-widest uppercase bg-slate-900 text-white px-3 py-1 rounded-full">
-                CARTELA DIGITAL OFICIAL • FRCAIXINHA 2.2
+                CARTELA DIGITAL DEMONSTRATIVA • FRCAIXINHA 2.2
               </span>
               <h2 className="text-xl font-black text-slate-900 mt-2">
                 {currentCampaign.title}

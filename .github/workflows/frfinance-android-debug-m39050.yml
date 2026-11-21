@@ -1,0 +1,240 @@
+name: FR Finance M39065 - Atualizacao APK principal original
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - ".github/workflows/frfinance-android-debug-m39050.yml"
+      - "src/**"
+      - "android/**"
+      - "capacitor.config.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39065-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk-debug-local:
+    name: APK principal 1080+ com certificado persistente e Pix OFF
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FRCAIXINHA_ANDROID_LOCAL_TEST: "1"
+      FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING: "1"
+      VITE_API_URL: "http://127.0.0.1:8000"
+      VITE_FR_FINANCE_PUSH_DIAGNOSTIC: "NO"
+      FR_FINANCE_ANDROID_RELEASE_PROFILE: "0"
+      FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC: "0"
+      FR_FINANCE_PIX_REAL: "OFF"
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: "NO"
+      FR_FINANCE_ACCESS_MAIL_ENABLE: "OFF"
+      FR_FINANCE_ACCESS_MAIL_WORKER: "OFF"
+      FR_FINANCE_REAL_USER_ACTIVATION: "OFF"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Instalar Node somente no runner descartavel
+        run: npm ci
+
+      - name: TS + contratos de seguranca Android
+        run: |
+          npm run lint
+          npx tsx src/tests/m39020_credit_push_ui_ci.test.ts
+          npx tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
+          npx tsx src/tests/m39076_tenant_campaigns_navigation_ci.test.ts
+          npx tsx src/tests/m39070_android_saas_master_promotions_ci.test.ts
+          npx tsx src/tests/session_resume_guard_ci.test.ts
+          npx tsx src/tests/m39075_android_background_campaign_draft_ci.test.ts
+
+      - name: Empacotar web e sincronizar Capacitor debug
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Verificar assinatura, rede local e protecoes de producao
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$FRCAIXINHA_ANDROID_LOCAL_TEST" = "1"
+          test "$FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC" = "0"
+          test "$VITE_API_URL" = "http://127.0.0.1:8000"
+          test "$FR_FINANCE_PIX_REAL" = "OFF"
+          test "$FR_FINANCE_SPECIAL_CREDIT_SANDBOX" = "NO"
+          test "$VITE_FR_FINANCE_PUSH_DIAGNOSTIC" = "NO"
+          test ! -e android/app/google-services.json
+          test -f android/app/src/debug/AndroidManifest.xml
+          test -f android/app/src/debug/res/xml/local_api_network_security.xml
+          grep -q 'android:networkSecurityConfig="@xml/local_api_network_security"' \
+            android/app/src/debug/AndroidManifest.xml
+          grep -q 'cleartextTrafficPermitted="false"' \
+            android/app/src/debug/res/xml/local_api_network_security.xml
+          grep -Fq 'applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"' android/app/build.gradle
+          test -f android/app/src/main/assets/capacitor.config.json
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const config=JSON.parse(readFileSync('android/app/src/main/assets/capacitor.config.json','utf8'));
+          assert.equal(config.appId,'com.frcaixinha.app');
+          assert.equal(config.server?.androidScheme,'http');
+          assert.equal(config.server?.cleartext,false);
+          const debug=readFileSync('android/app/src/debug/res/xml/local_api_network_security.xml','utf8');
+          assert.match(debug,/<base-config cleartextTrafficPermitted="false"/);
+          assert.match(debug,/<domain includeSubdomains="false">127\.0\.0\.1<\/domain>/);
+          assert.match(debug,/<domain includeSubdomains="false">localhost<\/domain>/);
+          console.log('M39050_LOCAL_LOOPBACK_ONLY=PASS');
+          JS
+
+      - name: M39065 — exigir assinatura ja existente de homologacao
+        shell: bash
+        env:
+          SIGNING_BASE64: ${{ secrets.FRCAIXINHA_ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in SIGNING_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if test -z "${!key}"; then
+              echo "M39065_BLOCKED=REQUIRED_EXISTING_GITHUB_SIGNING_SECRET_MISSING"
+              exit 2
+            fi
+          done
+          test "$FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING" = "1"
+          test "$FR_FINANCE_ANDROID_PARALLEL_DIAGNOSTIC" = "0"
+          keystore="$RUNNER_TEMP/fr-finance-original-homologation.p12"
+          test ! -e "$keystore"
+          (umask 077; printf '%s' "$SIGNING_BASE64" | base64 --decode > "$keystore")
+          test -s "$keystore"
+          export M39065_PRIVATE_STOREPASS="$STORE_PASSWORD"
+          digest="$(keytool -list -v -storetype PKCS12 -keystore "$keystore" -alias "$KEY_ALIAS" -storepass:env M39065_PRIVATE_STOREPASS | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if test "$digest" != "ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7"; then
+            echo "M39065_BLOCKED=KEYSTORE_CERT_MISMATCH"
+            exit 2
+          fi
+          unset M39065_PRIVATE_STOREPASS
+          version_code=$((3906500 + GITHUB_RUN_NUMBER))
+          if test "$version_code" -le 1080; then
+            echo "M39065_BLOCKED=NON_MONOTONIC_VERSION_CODE"
+            exit 2
+          fi
+          echo "FRCAIXINHA_ANDROID_KEYSTORE_FILE=$keystore" >> "$GITHUB_ENV"
+          echo "FRCAIXINHA_ANDROID_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+          echo "M39065_ORIGINAL_SIGNING_CERT=PASS"
+          echo "M39065_NO_EPHEMERAL_DEBUG_KEY=PASS"
+          echo "M39065_PLANNED_VERSION_CODE=$version_code"
+
+      - name: Testar contrato CI de atualizacao sem instalar APK
+        run: |
+          python3 -m pip install --disable-pip-version-check pytest==8.3.4
+          python3 -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39065_stable_upgrade_apk_pipeline_ci.py
+
+      - name: Montar APK debug principal com chave fixa
+        working-directory: android
+        env:
+          FRCAIXINHA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_STORE_PASSWORD }}
+          FRCAIXINHA_ANDROID_KEY_ALIAS: ${{ secrets.FRCAIXINHA_ANDROID_KEY_ALIAS }}
+          FRCAIXINHA_ANDROID_KEY_PASSWORD: ${{ secrets.FRCAIXINHA_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test "$FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING" = "1"
+          test -s "$FRCAIXINHA_ANDROID_KEYSTORE_FILE"
+          test "$FRCAIXINHA_ANDROID_VERSION_CODE" -gt 1080
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Validar pacote principal assinatura e versao do APK gerado
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          test "$FR_FINANCE_PIX_REAL" = "OFF"
+          test "$FR_FINANCE_ACCESS_MAIL_WORKER" = "OFF"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          signer="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$aapt"
+          test -x "$signer"
+          export M39065_AAPT="$aapt" M39065_APKSIGNER="$signer"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          apk = Path("android/app/build/outputs/apk/debug/app-debug.apk")
+          out = subprocess.run(
+              [os.environ["M39065_AAPT"], "dump", "badging", str(apk)],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          package_line = next((line for line in out.splitlines()
+                               if line.startswith("package: ")), "")
+          match = re.search(r"name='([^']+)'\s+versionCode='([0-9]+)'", package_line)
+          if not match or match.group(1) != "com.frcaixinha.app.aistudio":
+              raise SystemExit("M39065_BLOCKED=WRONG_ANDROID_PACKAGE")
+          version = int(match.group(2))
+          MIN_INSTALLED_CODE = 1080
+          if version <= MIN_INSTALLED_CODE or (
+              version != int(os.environ["FRCAIXINHA_ANDROID_VERSION_CODE"])
+          ):
+              raise SystemExit("M39065_BLOCKED=APK_VERSION_CODE_INVALID")
+          verified = subprocess.run(
+              [os.environ["M39065_APKSIGNER"], "verify", "--print-certs", str(apk)],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          certs = {
+              cert.lower() for cert in re.findall(
+                  r"^(?:Signer #1|V2 Signer): certificate SHA-256 digest:\s*([0-9a-fA-F]{64})",
+                  verified, flags=re.MULTILINE | re.IGNORECASE,
+              )
+          }
+          if certs != {"ab003bfd9a496e211370ff4dfcc5044ec19e1151b69ad488d7ec1b0f34ce31c7"}:
+              raise SystemExit("M39065_BLOCKED=APK_CERT_MISMATCH")
+          print("M39065_APK_PACKAGE=MAIN_AISTUDIO_ONLY")
+          print("M39065_SIGNED_CERT=MATCH_INSTALLED_MAIN_1080")
+          print("M39065_VERSION_CODE=" + str(version))
+          print("M39065_APK_SIGNING=PASS")
+          PY
+          sha256sum "$apk" > "$apk.sha256"
+          echo "M39065_APK_PACKAGE=com.frcaixinha.app.aistudio" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_SIGNED_CERT=MATCH_INSTALLED_MAIN_1080" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_VERSION_CODE=$FRCAIXINHA_ANDROID_VERSION_CODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_API_LOCAL_LOOPBACK_ONLY=TRUE" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_PIX_REAL=OFF" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_EXTERNAL_NOTIFICATIONS=OFF" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_ANDROID_INSTALL=NOT_ATTEMPTED" >> "$GITHUB_STEP_SUMMARY"
+          echo "M39065_REAL_LOGIN_AND_DEVICE_E2E=NOT_ATTESTED" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Disponibilizar APK principal atualizavel no GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: FR-Finance-M39065-APK-Principal-Assinado
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14

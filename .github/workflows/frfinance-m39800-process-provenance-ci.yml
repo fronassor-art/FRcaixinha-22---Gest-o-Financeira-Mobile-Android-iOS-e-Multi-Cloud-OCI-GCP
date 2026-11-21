@@ -1,0 +1,48 @@
+name: FR Finance M39800 — Native Termux FastAPI owner provenance (no restart)
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m39800_running_process_origin_readonly.py'
+      - 'backend/tests/test_m39800_original_fastapi_process_origin_ci.py'
+      - '.github/workflows/frfinance-m39800-process-provenance-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m39800_running_process_origin_readonly.py'
+      - 'backend/tests/test_m39800_original_fastapi_process_origin_ci.py'
+      - '.github/workflows/frfinance-m39800-process-provenance-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39800-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  process-provenance-readonly:
+    name: Prove original FastAPI owner without signals or DB access
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: backend:.
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned API test dependencies
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest==8.3.4
+      - name: Test blocked wrong process, socket/cwd, no print and fail-closed
+        run: |
+          python -B -m pytest -q -p no:cacheprovider             backend/tests/test_m39800_original_fastapi_process_origin_ci.py             backend/tests/test_m39700_runtime_attestation_ci.py
+          echo 'M39800_TERMUX_PROCESS_KILL=NONE'
+          echo 'M39800_DATABASE_WRITES=NONE'
+          echo 'M39800_PRODUCTION=BLOCKED'

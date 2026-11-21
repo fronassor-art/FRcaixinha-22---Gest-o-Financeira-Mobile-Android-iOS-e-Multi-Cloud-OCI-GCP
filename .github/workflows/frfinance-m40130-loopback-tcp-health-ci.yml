@@ -1,0 +1,52 @@
+name: FR Finance M40130 — Local TCP and HTTP no-control diagnostics
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40130_loopback_tcp_health_readonly.py'
+      - 'backend/tests/test_m40130_loopback_tcp_health_ci.py'
+      - '.github/workflows/frfinance-m40130-loopback-tcp-health-ci.yml'
+      - 'docs/FR_FINANCE_M40130_TCP_LOOPBACK_DIAGNOSIS.md'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40130_loopback_tcp_health_readonly.py'
+      - 'backend/tests/test_m40130_loopback_tcp_health_ci.py'
+      - '.github/workflows/frfinance-m40130-loopback-tcp-health-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-tcp-http-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Synthetic TCP/HTTP and prior diagnostics regression
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40130_loopback_tcp_health_ci.py \
+            backend/tests/test_m40120_http_health_disambiguation_ci.py \
+            backend/tests/test_m40110_listener_correlation_ci.py \
+            backend/tests/test_m40100_safe_runtime_triage_ci.py \
+            backend/tests/test_m40090_old_fastapi_diagnosis_ci.py
+          python -B backend/scripts/frfinance_m40130_loopback_tcp_health_readonly.py --source-only
+          echo M40130_CI=PASS
+          echo M40130_REAL_DB_ACCESS=NONE
+          echo M40130_PROCESS_CONTROL=NONE
+          echo M40130_PIX_REAL=OFF
+          echo M40130_PRODUCTION=BLOCKED
