@@ -108,6 +108,15 @@ async def get_rls_db_connection(
         tx = conn.transaction()
         await tx.start()
         try:
+            # M40932: Master uses this legacy RLS connection only for
+            # read-only governance views while the independent SQL trust
+            # boundary is unapproved. This is the FIRST SQL command after
+            # BEGIN, before any untrusted GUC context is set. PostgreSQL
+            # rejects ordinary DML/DDL even if an HTTP route guard is missed.
+            # It is NOT a substitute for privileges, RLS, or issuer custody.
+            if session.role == "MASTER":
+                await conn.execute("SET TRANSACTION READ ONLY")
+
             # 1. Parâmetros de contexto transacional seguros via set_config (is_local=true equivale a SET LOCAL)
             user_id = str(session.user_id)
             role = str(session.role)
