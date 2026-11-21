@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_rls_db_connection
 from app.dependencies import AuthenticatedSession, require_master
+from app.m40930_master_write_no_go import require_unreleased_master_write
 from app.main import app
 
 
@@ -57,8 +58,14 @@ def catalog_db():
                                     "master@example.invalid","Master",True)
     app.dependency_overrides[require_master] = owner
     app.dependency_overrides[get_rls_db_connection] = lambda: fake
-    yield fake
-    app.dependency_overrides.clear()
+    # CI-only synthetic price contract verification. The production route
+    # remains fail-closed with HTTP 503 in ALL environments (M40930).
+    # Never expose this override through a runtime flag or the real app.
+    app.dependency_overrides[require_unreleased_master_write] = lambda: None
+    try:
+        yield fake
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_master_reads_catalog_from_postgres(catalog_db):
