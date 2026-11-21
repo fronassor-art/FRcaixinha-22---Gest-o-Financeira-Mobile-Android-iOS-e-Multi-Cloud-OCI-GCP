@@ -1,0 +1,39 @@
+name: FR Finance M40932 Master SQL read-only transaction NO-GO
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/database.py'
+      - 'backend/app/m40930_master_write_no_go.py'
+      - 'backend/app/routers/master.py'
+      - 'backend/app/routers/saas_promotions.py'
+      - 'backend/tests/test_m40932_master_sql_readonly_ci.py'
+      - '.github/workflows/frfinance-m40932-master-readonly-sql-ci.yml'
+      - 'docs/FR_FINANCE_M40932_MASTER_SQL_READONLY_TRANSACTION_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/database.py'
+      - 'backend/app/m40930_master_write_no_go.py'
+      - 'backend/tests/test_m40932_master_sql_readonly_ci.py'
+      - '.github/workflows/frfinance-m40932-master-readonly-sql-ci.yml'
+permissions:
+  contents: read
+jobs:
+  fake-master-readonly-first:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install offline FastAPI import dependencies
+        run: python -m pip install fastapi==0.115.8 pydantic==2.10.6 asyncpg==0.30.0
+      - name: Master READ ONLY first, rollback and no financial release
+        run: python -B -m unittest discover -s backend/tests -p 'test_m40932_master_sql_readonly_ci.py' -v
