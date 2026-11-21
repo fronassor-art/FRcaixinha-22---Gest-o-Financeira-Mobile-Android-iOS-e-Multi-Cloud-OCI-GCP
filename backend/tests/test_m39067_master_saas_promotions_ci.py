@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.database import get_rls_db_connection
+from app.m40930_master_write_no_go import require_unreleased_master_write
 from app.dependencies import require_master, get_current_session, AuthenticatedSession
 from app.routers.saas_promotions import (
     SaaSPromotionDraft, SaaSPromotionTransition,
@@ -93,6 +94,8 @@ def fake_db():
                                     "CI Master",True)
     app.dependency_overrides[require_master] = master
     app.dependency_overrides[get_rls_db_connection] = lambda: fake
+    # Synthetic CI only: override the unconditional live-write containment fence.
+    app.dependency_overrides[require_unreleased_master_write] = lambda: None
     try: yield fake
     finally: app.dependency_overrides.clear()
 
