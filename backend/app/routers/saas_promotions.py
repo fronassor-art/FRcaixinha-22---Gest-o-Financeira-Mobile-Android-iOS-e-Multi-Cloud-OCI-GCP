@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from ..database import get_rls_db_connection
+from ..m40930_master_write_no_go import require_unreleased_master_write
 from ..dependencies import (
     AuthenticatedSession, get_current_session, require_master,
     require_tenant_access,
@@ -120,7 +121,7 @@ async def list_master_promotions(
     }
 
 
-@master_router.post("/draft", status_code=201)
+@master_router.post("/draft", status_code=201, dependencies=[Depends(require_unreleased_master_write)])
 async def create_master_promotion_draft(
     payload: SaaSPromotionDraft,
     session: AuthenticatedSession = Depends(require_master),
@@ -174,7 +175,7 @@ async def create_master_promotion_draft(
     }
 
 
-@master_router.post("/transition")
+@master_router.post("/transition", dependencies=[Depends(require_unreleased_master_write)])
 async def transition_master_promotion(
     payload: SaaSPromotionTransition,
     session: AuthenticatedSession = Depends(require_master),
