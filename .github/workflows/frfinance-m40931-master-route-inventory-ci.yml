@@ -1,0 +1,36 @@
+name: FR Finance M40931 Master mutation route inventory NO-GO
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/routers/**'
+      - 'backend/app/m40840_financial_sql_release_no_go.py'
+      - 'backend/app/m40930_master_write_no_go.py'
+      - 'backend/tests/test_m40931_master_route_inventory_ci.py'
+      - '.github/workflows/frfinance-m40931-master-route-inventory-ci.yml'
+      - 'docs/FR_FINANCE_M40931_MASTER_SQL_ROUTE_INVENTORY_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/routers/**'
+      - 'backend/app/m40840_financial_sql_release_no_go.py'
+      - 'backend/app/m40930_master_write_no_go.py'
+      - 'backend/tests/test_m40931_master_route_inventory_ci.py'
+      - '.github/workflows/frfinance-m40931-master-route-inventory-ci.yml'
+permissions:
+  contents: read
+jobs:
+  audit-master-post-put-patch-delete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Freeze Master routes and block unreviewed SQL mutations (no external I/O)
+        run: python -B -m unittest discover -s backend/tests -p 'test_m40931_master_route_inventory_ci.py' -v
