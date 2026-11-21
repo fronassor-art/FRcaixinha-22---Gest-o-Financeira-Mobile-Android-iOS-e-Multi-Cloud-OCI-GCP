@@ -166,6 +166,53 @@ def check_master_mutations(sources):
     return len(found)
 
 
+def check_main_master_mounts(main_source: str) -> int:
+    """AST inventory of real FastAPI mounts; reject new direct mutation APIs."""
+    tree = ast.parse(main_source, filename="backend/app/main.py")
+    expected_mounts = {
+        "master.router",
+        "_saas_promotions.master_router",
+        "_exclusive_cashboxes.master_router",
+        "_review_policy_gaps.master_router",
+    }
+    observed_mounts = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "app":
+            continue
+        if node.func.attr in {
+            "post", "put", "patch", "delete", "api_route", "route",
+            "add_api_route",
+        }:
+            raise AssertionError("M40933_DIRECT_APP_MUTATION_REVIEW_REQUIRED")
+        if node.func.attr != "include_router":
+            continue
+        if not node.args:
+            raise AssertionError("M40933_DYNAMIC_ROUTER_MOUNT_UNREVIEWED")
+        target = node.args[0]
+        if (isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and (target.attr == "master_router"
+                     or target.value.id == "master" and target.attr == "router")):
+            name = target.value.id + "." + target.attr
+            if name in observed_mounts:
+                raise AssertionError("M40933_DUPLICATE_MASTER_ROUTER_MOUNT")
+            observed_mounts.add(name)
+            if (len(node.keywords) != 1 or node.keywords[0].arg != "prefix"
+                    or not isinstance(node.keywords[0].value, ast.Attribute)
+                    or not isinstance(node.keywords[0].value.value, ast.Name)
+                    or node.keywords[0].value.value.id != "settings"
+                    or node.keywords[0].value.attr != "API_V1_STR"):
+                raise AssertionError("M40933_MASTER_ROUTER_PREFIX_DRIFT")
+    if observed_mounts != expected_mounts:
+        raise AssertionError(
+            "M40933_MASTER_ROUTER_MOUNT_DRIFT expected=%r observed=%r"
+            % (sorted(expected_mounts), sorted(observed_mounts))
+        )
+    return len(observed_mounts)
+
+
 class MasterTrustInventory(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -197,64 +244,23 @@ class MasterTrustInventory(unittest.TestCase):
             check_master_mutations(changed)
 
     def test_main_app_master_mounts_and_no_direct_write_bypass(self):
-        """Master routers must be mounted through the reviewed path only.
-
-        A new direct mutation decorator, route factory or unknown Master
-        mount is a code-review failure; this is NOT SQL-layer assurance.
-        """
-        main_source = (ROOT / "backend/app/main.py").read_text(encoding="utf-8")
-        tree = ast.parse(main_source, filename="backend/app/main.py")
-        expected_mounts = {
-            "master.router",
-            "_saas_promotions.master_router",
-            "_exclusive_cashboxes.master_router",
-            "_review_policy_gaps.master_router",
-        }
-        observed_mounts = set()
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            if not isinstance(node.func.value, ast.Name) or node.func.value.id != "app":
-                continue
-            if node.func.attr in {
-                "post", "put", "patch", "delete", "api_route", "route",
-                "add_api_route",
-            }:
-                raise AssertionError("M40933_DIRECT_APP_MUTATION_REVIEW_REQUIRED")
-            if node.func.attr != "include_router":
-                continue
-            if not node.args:
-                raise AssertionError("M40933_DYNAMIC_ROUTER_MOUNT_UNREVIEWED")
-            target = node.args[0]
-            if (isinstance(target, ast.Attribute)
-                    and isinstance(target.value, ast.Name)
-                    and (target.attr == "master_router"
-                         or target.value.id == "master" and target.attr == "router")):
-                name = target.value.id + "." + target.attr
-                if name in observed_mounts:
-                    raise AssertionError("M40933_DUPLICATE_MASTER_ROUTER_MOUNT")
-                observed_mounts.add(name)
-                if (len(node.keywords) != 1 or node.keywords[0].arg != "prefix"
-                        or not isinstance(node.keywords[0].value, ast.Attribute)
-                        or not isinstance(node.keywords[0].value.value, ast.Name)
-                        or node.keywords[0].value.value.id != "settings"
-                        or node.keywords[0].value.attr != "API_V1_STR"):
-                    raise AssertionError("M40933_MASTER_ROUTER_PREFIX_DRIFT")
-        self.assertEqual(observed_mounts, expected_mounts)
+        source = (ROOT / "backend/app/main.py").read_text(encoding="utf-8")
+        self.assertEqual(check_main_master_mounts(source), 4)
 
     def test_unreviewed_direct_app_post_is_rejected(self):
         source = (ROOT / "backend/app/main.py").read_text(encoding="utf-8")
-        spoof = source + '\\n@app.post("/api/v1/master/unreviewed")\\ndef write():\\n    return True\\n'
-        # Verify the AST detector used by the real check identifies the
-        # injection without importing or serving the FastAPI app.
-        tree = ast.parse(spoof)
-        calls = [node for node in ast.walk(tree)
-                 if isinstance(node, ast.Call)
-                 and isinstance(node.func, ast.Attribute)
-                 and isinstance(node.func.value, ast.Name)
-                 and node.func.value.id == "app"
-                 and node.func.attr == "post"]
-        self.assertEqual(len(calls), 1)
+        spoof = source + '\n@app.post("/api/v1/master/unreviewed")\ndef write():\n    return True\n'
+        with self.assertRaisesRegex(AssertionError, "M40933_DIRECT_APP_MUTATION"):
+            check_main_master_mounts(spoof)
+
+    def test_master_router_unmounted_is_rejected(self):
+        source = (ROOT / "backend/app/main.py").read_text(encoding="utf-8")
+        reduced = source.replace(
+            "app.include_router(_saas_promotions.master_router, prefix=settings.API_V1_STR)",
+            "# M40933_SYNTHETIC_MISSING_MASTER_ROUTER",
+        )
+        with self.assertRaisesRegex(AssertionError, "M40933_MASTER_ROUTER_MOUNT_DRIFT"):
+            check_main_master_mounts(reduced)
 
     def test_m40840_fence_and_no_money_switches(self):
         gate = (ROOT / "backend/app/m40840_financial_sql_release_no_go.py").read_text()
