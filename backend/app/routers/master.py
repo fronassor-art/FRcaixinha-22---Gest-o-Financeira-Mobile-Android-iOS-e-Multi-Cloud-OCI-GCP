@@ -11,6 +11,7 @@ import uuid
 import os
 from ..dependencies import require_master, AuthenticatedSession
 from ..database import get_rls_db_connection
+from ..m40930_master_write_no_go import require_unreleased_master_write
 from ..admin_onboarding_policy import readiness_manifest, preflight_assessment
 from ..admin_onboarding_workflow import (
     STATES, workflow_contract, preview_transition,
@@ -414,7 +415,7 @@ async def get_platform_licenses(
     }
 
 
-@router.post("/license-prices")
+@router.post("/license-prices", dependencies=[Depends(require_unreleased_master_write)])
 async def change_platform_license_price(
     payload: LicensePriceChange,
     session: AuthenticatedSession = Depends(require_master),
