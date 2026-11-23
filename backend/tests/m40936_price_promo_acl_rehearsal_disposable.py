@@ -65,6 +65,9 @@ def apply_price_acl_fence(conn) -> None:
 def install_synthetic_011_price_context(conn) -> None:
     """M40560 runs 112/113, but its tiny fixture omits RLS and 011 grants."""
     conn.execute("RESET ROLE")
+    # M40560 trimmed the SQL011 synthetic fixture: restore the documented
+    # UUID default so a column-scoped app INSERT can omit the id column.
+    conn.execute("ALTER TABLE " + PRICE + " ALTER COLUMN id SET DEFAULT uuid_generate_v4()")
     conn.execute("ALTER TABLE " + PRICE + " ENABLE ROW LEVEL SECURITY")
     conn.execute("ALTER TABLE " + PRICE + " FORCE ROW LEVEL SECURITY")
     conn.execute("""
