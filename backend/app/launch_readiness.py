@@ -102,6 +102,32 @@ def readiness_manifest(env: Mapping[str, str]) -> dict:
         "real_pix_active": False,
         "financial_closing_authorized": False,
         "writes_performed": False,
+        # M40937: explicit P0 SQL trust blockers. These statements describe
+        # missing attestation, never read runtime SQL grants, secrets, GUCs,
+        # or claim the CI's disposable proof changed a real database.
+        "sql_trust": {
+            "status": "NO_GO",
+            "evidence": "SOURCE_ONLY_NOT_RUNTIME_ATTESTED",
+            "guc_identity_boundary_verified": False,
+            "app_direct_saas_insert_revoked_verified": False,
+            "independent_master_custody_verified": False,
+            "staging_sql_roles_acl_verified": False,
+            "master_write_operations_enabled": False,
+            "blockers": [
+                {
+                    "code": "M40570",
+                    "description": "GUC SQL falsificavel nao e autenticador independente.",
+                },
+                {
+                    "code": "M40730",
+                    "description": "Custodia do emissor SQL e autorizador ainda nao atestada.",
+                },
+                {
+                    "code": "M40936",
+                    "description": "Revogacao de INSERT ensaiada somente em PG18 descartavel.",
+                },
+            ],
+        },
         "total_gates": len(entries),
         "unverified_gates": len(entries),
         "requirements": entries,
