@@ -1,0 +1,61 @@
+name: FR Finance M40937 Master SQL trust NO-GO Android/web and API
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/launch_readiness.py'
+      - 'backend/tests/test_m40937_master_sql_readiness_ci.py'
+      - 'src/services/launchReadiness.ts'
+      - 'src/components/LaunchReadinessPanel.tsx'
+      - 'src/tests/m40937_master_sql_no_go_ui_ci.test.ts'
+      - '.github/workflows/frfinance-m40937-master-sql-readiness-ui-ci.yml'
+      - 'docs/FR_FINANCE_M40937_MASTER_SQL_READINESS_UI_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/launch_readiness.py'
+      - 'backend/tests/test_m40937_master_sql_readiness_ci.py'
+      - 'src/services/launchReadiness.ts'
+      - 'src/components/LaunchReadinessPanel.tsx'
+      - 'src/tests/m40937_master_sql_no_go_ui_ci.test.ts'
+      - '.github/workflows/frfinance-m40937-master-sql-readiness-ui-ci.yml'
+permissions:
+  contents: read
+jobs:
+  master-readiness-server-no-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      ENVIRONMENT: ci
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Server cannot report green SQL trust or echo secrets
+        run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40937_master_sql_readiness_ci.py backend/tests/test_m25600_launch_readiness_ci.py
+  master-readiness-mobile-ui-no-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Client parser rejects false release and old backend stays blocked
+        run: |
+          npx tsx src/tests/m40937_master_sql_no_go_ui_ci.test.ts
+          npx tsx src/tests/m25600_launch_readiness_ui_ci.test.ts
+      - name: Check frontend TypeScript
+        run: npm run lint
