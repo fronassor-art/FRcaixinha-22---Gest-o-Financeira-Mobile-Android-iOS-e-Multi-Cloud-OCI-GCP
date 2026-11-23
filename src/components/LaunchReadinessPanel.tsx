@@ -40,6 +40,19 @@ export const LaunchReadinessPanel: React.FC<{state:AppState}> = ({state}) => {
         {current.report.unverified_gates} requisitos aguardam evidências de produção.
         Nenhuma integração real foi ativada pelo relatório.
       </p>
+      <div role="alert" className="rounded-xl border border-[#d8bd9d] bg-[#fff9f2] p-3 space-y-2">
+        <p className="text-sm font-bold text-[#854322]">Segurança SQL: NÃO HOMOLOGADA — NO-GO</p>
+        <p className="text-xs text-[#6e4f3c]">
+          Testes em PostgreSQL descartável não atestam o banco real. O Master
+          não pode habilitar gravações comerciais, PIX ou produção por esta tela.
+        </p>
+        <ul className="space-y-1">
+          {current.report.sql_trust.blockers.map(item=>
+            <li key={item.code} className="text-xs text-[#6e4f3c]">
+              <strong>{item.code}</strong> — {item.description}
+            </li>)}
+        </ul>
+      </div>
       <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-[#c4d5c9] p-3">
         <ul className="space-y-3">
           {current.report.requirements.map(item=>
