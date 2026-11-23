@@ -8,6 +8,32 @@ export type ReleaseRequirement = {
   required_evidence: string;
 };
 
+/** M40937: SQL authorization remains blocked regardless of source-only CI. */
+export type SqlTrustReadiness = {
+  status: 'NO_GO';
+  evidence: 'SOURCE_ONLY_NOT_RUNTIME_ATTESTED';
+  guc_identity_boundary_verified: false;
+  app_direct_saas_insert_revoked_verified: false;
+  independent_master_custody_verified: false;
+  staging_sql_roles_acl_verified: false;
+  master_write_operations_enabled: false;
+  blockers: {code:string;description:string}[];
+};
+
+const noGoSqlFallback = ():SqlTrustReadiness => ({
+  status:'NO_GO',evidence:'SOURCE_ONLY_NOT_RUNTIME_ATTESTED',
+  guc_identity_boundary_verified:false,
+  app_direct_saas_insert_revoked_verified:false,
+  independent_master_custody_verified:false,
+  staging_sql_roles_acl_verified:false,
+  master_write_operations_enabled:false,
+  blockers:[
+    {code:'M40570',description:'Proveniência de identidade SQL não atestada.'},
+    {code:'M40730',description:'Custódia independente de comandos Master pendente.'},
+    {code:'M40936',description:'Privilégios de escrita ainda não atestados em staging.'},
+  ],
+});
+
 export type LaunchReadiness = {
   scope: 'AI_STUDIO_MASTER_RELEASE_READINESS';
   source: 'REPOSITORY_AND_CONFIGURATION_DECLARATIONS';
@@ -25,11 +51,41 @@ export type LaunchReadiness = {
   financial_closing_authorized: false;
   writes_performed: false;
   requirements: ReleaseRequirement[];
+  sql_trust: SqlTrustReadiness;
 };
 
 const object = (value:unknown):value is Record<string,unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const categories = new Set(['identidade','cadastro','infra','pagamentos']);
+export function parseSqlTrustReadiness(raw:unknown):SqlTrustReadiness {
+  // Older backend without the M40937 field also fails closed.
+  if(raw === undefined) return noGoSqlFallback();
+  if(!object(raw) || raw.status!=='NO_GO' ||
+      raw.evidence!=='SOURCE_ONLY_NOT_RUNTIME_ATTESTED' ||
+      raw.guc_identity_boundary_verified!==false ||
+      raw.app_direct_saas_insert_revoked_verified!==false ||
+      raw.independent_master_custody_verified!==false ||
+      raw.staging_sql_roles_acl_verified!==false ||
+      raw.master_write_operations_enabled!==false ||
+      !Array.isArray(raw.blockers) || raw.blockers.length<2 ||
+      raw.blockers.length>10) {
+    throw new Error('Fronteira SQL não homologada ou resposta inválida');
+  }
+  const codes=new Set<string>();
+  for(const item of raw.blockers) {
+    if(!object(item) || typeof item.code!=='string' ||
+        !/^M[0-9]{5}$/.test(item.code) || codes.has(item.code) ||
+        typeof item.description!=='string' ||
+        item.description.length<15 || item.description.length>180) {
+      throw new Error('Bloqueio SQL inválido');
+    }
+    codes.add(item.code);
+  }
+  if(!codes.has('M40570') || !codes.has('M40730')) {
+    throw new Error('Fronteiras SQL obrigatórias não declaradas');
+  }
+  return raw as SqlTrustReadiness;
+}
 export function parseLaunchReadiness(raw:unknown):LaunchReadiness {
   if (!object(raw) || raw.scope !== 'AI_STUDIO_MASTER_RELEASE_READINESS' ||
       raw.source !== 'REPOSITORY_AND_CONFIGURATION_DECLARATIONS' ||
@@ -60,5 +116,5 @@ export function parseLaunchReadiness(raw:unknown):LaunchReadiness {
     }
     ids.add(item.id);
   }
-  return raw as LaunchReadiness;
+  return {...raw,sql_trust:parseSqlTrustReadiness(raw.sql_trust)} as LaunchReadiness;
 }
