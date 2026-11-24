@@ -87,3 +87,41 @@ def test_ci_and_manual_synchronization_policy_not_bypassed():
     for token in ("M40600","M40840","M40930","SQL",
                   "Termux","NO-GO","PIX_REAL=OFF"):
         assert token in doc
+
+
+# M40957 — reject attempts to weaken the source plan or its dependency graph.
+@pytest.mark.parametrize("mutate", [
+    lambda a: a.update(repository="other/repository"),
+    lambda a: a.update(branch="main"),
+    lambda a: a.update(evidence_level="LIVE_APPROVED"),
+    lambda a: a["phases"].pop(),
+    lambda a: a["phases"][0].update(status="BLOCKED_FAKE"),
+    lambda a: a["phases"][0].update(name="Production approved"),
+    lambda a: a["phases"].reverse(),
+    lambda a: a["production_gates"][0].update(status="DONE_SOURCE_ONLY"),
+    lambda a: a["production_gates"][0].update(status="CI_PENDING"),
+    lambda a: a["production_gates"][0].update(status=[]),
+    lambda a: a["production_gates"][0].update(depends_on=["UNKNOWN"]),
+    lambda a: a["tasks"][0].update(depends_on=[]),
+    lambda a: a["tasks"][0].update(depends_on=[{}]),
+    lambda a: a["tasks"][7].update(depends_on=[]),
+    lambda a: a["tasks"][10].update(depends_on=["CI_ALL_REQUIRED_JOBS"]),
+    lambda a: a["tasks"][11].update(status="DONE_SOURCE_ONLY"),
+    lambda a: a["tasks"][8].update(status="DONE_SOURCE_ONLY"),
+    lambda a: a["tasks"].pop(12),
+])
+def test_m40957_source_plan_cannot_drop_safety_dependencies(mutate):
+    obj = manifest()
+    mutate(obj)
+    with pytest.raises(GateInvalid):
+        validate(obj)
+
+
+def test_m40957_engineering_completion_is_not_production_approval():
+    obj = manifest()
+    obj["tasks"][4]["status"] = "DONE_SOURCE_ONLY"
+    report = validate(obj)
+    assert report["M40939_BLOCKED_OR_CI_PENDING"] == 32
+    assert report["M40939_PRODUCTION_GATES"] == 20
+    assert report["M40939_DECISION"] == "NO_GO"
+    assert report["M40939_MIGRATION"] == "NOT_AUTHORIZED"

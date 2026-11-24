@@ -31,3 +31,14 @@ O arquivo `FR_FINANCE_M40939_SUPERMACRO_GATES.json` é a fonte máquina-legível
 **ETAPA E — continuidade:** quando a saída real do Termux for enviada em nova mensagem, revisar os códigos de retorno e o SHA antes de preparar o próximo pacote. Não há trabalho em segundo plano ou execução futura sem uma nova interação.
 
 `PRODUCTION=BLOCKED`; `PIX_REAL=OFF`; `PAGAMENTOS_REAIS=OFF`; `ATIVACAO_REAL=OFF`; `MIGRATIONS=NONE`; `TERMUX_SYNC=NONE`; `M40840=NO_GO`; `M40930_MASTER_WRITES=503`; `NO-GO`.
+
+
+## M40957 — integridade do plano de liberação
+
+O validador original exige repositório, branch e nível de evidência canônicos,
+as seis fases bloqueadas e as dependências mínimas das 14 tarefas existentes.
+Nenhum gate de produção pode ser apresentado como concluído por código ou CI.
+Somente as quatro tarefas de engenharia enumeradas podem registrar conclusão
+source-only. Dependências inválidas, remoção de controles, fases adulteradas
+e falsas conclusões são rejeitadas. A validação não altera o manifesto original,
+não atesta runtime e não concede autorização para migração ou pagamentos.

@@ -26,6 +26,42 @@ REQUIRED_STATUSES = {
 }
 
 
+# M40957 — canonical source-plan boundaries. These are minimum constraints,
+# not external attestations or an authority to enable any real operation.
+EXPECTED_REPOSITORY = "fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP"
+EXPECTED_BRANCH = "atualizacao-ai-studio-9b46a63187"
+BLOCKED_STATUSES = {"BLOCKED_SECURITY", "BLOCKED_EXTERNAL", "BLOCKED_AUTHORIZATION"}
+EXPECTED_PHASES = {
+    "P0": ("Arquitetura SQL e segregacao Master", "BLOCKED_SECURITY"),
+    "P1": ("Identidade, auditoria, antifraude e RLS", "BLOCKED_SECURITY"),
+    "P2": ("Staging OCI, restore, CI e integracao", "BLOCKED_EXTERNAL"),
+    "P3": ("Android release, operacao e UX", "BLOCKED_EXTERNAL"),
+    "P4": ("Provedor, financeiro e juridico", "BLOCKED_EXTERNAL"),
+    "P5": ("Migracao autorizada, sync Termux e homologacao fisica", "BLOCKED_AUTHORIZATION"),
+}
+REQUIRED_TASK_DEPENDENCIES = {
+    "M40570_GUC_SPOOF": {"TENANT_RLS"},
+    "M40730_INDEPENDENT_ISSUER": {"M40570_GUC_SPOOF"},
+    "M40840_PRODUCTION_SQL_GATE": {"M40730_INDEPENDENT_ISSUER"},
+    "M40930_MASTER_WRITE_HTTP": {} or set(),
+    "M40936_ACL_DISPOSABLE": {"M40930_MASTER_WRITE_HTTP"},
+    "M40937_MASTER_NO_GO_UI": {"M40930_MASTER_WRITE_HTTP"},
+    "M40938_MASTER_HTTP_RBAC": {"M40937_MASTER_NO_GO_UI"},
+    "CI_ALL_REQUIRED_JOBS": {"M40936_ACL_DISPOSABLE", "M40937_MASTER_NO_GO_UI", "M40938_MASTER_HTTP_RBAC"},
+    "OCI_A1_STAGING_CAPACITY": {} or set(),
+    "LEGAL_LGPD_REGULATORY": {"CANONICAL_CONTRACT"},
+    "MIGRATION_ORIGINAL_APPROVAL": {"CI_ALL_REQUIRED_JOBS", "M40730_INDEPENDENT_ISSUER", "MIGRATION_PARITY"},
+    "TERMUX_SOURCE_SYNC": {"CI_ALL_REQUIRED_JOBS"},
+    "ANDROID_PHYSICAL_RETEST": {"ANDROID_RELEASE", "M40937_MASTER_NO_GO_UI"},
+    "MERCADO_PAGO_EXTERNAL_APPROVAL": {"MP_CONNECT", "PIX_OUTBOUND"},
+}
+# Only these engineering tasks may currently carry a source-only completion.
+SOURCE_ONLY_COMPLETABLE = {
+    "M40930_MASTER_WRITE_HTTP", "M40936_ACL_DISPOSABLE",
+    "M40937_MASTER_NO_GO_UI", "M40938_MASTER_HTTP_RBAC",
+}
+
+
 class GateInvalid(ValueError):
     pass
 
@@ -45,6 +81,9 @@ def expected_production_gate_ids() -> set[str]:
 def validate(source: dict) -> dict:
     if (not isinstance(source, dict) or source.get("version") != "M40939"
             or source.get("project") != "FR Finance"
+            or source.get("repository") != EXPECTED_REPOSITORY
+            or source.get("branch") != EXPECTED_BRANCH
+            or source.get("evidence_level") != "SOURCE_CATALOG_AND_CI_OBSERVATIONS_NOT_LIVE_ATTESTATION"
             or source.get("release_decision") != "NO_GO"
             or source.get("production_enabled") is not False
             or source.get("original_database_migrations_authorized") is not False
@@ -55,6 +94,13 @@ def validate(source: dict) -> dict:
             or not isinstance(source.get("production_gates"), list)
             or not isinstance(source.get("tasks"), list)):
         raise GateInvalid("M40939_RELEASE_FIELDS_MUST_BE_NO_GO")
+
+    phases = source.get("phases")
+    if (type(phases) is not list or len(phases) != len(EXPECTED_PHASES)
+            or any(type(p) is not dict for p in phases)
+            or [(p.get("id"), p.get("name"), p.get("status")) for p in phases]
+               != [(key, *value) for key, value in EXPECTED_PHASES.items()]):
+        raise GateInvalid("M40957_PHASE_POLICY_INVALID")
 
     gates = source["production_gates"]
     tasks = source["tasks"]
@@ -68,18 +114,30 @@ def validate(source: dict) -> dict:
     if {g["id"] for g in gates} != expected_production_gate_ids():
         raise GateInvalid("M40939_MISSING_CANONICAL_PRODUCTION_GATE")
     for g in gates:
-        if (g.get("status") not in REQUIRED_STATUSES
+        if (type(g.get("status")) is not str
+                or g.get("status") not in BLOCKED_STATUSES
+                or "depends_on" in g
                 or g.get("production_verified") is not False
                 or g.get("requires_independent_attestation") is not True):
             raise GateInvalid("M40939_FALSE_PRODUCTION_ATTESTATION")
     for task in tasks:
-        if (task.get("status") not in REQUIRED_STATUSES
+        if (type(task.get("status")) is not str
+                or task.get("status") not in REQUIRED_STATUSES
+                or (task.get("status") == "DONE_SOURCE_ONLY"
+                    and task["id"] not in SOURCE_ONLY_COMPLETABLE)
                 or task.get("production_verified") is not False
                 or not isinstance(task.get("next_action"), str)
                 or len(task["next_action"]) < 20
                 or not isinstance(task.get("depends_on"), list)):
             raise GateInvalid("M40939_TASK_STATUS_OR_ACTION_INVALID")
     lookup = {row["id"]: row for row in gates + tasks}
+    if not REQUIRED_TASK_DEPENDENCIES.keys() <= {t["id"] for t in tasks}:
+        raise GateInvalid("M40957_REQUIRED_TASK_MISSING")
+    for task in tasks:
+        deps = task["depends_on"]
+        if (any(type(dep) is not str for dep in deps)
+                or not REQUIRED_TASK_DEPENDENCIES.get(task["id"], set()) <= set(deps)):
+            raise GateInvalid("M40957_REQUIRED_DEPENDENCY_MISSING_OR_INVALID")
     for critical in SECURITY_CRITICAL:
         if critical not in lookup or lookup[critical]["status"] not in {
             "BLOCKED_SECURITY", "BLOCKED_AUTHORIZATION", "CI_PENDING",
