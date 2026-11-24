@@ -5,9 +5,14 @@ Referencias: Caderno Mestre e Contrato Tecnico Mestre FR Finance, exclusivos des
 
 import ipaddress
 import os
+import re
 from typing import List, Mapping
 from urllib.parse import urlsplit
 from pydantic import BaseModel
+
+
+# M40960: restrict public origins to unambiguous ASCII DNS authorities.
+_PUBLIC_DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 
 
 def safe_public_https_origin(value: str) -> str | None:
@@ -16,7 +21,10 @@ def safe_public_https_origin(value: str) -> str | None:
     Static syntax gate; does NOT prove domain ownership, DNS, TLS deployment
     or a production-ready server. Invalid values fail closed.
     """
-    if type(value) is not str or not 8 < len(value) <= 253 or value != value.strip():
+    if (type(value) is not str or not 8 < len(value) <= 253
+            or not value.isascii() or not value.lower().startswith("https://")
+            or any(ord(ch) <= 32 or ord(ch) == 127 for ch in value)
+            or "?" in value or "#" in value or "\\" in value):
         return None
     try:
         parsed = urlsplit(value)
@@ -40,11 +48,14 @@ def safe_public_https_origin(value: str) -> str | None:
         pass
     else:
         return None
-    if any(not label or not all(c.isalnum() or c == "-" for c in label)
-           or label.startswith("-") or label.endswith("-")
-           for label in host.split(".")):
+    labels = host.split(".")
+    if (any(not _PUBLIC_DNS_LABEL.fullmatch(label) for label in labels)
+            or not labels[-1][0].isalpha()
+            or parsed.netloc.lower() not in (host, host + ":443")):
         return None
-    return "https://" + host.lower()
+    # A numeric final label can make browsers interpret a DNS-looking
+    # authority as IPv4, including octal, hexadecimal and shortened forms.
+    return "https://" + host
 
 
 def cors_origins_for(env: Mapping[str, str]) -> list[str]:

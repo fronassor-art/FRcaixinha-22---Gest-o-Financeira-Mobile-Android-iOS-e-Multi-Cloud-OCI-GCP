@@ -40,3 +40,14 @@ As flags de teste e Termux só admitem ausência, vazio ou 0 em produção.
 As recusas são genéricas e não exibem credenciais. Os testes são sintéticos,
 sem conexões. Não há homologação de DNS, TLS, driver, custódia, RLS ou
 produção real por este pacote. Nenhuma migração ou ativação é autorizada.
+
+
+## M40960 — origem HTTPS compartilhada e CORS
+
+O validador compartilhado de origem pública rejeita aliases IPv4 de navegador
+(inclusive formatos abreviados, octais ou hexadecimais com rótulo final
+numérico), caracteres de controle, Unicode não codificado, rótulos DNS
+longos, barras invertidas e delimitadores vazios. A autoridade aceita
+somente porta ausente ou 443 literal. CORS de produção fica vazio para
+origens inválidas; o gate de autenticação permanece mais estrito quanto
+à forma canônica. Não há resolução DNS, teste de TLS ou rede real.

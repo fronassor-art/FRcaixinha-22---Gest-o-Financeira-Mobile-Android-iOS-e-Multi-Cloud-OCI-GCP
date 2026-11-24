@@ -201,3 +201,45 @@ def test_m40959_explicit_disabled_test_flags(flag, value):
     env = safe_env()
     env[flag] = value
     assert require_production_auth(env).auth_dsn == env["AUTH_DATABASE_URL"]
+
+
+# M40960 — the shared CORS origin gate also rejects browser IPv4 aliases
+# and parser normalization ambiguity. All inputs are synthetic.
+@pytest.mark.parametrize("origin", [
+    "https://127.0.0.01",
+    "https://127.1",
+    "https://0x7f.0.0.1",
+    "https://127.0.0.0x1",
+    "https://0177.0.0.1",
+    "https://example.123",
+    "https://app.frfinance.com.br:",
+    "https://app.frfinance.com.br:0443",
+    "https://app.frfinance.com.br?",
+    "https://app.frfinance.com.br/#",
+    "https://app.\tfrfinance.com.br",
+    "https://app.frfinance.com.br/\n",
+    "https://app.frfinance.com.br/\\",
+    "https://app.frfinancé.com.br",
+    "https://app." + "a"*64 + ".com.br",
+])
+def test_m40960_shared_origin_and_production_auth_fail_closed(origin):
+    from app.config import safe_public_https_origin, cors_origins_for
+    assert safe_public_https_origin(origin) is None
+    env = safe_env()
+    env["APP_URL"] = origin
+    assert cors_origins_for(env) == []
+    with pytest.raises(ProductionAuthBlocked, match="OCI_PRODUCTION_GATE_NOT_APPROVED"):
+        require_production_auth(env)
+
+
+@pytest.mark.parametrize("origin,expected", [
+    ("https://app.frfinance.com.br", "https://app.frfinance.com.br"),
+    ("https://app.frfinance.com.br/", "https://app.frfinance.com.br"),
+    ("https://app.frfinance.com.br:443/", "https://app.frfinance.com.br"),
+    ("https://APP.FRFINANCE.COM.BR", "https://app.frfinance.com.br"),
+    ("https://app.xn--p1ai", "https://app.xn--p1ai"),
+])
+def test_m40960_shared_origin_normalization(origin, expected):
+    from app.config import safe_public_https_origin, cors_origins_for
+    assert safe_public_https_origin(origin) == expected
+    assert cors_origins_for({"ENVIRONMENT": "production", "APP_URL": origin}) == [expected]
