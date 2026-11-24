@@ -26,3 +26,17 @@ Nenhum segredo é incluído na representação do objeto ou nas recusas.
 Os testes usam credenciais sintéticas e não conectam ao banco ou provedor.
 A aprovação continua exclusivamente sintática e não equivale a homologação
 de autenticação, custódia, RLS, TLS ou autorização de produção.
+
+
+## M40959 — sintaxe inequívoca e flags de homologação
+
+O gate de autenticação exige o subconjunto URI PostgreSQL estrito: porta
+literal 5432, parâmetro literal sslmode=verify-full, sem aliases de query,
+e senha ASCII não reservada ou com caracteres reservados codificados em
+percentual UTF-8. A comparação continua sendo dos valores decodificados.
+A origem pública deve ser ASCII, canônica, com rótulos DNS válidos e
+sem delimitadores vazios, caracteres de controle ou portas alternativas.
+As flags de teste e Termux só admitem ausência, vazio ou 0 em produção.
+As recusas são genéricas e não exibem credenciais. Os testes são sintéticos,
+sem conexões. Não há homologação de DNS, TLS, driver, custódia, RLS ou
+produção real por este pacote. Nenhuma migração ou ativação é autorizada.

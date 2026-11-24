@@ -131,3 +131,73 @@ def test_m40958_valid_encoded_distinct_password_is_syntax_only():
     assert config.auth_dsn == env["AUTH_DATABASE_URL"]
     assert "%61" not in repr(config)
     assert "operationally_unverified" in repr(config)
+
+
+# M40959 — strict shared URI subset and canonical public origin.
+@pytest.mark.parametrize("old,new", [
+    ("sslmode=verify-full", "sslmode=%76erify-full"),
+    ("sslmode=verify-full", "%73slmode=verify-full"),
+    ("sslmode=verify-full", "sslmode=verify-full&"),
+    ("sslmode=verify-full", "sslmode=verify-full;"),
+    (":5432/", ":05432/"),
+    ("a"*24, "a"*24 + ":reserved"),
+    ("a"*24, "a"*24 + "+reserved"),
+    ("a"*24, "a"*24 + "\\reserved"),
+    ("a"*24, "a"*24 + "é"),
+    ("a"*24, "a"*24 + "\ud800"),
+])
+def test_m40959_noncanonical_dsn_rejected(old, new):
+    env = safe_env()
+    env["AUTH_DATABASE_URL"] = env["AUTH_DATABASE_URL"].replace(old, new)
+    with pytest.raises(ProductionAuthBlocked) as err:
+        require_production_auth(env)
+    assert str(err.value) == "UNSAFE_OR_INCOMPLETE_PRODUCTION_DSN"
+
+
+@pytest.mark.parametrize("suffix", ["%3A", "%2B", "%5C", "%C3%A9", "%40"])
+def test_m40959_encoded_password_accepted_as_syntax_only(suffix):
+    env = safe_env()
+    env["AUTH_DATABASE_URL"] = env["AUTH_DATABASE_URL"].replace("a"*24, "a"*24 + suffix)
+    assert require_production_auth(env).auth_dsn == env["AUTH_DATABASE_URL"]
+
+
+@pytest.mark.parametrize("origin", [
+    "https://app.frfinance.com.br?",
+    "https://app.frfinance.com.br#",
+    "https://app.frfinance.com.br:",
+    "https://app.frfinance.com.br:0443",
+    "https://app.frfinance.com.br/\t",
+    "https://app.\tfrfinance.com.br",
+    "https://app.frfinancé.com.br",
+    "https://app." + "a"*64 + ".com.br",
+    "https://app.frfinance.com.br/?",
+])
+def test_m40959_ambiguous_origin_denied(origin):
+    env = safe_env()
+    env["APP_URL"] = origin
+    with pytest.raises(ProductionAuthBlocked, match="OCI_PRODUCTION_GATE_NOT_APPROVED"):
+        require_production_auth(env)
+
+
+@pytest.mark.parametrize("suffix", ["", "/", ":443", ":443/"])
+def test_m40959_canonical_origin_syntax_only(suffix):
+    env = safe_env()
+    env["APP_URL"] += suffix
+    assert require_production_auth(env).auth_dsn == env["AUTH_DATABASE_URL"]
+
+
+@pytest.mark.parametrize("flag", ["FRCAIXINHA_TEST_AUTH", "FRCAIXINHA_TERMUX_LOCAL_API"])
+@pytest.mark.parametrize("value", ["true", "yes", " 1", "False", None])
+def test_m40959_noncanonical_test_flags_fail_closed(flag, value):
+    env = safe_env()
+    env[flag] = value
+    with pytest.raises(ProductionAuthBlocked, match="OCI_PRODUCTION_GATE_NOT_APPROVED"):
+        require_production_auth(env)
+
+
+@pytest.mark.parametrize("flag", ["FRCAIXINHA_TEST_AUTH", "FRCAIXINHA_TERMUX_LOCAL_API"])
+@pytest.mark.parametrize("value", ["", "0"])
+def test_m40959_explicit_disabled_test_flags(flag, value):
+    env = safe_env()
+    env[flag] = value
+    assert require_production_auth(env).auth_dsn == env["AUTH_DATABASE_URL"]

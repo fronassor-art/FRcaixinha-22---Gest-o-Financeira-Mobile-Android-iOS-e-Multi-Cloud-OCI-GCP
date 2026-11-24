@@ -1,6 +1,6 @@
 """M22000 OCI production auth configuration gate, no network or database IO."""
 from dataclasses import dataclass, field
-from urllib.parse import urlsplit, parse_qsl, unquote
+from urllib.parse import urlsplit, unquote
 from typing import Mapping
 import ipaddress
 import re
@@ -25,16 +25,20 @@ class ProductionAuthConfig:
 # success is not a live identity, DNS, certificate or ACL attestation.
 _DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 _DB = re.compile(r"[a-zA-Z0-9_]{1,58}_prod\Z")
-_BAD_PERCENT = re.compile(r"%(?![0-9a-fA-F]{2})")
+# M40959: use a strict URI subset shared by Python, asyncpg and libpq.
+# Reserved password characters must be percent-encoded; no query aliases.
+_URI = re.compile(
+    r"postgresql://[a-z_]+:(?:[A-Za-z0-9._~-]|%[0-9a-fA-F]{2})+"
+    r"@[a-zA-Z0-9.-]+:5432/[a-zA-Z0-9_]+[?]sslmode=verify-full\Z"
+)
 
 
 def _dsn(text: str, role: str) -> tuple[tuple[str, int, str], str]:
     try:
         if (type(text) is not str or len(text) > 4096
-                or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in text)):
+                or not _URI.fullmatch(text)):
             raise ValueError()
         p = urlsplit(text)
-        q = parse_qsl(p.query, keep_blank_values=True, strict_parsing=True)
         host = p.hostname
         if (p.scheme != "postgresql" or p.username != role or not p.password
                 or p.netloc.count("@") != 1 or "#" in text or host is None
@@ -43,8 +47,7 @@ def _dsn(text: str, role: str) -> tuple[tuple[str, int, str], str]:
                 or not any(c.isalpha() for c in host.rsplit(".", 1)[-1])
                 or host.endswith((".invalid", ".example", ".test", ".localhost", ".local"))
                 or not p.path.startswith("/") or not _DB.fullmatch(p.path[1:])
-                or q != [("sslmode", "verify-full")]
-                or _BAD_PERCENT.search(p.password)):
+                or p.query != "sslmode=verify-full"):
             raise ValueError()
         try:
             ipaddress.ip_address(host)
@@ -71,12 +74,26 @@ def _valid_secret(value: object) -> bool:
         return False
 
 
+def _strict_public_origin(value: object) -> bool:
+    # urlsplit can silently strip ASCII controls and accept empty delimiters.
+    # Require an exact, canonical ASCII public origin before accepting it.
+    if type(value) is not str or not value.isascii():
+        return False
+    origin = safe_public_https_origin(value)
+    if origin is None:
+        return False
+    if not all(_DNS_LABEL.fullmatch(label)
+               for label in origin.removeprefix("https://").split(".")):
+        return False
+    return value in (origin, origin + "/", origin + ":443", origin + ":443/")
+
+
 def require_production_auth(env: Mapping[str,str]) -> ProductionAuthConfig:
     if (not isinstance(env, Mapping) or env.get("ENVIRONMENT")!="production"
             or env.get("FR_FINANCE_AUTH_PRODUCTION_GATE")!="OCI_STAGING_REVIEWED"
-            or env.get("FRCAIXINHA_TERMUX_LOCAL_API")=="1"
-            or env.get("FRCAIXINHA_TEST_AUTH")=="1"
-            or safe_public_https_origin(env.get("APP_URL","")) is None):
+            or env.get("FRCAIXINHA_TERMUX_LOCAL_API", "") not in ("", "0")
+            or env.get("FRCAIXINHA_TEST_AUTH", "") not in ("", "0")
+            or not _strict_public_origin(env.get("APP_URL", ""))):
         raise ProductionAuthBlocked("OCI_PRODUCTION_GATE_NOT_APPROVED")
     auth_secret=env.get("AUTH_SECRET","")
     hmac_secret=env.get("AUTH_RATE_LIMIT_HMAC_KEY","")
