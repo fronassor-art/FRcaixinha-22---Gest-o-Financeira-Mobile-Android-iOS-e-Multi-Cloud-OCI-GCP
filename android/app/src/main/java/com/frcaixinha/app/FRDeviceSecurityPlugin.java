@@ -164,9 +164,11 @@ public final class FRDeviceSecurityPlugin extends Plugin {
             String key = accountKey(call);
             Boolean value = call.getBoolean("enabled");
             if (value == null) throw new IllegalArgumentException("Preferência ausente.");
-            if (value && (!key.equals(lastBiometricAccount) ||
-                    android.os.SystemClock.elapsedRealtime() - lastBiometricAt > 45_000L)) {
-                call.reject("Confirme a biometria antes de ativar a proteção.");
+            // M40954: require a fresh same-account challenge for either
+            // direction; disabling cannot bypass the security preference gate.
+            if (!key.equals(lastBiometricAccount) ||
+                    android.os.SystemClock.elapsedRealtime() - lastBiometricAt > 45_000L) {
+                call.reject("Confirme a biometria antes de alterar a proteção.");
                 return;
             }
             prefs().edit().putBoolean("bio_" + digest(key), value).apply();

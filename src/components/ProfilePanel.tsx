@@ -85,11 +85,10 @@ export const ProfilePanel:React.FC<Props>=({
    const guard=authService.captureSession();
    setBusy(true);setMessage('');
    try{
-     if(!bioEnabled){
-       if(!await biometricAvailable())
-         throw new Error('Configure digital ou biometria forte no Android.');
-       await biometricChallenge(accountKey);
-     }
+     // Both enabling and disabling change a security preference.
+     if(!await biometricAvailable())
+       throw new Error('Configure digital ou biometria forte no Android.');
+     await biometricChallenge(accountKey);
      if(!authService.isSessionSnapshotCurrent(guard))return;
      const newValue=await updateBiometricPreference(accountKey,!bioEnabled);
      if(!authService.isSessionSnapshotCurrent(guard))return;

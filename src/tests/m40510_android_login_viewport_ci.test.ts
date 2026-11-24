@@ -7,7 +7,7 @@ import {readFileSync} from 'node:fs';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {LoginView} from '../components/LoginView';
-import {visibleLoginHeight,resetLoginScroll} from '../services/loginViewport';
+import {visibleLoginHeight,resetLoginScroll,loginFieldScrollDelta} from '../services/loginViewport';
 let checks=0;
 const check=(f:()=>void)=>{f();checks++;};
 const css=readFileSync('src/index.css','utf8');
@@ -65,3 +65,24 @@ console.log('M40510_KEYBOARD_AND_SAFE_INSETS=PASS_STATIC_AND_UNIT');
 console.log('M40510_ORIGINAL_POSTGRES=NOT_CONNECTED');
 console.log('M40510_SERVICE_RESTARTS=NONE');
 console.log('M40510_PRODUCTION=BLOCKED');
+
+
+// M40954 additional deterministic keyboard-focus and remount cases.
+const focusedCases:Array<[number,number,number,number,number]>= [
+ [120,168,40,400,0],
+ [380,428,40,400,40],
+ [25,73,40,400,-27],
+ [20,100,40,90,-32],
+ [50,90,40,40,0],
+ [NaN,90,40,400,0],
+ [120,100,40,400,0],
+ [52,388,40,400,0],
+];
+for(const [ft,fb,vt,vb,want] of focusedCases)
+ assert.equal(loginFieldScrollDelta(ft,fb,vt,vb),want);
+assert.match(login,/node\.addEventListener\('focusin',keepFocusedFieldVisible\)/);
+assert.match(login,/node\.removeEventListener\('focusin',keepFocusedFieldVisible\)/);
+assert.match(login,/\[mode,selectedRole,accessLink\]/);
+assert.match(login,/visibilitychange',conceal/);
+assert.match(login,/setSelectedRole\(null\);\s*setShowPassword\(false\)/);
+console.log('M40954_LOGIN_FOCUS_AND_PASSWORD_CONCEAL=PASS');

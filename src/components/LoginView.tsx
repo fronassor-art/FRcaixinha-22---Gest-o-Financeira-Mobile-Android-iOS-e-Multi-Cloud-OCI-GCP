@@ -4,7 +4,7 @@ import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform }
 import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
 import {probeMobileBackendHealth} from '../services/mobileBackendProbe';
 import { AccessLinkView, parseAccessLink, type AccessLink } from './AccessLinkView';
-import {resetLoginScroll,visibleLoginHeight} from '../services/loginViewport';
+import {resetLoginScroll,visibleLoginHeight,loginFieldScrollDelta} from '../services/loginViewport';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthenticatedUser) => void;
@@ -61,6 +61,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     const node=loginScrollRef.current;
     if(!node)return;
     let alive=true;
+    let focusFrame=0;
+    const keepFocusedFieldVisible=()=>{
+      window.cancelAnimationFrame(focusFrame);
+      focusFrame=window.requestAnimationFrame(()=>{
+        if(!alive||selectedRole===null)return;
+        const focused=document.activeElement;
+        if(!(focused instanceof HTMLInputElement)||!node.contains(focused))return;
+        const field=focused.getBoundingClientRect();
+        const region=node.getBoundingClientRect();
+        const visual=window.visualViewport;
+        const top=Math.max(region.top,visual?.offsetTop ?? 0);
+        const bottom=Math.min(region.bottom,
+          (visual?.offsetTop ?? 0)+(visual?.height ?? window.innerHeight));
+        const delta=loginFieldScrollDelta(field.top,field.bottom,top,bottom);
+        if(delta)node.scrollTop+=delta;
+      });
+    };
     const fitVisualViewport=()=>{
       if(!alive)return;
       const parent=node.parentElement;
@@ -78,12 +95,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
       // The role selector has no inputs that require keeping the keyboard
       // anchor. Always show FR Finance and the full top after logout.
       if(selectedRole===null)resetLoginScroll(node);
+      else keepFocusedFieldVisible();
     };
     resetLoginScroll(node);
     fitVisualViewport();
     const frame=window.requestAnimationFrame(()=>{
       if(alive){fitVisualViewport();resetLoginScroll(node);}
     });
+    node.addEventListener('focusin',keepFocusedFieldVisible);
     window.addEventListener('resize',fitVisualViewport);
     window.addEventListener('pageshow',fitVisualViewport);
     const visual=window.visualViewport;
@@ -92,13 +111,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     return()=>{
       alive=false;
       window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(focusFrame);
+      node.removeEventListener('focusin',keepFocusedFieldVisible);
       window.removeEventListener('resize',fitVisualViewport);
       window.removeEventListener('pageshow',fitVisualViewport);
       visual?.removeEventListener('resize',fitVisualViewport);
       visual?.removeEventListener('scroll',fitVisualViewport);
       node.style.removeProperty('max-height');
     };
-  },[mode,selectedRole]);
+  },[mode,selectedRole,accessLink]);
   useEffect(() => {
     const syncReservedRoute = () => {
       if (window.location.hash !== ownerRoute) return;
@@ -130,6 +151,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
     return () => window.removeEventListener('hashchange', receiveAccessLink);
   }, []);
 
+  // A previously revealed password must not remain visible after backgrounding.
+  useEffect(()=>{
+    const conceal=()=>{if(document.visibilityState!=='visible')setShowPassword(false);};
+    document.addEventListener('visibilitychange',conceal);
+    return()=>document.removeEventListener('visibilitychange',conceal);
+  },[]);
+
   const openReservedAccess = () => {
     if (mode !== 'login' || selectedRole !== null) return;
     const now = Date.now();
@@ -144,6 +172,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
   };
   const returnToPublicAccess = () => {
     setSelectedRole(null);
+    setShowPassword(false);
     setTenantChoice('');
     setError(null);
     setPassword('');

@@ -22,3 +22,21 @@ export function resetLoginScroll(node:Pick<HTMLElement,'scrollTop'|'scrollLeft'>
   node.scrollTop=0;
   node.scrollLeft=0;
 }
+
+
+/** M40954 — minimal internal scroll needed to expose a focused field.
+ * No global window scrolling, keyboard detection heuristic or credential access.
+ */
+export function loginFieldScrollDelta(
+  fieldTop:number,fieldBottom:number,visibleTop:number,visibleBottom:number,
+  padding=12,
+):number{
+  if(![fieldTop,fieldBottom,visibleTop,visibleBottom,padding].every(Number.isFinite)||
+     fieldBottom<fieldTop||visibleBottom<=visibleTop||padding<0)return 0;
+  const inset=Math.min(padding,(visibleBottom-visibleTop)/4);
+  const top=visibleTop+inset,bottom=visibleBottom-inset;
+  if(fieldBottom-fieldTop>bottom-top)return Math.round(fieldTop-top);
+  if(fieldBottom>bottom)return Math.ceil(fieldBottom-bottom);
+  if(fieldTop<top)return Math.floor(fieldTop-top);
+  return 0;
+}

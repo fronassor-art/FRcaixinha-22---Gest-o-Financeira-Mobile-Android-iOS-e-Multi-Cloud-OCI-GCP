@@ -133,3 +133,13 @@ console.log('M40500_PRIVATE_AVATAR_ANDROID_KEYSTORE=PASS_STATIC');
 console.log('M40500_SQL_AND_TERMUX_RUNTIME=UNTOUCHED');
 console.log('M40500_PIX_REAL=OFF');
 console.log('M40500_PRODUCTION=BLOCKED');
+
+
+// M40954: both directions require the same device authentication.
+const toggle=panel.slice(panel.indexOf('const toggleBiometrics='),panel.indexOf("if(user.role==='MASTER')"));
+assert.doesNotMatch(toggle,/if\(!bioEnabled\)/);
+assert.ok(toggle.indexOf('await biometricChallenge(accountKey)')>=0);
+assert.ok(toggle.indexOf('await biometricChallenge(accountKey)')<toggle.indexOf('await updateBiometricPreference'));
+assert.match(native,/if \(!key\.equals\(lastBiometricAccount\) \|\|/);
+assert.doesNotMatch(native,/if \(value && \(!key\.equals\(lastBiometricAccount\)/);
+console.log('M40954_BIOMETRIC_CHANGE_BOTH_DIRECTIONS=PASS');
