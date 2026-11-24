@@ -1,0 +1,46 @@
+name: FR Finance M40939 supermacropacote release gates source-only CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'docs/FR_FINANCE_M40939_SUPERMACRO_GATES.json'
+      - 'docs/FR_FINANCE_M40939_SUPERMACRO_CADERNO_EXECUCAO_NO_GO.md'
+      - 'backend/scripts/frfinance_m40939_release_gate.py'
+      - 'backend/tests/test_m40939_supermacropacote_gates_ci.py'
+      - '.github/workflows/frfinance-m40939-supermacropacote-gates-ci.yml'
+  pull_request:
+    paths:
+      - 'docs/FR_FINANCE_M40939_SUPERMACRO_GATES.json'
+      - 'backend/scripts/frfinance_m40939_release_gate.py'
+      - 'backend/tests/test_m40939_supermacropacote_gates_ci.py'
+permissions:
+  contents: read
+jobs:
+  validate-supermacropacote-no-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40939_supermacropacote_gates_ci.py
+      - name: Executar manifesto somente leitura
+        run: python -B backend/scripts/frfinance_m40939_release_gate.py
+      - name: Atestar que comando de aprovacao falha sem liberacao real
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(python -B backend/scripts/frfinance_m40939_release_gate.py --mode approve-production)"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          grep -Fq 'M40939_APPROVAL=DENIED_EXTERNAL_ATTESTATION_REQUIRED' <<< "$output"

@@ -1,0 +1,335 @@
+{
+  "version": "M40939",
+  "project": "FR Finance",
+  "repository": "fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP",
+  "branch": "atualizacao-ai-studio-9b46a63187",
+  "as_of": "2026-11-23",
+  "release_decision": "NO_GO",
+  "production_enabled": false,
+  "pix_real": "OFF",
+  "pagamentos_reais": "OFF",
+  "ativacao_real": "OFF",
+  "original_database_migrations_authorized": false,
+  "original_database_writes_authorized": false,
+  "termux_sync_executed": false,
+  "evidence_level": "SOURCE_CATALOG_AND_CI_OBSERVATIONS_NOT_LIVE_ATTESTATION",
+  "instructions": "Status de liberacao nao pode ser derivado de existencia de codigo, flag, CI parcial ou teste descartavel. Preservar M40840/M40930.",
+  "phases": [
+    {
+      "id": "P0",
+      "name": "Arquitetura SQL e segregacao Master",
+      "status": "BLOCKED_SECURITY"
+    },
+    {
+      "id": "P1",
+      "name": "Identidade, auditoria, antifraude e RLS",
+      "status": "BLOCKED_SECURITY"
+    },
+    {
+      "id": "P2",
+      "name": "Staging OCI, restore, CI e integracao",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "id": "P3",
+      "name": "Android release, operacao e UX",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "id": "P4",
+      "name": "Provedor, financeiro e juridico",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "id": "P5",
+      "name": "Migracao autorizada, sync Termux e homologacao fisica",
+      "status": "BLOCKED_AUTHORIZATION"
+    }
+  ],
+  "production_gates": [
+    {
+      "id": "AUTH_PRODUCTION",
+      "category": "identidade",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "MASTER_MFA",
+      "category": "identidade",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "DUAL_CONTROL",
+      "category": "identidade",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "TENANT_RLS",
+      "category": "identidade",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "INVITE_TRANSACTION",
+      "category": "cadastro",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "VERIFIED_EMAIL",
+      "category": "cadastro",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "CANONICAL_CONTRACT",
+      "category": "cadastro",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "CONTRACT_CONSENT",
+      "category": "cadastro",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "MAIL_OUTBOX",
+      "category": "cadastro",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "PASSWORD_RECOVERY",
+      "category": "cadastro",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "OCI_PUBLIC_HTTPS",
+      "category": "infra",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "OCI_BACKUP_RESTORE",
+      "category": "infra",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "MIGRATION_PARITY",
+      "category": "infra",
+      "status": "BLOCKED_AUTHORIZATION",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "RUNTIME_SHA",
+      "category": "infra",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "ANDROID_RELEASE",
+      "category": "infra",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "MP_CONNECT",
+      "category": "pagamentos",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "PIX_INBOUND",
+      "category": "pagamentos",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "PIX_OUTBOUND",
+      "category": "pagamentos",
+      "status": "BLOCKED_EXTERNAL",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "FINANCIAL_RECONCILIATION",
+      "category": "pagamentos",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    },
+    {
+      "id": "ANNUAL_CLOSING",
+      "category": "pagamentos",
+      "status": "BLOCKED_SECURITY",
+      "production_verified": false,
+      "requires_independent_attestation": true
+    }
+  ],
+  "tasks": [
+    {
+      "id": "M40570_GUC_SPOOF",
+      "category": "sql",
+      "status": "BLOCKED_SECURITY",
+      "depends_on": [
+        "TENANT_RLS"
+      ],
+      "next_action": "Substituir autoridade SQL baseada em GUC falsificavel por prova segregada.",
+      "production_verified": false
+    },
+    {
+      "id": "M40730_INDEPENDENT_ISSUER",
+      "category": "sql",
+      "status": "BLOCKED_SECURITY",
+      "depends_on": [
+        "M40570_GUC_SPOOF"
+      ],
+      "next_action": "Homologar emissor, guardian e segredos com custodia independente.",
+      "production_verified": false
+    },
+    {
+      "id": "M40840_PRODUCTION_SQL_GATE",
+      "category": "sql",
+      "status": "BLOCKED_SECURITY",
+      "depends_on": [
+        "M40730_INDEPENDENT_ISSUER"
+      ],
+      "next_action": "Manter bloqueio de producao ate aprovacoes cumulativas.",
+      "production_verified": false
+    },
+    {
+      "id": "M40930_MASTER_WRITE_HTTP",
+      "category": "sql",
+      "status": "DONE_SOURCE_ONLY",
+      "depends_on": [],
+      "next_action": "Manter HTTP 503 e inventario de rotas; nao substituir prova SQL.",
+      "production_verified": false
+    },
+    {
+      "id": "M40936_ACL_DISPOSABLE",
+      "category": "sql",
+      "status": "CI_PENDING",
+      "depends_on": [
+        "M40930_MASTER_WRITE_HTTP"
+      ],
+      "next_action": "Obter sucesso da etapa adversarial PostgreSQL 18 descartavel.",
+      "production_verified": false
+    },
+    {
+      "id": "M40937_MASTER_NO_GO_UI",
+      "category": "android",
+      "status": "CI_PENDING",
+      "depends_on": [
+        "M40930_MASTER_WRITE_HTTP"
+      ],
+      "next_action": "Obter sucesso CI frontend/backend e testar em APK fisico.",
+      "production_verified": false
+    },
+    {
+      "id": "M40938_MASTER_HTTP_RBAC",
+      "category": "api",
+      "status": "CI_PENDING",
+      "depends_on": [
+        "M40937_MASTER_NO_GO_UI"
+      ],
+      "next_action": "Obter sucesso CI FastAPI TestClient sem conexao DB.",
+      "production_verified": false
+    },
+    {
+      "id": "CI_ALL_REQUIRED_JOBS",
+      "category": "ci",
+      "status": "CI_PENDING",
+      "depends_on": [
+        "M40936_ACL_DISPOSABLE",
+        "M40937_MASTER_NO_GO_UI",
+        "M40938_MASTER_HTTP_RBAC"
+      ],
+      "next_action": "Exigir conclusao SUCCESS de todas CIs aplicaveis ao mesmo SHA e APK.",
+      "production_verified": false
+    },
+    {
+      "id": "OCI_A1_STAGING_CAPACITY",
+      "category": "infra",
+      "status": "BLOCKED_EXTERNAL",
+      "depends_on": [],
+      "next_action": "Prover VM e staging autenticado sem autorizar pagamentos reais.",
+      "production_verified": false
+    },
+    {
+      "id": "LEGAL_LGPD_REGULATORY",
+      "category": "juridico",
+      "status": "BLOCKED_EXTERNAL",
+      "depends_on": [
+        "CANONICAL_CONTRACT"
+      ],
+      "next_action": "Validar enquadramento juridico, contratos, LGPD e operacao com assessor habilitado.",
+      "production_verified": false
+    },
+    {
+      "id": "MIGRATION_ORIGINAL_APPROVAL",
+      "category": "termux",
+      "status": "BLOCKED_AUTHORIZATION",
+      "depends_on": [
+        "CI_ALL_REQUIRED_JOBS",
+        "M40730_INDEPENDENT_ISSUER",
+        "MIGRATION_PARITY"
+      ],
+      "next_action": "Exigir autorizacao especifica, backup restauravel, diff SQL e plano rollback antes de qualquer DDL.",
+      "production_verified": false
+    },
+    {
+      "id": "TERMUX_SOURCE_SYNC",
+      "category": "termux",
+      "status": "BLOCKED_AUTHORIZATION",
+      "depends_on": [
+        "CI_ALL_REQUIRED_JOBS"
+      ],
+      "next_action": "Apenas fast-forward source-only com SHA pinado e comando M40600 apos CI aprovada.",
+      "production_verified": false
+    },
+    {
+      "id": "ANDROID_PHYSICAL_RETEST",
+      "category": "android",
+      "status": "BLOCKED_EXTERNAL",
+      "depends_on": [
+        "ANDROID_RELEASE",
+        "M40937_MASTER_NO_GO_UI"
+      ],
+      "next_action": "Homologar APK em celular real, login, teclado, biometria e segregacao de perfis.",
+      "production_verified": false
+    },
+    {
+      "id": "MERCADO_PAGO_EXTERNAL_APPROVAL",
+      "category": "pagamentos",
+      "status": "BLOCKED_EXTERNAL",
+      "depends_on": [
+        "MP_CONNECT",
+        "PIX_OUTBOUND"
+      ],
+      "next_action": "Contrato PSP, OAuth, webhook, reconciliacao e permissoes do provedor ainda nao aprovados.",
+      "production_verified": false
+    }
+  ]
+}
