@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import settings
 from ..database import get_rls_db_connection
@@ -124,10 +124,18 @@ class CampaignDraft(StrictModel):
     expires_at: datetime
     request_id: UUID
 
+    @field_validator("title", "body")
+    @classmethod
+    def require_meaningful_campaign_text(cls, value: str, info):
+        minimum = 4 if info.field_name == "title" else 10
+        if len(value.strip()) < minimum or any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError("Texto de campanha inválido.")
+        return value.strip()
+
 
 class MarketingPreference(StrictModel):
     channel: Literal["PUSH", "EMAIL", "WHATSAPP", "SMS"]
-    opted_in: bool
+    opted_in: bool = Field(strict=True)
 
 
 class OpportunityReply(StrictModel):
@@ -137,7 +145,7 @@ class OpportunityReply(StrictModel):
 class SpecialSimulation(StrictModel):
     grant_id: UUID
     principal: Decimal
-    term_months: int = Field(ge=1, le=6)
+    term_months: int = Field(ge=1, le=6, strict=True)
 
 
 @router.get("/capabilities")
@@ -425,7 +433,7 @@ async def member_opportunities(tenant_id: UUID,
     _authorize(tenant_id, session, "TENANT_MEMBER")
     rows = await conn.fetch(
         "SELECT r.id AS recipient_id,r.response_status,c.id AS campaign_id,"
-        "c.title,c.body,c.expires_at,g.id AS grant_id,g.ceiling_brl "
+        "c.title,c.body,LEAST(c.expires_at,g.expires_at) AS expires_at,g.id AS grant_id,g.ceiling_brl "
         "FROM public.special_credit_recipients r "
         "JOIN public.special_credit_campaigns c ON c.id=r.campaign_id "
         "JOIN public.special_credit_grants g ON g.id=r.grant_id "
@@ -530,6 +538,7 @@ async def simulate_special(tenant_id: UUID, payload: SpecialSimulation,
         "JOIN public.memberships m ON m.id=g.member_id "
         "JOIN public.cycles c ON c.id=g.cycle_id "
         "WHERE g.id=$1 AND g.tenant_id=$2 AND m.user_id=$3 AND c.tenant_id=$2 "
+        "AND m.tenant_id=$2 AND m.role='TENANT_MEMBER' "
         "AND c.status='ABERTO' AND c.start_date<=CURRENT_DATE "
         "AND c.end_date>=CURRENT_DATE",
         payload.grant_id, tenant_id, _uid(session))
@@ -543,7 +552,12 @@ async def simulate_special(tenant_id: UUID, payload: SpecialSimulation,
         "SELECT monthly_interest_rate,max_installments FROM public.policies "
         "WHERE tenant_id=$1 AND cycle_id=$2 AND status='ACTIVE' "
         "ORDER BY version DESC,id DESC LIMIT 1", tenant_id,row["cycle_id"])
-    if policy is None or payload.term_months>policy["max_installments"]:
+    if policy is None:
+        raise HTTPException(422, "Prazo incompatível com a política.")
+    policy_limit = policy["max_installments"]
+    if type(policy_limit) is not int or not 1 <= policy_limit <= 6:
+        raise HTTPException(503, "Limite de prazo da política inválido.")
+    if payload.term_months > policy_limit:
         raise HTTPException(422, "Prazo incompatível com a política.")
     try:
         preview = compute_price_schedule(

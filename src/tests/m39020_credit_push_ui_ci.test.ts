@@ -1,6 +1,7 @@
 /** M39020 — client & Android push static contract; no device registration. */
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {parseCreditPricePreview} from '../services/specialCreditPresentation';
 
 const read=(path:string)=>readFileSync(path,'utf8');
 const deps=JSON.parse(read('package.json'));
@@ -39,3 +40,24 @@ assert.ok(!api.includes('pix/transfer'));
 assert.ok(!native.includes('FCM_OAUTH2_SCOPED_BEARER'));
 
 console.log('M39020_ANDROID_PUSH_AND_CAMPAIGN_UI=PASS_CI_ONLY');
+
+
+// M40953: Decimal JSON strings from FastAPI and exact financial preview checks.
+const grant='11111111-1111-4111-8111-111111111111';
+const simulation={principal:'1000.00',monthly_rate:'0.20',term_months:2,
+  uniform_payment:'654.55',last_payment:'654.54',total_interest:'309.09',total_payable:'1309.09'};
+const preview={grant_id:grant,approved:false,reserved:false,disbursed:false,simulation};
+assert.equal(parseCreditPricePreview(preview,grant,'1000.00',2).simulation.total_payable,1309.09);
+for(const patch of [{approved:true},{reserved:true},{disbursed:true},
+  {grant_id:'22222222-2222-4222-8222-222222222222'},{approved:undefined},
+  {simulation:{...simulation,term_months:3}},
+  {simulation:{...simulation,principal:'999.00'}},
+  {simulation:{...simulation,monthly_rate:'Infinity'}},
+  {simulation:{...simulation,total_payable:'1309.10'}},
+  {simulation:{...simulation,last_payment:'654.545'}},
+  {simulation:{...simulation,uniform_payment:null}},
+  {simulation:{...simulation,total_interest:'-1.00'}}]){
+  assert.throws(()=>parseCreditPricePreview({...preview,...patch},grant,'1000.00',2));
+}
+assert.match(api,/parseCreditPricePreview\(await call<unknown>/);
+console.log('M40953_CREDIT_SIMULATION_RESPONSE_FENCE=PASS');

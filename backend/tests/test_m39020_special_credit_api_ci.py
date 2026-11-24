@@ -100,3 +100,29 @@ def test_environment_gate_requires_exclusive_local_pg18(monkeypatch):
     monkeypatch.setattr(module,"settings",SimpleNamespace(
         DATABASE_URL="postgresql://frc_ai_app@127.0.0.1:5432/another_db"))
     assert module._enabled() is False
+
+
+# M40953 — strict consent and simulation input; no database or channel.
+@pytest.mark.parametrize("value", ["true", "false", 1, 0, None])
+def test_m40953_only_explicit_boolean_consent(value):
+    response = client("TENANT_MEMBER", TENANT_A).post(ROOT+"/preferences",
+        json={"channel":"PUSH","opted_in":value})
+    assert response.status_code == 422
+
+@pytest.mark.parametrize("value", [True, "2", 2.0, 0, 7])
+def test_m40953_simulation_term_must_be_exact_integer(value):
+    response = client("TENANT_MEMBER", TENANT_A).post(ROOT+"/simulate",
+        json={"grant_id":str(uuid4()),"principal":"1000.00","term_months":value})
+    assert response.status_code == 422
+
+@pytest.mark.parametrize("changes", [
+    {"title":"    "}, {"body":" " * 20}, {"title":"Oferta\ninválida"},
+    {"body":"Mensagem\tinválida"},
+])
+def test_m40953_campaign_requires_meaningful_clean_text(changes):
+    response = client("TENANT_ADMIN", TENANT_A).post(ROOT+"/campaigns",
+        json={"grant_ids":[str(uuid4())],"title":"Campanha válida",
+              "body":"Convite para simulação, sem aprovação real.",
+              "expires_at":"2027-01-10T00:00:00+00:00",
+              "request_id":str(uuid4()),**changes})
+    assert response.status_code == 422

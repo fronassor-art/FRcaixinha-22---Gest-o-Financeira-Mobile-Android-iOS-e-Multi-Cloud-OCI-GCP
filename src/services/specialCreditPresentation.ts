@@ -1,6 +1,6 @@
 /** M40420 — fail-closed presentation parser, no network or storage. */
 import type {
-  CreditCampaign, CreditOpportunity, MarketingChannel,
+  CreditCampaign, CreditOpportunity, MarketingChannel, CreditPricePreview,
 } from './specialCreditApi';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -133,4 +133,35 @@ export function creditSessionCanRender(
 ):boolean{
   return hasActiveToken === true &&
     creditContextCanRender(loadedKey,currentKey,enabled,loading);
+}
+
+
+/** M40953: do not present a simulation unless the response confirms no
+ * approval, reservation or disbursement and matches the requested grant. */
+export function parseCreditPricePreview(
+  raw:unknown,grantId:string,principal:string,months:number,
+):CreditPricePreview{
+  const root=object(raw),v=object(root.simulation);
+  const fail=()=>{throw new Error('Simulação não confirmada; nenhum resultado exibido.');};
+  const cents=(value:unknown):number=>{
+    if(typeof value!=='number' && typeof value!=='string')return fail();
+    if(typeof value==='string'&&!/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?$/.test(value))return fail();
+    const n=Number(value),c=Math.round(n*100);
+    if(!Number.isFinite(n)||n<0||!Number.isSafeInteger(c)||Math.abs(n*100-c)>1e-6)return fail();
+    return c;
+  };
+  if(!uuid(grantId)||root.grant_id!==grantId||root.approved!==false||
+     root.reserved!==false||root.disbursed!==false||!Number.isInteger(months)||
+     months<1||months>6||v.term_months!==months||!amount(principal))return fail();
+  const p=cents(v.principal),u=cents(v.uniform_payment),last=cents(v.last_payment);
+  const interest=cents(v.total_interest),total=cents(v.total_payable);
+  const rawRate=v.monthly_rate;
+  if((typeof rawRate!=='number'&&typeof rawRate!=='string')||
+     (typeof rawRate==='string'&&!/^(?:0|1)(?:\.[0-9]+)?$/.test(rawRate)))return fail();
+  const rate=Number(rawRate);
+  if(!Number.isFinite(rate)||rate<0||rate>1||p!==cents(principal)||u<=0||last<=0||
+     total!==p+interest||total!==u*(months-1)+last)return fail();
+  return {grant_id:grantId,approved:false,reserved:false,disbursed:false,
+    simulation:{principal:p/100,monthly_rate:rate,term_months:months,
+      uniform_payment:u/100,last_payment:last/100,total_interest:interest/100,total_payable:total/100}};
 }

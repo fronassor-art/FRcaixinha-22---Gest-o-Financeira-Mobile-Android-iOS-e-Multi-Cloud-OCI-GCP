@@ -2,7 +2,7 @@
  * Sessão no backend + tenant explícito. Sem mocks, sem envio real, sem Pix.
  */
 import { authService, getApiBaseUrl } from './authService';
-import {parseCreditOpportunities,parseCreditCampaigns,parseCreditPreferences} from './specialCreditPresentation';
+import {parseCreditOpportunities,parseCreditCampaigns,parseCreditPreferences,parseCreditPricePreview} from './specialCreditPresentation';
 import {
   requestSpecialCredit, assertSandboxCreditCapabilities,
 } from './specialCreditRequestBoundary';
@@ -81,8 +81,8 @@ export const specialCreditApi={
   preferences:async (tenant:string)=>parseCreditPreferences(await call<unknown>(tenant,'/preferences')),
   changePreference:(tenant:string,channel:MarketingChannel,optedIn:boolean)=>
     call(tenant,'/preferences',{channel,opted_in:optedIn}),
-  simulate:(tenant:string,grantId:string,principal:string,months:number)=>
-    call<CreditPricePreview>(tenant,'/simulate',{
+  simulate:async (tenant:string,grantId:string,principal:string,months:number)=>
+    parseCreditPricePreview(await call<unknown>(tenant,'/simulate',{
       grant_id:grantId,principal,term_months:months,
-    }),
+    }),grantId,principal,months),
 };
