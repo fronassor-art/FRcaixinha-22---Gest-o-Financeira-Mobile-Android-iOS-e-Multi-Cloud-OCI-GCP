@@ -47,6 +47,39 @@ def test_each_live_flag_denied_even_in_staging(flag, state):
         require_nonproduction_financial_sql({"ENVIRONMENT": "staging", flag: state})
 
 
+
+@pytest.mark.parametrize("missing", [
+    "ENVIRONMENT", "PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL",
+])
+def test_implicit_environment_or_missing_real_flag_does_not_allow_financial_sql(missing):
+    env = {
+        "ENVIRONMENT": "development", "PIX_REAL": "OFF",
+        "PAGAMENTOS_REAIS": "OFF", "ATIVACAO_REAL": "OFF",
+    }
+    del env[missing]
+    with pytest.raises(FinancialSQLReleaseBlocked, match="M40840_FINANCIAL_SQL_NO_GO"):
+        require_nonproduction_financial_sql(env)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing", [
+    "ENVIRONMENT", "PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL",
+])
+async def test_cached_pool_denies_implicit_release_configuration(monkeypatch, missing):
+    old = object()
+    monkeypatch.setattr(db, "_db_pool", old)
+    env = {
+        "ENVIRONMENT": "development", "PIX_REAL": "OFF",
+        "PAGAMENTOS_REAIS": "OFF", "ATIVACAO_REAL": "OFF",
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv(missing, raising=False)
+    with pytest.raises(FinancialSQLReleaseBlocked, match="M40840_FINANCIAL_SQL_NO_GO"):
+        await db.get_db_pool()
+    assert db._db_pool is old
+
+
 @pytest.mark.asyncio
 async def test_cached_financial_pool_cannot_bypass_production_gate(monkeypatch):
     old=object()
