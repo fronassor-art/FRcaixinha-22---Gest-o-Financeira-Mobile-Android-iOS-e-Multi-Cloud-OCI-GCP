@@ -61,9 +61,15 @@ class SaaSPromotionDraft(BaseModel):
 
 class SaaSPromotionTransition(BaseModel):
     campaign_id: uuid.UUID
-    expected_revision: int = Field(..., ge=1)
+    expected_revision: int = Field(..., ge=1, strict=True)
     action: Literal["PUBLISH", "CANCEL"]
     reason: str = Field(..., min_length=15, max_length=500)
+
+    @model_validator(mode="after")
+    def verify_audit_reason(self):
+        if len(self.reason.strip()) < 15:
+            raise ValueError("Justificativa comercial deve conter texto.")
+        return self
 
 
 async def require_sql113(conn) -> None:

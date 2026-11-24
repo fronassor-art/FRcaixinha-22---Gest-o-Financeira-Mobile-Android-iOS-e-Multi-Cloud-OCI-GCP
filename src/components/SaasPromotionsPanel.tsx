@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { financialApi } from '../services/financialApiService';
 import { formatBRL } from '../services/financialEngine';
+import { MASTER_CAMPAIGN_WRITES_RELEASED, campaignScheduleLabel } from '../services/masterSaasCampaignSchedule';
 import {CampaignDraftForm, EMPTY_MASTER_CAMPAIGN_DRAFT,
   discardMasterCampaignDraft, hasDraftContent, masterCampaignDraftStorage,
   readMasterCampaignDraft, saveMasterCampaignDraft,
@@ -105,6 +106,10 @@ export const MasterSaasPromotionsPanel: React.FC<{
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!MASTER_CAMPAIGN_WRITES_RELEASED) {
+      setMessage('Gravação indisponível. O preenchimento continua salvo somente neste aparelho.');
+      return;
+    }
     if (busy || !actorId || draftScope !== actorId) return;
     const plan = plans.find(p => p.tier === tier && p.status === 'ACTIVE');
     const price = Number(priceText);
@@ -141,7 +146,7 @@ export const MasterSaasPromotionsPanel: React.FC<{
   };
 
   const transition = async (item: Campaign, action: 'PUBLISH'|'CANCEL') => {
-    if (busy) return;
+    if (!MASTER_CAMPAIGN_WRITES_RELEASED || !actorId || draftScope !== actorId || busy) return;
     const promptReason = action === 'PUBLISH'
       ? 'Publicação de oferta comercial aprovada pelo Master'
       : 'Cancelamento comercial registrado pelo Master';
@@ -176,6 +181,10 @@ export const MasterSaasPromotionsPanel: React.FC<{
           Promoções mensais ou anuais para novos administradores, com preço, benefício e vigência próprios.
           Não envia mensagens, concede licença ou cobra Pix.
         </p>
+        {!MASTER_CAMPAIGN_WRITES_RELEASED && <p role="status" className="mt-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
+          Gravação, publicação e cancelamento bloqueados até homologação da segurança SQL.
+          Você pode preparar o formulário e conservar o preenchimento local, sem criar uma campanha no servidor.
+        </p>}
         {restored && <p role="status" className="mt-2 rounded-lg bg-emerald-50 p-2 text-sm text-emerald-900">
           Preenchimento anterior recuperado neste aparelho. Revise valores e datas antes de criar.
         </p>}
@@ -231,7 +240,7 @@ export const MasterSaasPromotionsPanel: React.FC<{
           <textarea minLength={15} maxLength={500} required value={reason}
             onChange={e=>changeField('reason',e.target.value)} className="block mt-1 w-full rounded-lg border p-2" />
         </label>
-        <button type="submit" disabled={busy || !plans.some(p=>p.tier===tier && p.status==='ACTIVE' && p.version_id)}
+        <button type="submit" disabled={!MASTER_CAMPAIGN_WRITES_RELEASED || busy || !actorId || !plans.some(p=>p.tier===tier && p.status==='ACTIVE' && p.version_id)}
           className="rounded-lg bg-emerald-800 text-white font-semibold px-4 py-3 disabled:opacity-50">
           Criar rascunho (sem publicar)
         </button>
@@ -247,7 +256,7 @@ export const MasterSaasPromotionsPanel: React.FC<{
       </form>
       {message && <p role="status" className="text-sm text-emerald-950">{message}</p>}
       {status==='error' && <p role="alert" className="text-sm text-amber-900">
-        Campanhas indisponíveis até migração SQL113 e reinício da API. Nenhuma promoção simulada.
+        Campanhas não confirmadas pelo servidor. Atualize a consulta; não há promoção simulada.
       </p>}
       {status==='loading' && <p className="text-sm text-slate-600">Consultando campanhas no PostgreSQL...</p>}
       {status==='ready' && items.length===0 && <p className="text-sm text-slate-600">Nenhuma campanha cadastrada.</p>}
@@ -256,6 +265,9 @@ export const MasterSaasPromotionsPanel: React.FC<{
           <div className="flex justify-between gap-2">
             <strong>{item.title}</strong><span>{item.state} • v{item.revision}</span>
           </div>
+          <p className="text-xs text-slate-600">
+            Situação temporal: {campaignScheduleLabel(item, Date.now())} (relógio do aparelho; não confirma elegibilidade)
+          </p>
           <p>{item.plan_tier} • {item.billing_period==='MONTHLY'?'Mensal':'Anual'} •
             {' '}{formatBRL(Number(item.promotional_price))}</p>
           <p className="text-slate-700">{item.benefit_description}</p>
@@ -264,12 +276,12 @@ export const MasterSaasPromotionsPanel: React.FC<{
             {' '}{new Date(item.ends_at).toLocaleString('pt-BR')}
           </p>
           {item.state==='DRAFT' &&
-            <button type="button" disabled={busy} onClick={()=>void transition(item,'PUBLISH')}
+            <button type="button" disabled={!MASTER_CAMPAIGN_WRITES_RELEASED || busy} onClick={()=>void transition(item,'PUBLISH')}
               className="border border-emerald-700 rounded-lg px-3 py-2 disabled:opacity-50">
               Publicar campanha no aplicativo
             </button>}
           {item.state==='PUBLISHED' &&
-            <button type="button" disabled={busy} onClick={()=>void transition(item,'CANCEL')}
+            <button type="button" disabled={!MASTER_CAMPAIGN_WRITES_RELEASED || busy} onClick={()=>void transition(item,'CANCEL')}
               className="border border-amber-700 rounded-lg px-3 py-2 disabled:opacity-50">
               Cancelar publicação
             </button>}

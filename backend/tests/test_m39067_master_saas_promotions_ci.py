@@ -282,3 +282,26 @@ def test_no_real_dispatch_or_payments_from_routes():
     assert "requests.post(" not in backend
     assert "smtplib" not in backend
     assert "update public.platform_saas_promotion_revisions" not in backend.lower()
+
+
+# M40952 — audit reason must be real text; revisions are exact integers.
+@pytest.mark.parametrize("action", ["PUBLISH", "CANCEL"])
+@pytest.mark.parametrize("changes", [
+    {"reason": " " * 20},
+    {"reason": " " * 15 + "abc"},
+    {"expected_revision": True},
+    {"expected_revision": "1"},
+    {"expected_revision": 1.0},
+])
+def test_m40952_invalid_transition_never_writes(fake_db, action, changes):
+    if action == "CANCEL":
+        fake_db.current["state"] = "PUBLISHED"
+    with TestClient(app) as client:
+        response = client.post("/api/v1/master/saas-promotions/transition", json={
+            "campaign_id": str(CAMPAIGN), "expected_revision": 1,
+            "action": action, "reason": "Justificativa comercial registrada",
+            **changes,
+        })
+    assert response.status_code == 422
+    assert fake_db.writes == []
+    assert fake_db.calls == []
