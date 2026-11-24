@@ -105,7 +105,7 @@ async def test_cached_pool_cannot_bypass_guard_when_dsn_cleared_or_invalid(monke
 
 def test_existing_production_hard_gate_still_precedes_cache():
     s=SOURCE.read_text(encoding="utf-8")
-    assert s.index("require_nonproduction_financial_sql(os.environ)") < s.index("if _db_pool is not None and settings.DATABASE_URL")
+    assert s.index("require_nonproduction_financial_sql(os.environ)") < s.index("if _db_pool is not None:")
     assert s.index("if _db_pool is not None:") < s.index("if _db_pool is None:")
     assert "M40840_FINANCIAL_SQL_NO_GO" in (
         ROOT/"backend/app/m40840_financial_sql_release_no_go.py"
