@@ -87,10 +87,26 @@ async def test_cached_pool_with_matching_nonprod_target_is_only_syntax_accepted(
     assert await db.get_db_pool() is fake
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleared_dsn", ["", "not-a-postgresql-dsn"])
+async def test_cached_pool_cannot_bypass_guard_when_dsn_cleared_or_invalid(monkeypatch, cleared_dsn):
+    """M40943: an already-cached pool cannot outlive a valid DSN setting."""
+    fake = object()
+    monkeypatch.setattr(db, "_db_pool", fake)
+    monkeypatch.setattr(db.settings, "DATABASE_URL", cleared_dsn)
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("FRCAIXINHA_TERMUX_LOCAL_API", "1")
+    for flag in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        monkeypatch.setenv(flag, "OFF")
+    with pytest.raises(FinancialDSNBlocked, match="M40800_UNSAFE_FINANCIAL_DSN"):
+        await db.get_db_pool()
+    assert db._db_pool is fake
+
+
 def test_existing_production_hard_gate_still_precedes_cache():
     s=SOURCE.read_text(encoding="utf-8")
     assert s.index("require_nonproduction_financial_sql(os.environ)") < s.index("if _db_pool is not None and settings.DATABASE_URL")
-    assert s.index("if _db_pool is not None and settings.DATABASE_URL") < s.index("if _db_pool is None:")
+    assert s.index("if _db_pool is not None:") < s.index("if _db_pool is None:")
     assert "M40840_FINANCIAL_SQL_NO_GO" in (
         ROOT/"backend/app/m40840_financial_sql_release_no_go.py"
     ).read_text()

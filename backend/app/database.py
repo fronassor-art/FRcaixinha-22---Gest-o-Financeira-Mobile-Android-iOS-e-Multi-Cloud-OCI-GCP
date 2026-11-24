@@ -28,7 +28,9 @@ async def get_db_pool():
     require_nonproduction_financial_sql(os.environ)
     # M40850: revalidate target even if a pool is already cached. In
     # particular, environment downgrades must not reuse privileged DSNs.
-    if _db_pool is not None and settings.DATABASE_URL:
+    # M40943: revalidate even when the configured DSN was cleared. A cached
+    # connection must not become usable merely because DATABASE_URL is empty.
+    if _db_pool is not None:
         from .m40800_financial_dsn_guard import require_financial_dsn_shape
         require_financial_dsn_shape(settings.DATABASE_URL, os.environ)
     if _db_pool is None:

@@ -22,3 +22,14 @@ A verificação de DSN **não autentica o servidor PostgreSQL**, nem impede um s
 - FastAPI carregado, PostgreSQL original, segurança do host OCI, Vault, MFA Master, regularização jurídica, pagamentos reais e homologação Android ainda exigem provas independentes.
 
 Não há mudanças em SQL, migrações, schema, roles ou permissões no PostgreSQL original, Termux, Debian, serviços, credenciais reais, CI secrets ou provedores. `MIGRATIONS=NONE`; `DB_WRITES=NONE`; `SERVICE_RESTARTS=NONE`; `PIX_REAL=OFF`; `PAGAMENTOS_REAIS=OFF`; `ATIVACAO_REAL=OFF`; `PRODUCTION=BLOCKED`. PR #2 Draft, sem merge.
+
+
+## M40943 — fechamento da janela de DSN vazio com pool em cache (23/11/2026)
+
+**Falha localizada no código-fonte:** a condição `if _db_pool is not None and settings.DATABASE_URL` ignorava o preflight M40800/M40850 quando um pool já existia e `DATABASE_URL` era apagado ou substituído por string vazia. Assim, um objeto de pool previamente inicializado poderia ser devolvido sem a revalidação sintática do destino na condição de DSN ausente.
+
+**Correção segura no código-fonte:** para qualquer pool em cache, revalidar `settings.DATABASE_URL` incondicionalmente. DSN vazio ou malformado passa a ser recusado antes de devolver o objeto, sem fechá-lo, reiniciá-lo ou fazer SQL. Regressão sintética `test_cached_pool_cannot_bypass_guard_when_dsn_cleared_or_invalid` verifica ambos os casos mantendo o objeto de pool intacto. A trava M40840 de produção/flags continua sendo executada antes dessa verificação.
+
+**Escopo/limites:** não há prova de integridade do objeto `_db_pool`, nem da identidade do servidor SQL, nem de remediação da GUC M40570 ou do emissor M40730. A correção é defesa em profundidade, não autorização de produção ou segurança do runtime em memória. Nenhuma migration, nova role, conexão ao banco original, sincronização Termux, reinício ou operação real foi iniciada por esta alteração.
+
+`M40943_SOURCE_PATCH=APPLIED` · `M40943_TESTS=CI_REQUIRED_ON_EXACT_SHA` · `PIX_REAL=OFF` · `PAGAMENTOS_REAIS=OFF` · `ATIVACAO_REAL=OFF` · `PRODUCTION=BLOCKED`.
