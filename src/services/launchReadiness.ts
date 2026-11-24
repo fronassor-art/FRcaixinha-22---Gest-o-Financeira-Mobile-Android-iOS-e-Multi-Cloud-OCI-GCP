@@ -53,6 +53,8 @@ export function parseSupermacroReadiness(value:unknown):SupermacroReadiness {
   if(!object(value) || value.status!=='BLOCKED' ||
       value.source!=='SOURCE_ONLY_NOT_RUNTIME_ATTESTED' ||
       typeof value.plan_available!=='boolean' ||
+      typeof value.total_tasks!=='number' ||
+      typeof value.pending_tasks!=='number' ||
       !Number.isInteger(value.total_tasks) ||
       !Number.isInteger(value.pending_tasks) ||
       !Array.isArray(value.phases)) {

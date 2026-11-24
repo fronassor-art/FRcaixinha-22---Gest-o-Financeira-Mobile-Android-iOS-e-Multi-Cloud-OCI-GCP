@@ -10,7 +10,7 @@
     "docs/CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md": "535e3d745c214de6ec4cd716edafaa374fb2c572",
     "docs/CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md": "0572456988908465d6ef7f09183cb39c02400c77",
     "docs/FR_FINANCE_M24000_CONTRACT_GAP_REGISTER_147.json": "a8c25c96c7ab302489612f86fe7c146c24346933",
-    "backend/app/launch_readiness.py": "1fd62966cce1994e46d1feb44740b304f4b78155",
+    "backend/app/launch_readiness.py": "284ac00e9bcd969cb177751de933cf30c47d92aa",
     "backend/app/release_evidence_matrix.py": "6cc0357beb2407b4245fa1c4629a7172e5be31d4",
     "backend/app/operator_release_worklist.py": "ccd8f97ac07dfda2d9c189e0b29c553354e1f3f5"
   },
