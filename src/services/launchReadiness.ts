@@ -34,6 +34,52 @@ const noGoSqlFallback = ():SqlTrustReadiness => ({
   ],
 });
 
+/** M40940: descriptive source plan, NEVER an activation or audit receipt. */
+export type SupermacroReadiness = {
+  status:'BLOCKED';
+  source:'SOURCE_ONLY_NOT_RUNTIME_ATTESTED';
+  plan_available:boolean;
+  total_tasks:number;
+  pending_tasks:number;
+  phases:{id:string;name:string;status:string}[];
+};
+const unavailablePlan = ():SupermacroReadiness => ({
+  status:'BLOCKED',source:'SOURCE_ONLY_NOT_RUNTIME_ATTESTED',
+  plan_available:false,total_tasks:0,pending_tasks:0,phases:[],
+});
+
+export function parseSupermacroReadiness(value:unknown):SupermacroReadiness {
+  if(value===undefined) return unavailablePlan();
+  if(!object(value) || value.status!=='BLOCKED' ||
+      value.source!=='SOURCE_ONLY_NOT_RUNTIME_ATTESTED' ||
+      typeof value.plan_available!=='boolean' ||
+      !Number.isInteger(value.total_tasks) ||
+      !Number.isInteger(value.pending_tasks) ||
+      !Array.isArray(value.phases)) {
+    throw new Error('Supermacropacote não homologado ou formato inválido');
+  }
+  if(!value.plan_available) {
+    if(value.total_tasks!==0 || value.pending_tasks!==0 ||
+        value.phases.length!==0) throw new Error('Plano indisponível inválido');
+    return unavailablePlan();
+  }
+  if(value.total_tasks<32 || value.total_tasks>100 ||
+      value.pending_tasks<1 ||
+      value.pending_tasks>value.total_tasks ||
+      value.phases.length!==6) throw new Error('Contagem do plano inválida');
+  for(let i=0;i<value.phases.length;i++) {
+    const phase:unknown=value.phases[i];
+    if(!object(phase) || phase.id!=='P'+i ||
+        typeof phase.name!=='string' || phase.name.length<10 ||
+        phase.name.length>130 ||
+        !['BLOCKED_SECURITY','BLOCKED_EXTERNAL','BLOCKED_AUTHORIZATION']
+          .includes(String(phase.status))) {
+      throw new Error('Etapa não homologada do plano');
+    }
+  }
+  return value as SupermacroReadiness;
+}
+
 export type LaunchReadiness = {
   scope: 'AI_STUDIO_MASTER_RELEASE_READINESS';
   source: 'REPOSITORY_AND_CONFIGURATION_DECLARATIONS';
@@ -52,6 +98,7 @@ export type LaunchReadiness = {
   writes_performed: false;
   requirements: ReleaseRequirement[];
   sql_trust: SqlTrustReadiness;
+  supermacropacote: SupermacroReadiness;
 };
 
 const object = (value:unknown):value is Record<string,unknown> =>
@@ -116,5 +163,9 @@ export function parseLaunchReadiness(raw:unknown):LaunchReadiness {
     }
     ids.add(item.id);
   }
-  return {...raw,sql_trust:parseSqlTrustReadiness(raw.sql_trust)} as LaunchReadiness;
+  return {
+    ...raw,
+    sql_trust:parseSqlTrustReadiness(raw.sql_trust),
+    supermacropacote:parseSupermacroReadiness(raw.supermacropacote),
+  } as LaunchReadiness;
 }

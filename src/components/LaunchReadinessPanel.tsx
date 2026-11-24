@@ -40,6 +40,28 @@ export const LaunchReadinessPanel: React.FC<{state:AppState}> = ({state}) => {
         {current.report.unverified_gates} requisitos aguardam evidências de produção.
         Nenhuma integração real foi ativada pelo relatório.
       </p>
+      <div className="rounded-xl border border-[#c4d5c9] p-3 space-y-2">
+        <p className="text-sm font-bold text-[#143d29]">
+          Supermacropacote — etapas e dependências
+        </p>
+        {current.report.supermacropacote.plan_available
+          ? <>
+              <p className="text-xs text-[#8c4820]">
+                {current.report.supermacropacote.pending_tasks} de{' '}
+                {current.report.supermacropacote.total_tasks} itens ainda
+                pendentes ou bloqueados. Nenhuma fase está homologada.
+              </p>
+              <ol className="space-y-1">
+                {current.report.supermacropacote.phases.map(phase =>
+                  <li key={phase.id} className="text-xs text-[#53695b]">
+                    <strong>{phase.id}</strong> — {phase.name} · Bloqueada
+                  </li>)}
+              </ol>
+            </>
+          : <p role="status" className="text-xs text-[#8c4820]">
+              Plano de etapas não disponível nesta API. Produção segue bloqueada.
+            </p>}
+      </div>
       <div role="alert" className="rounded-xl border border-[#d8bd9d] bg-[#fff9f2] p-3 space-y-2">
         <p className="text-sm font-bold text-[#854322]">Segurança SQL: NÃO HOMOLOGADA — NO-GO</p>
         <p className="text-xs text-[#6e4f3c]">

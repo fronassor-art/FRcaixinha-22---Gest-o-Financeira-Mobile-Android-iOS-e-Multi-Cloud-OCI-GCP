@@ -63,6 +63,44 @@ def _engineering_evidence() -> dict[str, bool]:
     }
 
 
+def _supermacro_source_readiness() -> dict:
+    """M40940: show source-only tasks to Master, never issue capability."""
+    unavailable = {
+        "status": "BLOCKED", "source": "SOURCE_ONLY_NOT_RUNTIME_ATTESTED",
+        "plan_available": False, "total_tasks": 0, "pending_tasks": 0,
+        "phases": [],
+    }
+    try:
+        import json
+        from scripts.frfinance_m40939_release_gate import MANIFEST, validate
+        source = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        report = validate(source)
+        phases = source.get("phases")
+        if (not isinstance(phases, list) or len(phases) != 6
+                or any(not isinstance(x, dict)
+                       or x.get("id") != "P" + str(i)
+                       or not isinstance(x.get("name"), str)
+                       or not x.get("status", "").startswith("BLOCKED_")
+                       for i, x in enumerate(phases))):
+            return unavailable
+        return {
+            "status": "BLOCKED", "source": "SOURCE_ONLY_NOT_RUNTIME_ATTESTED",
+            "plan_available": True,
+            "total_tasks": (
+                report["M40939_PRODUCTION_GATES"] +
+                report["M40939_EXTRA_TASKS"]
+            ),
+            "pending_tasks": report["M40939_BLOCKED_OR_CI_PENDING"],
+            "phases": [
+                {"id": p["id"], "name": p["name"],
+                 "status": p["status"]}
+                for p in phases
+            ],
+        }
+    except (OSError, ValueError, TypeError, KeyError, ImportError):
+        return unavailable
+
+
 def readiness_manifest(env: Mapping[str, str]) -> dict:
     """Master-only read in API. Static config checks are not live attestations."""
     try:
@@ -102,6 +140,7 @@ def readiness_manifest(env: Mapping[str, str]) -> dict:
         "real_pix_active": False,
         "financial_closing_authorized": False,
         "writes_performed": False,
+        "supermacropacote": _supermacro_source_readiness(),
         # M40937: explicit P0 SQL trust blockers. These statements describe
         # missing attestation, never read runtime SQL grants, secrets, GUCs,
         # or claim the CI's disposable proof changed a real database.
