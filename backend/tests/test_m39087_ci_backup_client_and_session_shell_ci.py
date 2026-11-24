@@ -119,6 +119,6 @@ def test_android_test_keeps_session_safety_invariant():
     test = (ROOT / "src/tests/android_safe_area_ci.test.ts").read_text()
     app = (ROOT / "src/App.tsx").read_text()
     assert "M39087: M39075 preserves the mounted shell" in test
-    assert "aria-hidden={resumeValidationPending} inert={resumeValidationPending}" in app
-    assert "resumeValidationPending ? ' invisible pointer-events-none select-none' : ''" in app
+    assert "aria-hidden={resumeValidationPending || biometricLocked} inert={resumeValidationPending || biometricLocked}" in app
+    assert "((resumeValidationPending || biometricLocked) ? ' invisible pointer-events-none select-none' : '')" in app
     assert "className={'fr-app-shell " in app

@@ -11,7 +11,7 @@ const routes=read('src/services/roleScope.ts');
 
 assert(ui.includes('specialCreditApi.cycleReadiness(tenant)'));
 assert(ui.includes('setCycleReady(readiness.current_open_cycle)'));
-assert(ui.includes('setEnabled(false);setCycleReady(false)'));
+assert(ui.includes('setEnabled(false);setLoadedContext(null);setCycleReady(false)'));
 assert(ui.includes('Nenhum ciclo vigente e aberto nesta caixinha.'));
 assert(ui.includes('Revogações e cancelamentos continuam disponíveis.'));
 assert(ui.includes("disabled={busy||!cycleReady||selectedMembers.length===0"));
