@@ -5,6 +5,8 @@ on:
     branches: [atualizacao-ai-studio-9b46a63187]
     paths:
       - 'src/tests/role_scope_ui.test.ts'
+      - 'src/tests/m39083_cycle_readiness_ui_ci.test.ts'
+      - 'src/components/SpecialCreditView.tsx'
       - 'backend/tests/test_m19200_migration_inventory_ci.py'
       - '.github/workflows/validacao-atualizacao.yml'
       - 'backend/tests/test_m39086_general_ci_drift_ci.py'

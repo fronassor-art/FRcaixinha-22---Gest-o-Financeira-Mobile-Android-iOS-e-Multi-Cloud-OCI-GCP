@@ -5,6 +5,9 @@ on:
     branches: [atualizacao-ai-studio-9b46a63187]
     paths:
       - 'src/tests/android_safe_area_ci.test.ts'
+      - 'src/tests/m39083_cycle_readiness_ui_ci.test.ts'
+      - 'src/components/SpecialCreditView.tsx'
+      - 'src/App.tsx'
       - '.github/workflows/validacao-atualizacao.yml'
       - 'backend/tests/test_m39086_general_ci_drift_ci.py'
       - 'backend/tests/test_m39087_ci_backup_client_and_session_shell_ci.py'
