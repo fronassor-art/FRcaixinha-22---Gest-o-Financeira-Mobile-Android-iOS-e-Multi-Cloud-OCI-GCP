@@ -14,3 +14,15 @@ Nada disso foi configurado no ambiente do operador. O gate está DESATIVADO por 
 Antes de habilitar este gate é OBRIGATÓRIO: provisionar OCI staging; implementar verificações online de roles sem SUPERUSER/BYPASSRLS, grants, FORCE RLS e função emissora de sessão; validar certificados reais; configurar cofre/backup; simular três perfis e isolamento entre tenants; homologar autenticação e revisão de segurança independente.
 
 Não colocar senhas/DSNs/tokens em logs, GitHub ou no chat. Nenhuma VM, API pública, operação Pix real, lançamento ou conciliação financeira foi ativada por M22000.
+
+
+## M40958 — segregação de credenciais e identidade de destino
+
+O gate M22000 passa a rejeitar nomes DNS ambíguos, destinos múltiplos,
+identidades codificadas e senhas inválidas depois de decodificar o URI.
+Os três papéis SQL e as duas chaves de autenticação devem usar cinco
+segredos distintos, inclusive quando uma senha aparece codificada.
+Nenhum segredo é incluído na representação do objeto ou nas recusas.
+Os testes usam credenciais sintéticas e não conectam ao banco ou provedor.
+A aprovação continua exclusivamente sintática e não equivale a homologação
+de autenticação, custódia, RLS, TLS ou autorização de produção.

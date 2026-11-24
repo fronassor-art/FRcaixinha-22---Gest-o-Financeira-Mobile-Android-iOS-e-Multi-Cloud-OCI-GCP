@@ -69,3 +69,65 @@ def test_cross_database_auth_denied():
         "db.frfinance.internal","other.frfinance.internal")
     with pytest.raises(ProductionAuthBlocked):
         require_production_auth(data)
+
+
+# M40958 — production-auth configuration remains only a syntax check.
+@pytest.mark.parametrize("host", [
+    "db.frfinance.internal,other.frfinance.internal",
+    "db.frfinance.internal.",
+    "db%2efrfinance.internal",
+    "db._frfinance.internal",
+    "-db.frfinance.internal",
+    "db.localhost",
+    "127.000.000.001",
+])
+def test_m40958_rejects_ambiguous_or_local_dns(host):
+    env = safe_env()
+    for name in ("AUTH_DATABASE_URL", "AUTH_VERIFIER_DATABASE_URL", "DATABASE_URL"):
+        env[name] = env[name].replace("db.frfinance.internal", host)
+    with pytest.raises(ProductionAuthBlocked):
+        require_production_auth(env)
+
+
+@pytest.mark.parametrize("password", ["%61"*6, "%00"+"a"*24, "%FF"+"a"*24,
+                                       "%ZZ"+"a"*24, "%20"*24, "a"*24+"@extra"])
+def test_m40958_invalid_decoded_password_is_denied(password):
+    env = safe_env()
+    env["AUTH_DATABASE_URL"] = env["AUTH_DATABASE_URL"].replace("a"*24, password)
+    with pytest.raises(ProductionAuthBlocked) as err:
+        require_production_auth(env)
+    assert password not in str(err.value)
+
+
+@pytest.mark.parametrize("field,password", [
+    ("AUTH_VERIFIER_DATABASE_URL", "a"*24),
+    ("AUTH_VERIFIER_DATABASE_URL", "%61"*24),
+    ("DATABASE_URL", "v"*24),
+    ("DATABASE_URL", "%73"*48),
+    ("AUTH_DATABASE_URL", "h"*48),
+])
+def test_m40958_reused_secrets_across_roles_or_signers_denied(field, password):
+    env = safe_env()
+    prior = {"AUTH_VERIFIER_DATABASE_URL": "v"*24,
+             "DATABASE_URL": "p"*24, "AUTH_DATABASE_URL": "a"*24}[field]
+    env[field] = env[field].replace(prior, password)
+    with pytest.raises(ProductionAuthBlocked) as err:
+        require_production_auth(env)
+    assert password not in str(err.value)
+
+
+@pytest.mark.parametrize("value", [None, 3, " "*48, "\x00"+"s"*48, "\ud800"*48])
+def test_m40958_invalid_signing_key_fails_closed(value):
+    env = safe_env()
+    env["AUTH_SECRET"] = value
+    with pytest.raises(ProductionAuthBlocked):
+        require_production_auth(env)
+
+
+def test_m40958_valid_encoded_distinct_password_is_syntax_only():
+    env = safe_env()
+    env["AUTH_DATABASE_URL"] = env["AUTH_DATABASE_URL"].replace("a"*24, "%61"*24)
+    config = require_production_auth(env)
+    assert config.auth_dsn == env["AUTH_DATABASE_URL"]
+    assert "%61" not in repr(config)
+    assert "operationally_unverified" in repr(config)

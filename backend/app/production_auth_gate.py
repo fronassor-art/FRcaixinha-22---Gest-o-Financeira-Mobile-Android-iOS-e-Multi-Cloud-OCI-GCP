@@ -1,8 +1,9 @@
 """M22000 OCI production auth configuration gate, no network or database IO."""
 from dataclasses import dataclass, field
-from urllib.parse import urlsplit, parse_qsl
+from urllib.parse import urlsplit, parse_qsl, unquote
 from typing import Mapping
 import ipaddress
+import re
 
 from .config import safe_public_https_origin
 
@@ -20,21 +21,30 @@ class ProductionAuthConfig:
         return "ProductionAuthConfig(redacted=True,operationally_unverified=True)"
 
 
-def _dsn(text: str, role: str) -> tuple[str, int, str]:
+# M40958: compare decoded credentials, not distinct URI strings. A syntactic
+# success is not a live identity, DNS, certificate or ACL attestation.
+_DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
+_DB = re.compile(r"[a-zA-Z0-9_]{1,58}_prod\Z")
+_BAD_PERCENT = re.compile(r"%(?![0-9a-fA-F]{2})")
+
+
+def _dsn(text: str, role: str) -> tuple[tuple[str, int, str], str]:
     try:
-        if not isinstance(text, str) or len(text) > 4096 or any(c.isspace() for c in text):
+        if (type(text) is not str or len(text) > 4096
+                or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in text)):
             raise ValueError()
-        p=urlsplit(text)
-        q=parse_qsl(p.query, keep_blank_values=True, strict_parsing=True)
-        host=p.hostname
-        if (p.scheme!="postgresql" or p.username!=role or not p.password
-                or len(p.password)<16 or p.fragment or host is None
-                or p.port!=5432 or host=="localhost" or "." not in host
-                or host.endswith((".invalid",".example",".test"))
-                or not p.path.startswith("/") or "/" in p.path[1:]
-                or not p.path[1:].endswith("_prod")
-                or not p.path[1:-5].replace("_","").isalnum()
-                or q!=[("sslmode","verify-full")]):
+        p = urlsplit(text)
+        q = parse_qsl(p.query, keep_blank_values=True, strict_parsing=True)
+        host = p.hostname
+        if (p.scheme != "postgresql" or p.username != role or not p.password
+                or p.netloc.count("@") != 1 or "#" in text or host is None
+                or p.port != 5432 or len(host) > 253 or "." not in host
+                or any(not _DNS_LABEL.fullmatch(label) for label in host.split("."))
+                or not any(c.isalpha() for c in host.rsplit(".", 1)[-1])
+                or host.endswith((".invalid", ".example", ".test", ".localhost", ".local"))
+                or not p.path.startswith("/") or not _DB.fullmatch(p.path[1:])
+                or q != [("sslmode", "verify-full")]
+                or _BAD_PERCENT.search(p.password)):
             raise ValueError()
         try:
             ipaddress.ip_address(host)
@@ -42,13 +52,27 @@ def _dsn(text: str, role: str) -> tuple[str, int, str]:
             pass
         else:
             raise ValueError()
-        return (host.lower(),p.port,p.path)
-    except (ValueError,TypeError,AttributeError):
+        password = unquote(p.password, encoding="utf-8", errors="strict")
+        if (len(password) < 16 or not password.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in password)):
+            raise ValueError()
+        return (host.lower(), p.port, p.path), password
+    except (ValueError, TypeError, AttributeError, OverflowError):
         raise ProductionAuthBlocked("UNSAFE_OR_INCOMPLETE_PRODUCTION_DSN") from None
 
 
+def _valid_secret(value: object) -> bool:
+    if (type(value) is not str or not value.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in value)):
+        return False
+    try:
+        return len(value.encode("utf-8")) >= 32
+    except UnicodeError:
+        return False
+
+
 def require_production_auth(env: Mapping[str,str]) -> ProductionAuthConfig:
-    if (env.get("ENVIRONMENT")!="production"
+    if (not isinstance(env, Mapping) or env.get("ENVIRONMENT")!="production"
             or env.get("FR_FINANCE_AUTH_PRODUCTION_GATE")!="OCI_STAGING_REVIEWED"
             or env.get("FRCAIXINHA_TERMUX_LOCAL_API")=="1"
             or env.get("FRCAIXINHA_TEST_AUTH")=="1"
@@ -56,16 +80,15 @@ def require_production_auth(env: Mapping[str,str]) -> ProductionAuthConfig:
         raise ProductionAuthBlocked("OCI_PRODUCTION_GATE_NOT_APPROVED")
     auth_secret=env.get("AUTH_SECRET","")
     hmac_secret=env.get("AUTH_RATE_LIMIT_HMAC_KEY","")
-    if (len(auth_secret.encode("utf-8"))<32
-            or len(hmac_secret.encode("utf-8"))<32
+    if (not _valid_secret(auth_secret) or not _valid_secret(hmac_secret)
             or auth_secret==hmac_secret):
         raise ProductionAuthBlocked("PRODUCTION_KEYS_MISSING_OR_REUSED")
     auth=env.get("AUTH_DATABASE_URL","")
     verifier=env.get("AUTH_VERIFIER_DATABASE_URL","")
     app=env.get("DATABASE_URL","")
-    a=_dsn(auth,"frc_ai_auth")
-    b=_dsn(verifier,"frc_ai_verifier")
-    c=_dsn(app,"frc_ai_app")
-    if a!=b or b!=c or len({auth,verifier,app})!=3:
+    a, a_password = _dsn(auth,"frc_ai_auth")
+    b, b_password = _dsn(verifier,"frc_ai_verifier")
+    c, c_password = _dsn(app,"frc_ai_app")
+    if (a!=b or b!=c or len({a_password,b_password,c_password,auth_secret,hmac_secret})!=5):
         raise ProductionAuthBlocked("PRODUCTION_DB_ROLES_NOT_SEGREGATED")
     return ProductionAuthConfig(auth_dsn=auth,verifier_dsn=verifier)
