@@ -160,3 +160,40 @@ def test_signed_router_persists_once_and_replays_without_money():
                      "content-type":"application/json"},
             content=b"x"*17000)
         assert over.status_code==413
+
+
+# M40955 — malformed envelope and wrong account never reach financial effects.
+@pytest.mark.parametrize("raw", [
+    json.dumps(event_body(action=[])).encode(),
+    json.dumps(event_body(data={"id":ORD,"status":{}})).encode(),
+    json.dumps(event_body()).encode("utf-16"),
+    b'{"data":'+b'['*1500+b'0'+b']'*1500+b'}',
+])
+def test_m40955_orders_malformed_envelope(raw):
+    with pytest.raises(ValueError):
+        verify(raw=raw)
+
+@pytest.mark.parametrize("seller", [
+    SellerContext(T,"9999","test-secret"),
+    SellerContext(T,"2002","test-secret",False),
+    SellerContext(T,"2002","test-secret",1),
+])
+def test_m40955_orders_account_mismatch_before_secret(seller):
+    calls=[]
+    async def resolve(seller_id):
+        calls.append("resolve")
+        return seller
+    async def forbidden(*_):
+        calls.append("unexpected")
+        raise AssertionError("Secret or inbox access forbidden")
+    api=FastAPI()
+    api.include_router(create_orders_staging_router(
+        resolve_account=resolve,load_signing_secret=forbidden,
+        persist_event=forbidden,now_ms=lambda:NOW))
+    with TestClient(api,base_url="https://testserver") as client:
+        result=client.post("/integrations/mercadopago/orders",
+            params={"data.id":ORD,"type":"order"},
+            headers={"x-signature":signature(),"x-request-id":REQ},
+            json=event_body())
+    assert result.status_code==401
+    assert calls==["resolve"]

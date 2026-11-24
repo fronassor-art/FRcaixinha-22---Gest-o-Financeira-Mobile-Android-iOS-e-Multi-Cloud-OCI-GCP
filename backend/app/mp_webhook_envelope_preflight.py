@@ -72,7 +72,7 @@ def preview_signed_sandbox_webhook(
                           object_pairs_hook=_no_repeated_keys,
                           parse_constant=lambda c: (_ for _ in ()).throw(
                               ValueError("Constante JSON inválida")))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError("Envelope JSON inválido") from exc
     if type(data) is not dict or type(data.get("data")) is not dict:
         raise ValueError("Notificação sem estrutura")

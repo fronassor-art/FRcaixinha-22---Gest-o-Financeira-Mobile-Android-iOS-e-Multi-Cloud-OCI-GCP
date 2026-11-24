@@ -78,9 +78,9 @@ def _load(raw:bytes)->dict:
     if type(raw) is not bytes or not 0<len(raw)<=MAX_BODY:
         raise ValueError("Invalid Order webhook size")
     try:
-        obj=json.loads(raw,object_pairs_hook=_unique,
+        obj=json.loads(raw.decode('utf-8'),object_pairs_hook=_unique,
                        parse_constant=_bad_constant)
-    except (TypeError,ValueError,UnicodeError):
+    except (TypeError,ValueError,UnicodeError,RecursionError):
         raise ValueError("Invalid Order webhook JSON") from None
     if type(obj) is not dict or type(obj.get("data")) is not dict:
         raise ValueError("Invalid Order webhook shape")
@@ -110,13 +110,15 @@ def verify_order_notification(
     live=obj.get("live_mode")
     if (type(account) is not SellerContext or account.active is not True
             or type(account.tenant_id) is not UUID
+            or type(account.seller_id) is not str
             or not _SELLER.fullmatch(account.seller_id)
             or account_id != account.seller_id
             or type(data_id) is not str or not _ORDER.fullmatch(data_id)
             or resource != data_id or query_type!="order"
             or obj.get("type")!="order"
             or obj.get("api_version")!="v1"
-            or action not in _ACTION or status not in _STATUS
+            or type(action) is not str or action not in _ACTION
+            or type(status) is not str or status not in _STATUS
             or type(request_id) is not str or not _REQ.fullmatch(request_id)
             or type(live) is not bool
             or (live is True and allow_live_ingest is not True)):
@@ -167,7 +169,10 @@ def create_orders_staging_router(
             raise HTTPException(400,"Ambiguous signed headers")
         qp=request.query_params
         if (len(qp.getlist("data.id"))!=1 or
-                len(qp.getlist("type"))!=1 or qp.get("type")!="order"):
+                len(qp.getlist("type"))!=1 or qp.get("type")!="order"
+                or not _ORDER.fullmatch(qp.get("data.id",""))
+                or not _REQ.fullmatch(request.headers.get("x-request-id",""))
+                or not 0<len(request.headers.get("x-signature",""))<=256):
             raise HTTPException(400,"Invalid Orders query")
         received=bytearray()
         async for part in request.stream():
@@ -182,7 +187,9 @@ def create_orders_staging_router(
             if not _SELLER.fullmatch(seller_id):
                 raise ValueError()
             seller=await resolve_account(seller_id)
-            if type(seller) is not SellerContext:
+            if (type(seller) is not SellerContext or seller.active is not True
+                    or type(seller.tenant_id) is not UUID
+                    or seller.seller_id != seller_id):
                 raise ValueError()
             secret=await load_signing_secret(seller)
             event=verify_order_notification(

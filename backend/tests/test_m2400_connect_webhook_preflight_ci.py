@@ -202,3 +202,9 @@ def test_health_does_not_expose_secret_or_register_webhook():
         assert body["ledger_written"] is False
         assert not any("/webhook" in route.path for route in app.routes
                        if route.path.startswith("/api/v1/"))
+
+
+def test_m40955_preview_rejects_excessive_json_nesting():
+    raw=b'{"data":'+b'['*1500+b'0'+b']'*1500+b'}'
+    with pytest.raises(ValueError):
+        preview(raw_json=raw)

@@ -84,9 +84,9 @@ def _parse_untrusted(raw: bytes) -> dict:
     if type(raw) is not bytes or not 0 < len(raw) <= MAX_BODY:
         raise ValueError("Invalid envelope size")
     try:
-        body = json.loads(raw,object_pairs_hook=_unique,
+        body = json.loads(raw.decode('utf-8'),object_pairs_hook=_unique,
                           parse_constant=_reject_constant)
-    except (UnicodeError,ValueError,TypeError):
+    except (UnicodeError,ValueError,TypeError,RecursionError):
         raise ValueError("Invalid envelope") from None
     if type(body) is not dict or type(body.get("data")) is not dict:
         raise ValueError("Invalid structure")
@@ -113,7 +113,8 @@ def verify_webhook_for_seller(
             or type(data_id) is not str or not _ID.fullmatch(data_id)
             or not _ID.fullmatch(resource_id) or data_id != resource_id
             or type(query_type) is not str or kind != query_type
-            or kind not in _ALLOWED or action not in _ALLOWED[kind]
+            or type(kind) is not str or kind not in _ALLOWED
+            or type(action) is not str or action not in _ALLOWED[kind]
             or type(payload_id) is not str or not _ID.fullmatch(payload_id)
             or type(request_id) is not str or not _REQ.fullmatch(request_id)
             or type(live) is not bool
@@ -155,6 +156,8 @@ def create_webhook_staging_router(
                 or request.headers.get("content-type","").split(";")[0].lower()
                     != "application/json"):
             raise HTTPException(415, "Unsupported channel")
+        if len(request.headers.getlist("content-length")) > 1:
+            raise HTTPException(400,"Ambiguous content length")
         size = request.headers.get("content-length")
         if size is not None:
             try:
@@ -182,13 +185,18 @@ def create_webhook_staging_router(
             raise HTTPException(400,"Signed headers ambiguous")
         req_id=request.headers.get("x-request-id","")
         sig=request.headers.get("x-signature","")
+        if (not _ID.fullmatch(data_id) or kind not in _ALLOWED
+                or not _REQ.fullmatch(req_id) or not 0<len(sig)<=256):
+            raise HTTPException(400,"Invalid signed envelope")
         try:
             decoded=_parse_untrusted(raw)
             user_id=_numeric_id(decoded.get("user_id"))
             if not _SELLER.fullmatch(user_id):
                 raise ValueError()
             seller=await resolve_seller(user_id)
-            if type(seller) is not SellerContext or not seller.active:
+            if (type(seller) is not SellerContext or seller.active is not True
+                    or type(seller.tenant_id) is not UUID
+                    or seller.seller_id != user_id):
                 raise ValueError()
             secret=await load_signing_secret(seller)
             record=verify_webhook_for_seller(

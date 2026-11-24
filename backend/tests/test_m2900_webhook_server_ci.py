@@ -183,3 +183,31 @@ def test_staging_sql_has_strict_database_guard():
     assert "ledger_written=false" in sql
     assert "bank_reconciled=false" in sql
     assert "FROM PUBLIC" in sql
+
+
+@pytest.mark.parametrize("raw", [
+    event(action=[]),event(type={}),
+    event().decode().encode("utf-16"),
+    b'{"data":'+b'['*1500+b'0'+b']'*1500+b'}',
+])
+def test_m40955_payment_malformed_envelope(raw):
+    with pytest.raises(ValueError):
+        validate(raw=raw)
+
+def test_m40955_payment_wrong_seller_does_not_load_secret():
+    client,calls=make_client()
+    with client:
+        response=send(client,data=event(user_id=3003))
+    assert response.status_code==401
+    assert calls==[("resolve","3003")]
+
+@pytest.mark.parametrize("url", [
+    "/integrations/mercadopago/webhook?type=unknown&data.id=900001",
+    "/integrations/mercadopago/webhook?type=payment&data.id=bad%20id",
+])
+def test_m40955_payment_invalid_query_before_registry(url):
+    client,calls=make_client()
+    with client:
+        response=send(client,url=url)
+    assert response.status_code==400
+    assert calls==[]
