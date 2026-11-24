@@ -122,3 +122,47 @@ def test_workflow_and_scope_no_go():
         assert s in yaml
     for s in ("M40570","M40730","GUC","NO-GO","PRODUCTION=BLOCKED"):
         assert s in doc
+
+
+# M40951 — reject URI identity aliases before asyncpg interprets them.
+@pytest.mark.parametrize("url", [
+    f"postgresql://%70ostgres:{CRED}@pg.staging.invalid:5432/app",
+    f"postgresql://frc_ai_%6fwner:{CRED}@pg.staging.invalid:5432/app",
+    f"postgresql://frc_ai_app:{CRED}@pg.staging.invalid:5432/frfinance%5fprod",
+    f"postgresql://frc_ai_app:{CRED}@pg.staging.invalid:5432/frcaixinha%5f2_2",
+    f"postgresql://frc_ai_app:{CRED}@127%2e0%2e0%2e1:5433/other",
+    f"postgresql://frc_ai_app:{CRED}@pg.staging.invalid,127.0.0.1:5433/other",
+    f"postgresql://frc_ai_app:{CRED}@localhost.:5433/other",
+])
+@pytest.mark.parametrize("mode", ["development", "staging", "production"])
+def test_m40951_ambiguous_identity_is_rejected_before_driver(url, mode):
+    with pytest.raises(FinancialDSNBlocked, match="M40800_UNSAFE_FINANCIAL_DSN"):
+        require_financial_dsn_shape(url, {"ENVIRONMENT": mode})
+
+
+@pytest.mark.parametrize("host", ["127.0.0.2", "[::1]", "[::ffff:127.0.0.1]"])
+def test_m40951_loopback_aliases_preserve_frfinance_port_fence(host):
+    url = f"postgresql://frc_ai_app:{CRED}@{host}:5433/other"
+    with pytest.raises(FinancialDSNBlocked, match="M40850_UNTRUSTED_NONPROD_DB_TARGET"):
+        require_financial_dsn_shape(url, {"ENVIRONMENT": "staging"})
+
+
+def test_m40951_encoded_password_does_not_change_identity_policy():
+    url = "postgresql://frc_ai_app:synthetic%40%2F%25@127.0.0.1:5433/frcaixinha_aistudio_dev"
+    assert require_financial_dsn_shape(url, {
+        "ENVIRONMENT": "development", "FRCAIXINHA_TERMUX_LOCAL_API": "1",
+    }) == "TERMUX_DSN_SHAPE_ONLY_NOT_DB_ATTESTED"
+
+
+@pytest.mark.asyncio
+async def test_m40951_cached_pool_refuses_encoded_identity(monkeypatch):
+    fake = object()
+    monkeypatch.setattr(db, "_db_pool", fake)
+    monkeypatch.setattr(db.settings, "DATABASE_URL",
+        f"postgresql://%70ostgres:{CRED}@pg.staging.invalid:5432/app")
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    for flag in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        monkeypatch.setenv(flag, "OFF")
+    with pytest.raises(FinancialDSNBlocked, match="M40800_UNSAFE_FINANCIAL_DSN"):
+        await db.get_db_pool()
+    assert db._db_pool is fake

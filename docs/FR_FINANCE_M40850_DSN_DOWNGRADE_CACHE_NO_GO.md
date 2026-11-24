@@ -33,3 +33,22 @@ Não há mudanças em SQL, migrações, schema, roles ou permissões no PostgreS
 **Escopo/limites:** não há prova de integridade do objeto `_db_pool`, nem da identidade do servidor SQL, nem de remediação da GUC M40570 ou do emissor M40730. A correção é defesa em profundidade, não autorização de produção ou segurança do runtime em memória. Nenhuma migration, nova role, conexão ao banco original, sincronização Termux, reinício ou operação real foi iniciada por esta alteração.
 
 `M40943_SOURCE_PATCH=APPLIED` · `M40943_TESTS=CI_REQUIRED_ON_EXACT_SHA` · `PIX_REAL=OFF` · `PAGAMENTOS_REAIS=OFF` · `ATIVACAO_REAL=OFF` · `PRODUCTION=BLOCKED`.
+
+
+## M40951 — identidade URI sem aliases ambíguos (source-only)
+
+O preflight agora recusa percent-encoding em usuário, host e nome do banco,
+listas de hosts, barra invertida no host e host com ponto terminal. A senha
+pode continuar percent-encoded: ela não é usada para classificar a identidade.
+A cerca da porta 5433 reconhece endereços IP loopback, inclusive IPv4 mapeado
+em IPv6, em vez de apenas três strings fixas. A regra Termux continua exigindo
+o endereço literal original. Os testes M40850 acrescentam casos negativos,
+credencial sintética codificada e pool em cache, sem conexões de rede.
+
+Não é prova de DNS, identidade do servidor, custódia independente de SQL ou
+remediação GUC. Não se alteram migrations, credenciais, PostgreSQL original,
+runtime FastAPI ou regras financeiras. CI no SHA publicado é obrigatória
+antes de qualquer sincronização source-only.
+`M40570=NOT_REMEDIATED`; `M40730=NOT_REMEDIATED`;
+`PIX_REAL=OFF`; `PAGAMENTOS_REAIS=OFF`; `ATIVACAO_REAL=OFF`;
+`PRODUCTION=BLOCKED`.
