@@ -197,3 +197,130 @@ def test_m40955_orders_account_mismatch_before_secret(seller):
             json=event_body())
     assert result.status_code==401
     assert calls==["resolve"]
+
+
+# M40956 — integrated, in-process synthetic ingress and release NO-GO.
+# Existing CI executes this suite. No new service, database, provider or route
+# in the deployed app. Callbacks are deliberately memory-only.
+@pytest.mark.parametrize("kind", ["payment", "mp-connect", "order"])
+@pytest.mark.parametrize("failure", [
+    "none", "unknown_account", "wrong_account", "registry_unavailable",
+    "secret_unavailable", "invalid_signature", "inbox_unavailable",
+    "unexpected_receipt", "live_disabled",
+])
+def test_m40956_integrated_ingress_fail_closed(kind, failure):
+    from app.mp_webhook_staging_runtime import create_webhook_staging_router
+
+    other = UUID("00000000-0000-4000-8000-0000000000b2")
+    accounts = {
+        "2002": SellerContext(T, "2002", "synthetic-a"),
+        "3003": SellerContext(other, "3003", "synthetic-b"),
+    }
+    keys = {"2002": SECRET, "3003": b"synthetic_distinct_tenant_key_123456"}
+    calls, records = [], []
+
+    async def resolve(seller_id):
+        calls.append(("resolve", seller_id))
+        if failure == "registry_unavailable":
+            raise RuntimeError("synthetic failure")
+        if failure == "unknown_account":
+            return None
+        if failure == "wrong_account":
+            return accounts["2002"]
+        return accounts[seller_id]
+
+    async def secret(account):
+        calls.append(("secret", account.seller_id))
+        if failure == "secret_unavailable":
+            raise RuntimeError("synthetic failure")
+        return keys[account.seller_id]
+
+    async def persist(record):
+        calls.append(("inbox", record.tenant_id))
+        if failure == "inbox_unavailable":
+            raise RuntimeError("synthetic failure")
+        if failure == "unexpected_receipt":
+            return "PAID"
+        records.append(record)
+        return "INSERTED"
+
+    api = FastAPI()
+    api.include_router(create_webhook_staging_router(
+        resolve_seller=resolve, load_signing_secret=secret,
+        persist_verified=persist, now_ms=lambda: NOW))
+    api.include_router(create_orders_staging_router(
+        resolve_account=resolve, load_signing_secret=secret,
+        persist_event=persist, now_ms=lambda: NOW))
+
+    resource = ORD if kind == "order" else "900001"
+    endpoint = "/integrations/mercadopago/" + (
+        "orders" if kind == "order" else "webhook")
+    body = (event_body(user_id="3003") if kind == "order" else {
+        "id": 100001, "user_id": 3003, "live_mode": False, "type": kind,
+        "action": ("payment.updated" if kind == "payment"
+                   else "application.authorized"),
+        "data": {"id": resource},
+    })
+    body["live_mode"] = failure == "live_disabled"
+    signed_key = SECRET if failure == "invalid_signature" else keys["3003"]
+    digest = hmac.new(
+        signed_key, f"id:{resource};request-id:{REQ};ts:{NOW};".encode(),
+        hashlib.sha256).hexdigest()
+    with TestClient(api, base_url="https://testserver") as client:
+        response = client.post(
+            endpoint, params={"type": kind, "data.id": resource},
+            headers={"x-request-id": REQ, "x-signature": f"ts={NOW},v1={digest}"},
+            json=body)
+
+    if failure == "none":
+        assert response.status_code == (200 if kind == "order" else 202)
+        assert response.json()["receipt"] == "INSERTED"
+        for field in ("financial_effect_applied", "bank_reconciled", "ledger_written"):
+            assert response.json()[field] is False
+        assert len(records) == 1
+        record = records[0]
+        assert record.tenant_id == other
+        assert record.tenant_id != T
+        assert record.bank_reconciled is False
+        assert record.payment_marked_paid is False
+        assert record.ledger_written is False
+        assert calls == [("resolve", "3003"), ("secret", "3003"), ("inbox", other)]
+    else:
+        expected = 503 if failure in {
+            "registry_unavailable", "secret_unavailable", "inbox_unavailable",
+            "unexpected_receipt",
+        } else 401
+        assert response.status_code == expected
+        assert records == []
+        assert calls[0] == ("resolve", "3003")
+        if failure in {"unknown_account", "wrong_account", "registry_unavailable"}:
+            assert calls == [("resolve", "3003")]
+        elif failure in {"secret_unavailable", "invalid_signature", "live_disabled"}:
+            assert calls == [("resolve", "3003"), ("secret", "3003")]
+        else:
+            assert calls == [("resolve", "3003"), ("secret", "3003"), ("inbox", other)]
+        assert "synthetic" not in response.text
+        assert "receipt" not in response.json()
+
+
+def test_m40956_integrated_source_evidence_cannot_release_production():
+    from scripts.frfinance_m40939_release_gate import MANIFEST, validate
+    from app.launch_readiness import readiness_manifest
+
+    gate = validate(json.loads(MANIFEST.read_text(encoding="utf-8")))
+    assert gate["M40939_DECISION"] == "NO_GO"
+    assert gate["M40939_PRODUCTION_GATES"] == 20
+    assert gate["M40939_PRODUCTION"] == "BLOCKED"
+    assert gate["M40939_MIGRATION"] == "NOT_AUTHORIZED"
+    for flag in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        assert gate["M40939_" + flag] == "OFF"
+
+    report = readiness_manifest({})
+    assert report["status"] == "BLOCKED"
+    assert report["total_gates"] == report["unverified_gates"] == 20
+    assert all(r["production_verified"] is False for r in report["requirements"])
+    assert report["real_pix_active"] is False
+    assert report["financial_closing_authorized"] is False
+    assert report["writes_performed"] is False
+    assert report["sql_trust"]["status"] == "NO_GO"
+    assert report["sql_trust"]["master_write_operations_enabled"] is False
