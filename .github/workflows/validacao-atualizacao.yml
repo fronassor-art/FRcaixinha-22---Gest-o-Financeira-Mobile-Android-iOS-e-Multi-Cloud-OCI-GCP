@@ -674,6 +674,13 @@ jobs:
     name: Migrações e testes de RLS em PostgreSQL descartável
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # M40947: the M40840 gate requires explicit non-production context
+    # and three OFF flags; do not relax the runtime guard for CI fixtures.
+    env:
+      ENVIRONMENT: development
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
     services:
       postgres:
         image: postgres:16
