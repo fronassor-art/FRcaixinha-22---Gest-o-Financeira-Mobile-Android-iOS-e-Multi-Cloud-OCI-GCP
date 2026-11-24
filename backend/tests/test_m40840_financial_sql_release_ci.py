@@ -97,8 +97,15 @@ async def test_existing_nonproduction_inert_pool_still_available(monkeypatch):
     old=object()
     monkeypatch.setattr(db,"_db_pool",old)
     monkeypatch.setenv("ENVIRONMENT","development")
+    monkeypatch.setenv("FRCAIXINHA_TERMUX_LOCAL_API","1")
+    monkeypatch.setattr(
+        db.settings, "DATABASE_URL",
+        "postgresql://frc_ai_app:synthetic-not-a-secret@127.0.0.1:5433/frcaixinha_aistudio_dev",
+    )
     for flag in ("PIX_REAL","PAGAMENTOS_REAIS","ATIVACAO_REAL"):
         monkeypatch.setenv(flag,"OFF")
+    # The cached inert pool is usable only with an explicit, valid DSN shape.
+    # No database connection is opened in this unit test.
     assert await db.get_db_pool() is old
 
 
