@@ -2,6 +2,8 @@
 
 **Edição 2.2 — retificação de autoria e titularidade de 24/11/2026 | Minuta para aprovação do proprietário**
 
+**Ajuste de identidade de 25/11/2026:** o nome do produto e a marca pública são **FR Finance**. Esta revisão atualiza nomes de documentos e descrições de identidade, mantendo referências técnicas existentes apenas quando necessárias à compatibilidade de sincronização, banco e atualização Android. Não altera regras financeiras, cláusulas, algoritmos ou autorizações operacionais.
+
 ## Identificação oficial do projeto e autoria
 
 **Ideia original:** Fábio Rossano Araújo Medeiros  
@@ -40,7 +42,7 @@ no escopo. O desenvolvimento do demonstrador do item (B) precisa ter esforço e 
 
 **1.7. Dinheiro real e responsabilidade.** FR Finance é software de gestão e automação financeira, não banco, custodiante, emissor de contas, captador ou garantidor de rentabilidade. O administrador responde pela operação e titularidade/mandato de recursos sob sua administração; dinheiro permanece fora da plataforma. Eventos em espécie ou em contas externas podem ser registrados manualmente, com prova e identificação da origem. Operações integradas são realizadas pelo provedor autorizado na conta legítima; nenhum lançamento manual executa Pix. Não confundir saldo contábil, saldo conferido, saldo bancário e patrimônio dos membros. O Master não recebe capital de terceiros.
 
-**1.8. Ambiente técnico existente.** React/TypeScript + Capacitor Android, FastAPI/Python, PostgreSQL 18 e GitHub Actions. Trabalhar no único repositório fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP, branch atualizacao-ai-studio-9b46a63187, PR #2 Draft, e no Termux nativo $HOME/fr-finance; banco 127.0.0.1:5433/frcaixinha_aistudio_dev. Identificadores técnicos históricos preservados por compatibilidade. Debian PRoot somente OCI quando pertinente. Sem novos clones, bancos, roles ou serviços; PG descartável em CI permitido. GitHub/CI, sincronização fast-forward autorizada e validação local. Segredos fora do Git; mínimo privilégio; backend fonte de verdade.
+**1.8. Ambiente técnico existente.** React/TypeScript + Capacitor Android, FastAPI/Python, PostgreSQL 18 e GitHub Actions. Trabalhar no único repositório fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP, branch atualizacao-ai-studio-9b46a63187, PR #2 Draft, e no Termux nativo $HOME/fr-finance; banco 127.0.0.1:5433/frcaixinha_aistudio_dev. Esses valores são identificadores operacionais existentes, mantidos para preservar sincronização e atualização instalada; não constituem marca do produto. Debian PRoot somente OCI quando pertinente. Sem novos clones, bancos, roles ou serviços; PG descartável em CI permitido. GitHub/CI, sincronização fast-forward autorizada e validação local. Segredos fora do Git; mínimo privilégio; backend fonte de verdade.
 
 **1.9. Desenvolvimento independente e orçamento inicial — DEFINIDO.** O idealizador, criador e desenvolvedor responsável nominalmente identificado é **Fábio Rossano Araújo Medeiros**, que conduz pessoalmente a concepção, o planejamento, a criação e a evolução do FR Finance com assistência das ferramentas de desenvolvimento.  O idealizador realizará pessoalmente planejamento, desenvolvimento, publicação, formalização, requerimentos e atendimento inicial, com assistência das ferramentas citadas; **sem
 
@@ -565,7 +567,7 @@ CPF/CNPJ validados; representante autorizado; identidade e titular contratual se
 - Logs, resposta HTTP e documentos novos devem omitir senhas, tokens, hash de credenciais, dados pessoais e URLs privadas.
 
 ## C. Dados e política de migração
-- Banco **exclusivo do FR Finance** em Termux: PostgreSQL 18, porta `5433`, banco `frcaixinha_aistudio_dev`. Não modificar nome/porta ou importar dados do projeto independente.
+- Banco **exclusivo do FR Finance** em Termux: PostgreSQL 18, porta `5433`, banco `frcaixinha_aistudio_dev`. Não modificar o nome/porta existentes nem importar dados externos.
 - Catálogo histórico verificado no M29800: **92 arquivos SQL versionados**, com subclasses local, CI e staging. A existência de SQL em Git não prova migração aplicada ao banco local.
 - Nenhuma sincronização Git autoriza `migration apply`. Antes de migração, conferir Git SHA/branch, lista e hash dos SQL, roles, versão de schema, backup restaurável, impacto transacional e autorização separada. Nunca aplicar arquivos CI/staging ao PostgreSQL local `5433`.
 - Manter testes de concorrência, idempotência, reversão, segregação de caixa Master e caixas de administradores e recuperação de incidentes.
@@ -588,9 +590,9 @@ CPF/CNPJ validados; representante autorizado; identidade e titular contratual se
 - Produção não é liberada por CI verde, VM criada ou campo de configuração preenchido. A matriz [M28700–M29000](FR_FINANCE_SUPER_MACRO_M28700_M29000_RELEASE_EVIDENCE.md) registra **20 provas técnicas** e **7 gates externos** pendentes de homologação operacional.
 
 ## G. Exclusividade dos documentos
-- Documento de produto vigente: [Caderno Mestre FR Finance](CADERNO_MESTRE_FR_FINANCE_AI_STUDIO.md).
+- Documento de produto vigente: [Caderno Mestre FR Finance](FR_Finance_Caderno_Mestre_V2_2_2026-11-24.md).
 - Histórico técnico: [registro original de 147 cláusulas](FR_FINANCE_M24000_CONTRACT_GAP_REGISTER_147.json).
-- Os arquivos históricos originais em `public/assets/aistudio/` ficam intactos como **fontes históricas**, sem adotar seus títulos como documentos vigentes nem alterar seus SHA-256.
+- Os documentos de origem arquivados permanecem intactos e identificados como **fontes históricas**; seus nomes e conteúdo não definem a marca ou os documentos vigentes do FR Finance, e seus hashes de auditoria são preservados.
 - Alterações contratuais requerem avaliação específica; esta edição de identidade **não** transfere autorização financeira, legal ou de ativação.
 
 **Estado de execução:** `PRODUCTION_NOT_AUTHORIZED` · `REAL_USERS=OFF` · `REAL_PIX=OFF` · `LOCAL_SCHEMA_REATTESTATION=PENDING`.
@@ -750,7 +752,7 @@ Vincular requisito → arquivo/API/tabela → unit/negativo/concorrência/RLS/id
 - RET-T15: importação de lote repetido, totais inconsistentes, membro duplicado, data efetiva e corte; preservar valores sem duplicação, bloquear divergências.
 - RET-T16: resultado do ciclo atravessa o ano, sem lucro fictício ou principal incluído; percentual escolhido e complemento conservados; zero peso ou perda não cria rateio indevido.
 - RET-T17: assinatura expira ou renova no meio do ciclo; não altera direitos, datas, capital nem libera acesso indevido.
-- RET-T18: UI/manifesto público sem AI Studio; update Android sem perder identidade de pacote/assinatura; reteste teclado/logout, acessibilidade e três perfis.
+- RET-T18: UI/manifesto público com a marca FR Finance e sem nome de ferramenta de desenvolvimento; atualização Android sem perder a identidade de pacote/assinatura; reteste teclado/logout, acessibilidade e três perfis.
 - RET-T19: restauração e replay de manual e PSP sem duplicar eventos; provas de catálogo, logs e trilha auditável sem exposição de segredo.
 - RET-T20: produção e operações reais mantêm gates OFF até aprovação específica; modo manual não falsifica homologação PSP.
 

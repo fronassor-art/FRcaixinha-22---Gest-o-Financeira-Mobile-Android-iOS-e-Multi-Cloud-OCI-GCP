@@ -15,8 +15,8 @@ const files=[
 for(const f of files){
  const src=read(f);
  assert.ok(src.includes('FR Finance'),f+' should present FR Finance');
- const screened = f === 'README.md' ? src.replaceAll('FR Caixinha 2.2','HISTORICAL_PROJECT') : src;
- assert.ok(!screened.includes('FR Caixinha'),f+' contains old commercial display name');
+  assert.ok(!/FR\s*Caixinha\s*2\.2/i.test(src),f+' contains a superseded product name');
+  assert.ok(!/Google\s+AI\s+Studio|FR Finance AI Studio/i.test(src),f+' contains a superseded development label');
 }
 assert.ok(read('capacitor.config.ts').includes("appId: 'com.frcaixinha.app'"));
 assert.ok(read('android/app/build.gradle').includes('applicationId "com.frcaixinha.app"'));
@@ -30,7 +30,7 @@ assert.match(read('src/components/GitHubSyncModal.tsx'),/FR Finance/);
 assert.match(read('src/services/zipExportService.ts'),/FR Finance/);
 assert.ok(read('docs/FR_FINANCE_REBRANDING_M21300.md').includes('com.frcaixinha.app'));
 assert.equal(JSON.parse(read('metadata.json')).name,'FR Finance — Gestão Financeira');
-assert.equal(JSON.parse(read('package.json')).name,'fr-finance-aistudio');
-assert.equal(JSON.parse(read('package-lock.json')).name,'fr-finance-aistudio');
-assert.equal(JSON.parse(read('package-lock.json')).packages[''].name,'fr-finance-aistudio');
+assert.equal(JSON.parse(read('package.json')).name,'fr-finance');
+assert.equal(JSON.parse(read('package-lock.json')).name,'fr-finance');
+assert.equal(JSON.parse(read('package-lock.json')).packages[''].name,'fr-finance');
 console.log('M21300_FR_FINANCE_COMMERCIAL_BRAND_AND_ANDROID_ID=PASS');

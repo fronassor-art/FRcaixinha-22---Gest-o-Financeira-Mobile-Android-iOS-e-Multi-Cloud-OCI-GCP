@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 /**
- * FR Finance — configuracao Capacitor da frente AI Studio
+ * FR Finance — configuração Capacitor da aplicação
  * Contrato Técnico Mestre (Cláusulas 11.1 e 16.2)
  *
  * NOTAS DE SEGURANÇA E AMBIENTE:

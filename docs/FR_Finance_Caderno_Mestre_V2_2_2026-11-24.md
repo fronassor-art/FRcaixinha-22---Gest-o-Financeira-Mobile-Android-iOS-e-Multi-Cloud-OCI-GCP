@@ -2,6 +2,8 @@
 
 **Edição 2.2 — retificação de autoria e titularidade de 24/11/2026 | Minuta para aprovação do proprietário**
 
+**Ajuste de identidade de 25/11/2026:** o nome do produto e a marca pública são **FR Finance**. Esta revisão atualiza nomes de documentos e descrições de identidade, mantendo referências técnicas existentes apenas quando necessárias à compatibilidade de sincronização, banco e atualização Android. Não altera regras financeiras, cláusulas, algoritmos ou autorizações operacionais.
+
 ## Identificação oficial do projeto e autoria
 
 **Ideia original:** Fábio Rossano Araújo Medeiros  
@@ -40,7 +42,7 @@ no escopo. O desenvolvimento do demonstrador do item (B) precisa ter esforço e 
 
 **1.7. Dinheiro real e responsabilidade.** FR Finance é software de gestão e automação financeira, não banco, custodiante, emissor de contas, captador ou garantidor de rentabilidade. O administrador responde pela operação e titularidade/mandato de recursos sob sua administração; dinheiro permanece fora da plataforma. Eventos em espécie ou em contas externas podem ser registrados manualmente, com prova e identificação da origem. Operações integradas são realizadas pelo provedor autorizado na conta legítima; nenhum lançamento manual executa Pix. Não confundir saldo contábil, saldo conferido, saldo bancário e patrimônio dos membros. O Master não recebe capital de terceiros.
 
-**1.8. Ambiente técnico existente.** React/TypeScript + Capacitor Android, FastAPI/Python, PostgreSQL 18 e GitHub Actions. Trabalhar no único repositório fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP, branch atualizacao-ai-studio-9b46a63187, PR #2 Draft, e no Termux nativo $HOME/fr-finance; banco 127.0.0.1:5433/frcaixinha_aistudio_dev. Identificadores técnicos históricos preservados por compatibilidade. Debian PRoot somente OCI quando pertinente. Sem novos clones, bancos, roles ou serviços; PG descartável em CI permitido. GitHub/CI, sincronização fast-forward autorizada e validação local. Segredos fora do Git; mínimo privilégio; backend fonte de verdade.
+**1.8. Ambiente técnico existente.** React/TypeScript + Capacitor Android, FastAPI/Python, PostgreSQL 18 e GitHub Actions. Trabalhar no único repositório fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP, branch atualizacao-ai-studio-9b46a63187, PR #2 Draft, e no Termux nativo $HOME/fr-finance; banco 127.0.0.1:5433/frcaixinha_aistudio_dev. Esses valores são identificadores operacionais existentes, mantidos para preservar sincronização e atualização instalada; não constituem marca do produto. Debian PRoot somente OCI quando pertinente. Sem novos clones, bancos, roles ou serviços; PG descartável em CI permitido. GitHub/CI, sincronização fast-forward autorizada e validação local. Segredos fora do Git; mínimo privilégio; backend fonte de verdade.
 
 **1.9. Desenvolvimento independente e orçamento inicial — DEFINIDO.** O idealizador, criador e desenvolvedor responsável nominalmente identificado é **Fábio Rossano Araújo Medeiros**, que conduz pessoalmente a concepção, o planejamento, a criação e a evolução do FR Finance com assistência das ferramentas de desenvolvimento.  O idealizador realizará pessoalmente planejamento, desenvolvimento, publicação, formalização, requerimentos e atendimento inicial, com assistência das ferramentas citadas; **sem
 
@@ -586,9 +588,9 @@ CPF/CNPJ validados; representante autorizado; identidade e titular contratual se
 - Operações com dinheiro real, Bolão e Rifa reais e cadastros reais estão desativados; os dois módulos demonstrativos são preservados; nenhum teste offline promove automaticamente uma funcionalidade a produção.
 
 ## 6. Linhagem documental e controle de alterações
-- **Fonte própria técnica atual:** [Contrato Técnico Mestre — FR Finance](CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md).
+- **Fonte própria técnica atual:** [Contrato Técnico Mestre — FR Finance](FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md).
 - **Inventário histórico:** [registro de 147 cláusulas](FR_FINANCE_M24000_CONTRACT_GAP_REGISTER_147.json) e [checkpoint histórico de 01/11/2026](CHECKPOINT_CONTRATO_2026-11-01.md).
-- Os dois PDFs históricos em `public/assets/aistudio/` são **referências históricas de origem**, não Caderno/Contrato atual do FR Finance. Mantê-los byte-idênticos e com nomes originais garante rastreabilidade.
+- Os documentos de origem arquivados são **referências históricas**, não o Caderno ou o Contrato vigentes do FR Finance. Mantê-los byte-idênticos e preservar seus hashes garante rastreabilidade sem promover seus nomes ou conteúdos a identidade atual.
 - As 147 cláusulas legadas são registro de pendências e conflitos, **não** 147 disposições automaticamente aprovadas para esta nova frente. Exige-se decisão por cláusula, revisão jurídica quando aplicável e prova de aceitação.
 - Documento sujeito a atualização versionada na branch autorizada. Não faz merge à `main`, não aplica SQL e não ativa usuários ou pagamentos.
 
@@ -612,11 +614,11 @@ CPF/CNPJ validados; representante autorizado; identidade e titular contratual se
 - **Elegibilidade técnica inicial:** administrador de tenant ativo, sem licença/preparação SaaS anterior, validado somente no servidor por função com contexto da sessão; listas de ofertas não mostram rascunhos, cancelamentos ou campanhas vencidas. A definição comercial detalhada de “novo administrador” poderá ser refinada sem prometer direitos ou descontos a outras categorias.
 - **Divulgação:** somente a seção interna de licenciamento do app. Criar rascunho não publica. Publicar não contrata, não fatura, não ativa licença, não envia e-mail/Brevo, SMS, WhatsApp ou push, e não automatiza desconto em pagamento.
 - **Validação de código:** GitHub Actions deve conferir catálogo/hash dos SQL112 e SQL113, contrato de autorização MASTER/TENANT_ADMIN, campo anual editável, filtros de vigência, rejeição de versão obsoleta, histórico de estado, API sem Pix/SMTP, regressão de UI e ausência de preços promocionais fictícios.
-- **Migração e homologação:** sincronizar somente o repositório original `~/fr-finance` por fast-forward; inspecionar PostgreSQL 18 original `127.0.0.1:5433/frcaixinha_aistudio_dev`, conservar backup e exigir aprovação interativa distinta antes de aplicar SQL112+SQL113 na mesma transação; revalidar RLS e preservação histórica. Não misturar projetos, não reaplicar migrations antigas, não ativar produção ou realizar cobranças reais.
+- **Migração e homologação:** sincronizar somente o repositório original `~/fr-finance` por fast-forward; inspecionar PostgreSQL 18 original `127.0.0.1:5433/frcaixinha_aistudio_dev`, conservar backup e exigir aprovação interativa distinta antes de aplicar SQL112+SQL113 na mesma transação; revalidar RLS e preservação histórica. Não importar dados ou código externo, não reaplicar migrations antigas, não ativar produção ou realizar cobranças reais.
 - **Plano Ampliado:** permanece bloqueado até teto de membros/cotas e decisão contratual específica. Preços de catálogos antigos são históricos, não piso obrigatório.
 - **Próximo gate antes da produção:** congelamento de oferta vinculada à versão de campanha, aceite inequívoco e documentado, consentimentos de comunicação, integração do provedor de cobrança e conciliação. A publicação informativa atual **não** completa esses requisitos.
 
-**Contraparte normativa:** [CTM-SAAS-01 a CTM-SAAS-09](CONTRATO_TECNICO_MESTRE_FR_FINANCE_AI_STUDIO.md). As fontes históricas PDF e o projeto independente não são alterados nesta frente.
+**Contraparte normativa:** [CTM-SAAS-01 a CTM-SAAS-09](FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md). Os documentos históricos de origem não são alterados por esta atualização de identidade.
 
 ## 9. Caixa exclusivo Master e Caixa exclusivo do Administrador — M39090 (consulta segura)
 - A plataforma mantém **Caixa Exclusivo do Administrador Master** para evidências de receitas SaaS e assinaturas, sem acesso a capital, saldos ou Livro-Razão de membros das caixinhas.
