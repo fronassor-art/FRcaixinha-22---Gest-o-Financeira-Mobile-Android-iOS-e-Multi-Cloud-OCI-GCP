@@ -1,11 +1,17 @@
-import React from "react";
+import React,{useState} from "react";
 import {buildFirstCaixinhaCalendarDraftV1} from "../services/firstCaixinhaCalendarDraftV1";
+import {
+  previewFirstCaixinhaCutoffV22,
+  type FirstCaixinhaCutoffChoiceV22,
+} from "../services/firstCaixinhaCutoffReviewV22";
 
 const DATE_LABEL=(value:string)=>value.split("-").reverse().join("/");
 
 /** Master-only planning card. It is not attached to a tenant or invitation. */
 export const FirstCaixinhaCalendarDraftPanel:React.FC=()=>{
   const plan=buildFirstCaixinhaCalendarDraftV1();
+  const [choice,setChoice]=useState<FirstCaixinhaCutoffChoiceV22|null>(null);
+  const cutoffPreview=previewFirstCaixinhaCutoffV22(plan,choice);
   return <section aria-label="Calendário planejado da primeira caixinha"
     className="fr-light-card space-y-3 rounded-2xl border border-[#d8c38d] p-4">
     <header>
@@ -30,11 +36,36 @@ export const FirstCaixinhaCalendarDraftPanel:React.FC=()=>{
     <div className="rounded-lg bg-[#fff8e7] p-3 text-xs text-[#6e4a18]">
       <p className="font-semibold">Antes de vincular esta proposta ao administrador</p>
       <ul className="mt-1 list-disc space-y-1 pl-4">
-        <li>Definir se o corte do Capital-Dias inclui 20/12/2027; o cálculo permanece bloqueado enquanto isso não for expresso.</li>
+        <li>O corte do Capital-Dias e a data de pagamento final são decisões separadas. Compare as opções abaixo; nenhuma vem pré-selecionada.</li>
         <li>Definir o valor da cota e a quantidade de cotas por membro; nenhuma cobrança é calculada nesta prévia.</li>
         <li>Os Contratos A (licença SaaS) e B (adesão da caixinha) continuam minutas V2.2, sem aceite habilitado.</li>
       </ul>
     </div>
+    <fieldset className="grid gap-2 rounded-lg border border-[#c8d7cd] bg-white p-3">
+      <legend className="px-1 text-sm font-semibold">Comparar o corte do Capital-Dias</legend>
+      <label className="flex items-start gap-2 text-sm">
+        <input aria-label="Excluir 20/12/2027 do corte do Capital-Dias" className="mt-1"
+          type="radio" name="first-caixinha-cutoff" value="EXCLUDE_FINAL_PAYMENT_DATE"
+          checked={choice==="EXCLUDE_FINAL_PAYMENT_DATE"}
+          onChange={()=>setChoice("EXCLUDE_FINAL_PAYMENT_DATE")}/>
+        <span>Excluir 20/12/2027: fim exclusivo em 20/12/2027.</span>
+      </label>
+      <label className="flex items-start gap-2 text-sm">
+        <input aria-label="Incluir 20/12/2027 no corte do Capital-Dias" className="mt-1"
+          type="radio" name="first-caixinha-cutoff" value="INCLUDE_FINAL_PAYMENT_DATE"
+          checked={choice==="INCLUDE_FINAL_PAYMENT_DATE"}
+          onChange={()=>setChoice("INCLUDE_FINAL_PAYMENT_DATE")}/>
+        <span>Incluir 20/12/2027: fim exclusivo em 21/12/2027.</span>
+      </label>
+    </fieldset>
+    {cutoffPreview.choice===null?<p role="status" className="text-xs text-[#6e4a18]">
+      Selecione uma opção para comparar a duração. Sem seleção, o corte permanece em aberto.
+    </p>:<div role="status" aria-live="polite" className="rounded-lg bg-[#f2f7f3] p-3 text-sm text-[#123d2b]">
+      <p className="font-semibold">Prévia temporária · {cutoffPreview.capitalDaysCalendarDays} dias civis</p>
+      <p>Janela [ {DATE_LABEL(cutoffPreview.capitalDaysStartInclusive)}, {DATE_LABEL(cutoffPreview.capitalDaysEndExclusive!)} ).
+        O dia 20/12/2027 {cutoffPreview.finalPaymentDateIncluded?"entra":"não entra"} nesta comparação.</p>
+      <p className="mt-1 text-xs">Esta escolha existe só nesta tela: não registra aceite, não salva política e não habilita cálculo financeiro.</p>
+    </div>}
     <details className="rounded-lg border border-[#c8d7cd] bg-white p-3">
       <summary className="cursor-pointer text-sm font-semibold">Conferir a sequência prevista</summary>
       <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm">

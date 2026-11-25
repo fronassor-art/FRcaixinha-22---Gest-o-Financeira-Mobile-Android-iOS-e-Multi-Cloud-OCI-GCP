@@ -1,0 +1,48 @@
+name: FR Finance M41020 first caixinha cutoff review CI
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - ".github/workflows/frfinance-m41020-first-caixinha-cutoff-review-ci.yml"
+      - ".github/workflows/validacao-atualizacao.yml"
+      - "docs/FR_FINANCE_M41020_FIRST_CAIXINHA_CUTOFF_REVIEW.md"
+      - "src/components/FirstCaixinhaCalendarDraftPanel.tsx"
+      - "src/services/firstCaixinhaCalendarDraftV1.ts"
+      - "src/services/firstCaixinhaCutoffReviewV22.ts"
+      - "src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts"
+      - "src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/frfinance-m41020-first-caixinha-cutoff-review-ci.yml"
+      - ".github/workflows/validacao-atualizacao.yml"
+      - "docs/FR_FINANCE_M41020_FIRST_CAIXINHA_CUTOFF_REVIEW.md"
+      - "src/components/FirstCaixinhaCalendarDraftPanel.tsx"
+      - "src/services/firstCaixinhaCalendarDraftV1.ts"
+      - "src/services/firstCaixinhaCutoffReviewV22.ts"
+      - "src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts"
+      - "src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  first-caixinha-cutoff-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - name: M41000 calendario first caixinha
+        run: npx tsx src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts
+      - name: M41020 comparar corte sem aceite financeiro
+        run: npx tsx src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts
