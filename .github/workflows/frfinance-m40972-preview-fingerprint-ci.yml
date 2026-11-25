@@ -1,0 +1,39 @@
+name: FR Finance M40972 preview fingerprint optional fields CI
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/tests/m40972_preview_fingerprint_optional_fields.test.ts"
+      - ".github/workflows/frfinance-m40972-preview-fingerprint-ci.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/tests/m40972_preview_fingerprint_optional_fields.test.ts"
+      - ".github/workflows/frfinance-m40972-preview-fingerprint-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-fingerprint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/m40972_preview_fingerprint_optional_fields.test.ts

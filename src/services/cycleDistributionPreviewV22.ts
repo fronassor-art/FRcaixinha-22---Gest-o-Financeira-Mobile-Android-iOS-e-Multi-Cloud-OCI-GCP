@@ -71,10 +71,14 @@ function canonicalJson(value: unknown): string {
     if (encoded === undefined) return fail("NON_CANONICAL_INPUT");
     return encoded;
   }
-  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  if (typeof value === "number" && !Number.isFinite(value)) return fail("NON_CANONICAL_INPUT");
+  if (Array.isArray(value)) {
+    return "[" + Array.from(value, item => item === undefined ? "null" : canonicalJson(item)).join(",") + "]";
+  }
   if (typeof value !== "object") return fail("NON_CANONICAL_INPUT");
   const record = value as Record<string, unknown>;
-  return "{" + Object.keys(record).sort()
+  const keys = Object.keys(record).filter(key => record[key] !== undefined).sort();
+  return "{" + keys
     .map(key => JSON.stringify(key) + ":" + canonicalJson(record[key]))
     .join(",") + "}";
 }
