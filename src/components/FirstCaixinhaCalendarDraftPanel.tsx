@@ -1,5 +1,6 @@
 import React,{useState} from "react";
 import {buildFirstCaixinhaCalendarDraftV1} from "../services/firstCaixinhaCalendarDraftV1";
+import {previewFirstCaixinhaCloseIntervalV22} from "../services/firstCaixinhaCloseIntervalV22";
 import {
   previewFirstCaixinhaCutoffV22,
   type FirstCaixinhaCutoffChoiceV22,
@@ -10,6 +11,7 @@ const DATE_LABEL=(value:string)=>value.split("-").reverse().join("/");
 /** Master-only planning card. It is not attached to a tenant or invitation. */
 export const FirstCaixinhaCalendarDraftPanel:React.FC=()=>{
   const plan=buildFirstCaixinhaCalendarDraftV1();
+  const closeIntervalPreview=previewFirstCaixinhaCloseIntervalV22(plan);
   const [choice,setChoice]=useState<FirstCaixinhaCutoffChoiceV22|null>(null);
   const cutoffPreview=previewFirstCaixinhaCutoffV22(plan,choice);
   return <section aria-label="Calendário planejado da primeira caixinha"
@@ -25,7 +27,11 @@ export const FirstCaixinhaCalendarDraftPanel:React.FC=()=>{
       <div><dt className="font-semibold">Última contribuição prevista</dt><dd>{DATE_LABEL(plan.lastContributionDate)}</dd></div>
       <div><dt className="font-semibold">Dia de vencimento mensal</dt><dd>Dia {plan.contributionDueDay} · {plan.contributionCount} datas</dd></div>
       <div><dt className="font-semibold">Encerramento e pagamento final informado</dt><dd>{DATE_LABEL(plan.closeAndFinalPaymentDate)}</dd></div>
+      <div aria-label="Intervalo entre última contribuição e encerramento"><dt className="font-semibold">Intervalo após a última contribuição</dt><dd>{closeIntervalPreview.elapsedCalendarDaysBetweenDates} dias civis</dd></div>
     </dl>
+    <p className="text-xs text-[#52695b]">
+      São {closeIntervalPreview.elapsedCalendarDaysBetweenDates} dias civis entre as datas. Isso não cria vencimento adicional, não define o corte do Capital-Dias e não habilita cálculo financeiro.
+    </p>
     <details className="rounded-lg border border-[#c8d7cd] bg-white p-3">
       <summary className="cursor-pointer text-sm font-semibold">Conferir as 12 datas mensais</summary>
       <ol className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2"
