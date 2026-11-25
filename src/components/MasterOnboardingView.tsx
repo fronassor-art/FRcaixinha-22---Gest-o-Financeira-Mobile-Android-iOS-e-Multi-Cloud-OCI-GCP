@@ -12,6 +12,7 @@ import {MasterWorkflowAuditView} from './MasterWorkflowAuditView';
 import {MasterPermissionMatrixView} from './MasterPermissionMatrixView';
 import {ContractReviewPanel} from './ContractReviewPanel';
 import {LaunchReadinessPanel} from './LaunchReadinessPanel';
+import {FirstCaixinhaCalendarDraftPanel} from './FirstCaixinhaCalendarDraftPanel';
 
 const LABELS:Record<string,string>={
   MASTER_MFA:'Segundo fator do proprietário',
@@ -147,6 +148,8 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
         Modo homologação · execução real bloqueada
       </p>
     </header>
+
+    <FirstCaixinhaCalendarDraftPanel/>
 
     {current.status==='loading'&&<p role="status">Consultando requisitos do servidor...</p>}
     {current.status==='error'&&<div role="alert" className="fr-light-card rounded-xl p-4">

@@ -1,0 +1,41 @@
+name: FR Finance M41000 primeira caixinha calendar draft
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - '.github/workflows/frfinance-m41000-first-caixinha-calendar-draft-ci.yml'
+      - 'src/services/firstCaixinhaCalendarDraftV1.ts'
+      - 'src/components/FirstCaixinhaCalendarDraftPanel.tsx'
+      - 'src/components/MasterOnboardingView.tsx'
+      - 'src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts'
+      - 'docs/FR_FINANCE_M41000_FIRST_CAIXINHA_CALENDAR_DRAFT.md'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/frfinance-m41000-first-caixinha-calendar-draft-ci.yml'
+      - 'src/services/firstCaixinhaCalendarDraftV1.ts'
+      - 'src/components/FirstCaixinhaCalendarDraftPanel.tsx'
+      - 'src/components/MasterOnboardingView.tsx'
+      - 'src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts'
+      - 'docs/FR_FINANCE_M41000_FIRST_CAIXINHA_CALENDAR_DRAFT.md'
+permissions:
+  contents: read
+jobs:
+  first-caixinha-calendar-draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx tsx src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts
+      - run: npm run lint
