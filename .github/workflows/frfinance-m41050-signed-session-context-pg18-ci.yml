@@ -1,0 +1,70 @@
+name: FR Finance M41050 signed SQL session context PG18 disposable
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/m41050_session_context_seal_prototype.py'
+      - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
+      - 'backend/tests/test_m41050_session_context_seal_ci.py'
+      - '.github/workflows/frfinance-m41050-signed-session-context-pg18-ci.yml'
+      - 'docs/FR_FINANCE_M41050_SQL_SIGNED_SESSION_CONTEXT_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/m41050_session_context_seal_prototype.py'
+      - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
+      - 'backend/tests/test_m41050_session_context_seal_ci.py'
+      - '.github/workflows/frfinance-m41050-signed-session-context-pg18-ci.yml'
+      - 'docs/FR_FINANCE_M41050_SQL_SIGNED_SESSION_CONTEXT_NO_GO.md'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m41050_session_context_seal_ci.py
+
+  pg18-disposable:
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m41050_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m41050_disposable_ci
+        ports:
+          - 55450:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m41050_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      CI_M41050_DISPOSABLE: '1'
+      CI_M41050_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55450/fr_m41050_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'psycopg[binary]==3.2.4'
+      - run: python -B backend/tests/m41050_sql_sealed_context_pg18_disposable.py
