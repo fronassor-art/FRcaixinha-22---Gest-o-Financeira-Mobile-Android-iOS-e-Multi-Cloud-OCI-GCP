@@ -18,6 +18,7 @@ const example={
   status:'BLOCKED',source:'SOURCE_ONLY_NOT_RUNTIME_ATTESTED',
   plan_available:true,total_tasks:34,pending_tasks:expectedPending,phases,
 };
+assert.equal(expectedPending,30);
 assert.equal(parseSupermacroReadiness(example).pending_tasks,expectedPending);
 assert.equal(parseSupermacroReadiness(undefined).status,'BLOCKED');
 assert.equal(parseSupermacroReadiness(undefined).plan_available,false);
