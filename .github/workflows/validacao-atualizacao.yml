@@ -55,6 +55,9 @@ on:
       - 'src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts'
       - 'src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts'
       - '.github/workflows/frfinance-m41030-first-caixinha-closing-interval-ci.yml'
+      - 'docs/FR_FINANCE_M41040_FIRST_CAIXINHA_ONBOARDING_SEQUENCE.md'
+      - 'src/services/firstCaixinhaOnboardingSequenceV1.ts'
+      - 'src/tests/m41040_first_caixinha_onboarding_sequence_ci.test.ts'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
       - 'src/services/firstCaixinhaCloseIntervalV22.ts'
       - 'src/tests/m41030_first_caixinha_closing_interval_ci.test.ts'
@@ -114,6 +117,8 @@ jobs:
         run: npx tsx src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts
       - name: M41030 — intervalo de calendário da primeira caixinha
         run: npx tsx src/tests/m41030_first_caixinha_closing_interval_ci.test.ts
+      - name: M41040 — roteiro de adesão em modo somente leitura
+        run: npx tsx src/tests/m41040_first_caixinha_onboarding_sequence_ci.test.ts
       - name: Testes de identidade única, contexto e concorrência no cliente
         run: npx tsx src/tests/auth_context_security.test.ts
       - name: Testar cliente dos tres perfis no APK

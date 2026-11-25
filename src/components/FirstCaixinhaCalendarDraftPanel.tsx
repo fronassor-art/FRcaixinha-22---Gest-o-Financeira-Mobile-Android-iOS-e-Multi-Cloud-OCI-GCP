@@ -1,6 +1,7 @@
 import React,{useState} from "react";
 import {buildFirstCaixinhaCalendarDraftV1} from "../services/firstCaixinhaCalendarDraftV1";
 import {previewFirstCaixinhaCloseIntervalV22} from "../services/firstCaixinhaCloseIntervalV22";
+import {FIRST_CAIXINHA_ONBOARDING_SEQUENCE_V1} from "../services/firstCaixinhaOnboardingSequenceV1";
 import {
   previewFirstCaixinhaCutoffV22,
   type FirstCaixinhaCutoffChoiceV22,
@@ -73,14 +74,22 @@ export const FirstCaixinhaCalendarDraftPanel:React.FC=()=>{
       <p className="mt-1 text-xs">Esta escolha existe só nesta tela: não registra aceite, não salva política e não habilita cálculo financeiro.</p>
     </div>}
     <details className="rounded-lg border border-[#c8d7cd] bg-white p-3">
-      <summary className="cursor-pointer text-sm font-semibold">Conferir a sequência prevista</summary>
-      <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm">
-        <li><strong>Master:</strong> preparar e enviar o convite do administrador — emissão real ainda bloqueada.</li>
-        <li><strong>Administrador convidado:</strong> cadastrar-se, revisar o Contrato A e pagar a licença SaaS somente após publicação da oferta e liberação do provedor.</li>
-        <li><strong>Administrador da caixinha:</strong> revisar e aceitar o Contrato B com o calendário e os valores próprios desta caixinha.</li>
-        <li><strong>Membros:</strong> receber convite, cadastrar-se, aceitar o Contrato B e pagar as contribuições à conta legítima indicada pela administração da caixinha.</li>
+      <summary className="cursor-pointer text-sm font-semibold">Ver as 9 etapas e os bloqueios</summary>
+      <ol className="mt-2 grid gap-2" aria-label="Sequência planejada de adesão da primeira caixinha">
+        {FIRST_CAIXINHA_ONBOARDING_SEQUENCE_V1.map((step,index)=><li key={step.id}
+          data-readiness={step.status}
+          className="rounded-lg border border-[#d8e2da] bg-white p-3">
+          <h4 className="text-sm font-semibold text-[#123d2b]">
+            {index+1}. {step.actor}: {step.title}
+          </h4>
+          <p className="mt-1 text-xs text-[#52695b]">{step.description}</p>
+          <p className="mt-1 text-xs font-semibold text-[#8a3828]">Bloqueado nesta versão.</p>
+          <p className="mt-1 text-xs text-[#6e4a18]">{step.blocker}</p>
+        </li>)}
       </ol>
-      <p className="mt-2 text-xs text-[#52695b]">A assinatura do FR Finance e as contribuições da caixinha são contratos e pagamentos distintos.</p>
+      <p className="mt-2 text-xs text-[#52695b]">
+        A licença SaaS é independente do caixa da caixinha. Os requisitos de adesão, segurança, provedor e homologação continuam pendentes; este roteiro não registra progresso.
+      </p>
     </details>
     <p role="note" className="text-xs font-semibold text-[#8a3828]">
       Prévia sem efeitos: não abre ciclo, não aceita contrato, não cria convite, não cobra licença ou cotas e não executa pagamento.

@@ -1,4 +1,4 @@
-name: FR Finance M41030 first caixinha closing interval CI
+name: FR Finance M41030/M41040 first caixinha CI
 
 on:
   push:
@@ -8,13 +8,16 @@ on:
       - ".github/workflows/frfinance-m41030-first-caixinha-closing-interval-ci.yml"
       - ".github/workflows/validacao-atualizacao.yml"
       - "docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md"
+      - "docs/FR_FINANCE_M41040_FIRST_CAIXINHA_ONBOARDING_SEQUENCE.md"
       - "src/components/FirstCaixinhaCalendarDraftPanel.tsx"
       - "src/services/firstCaixinhaCalendarDraftV1.ts"
       - "src/services/firstCaixinhaCloseIntervalV22.ts"
+      - "src/services/firstCaixinhaOnboardingSequenceV1.ts"
       - "src/services/firstCaixinhaCutoffReviewV22.ts"
       - "src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts"
       - "src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts"
       - "src/tests/m41030_first_caixinha_closing_interval_ci.test.ts"
+      - "src/tests/m41040_first_caixinha_onboarding_sequence_ci.test.ts"
   pull_request:
     branches:
       - main
@@ -22,13 +25,16 @@ on:
       - ".github/workflows/frfinance-m41030-first-caixinha-closing-interval-ci.yml"
       - ".github/workflows/validacao-atualizacao.yml"
       - "docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md"
+      - "docs/FR_FINANCE_M41040_FIRST_CAIXINHA_ONBOARDING_SEQUENCE.md"
       - "src/components/FirstCaixinhaCalendarDraftPanel.tsx"
       - "src/services/firstCaixinhaCalendarDraftV1.ts"
       - "src/services/firstCaixinhaCloseIntervalV22.ts"
+      - "src/services/firstCaixinhaOnboardingSequenceV1.ts"
       - "src/services/firstCaixinhaCutoffReviewV22.ts"
       - "src/tests/m41000_first_caixinha_calendar_draft_ci.test.ts"
       - "src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts"
       - "src/tests/m41030_first_caixinha_closing_interval_ci.test.ts"
+      - "src/tests/m41040_first_caixinha_onboarding_sequence_ci.test.ts"
   workflow_dispatch:
 
 permissions:
@@ -52,3 +58,5 @@ jobs:
         run: npx tsx src/tests/m41020_first_caixinha_cutoff_review_ci.test.ts
       - name: M41030 intervalo entre contribuição final e encerramento
         run: npx tsx src/tests/m41030_first_caixinha_closing_interval_ci.test.ts
+      - name: M41040 roteiro de adesão em modo somente leitura
+        run: npx tsx src/tests/m41040_first_caixinha_onboarding_sequence_ci.test.ts
