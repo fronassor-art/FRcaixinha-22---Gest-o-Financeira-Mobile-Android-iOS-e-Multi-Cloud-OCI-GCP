@@ -25,7 +25,7 @@ const policy: AcceptedCycleDistributionPolicyV22 = {
 };
 const revenue: ProfitBasisLineV22 = {
   ...scope, lineId: "revenue-1", kind: "REALIZED_REVENUE", status: "CONFIRMED",
-  currency: "BRL", amountCents: 10001, competenceDate: "2025-06-01",
+  currency: "BRL", amountCents: 10000, competenceDate: "2025-06-01",
   recognizedDate: "2025-06-01", financialDate: "2025-06-01",
   reconciled: true, policyAccepted: true, evidenceRef: "receipt:1", authorizationRef: null,
 };
@@ -45,11 +45,11 @@ const result = calculateCycleDistributionPreviewV22(input());
 assert.equal(result.preview, "CYCLE_DISTRIBUTION_SOURCE_ONLY");
 assert.equal(result.executionAuthorized, false);
 assert.equal(result.policyAttestation, "CALLER_SUPPLIED_NOT_AUTHENTICATED");
-assert.equal(result.calculation.profitBasis.distributableNetProfitCents, "10001");
+assert.equal(result.calculation.profitBasis.distributableNetProfitCents, "10000");
 assert.equal(result.calculation.capitalDays.adminShareCents, "0");
-assert.equal(result.calculation.capitalDays.memberPoolCents, "10001");
+assert.equal(result.calculation.capitalDays.memberPoolCents, "10000");
 assert.equal(result.calculation.capitalDays.members.reduce(
-  (sum, row) => sum + BigInt(row.memberShareCents), 0n), 10001n);
+  (sum, row) => sum + BigInt(row.memberShareCents), 0n), 10000n);
 assert.equal(result.calculation.capitalDays.members.find(row => row.membershipId === "member-a")
   ?.residualCentAssigned, true);
 assert.equal(result.calculation.capitalDays.members.find(row => row.membershipId === "member-b")
@@ -58,7 +58,7 @@ assert.equal(result.calculation.capitalDays.members.find(row => row.membershipId
 const emptyWeights = calculateCycleDistributionPreviewV22(input({
   members: [ {...member("no-eligible-capital", 0), eligibilityPeriods: []} ],
 }));
-assert.equal(emptyWeights.calculation.capitalDays.memberPoolPendingCents, "10001");
+assert.equal(emptyWeights.calculation.capitalDays.memberPoolPendingCents, "10000");
 assert.equal(emptyWeights.calculation.capitalDays.adminShareCents, "0");
 assert.equal(emptyWeights.calculation.capitalDays.members[0].memberShareCents, "0");
 
