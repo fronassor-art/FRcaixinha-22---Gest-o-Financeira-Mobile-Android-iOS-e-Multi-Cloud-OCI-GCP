@@ -1,8 +1,8 @@
 /**
- * M40965–M40966 — source-only Capital-Dias V2 calculation and scope fence.
+ * M40965–M40969 — source-only Capital-Dias V2 calculation and scope/reversal fences.
  * Pure integer-cent preview for one cycle. It does not authorize or settle money.
  */
-export type CapitalEventKindV22 = "CONTRIBUTION" | "RESTITUTION";
+export type CapitalEventKindV22 = "CONTRIBUTION" | "RESTITUTION" | "REVERSAL";
 export type CapitalEventStatusV22 = "CONFIRMED" | "PENDING" | "REVERSED";
 
 export interface CapitalEventV22 {
@@ -14,6 +14,7 @@ export interface CapitalEventV22 {
   kind: CapitalEventKindV22;
   amountCents: number; // positive integer; returns use RESTITUTION
   status: CapitalEventStatusV22;
+  reversesEventId?: string; // required for REVERSAL; links the immutable compensating event to its target
 }
 
 export interface EligibilityPeriodV22 {
@@ -194,6 +195,12 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
     }
 
     const deltas = new Map<number, bigint>();
+    const memberEventsById = new Map<string, {
+      event: CapitalEventV22;
+      day: number;
+      amount: bigint;
+    }>();
+
     for (const event of member.events) {
       if (event !== null && typeof event === "object"
           && (event.tenantId !== tenantId || event.cycleId !== cycleId)) {
@@ -207,7 +214,7 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
           || typeof event.eventId !== "string"
           || event.eventId.trim().length === 0
           || eventIds.has(event.eventId)
-          || (event.kind !== "CONTRIBUTION" && event.kind !== "RESTITUTION")
+          || (event.kind !== "CONTRIBUTION" && event.kind !== "RESTITUTION" && event.kind !== "REVERSAL")
           || (event.status !== "CONFIRMED" && event.status !== "PENDING" && event.status !== "REVERSED")) {
         return fail("INVALID_CAPITAL_EVENT");
       }
@@ -215,8 +222,50 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
       const day = dayNumber(event.effectiveDate);
       if (day < start || day >= end) return fail("CAPITAL_EVENT_OUTSIDE_CYCLE");
       const amount = requirePositiveSafeInteger(event.amountCents, "INVALID_CAPITAL_EVENT_AMOUNT");
+      memberEventsById.set(event.eventId, {event, day, amount});
+    }
+
+    const reversalTargets = new Set<string>();
+    for (const {event, day, amount} of memberEventsById.values()) {
+      if (event.kind !== "REVERSAL") {
+        if (event.reversesEventId !== undefined) return fail("UNEXPECTED_REVERSAL_REFERENCE");
+        continue;
+      }
+      if (!validScopeId(event.reversesEventId)) return fail("INVALID_REVERSAL_REFERENCE");
+      const target = memberEventsById.get(event.reversesEventId);
+      if (!target) return fail("REVERSAL_TARGET_NOT_FOUND");
+      if (target.event.status !== "CONFIRMED") return fail("REVERSAL_TARGET_NOT_CONFIRMED");
+      if (target.day > day) return fail("REVERSAL_BEFORE_TARGET");
+      if (target.amount !== amount) return fail("REVERSAL_AMOUNT_MISMATCH");
+      if (reversalTargets.has(event.reversesEventId)) return fail("DUPLICATE_EVENT_REVERSAL");
+      reversalTargets.add(event.reversesEventId);
+    }
+
+    const signedAmounts = new Map<string, bigint>();
+    const resolving = new Set<string>();
+    const signedAmountFor = (eventId: string): bigint => {
+      const cached = signedAmounts.get(eventId);
+      if (cached !== undefined) return cached;
+      if (resolving.has(eventId)) return fail("REVERSAL_CYCLE");
+      const current = memberEventsById.get(eventId);
+      if (!current) return fail("REVERSAL_TARGET_NOT_FOUND");
+      resolving.add(eventId);
+      let signed: bigint;
+      if (current.event.kind === "CONTRIBUTION") {
+        signed = current.amount;
+      } else if (current.event.kind === "RESTITUTION") {
+        signed = -current.amount;
+      } else {
+        signed = -signedAmountFor(current.event.reversesEventId!);
+      }
+      resolving.delete(eventId);
+      signedAmounts.set(eventId, signed);
+      return signed;
+    };
+
+    for (const {event, day} of memberEventsById.values()) {
       if (event.status === "CONFIRMED") {
-        const signed = event.kind === "CONTRIBUTION" ? amount : -amount;
+        const signed = signedAmountFor(event.eventId);
         deltas.set(day, (deltas.get(day) ?? 0n) + signed);
       }
     }
@@ -352,6 +401,7 @@ export async function createCapitalDaysPreviewEnvelopeV22(
             kind: event.kind,
             amountCents: event.amountCents,
             status: event.status,
+            reversesEventId: event.reversesEventId ?? null,
           }))
           .sort((a, b) => compareId(a.effectiveDate, b.effectiveDate)
             || compareId(a.eventId, b.eventId)),
