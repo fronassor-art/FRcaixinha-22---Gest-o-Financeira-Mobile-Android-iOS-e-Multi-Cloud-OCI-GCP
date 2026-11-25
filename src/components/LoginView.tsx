@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ContractModelPreviewV22 } from './ContractModelPreviewV22';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Users, BriefcaseBusiness, AlertCircle } from 'lucide-react';
 import { authService, AuthenticatedUser, getApiBaseUrl, isNativeMobilePlatform } from '../services/authService';
 import {inspectMobileBackend, interpretAuthenticationStatus} from '../services/mobileBackendDiagnostics';
@@ -437,6 +438,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
             </div>
           )}
         </section>
+
+        <div className="mt-4"><ContractModelPreviewV22 kind="SAAS_LICENSE" /></div>
 
         {backendProfile.mobile && (
           <section aria-label="Diagnóstico do servidor móvel" className="mt-4 rounded-xl border border-amber-500/40 bg-[#123d2b] p-3 text-xs text-emerald-50">

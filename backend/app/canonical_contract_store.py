@@ -49,10 +49,12 @@ def _read_immutable_document(document_id: UUID, expected_digest: str, root_setti
         if not stat.S_ISDIR(root_stat.st_mode) or root_stat.st_mode & 0o022:
             raise ContractBodyUnavailable()
         filename = str(document_id) + ".txt"
-        doc_fd = os.open(filename, flags, dir_fd=root_fd)
+        # A FIFO must not block a request before fstat rejects its type.
+        doc_fd = os.open(filename, flags | os.O_NONBLOCK, dir_fd=root_fd)
         doc_stat = os.fstat(doc_fd)
         if (not stat.S_ISREG(doc_stat.st_mode)
                 or doc_stat.st_mode & 0o222
+                or doc_stat.st_nlink != 1
                 or doc_stat.st_size < 1
                 or doc_stat.st_size > MAX_BYTES):
             raise ContractBodyUnavailable()
@@ -62,8 +64,23 @@ def _read_immutable_document(document_id: UUID, expected_digest: str, root_setti
             if (root_stat.st_uid == os.geteuid()
                     or doc_stat.st_uid == os.geteuid()):
                 raise ContractBodyUnavailable()
-        raw = os.read(doc_fd, MAX_BYTES + 1)
-        if not (0 < len(raw) <= MAX_BYTES):
+        # A single read can legally be short. Never exceed the byte cap.
+        buffer = bytearray()
+        while len(buffer) <= MAX_BYTES:
+            chunk = os.read(doc_fd, min(8192, MAX_BYTES + 1 - len(buffer)))
+            if not chunk:
+                break
+            buffer.extend(chunk)
+        raw = bytes(buffer)
+        after = os.fstat(doc_fd)
+        if (not 0 < len(raw) <= MAX_BYTES
+                or len(raw) != doc_stat.st_size
+                or after.st_size != doc_stat.st_size
+                or after.st_mode != doc_stat.st_mode
+                or after.st_nlink != 1
+                or after.st_uid != doc_stat.st_uid
+                or after.st_mtime_ns != doc_stat.st_mtime_ns
+                or after.st_ctime_ns != doc_stat.st_ctime_ns):
             raise ContractBodyUnavailable()
         if not hmac.compare_digest(sha256(raw).hexdigest(), expected_digest):
             raise ContractBodyUnavailable()
@@ -97,6 +114,8 @@ async def load_published_contract_body(*, session, payload, conn,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Documento indisponível.")
+    if row["id"] != payload.required_document_id or type(row["sha256"]) is not str:
+        raise HTTPException(status_code=503, detail="Metadados contratuais inconsistentes.")
     root = content_root if content_root is not None else os.getenv("FR_FINANCE_CANONICAL_CONTRACT_DIR", "")
     try:
         content = await asyncio.to_thread(

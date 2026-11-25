@@ -221,3 +221,21 @@ def test_body_read_routes_require_rls_not_ci_only():
     assert "register_new_invited_identity_ci" not in route
     assert "UPDATE public" not in service
     assert "INSERT INTO public" not in service
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("problem", ["wrong_document", "invalid_digest"])
+async def test_m40962_inconsistent_metadata_rejected_before_file_access(monkeypatch, problem):
+    tenant, document = uuid4(), uuid4()
+    conn = SelectOnly(uuid4() if problem == "wrong_document" else document,
+                      digest=42 if problem == "invalid_digest" else DIGEST)
+    from app import canonical_contract_store as service
+    def unexpected_read(*args):
+        raise AssertionError("inconsistent metadata reached the filesystem")
+    monkeypatch.setattr(service, "_read_immutable_document", unexpected_read)
+    with pytest.raises(HTTPException) as exc:
+        await service.load_published_contract_body(
+            session=actor(tenant=tenant), payload=request(tenant, document),
+            conn=conn, content_root="/never-read",
+        )
+    assert exc.value.status_code == 503

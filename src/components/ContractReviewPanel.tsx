@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {ContractModelPreviewV22} from './ContractModelPreviewV22';
 import {financialApi} from '../services/financialApiService';
 import {authService, type AuthSessionSnapshot} from '../services/authService';
 import {contractReviewScopeKey} from '../services/contractReviewBoundary';
@@ -151,6 +152,11 @@ export const ContractReviewPanel: React.FC<Props> = ({role, tenantId}) => {
       <p className="text-xs text-[#53695b]">
         O texto fornecido será enviado à API para comparação exata de SHA-256,
         mas não será salvo por esta tela.
+      </p>
+      {scope && <ContractModelPreviewV22 kind={memberInvite?'MEMBER_ADHESION':'SAAS_LICENSE'} />}
+      <p className="text-xs text-[#53695b]">
+        A conferência abaixo usa o catálogo legado de adesão geral. Não confirma
+        vínculo individual com caixinha/ciclo, nem substitui a licença comercial A.
       </p>
       {!scope && <p role="status" className="text-xs text-[#914c13]">
         Revise sua sessão e o perfil autorizado antes de consultar contratos.
