@@ -3,7 +3,7 @@
   "project": "FR Finance",
   "repository": "fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP",
   "branch": "atualizacao-ai-studio-9b46a63187",
-  "as_of": "2026-11-23",
+  "as_of": "2026-11-25",
   "release_decision": "NO_GO",
   "production_enabled": false,
   "pix_real": "OFF",
@@ -230,31 +230,31 @@
     {
       "id": "M40936_ACL_DISPOSABLE",
       "category": "sql",
-      "status": "CI_PENDING",
+      "status": "DONE_SOURCE_ONLY",
       "depends_on": [
         "M40930_MASTER_WRITE_HTTP"
       ],
-      "next_action": "Obter sucesso da etapa adversarial PostgreSQL 18 descartavel.",
+      "next_action": "Manter ensaio descartável como evidência limitada; GUC spoof de leitura continua sem solução.",
       "production_verified": false
     },
     {
       "id": "M40937_MASTER_NO_GO_UI",
       "category": "android",
-      "status": "CI_PENDING",
+      "status": "DONE_SOURCE_ONLY",
       "depends_on": [
         "M40930_MASTER_WRITE_HTTP"
       ],
-      "next_action": "Obter sucesso CI frontend/backend e testar em APK fisico.",
+      "next_action": "Manter painel em NO-GO; homologar visualmente o APK físico em etapa separada.",
       "production_verified": false
     },
     {
       "id": "M40938_MASTER_HTTP_RBAC",
       "category": "api",
-      "status": "CI_PENDING",
+      "status": "DONE_SOURCE_ONLY",
       "depends_on": [
         "M40937_MASTER_NO_GO_UI"
       ],
-      "next_action": "Obter sucesso CI FastAPI TestClient sem conexao DB.",
+      "next_action": "Preservar auditoria HTTP read-only; não integrar como autoridade sem custódia independente.",
       "production_verified": false
     },
     {
@@ -331,5 +331,17 @@
       "next_action": "Contrato PSP, OAuth, webhook, reconciliacao e permissoes do provedor ainda nao aprovados.",
       "production_verified": false
     }
-  ]
+  ],
+  "last_operator_termux_checkpoint": {
+    "observed_on": "2026-11-25",
+    "checkpoint": "M40941",
+    "sha": "ae4021d696a1",
+    "status": "PASS_SOURCE_ONLY_NO_GO",
+    "runtime": "NOT_RELOADED_OR_ATTESTED",
+    "database_connections": "NONE",
+    "database_writes": "NONE",
+    "migrations": "NONE",
+    "service_restarts": "NONE",
+    "production": "BLOCKED"
+  }
 }
