@@ -23,7 +23,7 @@ interface GitHubSyncModalProps {
 }
 
 export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({ isOpen, onClose }) => {
-  const [repoUrl, setRepoUrl] = useState('https://github.com/SEU_USUARIO/FR Finance-22.git');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP.git');
   const [githubToken, setGithubToken] = useState('');
   const [copiedScript, setCopiedScript] = useState(false);
   const [isZipping, setIsZipping] = useState(false);
@@ -33,9 +33,9 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const terminalScript = `# 1. Acesse https://github.com/new e crie o repositório "FR Finance-22"
+  const terminalScript = `# 1. Acesse https://github.com/new e crie o repositório "FRcaixinha-22"
 # 2. No terminal do projeto, execute:
-git remote add origin ${repoUrl || 'https://github.com/SEU_USUARIO/FR Finance-22.git'}
+git remote add origin ${repoUrl || 'https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP.git'}
 git branch -M main
 git push -u origin main`;
 
@@ -186,7 +186,7 @@ git push -u origin main`;
                   type="text"
                   value={repoUrl}
                   onChange={e => setRepoUrl(e.target.value)}
-                  placeholder="https://github.com/seu-usuario/FR Finance-22.git"
+                  placeholder="https://github.com/seu-usuario/FRcaixinha-22.git"
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:border-indigo-500 focus:outline-none"
                 />
               </div>

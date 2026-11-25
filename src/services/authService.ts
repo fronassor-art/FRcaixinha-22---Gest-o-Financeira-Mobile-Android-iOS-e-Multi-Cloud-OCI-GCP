@@ -484,7 +484,7 @@ class AuthService {
   public invalidateSession(): void {
     this.clearSession();
     this.notify();
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('FR Finance:session-expired'));
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('frcaixinha:session-expired'));
   }
 
   public async logout(): Promise<void> {
@@ -608,7 +608,7 @@ class AuthService {
     this.clearSession();
     this.notify();
     // Dispatch event to show toast or notification
-    window.dispatchEvent(new CustomEvent('FR Finance:session-expired'));
+    window.dispatchEvent(new CustomEvent('frcaixinha:session-expired'));
   }
 
   private clearSession() {

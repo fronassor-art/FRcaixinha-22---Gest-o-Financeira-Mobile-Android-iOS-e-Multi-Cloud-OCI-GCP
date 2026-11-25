@@ -1,4 +1,4 @@
-"""M28700–M29000: release evidence matrix for FR Finance.
+"""M28700–M29000: release evidence matrix for FR Finance AI Studio.
 
 This is an audit inventory, NOT an authorization engine. No evidence is
 promoted by the existence of source files, CI success, a public OCI VM,

@@ -307,7 +307,7 @@ export const MultiCloudView: React.FC = () => {
         {/* Audit Details Box */}
         <div className="p-4 bg-slate-900 text-white rounded-2xl font-mono text-xs space-y-2 border border-slate-800">
           <div className="flex flex-wrap items-center justify-between text-slate-400 pb-2 border-b border-slate-800 text-[11px]">
-            <span>BUCKET: oci-br-vinhedo-FR Finance-immutable-worm-ledger</span>
+            <span>BUCKET: oci-br-vinhedo-frcaixinha-immutable-worm-ledger</span>
             <span className="text-emerald-400 font-bold">STATUS: COMPLIANCE LOCK ATIVO (5 ANOS)</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">

@@ -117,7 +117,7 @@ class FinancialApiService {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-FR Finance-Client': 'web-react-19',
+      'X-FRcaixinha-Client': 'web-react-19',
       ...(options.headers as Record<string, string> || {}),
     };
 

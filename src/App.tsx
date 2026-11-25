@@ -171,7 +171,7 @@ export default function App() {
     const handleExpired = () => {
       setSessionExpiredNotice(true);
     };
-    window.addEventListener('FR Finance:session-expired', handleExpired);
+    window.addEventListener('frcaixinha:session-expired', handleExpired);
 
     // Android e navegador: depois de retornar do segundo plano, nenhuma
     // tela protegida aparece até que /auth/me confirme a sessão atual.
@@ -199,7 +199,7 @@ export default function App() {
       mounted = false;
       resumeGuard.dispose();
       unsubscribeAuth();
-      window.removeEventListener('FR Finance:session-expired', handleExpired);
+      window.removeEventListener('frcaixinha:session-expired', handleExpired);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', onPageShow);
     };

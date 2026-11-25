@@ -138,7 +138,7 @@ def _event_bytes(event: LabJournalEvent) -> bytes:
 
 def _hash_link(previous: str, event: LabJournalEvent) -> str:
     return hashlib.sha256(
-        b"FR Finance-ai-studio-synthetic-ledger-v1\0"
+        b"frcaixinha-ai-studio-synthetic-ledger-v1\0"
         + previous.encode("ascii") + b"\0" + _event_bytes(event)
     ).hexdigest()
 

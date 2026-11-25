@@ -57,13 +57,22 @@ def test_current_app_code_uses_fr_finance_product_name():
     import re
     for path in paths:
         body=text(path)
-        assert not re.search(r"AI\\s+Studio|FR\\s*Caixinha\\s*2\\.2|FRcaixinha\\s*2\\.2",body,re.I), path
+        assert not re.search(r"AI\s+Studio|FR\s*Caixinha\s*2\.2|FRcaixinha\s*2\.2",body,re.I), path
 
 
 def test_legacy_identifiers_and_pdfs_remain_untouched():
     cap=text("capacitor.config.ts")
     cfg=text("backend/app/config.py")
     assert "com.frcaixinha.app" in cap
+    # Technical identifiers remain stable across the public brand rename.
+    assert "frcaixinha.notifications_staging_ci" in text("backend/app/notification_ci_reader.py")
+    atomic = text("backend/app/saas_atomic_api_adapter_ci.py")
+    assert "frcaixinha.saas_atomic_ci" in atomic and "frcaixinha.saas_preprep_ci" in atomic
+    assert "frcaixinha:session-expired" in text("src/App.tsx")
+    assert "X-FRcaixinha-Client" in text("src/services/financialApiService.ts")
+    assert "com.frcaixinha.app" in text("src/components/MobileInstallModal.tsx")
+    assert "FR Finance.notifications_staging_ci" not in text("backend/app/notification_ci_reader.py")
+    assert "FR Finance.saas_atomic_ci" not in atomic
     assert 'SESSION_COOKIE_NAME: str = "frcaixinha_session"' in cfg
     assert "frcaixinha_aistudio_dev" in text("docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md")
     files=list((ROOT/"public/assets/aistudio").glob("FRcaixinha_2.2*.pdf"))

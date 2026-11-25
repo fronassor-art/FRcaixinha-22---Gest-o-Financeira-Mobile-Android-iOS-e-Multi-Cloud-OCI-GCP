@@ -225,7 +225,7 @@ class MultiCloudService {
       tamperDetected: false,
       hashSha256: newHash,
       verifiedAt: new Date().toLocaleString('pt-BR'),
-      ociStorageBucket: 'oci-br-vinhedo-FR Finance-immutable-worm-ledger',
+      ociStorageBucket: 'oci-br-vinhedo-frcaixinha-immutable-worm-ledger',
       gcpSyncParityPct: 100.0,
     };
   }

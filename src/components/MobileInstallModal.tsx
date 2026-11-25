@@ -298,10 +298,10 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                     Depois, cole esse comando no Termux para extrair em pasta nova sem sobrescrever:
                   </p>
                   <div className="bg-slate-900 p-2.5 rounded-xl font-mono text-[10px] text-emerald-400 space-y-1 relative">
-                    <div>mkdir -p ~/FR Finance-build && cd ~/FR Finance-build</div>
+                    <div>mkdir -p ~/frcaixinha-build && cd ~/frcaixinha-build</div>
                     <div>unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip</div>
                     <button
-                      onClick={() => handleCopy('mkdir -p ~/FR Finance-build && cd ~/FR Finance-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip', 'termux-step3')}
+                      onClick={() => handleCopy('mkdir -p ~/frcaixinha-build && cd ~/frcaixinha-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip', 'termux-step3')}
                       className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] flex items-center gap-1 cursor-pointer"
                     >
                       {copiedCommand === 'termux-step3' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -362,7 +362,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   <button
                     onClick={() =>
                       handleCopy(
-                        'pkg update -y && pkg install -y nodejs-lts git openjdk-17 unzip curl && termux-setup-storage && mkdir -p ~/FR Finance-build && cd ~/FR Finance-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip && npm ci && npm run dev',
+                        'pkg update -y && pkg install -y nodejs-lts git openjdk-17 unzip curl && termux-setup-storage && mkdir -p ~/frcaixinha-build && cd ~/frcaixinha-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip && npm ci && npm run dev',
                         'termux-all'
                       )
                     }
@@ -396,11 +396,11 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   <div className="text-slate-400 mt-1"># 2. Gerar APK debug com Gradle Wrapper:</div>
                   <div>cd android && chmod +x gradlew && ./gradlew assembleDebug</div>
                   <div className="text-slate-400 mt-1"># 3. Copiar APK gerado para Downloads:</div>
-                  <div>cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FR Finance-2.2-debug.apk</div>
+                  <div>cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FRcaixinha-2.2-debug.apk</div>
                   <button
                     onClick={() =>
                       handleCopy(
-                        'npm run cap:build && cd android && chmod +x gradlew && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FR Finance-2.2-debug.apk',
+                        'npm run cap:build && cd android && chmod +x gradlew && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FRcaixinha-2.2-debug.apk',
                         'termux-apk-cmd'
                       )
                     }
@@ -449,10 +449,10 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   </p>
                   <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-emerald-400 space-y-1 relative">
                     <div>pkg install -y python</div>
-                    <div>cd ~/FR Finance/dist</div>
+                    <div>cd ~/frcaixinha/dist</div>
                     <div>python -m http.server 3000</div>
                     <button
-                      onClick={() => handleCopy('pkg install -y python && cd ~/FR Finance/dist && python -m http.server 3000', 'termux-python')}
+                      onClick={() => handleCopy('pkg install -y python && cd ~/frcaixinha/dist && python -m http.server 3000', 'termux-python')}
                       className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] flex items-center gap-1 cursor-pointer"
                     >
                       {copiedCommand === 'termux-python' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -675,14 +675,14 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                 <div className="bg-slate-900 p-2.5 rounded-xl font-mono text-[10px] text-slate-200 space-y-1 relative">
                   <div className="text-slate-400"># Comandos para gerar o projeto Android com Capacitor:</div>
                   <div>npm install @capacitor/core @capacitor/cli @capacitor/android</div>
-                  <div>npx cap init "FR Finance" "com.FR Finance.app" --web-dir dist</div>
+                  <div>npx cap init "FR Finance" "com.frcaixinha.app" --web-dir dist</div>
                   <div>npm run build</div>
                   <div>npx cap add android</div>
                   <div>npx cap open android</div>
                   <button
                     onClick={() =>
                       handleCopy(
-                        'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "FR Finance" "com.FR Finance.app" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap open android',
+                        'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "FR Finance" "com.frcaixinha.app" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap open android',
                         'cmd-cap'
                       )
                     }

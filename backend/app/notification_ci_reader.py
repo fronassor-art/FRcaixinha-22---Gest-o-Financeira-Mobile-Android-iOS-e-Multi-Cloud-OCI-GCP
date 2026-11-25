@@ -48,7 +48,7 @@ async def _bind_ci_context(
     await conn.execute("SELECT set_config('app.current_tenant_id',$1,true)",
                        str(scope.tenant_id) if scope.tenant_id else "")
     await conn.execute(
-        "SELECT set_config('FR Finance.notifications_staging_ci','1',true)"
+        "SELECT set_config('frcaixinha.notifications_staging_ci','1',true)"
     )
 
 
