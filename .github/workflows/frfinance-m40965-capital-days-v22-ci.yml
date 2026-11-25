@@ -1,0 +1,35 @@
+name: FR Finance M40965 Capital-Dias V2.2 source-only
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'src/services/capitalDaysV22.ts'
+      - 'src/tests/m40965_capital_days_v22.test.ts'
+      - '.github/workflows/frfinance-m40965-capital-days-v22-ci.yml'
+      - 'docs/FR_FINANCE_M40965_CAPITAL_DIAS_V22_SOURCE_ONLY.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/services/capitalDaysV22.ts'
+      - 'src/tests/m40965_capital_days_v22.test.ts'
+      - '.github/workflows/frfinance-m40965-capital-days-v22-ci.yml'
+      - 'docs/FR_FINANCE_M40965_CAPITAL_DIAS_V22_SOURCE_ONLY.md'
+permissions:
+  contents: read
+jobs:
+  capital-days-v22:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/m40965_capital_days_v22.test.ts
