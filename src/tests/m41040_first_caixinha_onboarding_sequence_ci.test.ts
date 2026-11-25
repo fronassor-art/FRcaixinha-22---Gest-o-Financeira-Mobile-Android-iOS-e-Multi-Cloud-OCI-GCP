@@ -44,11 +44,15 @@ const matrix = JSON.parse(readFileSync(
 ));
 assert.equal(matrix.counts.expanded_total, 330);
 assert.equal(matrix.items.length, 330);
-const rows = new Map(matrix.items.map((row: {
+type MatrixRequirementRow = {
   check_id: string;
   production_verified: boolean;
   acceptance_state: string;
-}) => [row.check_id, row]));
+};
+const rows = new Map<string, MatrixRequirementRow>();
+for (const row of matrix.items as MatrixRequirementRow[]) {
+  rows.set(row.check_id, row);
+}
 const referencedRequirements = new Set(
   FIRST_CAIXINHA_ONBOARDING_SEQUENCE_V1.flatMap((step) => step.requirementIds),
 );
