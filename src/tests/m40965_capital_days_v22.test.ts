@@ -104,7 +104,7 @@ assert.equal(loss.adminShareCents, "0");
 rejected({...base, cycleStart: "2027-02-29"}, "INVALID_DATE");
 rejected({...base, cycleEndExclusive: "2026-12-30"}, "INVALID_CYCLE_WINDOW");
 rejected({...base, cycleEndExclusive: "2028-01-01"}, "INVALID_CYCLE_WINDOW");
-assert.equal(calculateCapitalDaysV22({...tieInput, cycleStart: "2027-12-31", cycleEndExclusive: "2028-12-31"}).cycleEndExclusive, "2028-12-31");
+assert.equal(calculateCapitalDaysV22({...tieInput, cycleStart: "2027-12-31", cycleEndExclusive: "2028-12-31", members: []}).cycleEndExclusive, "2028-12-31");
 assert.equal(calculateCapitalDaysV22({...tieInput, cycleStart: "2028-02-29", cycleEndExclusive: "2029-02-28", members: []}).cycleEndExclusive, "2029-02-28");
 rejected({...base, cycleStart: "2028-02-29", cycleEndExclusive: "2029-03-01"}, "INVALID_CYCLE_WINDOW");
 rejected({...base, netProfitCents: 1.5}, "INVALID_NET_PROFIT_CENTS");
