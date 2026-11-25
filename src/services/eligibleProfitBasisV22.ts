@@ -79,7 +79,7 @@ export class EligibleProfitBasisV22Error extends Error {
 }
 
 const DAY_MS = 86_400_000;
-const DATE_ONLY = /^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 
 function fail(code: string): never {
