@@ -18,7 +18,7 @@ def test_android_base_and_debug_id_are_not_confused():
  assert 'namespace = "com.frcaixinha.app"' in gradle
  assert 'applicationId "com.frcaixinha.app"' in gradle
  assert 'applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"' in gradle
- assert 'versionNameSuffix "-AI-STUDIO-TEST"' in gradle
+ assert 'versionNameSuffix "-FR-FINANCE-TEST"' in gradle
  assert 'releaseKeyFile = System.getenv("FR_FINANCE_ANDROID_RELEASE_KEYSTORE_FILE")' in gradle
  assert "signingConfig signingConfigs.productionRelease" in gradle
  assert "FR_FINANCE_ANDROID_RELEASE_PROFILE" in capacitor
