@@ -11,11 +11,14 @@ const phases=[
   ['P4','Provedor e jurídico','BLOCKED_EXTERNAL'],
   ['P5','Termux e migração autorizada','BLOCKED_AUTHORIZATION'],
 ].map(([id,name,status])=>({id,name,status}));
+const manifest=JSON.parse(readFileSync('docs/FR_FINANCE_M40939_SUPERMACRO_GATES.json','utf8'));
+const expectedPending=[...manifest.production_gates,...manifest.tasks]
+  .filter(row=>row.status!=='DONE_SOURCE_ONLY').length;
 const example={
   status:'BLOCKED',source:'SOURCE_ONLY_NOT_RUNTIME_ATTESTED',
-  plan_available:true,total_tasks:34,pending_tasks:33,phases,
+  plan_available:true,total_tasks:34,pending_tasks:expectedPending,phases,
 };
-assert.equal(parseSupermacroReadiness(example).pending_tasks,33);
+assert.equal(parseSupermacroReadiness(example).pending_tasks,expectedPending);
 assert.equal(parseSupermacroReadiness(undefined).status,'BLOCKED');
 assert.equal(parseSupermacroReadiness(undefined).plan_available,false);
 for(const invalid of [
