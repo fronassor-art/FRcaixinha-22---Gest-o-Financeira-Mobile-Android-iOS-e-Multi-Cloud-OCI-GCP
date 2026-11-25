@@ -111,7 +111,7 @@ rejected({...base, netProfitCents: 1.5}, "INVALID_NET_PROFIT_CENTS");
 rejected({...base, adminShareBps: 10001}, "INVALID_ADMIN_SHARE_BPS");
 rejected({...base, members: [base.members[0], {...base.members[1], membershipId: "mem-a"}]}, "INVALID_MEMBER");
 rejected({...base, members: [{...base.members[0], events: [...base.members[0].events, {...base.members[0].events[0]}]}]}, "INVALID_CAPITAL_EVENT");
-rejected({...base, members: [{...base.members[0], events: [
+rejected({...base, members: [{...base.members[0], openingCapitalCents: 0, events: [
   {eventId: "return", effectiveDate: "2027-01-01", kind: "RESTITUTION", amountCents: 1, status: "CONFIRMED"},
 ]}]}, "RESTITUTION_EXCEEDS_CONFIRMED_CAPITAL");
 rejected({...base, members: [{...base.members[0], eligibilityPeriods: [
