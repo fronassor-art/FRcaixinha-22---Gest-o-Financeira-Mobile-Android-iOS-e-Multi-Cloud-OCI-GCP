@@ -78,6 +78,8 @@ app.add_middleware(
 # Registro dos Roteadores da API v1
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(tenants.router, prefix=settings.API_V1_STR)
+from .routers import contract_models as _contract_models
+app.include_router(_contract_models.router, prefix=settings.API_V1_STR)
 app.include_router(invitations.router, prefix=settings.API_V1_STR)
 app.include_router(master.router, prefix=settings.API_V1_STR)
 # M39067: promoções comerciais SaaS isoladas das campanhas de crédito.

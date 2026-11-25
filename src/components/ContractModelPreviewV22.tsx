@@ -1,10 +1,30 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {contractModelsV22, type ContractModelKind} from '../services/contractModelsV22';
+import {fetchAndVerifyContractModelV22, type ContractModelIntegrityState} from '../services/contractModelIntegrityV22';
 
 /** Read-only consultation of generic V2.2 templates, independent of auth/PSP. */
-export const ContractModelPreviewV22: React.FC<{kind: ContractModelKind}> = ({kind}) => {
+export const ContractModelPreviewV22: React.FC<{kind:ContractModelKind}> = ({kind}) => {
   const text=contractModelsV22[kind];
   const license=kind==='SAAS_LICENSE';
+  const [integrity,setIntegrity]=useState<ContractModelIntegrityState>('checking');
+
+  useEffect(()=>{
+    let current=true;
+    setIntegrity('checking');
+    void fetchAndVerifyContractModelV22(kind,text).then(result=>{
+      if(current)setIntegrity(result);
+    });
+    return()=>{current=false;};
+  },[kind,text]);
+
+  const integrityMessage=integrity==='verified'
+    ? 'Integridade do texto conferida pelo servidor FR Finance.'
+    : integrity==='mismatch'
+      ? 'Divergência de integridade: interrompa a conferência e atualize o aplicativo.'
+      : integrity==='checking'
+        ? 'Conferindo a integridade do modelo no servidor...'
+        : 'Servidor indisponível para conferência. O texto abaixo continua identificado como minuta não publicada.';
+
   return (
     <details className="rounded-xl border border-[#8eae99] bg-[#f5faf6] p-3 text-[#143d29]">
       <summary className="cursor-pointer font-semibold text-sm min-h-10">
@@ -13,6 +33,9 @@ export const ContractModelPreviewV22: React.FC<{kind: ContractModelKind}> = ({ki
       <p className="my-2 text-xs font-semibold text-[#914c13]" role="note">
         Minuta V2.2 para consulta. Não é contrato publicado, proposta de cobrança ou aceite.
         Campos de identificação e condições ainda dependem de preenchimento e revisão jurídica.
+      </p>
+      <p className="my-2 text-xs font-semibold" role="status" aria-live="polite">
+        {integrityMessage}
       </p>
       <p className="text-xs mb-2">{license
         ? 'Relação entre licenciante FR Finance e administrador contratante. Não exige login nem integração bancária para leitura.'
