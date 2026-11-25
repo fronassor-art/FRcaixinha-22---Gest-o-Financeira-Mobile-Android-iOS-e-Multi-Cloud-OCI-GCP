@@ -1,4 +1,4 @@
-name: FR Finance M41050 signed SQL session context PG18 disposable
+name: FR Finance M41050 M40700 ticket-bound SQL/RLS context PG18 disposable
 on:
   push:
     branches: [atualizacao-ai-studio-9b46a63187]
@@ -6,6 +6,9 @@ on:
       - 'backend/app/m41050_session_context_seal_prototype.py'
       - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
       - 'backend/tests/test_m41050_session_context_seal_ci.py'
+      - 'backend/tests/m40700_request_proof_disposable.py'
+      - 'backend/tests/m40680_digest_one_time_gateway_disposable.py'
+      - 'backend/tests/m40650_token_bound_gateway_disposable.py'
       - '.github/workflows/frfinance-m41050-signed-session-context-pg18-ci.yml'
       - 'docs/FR_FINANCE_M41050_SQL_SIGNED_SESSION_CONTEXT_NO_GO.md'
   pull_request:
@@ -13,6 +16,9 @@ on:
       - 'backend/app/m41050_session_context_seal_prototype.py'
       - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
       - 'backend/tests/test_m41050_session_context_seal_ci.py'
+      - 'backend/tests/m40700_request_proof_disposable.py'
+      - 'backend/tests/m40680_digest_one_time_gateway_disposable.py'
+      - 'backend/tests/m40650_token_bound_gateway_disposable.py'
       - '.github/workflows/frfinance-m41050-signed-session-context-pg18-ci.yml'
       - 'docs/FR_FINANCE_M41050_SQL_SIGNED_SESSION_CONTEXT_NO_GO.md'
 permissions:
@@ -42,13 +48,13 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_DB: fr_m41050_disposable_ci
+          POSTGRES_DB: fr_m40700_disposable_ci
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: only_m41050_disposable_ci
         ports:
-          - 55450:5432
+          - 55439:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d fr_m41050_disposable_ci"
+          --health-cmd "pg_isready -U postgres -d fr_m40700_disposable_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
@@ -56,7 +62,11 @@ jobs:
       GITHUB_ACTIONS: 'true'
       FRCAIXINHA_CI_ISOLATED: '1'
       CI_M41050_DISPOSABLE: '1'
-      CI_M41050_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55450/fr_m41050_disposable_ci
+      CI_M40700_DISPOSABLE: '1'
+      CI_M40680_DISPOSABLE: '1'
+      CI_M40560_DISPOSABLE: '1'
+      CI_M41050_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M40700_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       PYTHONDONTWRITEBYTECODE: '1'
       PIX_REAL: 'OFF'
       PAGAMENTOS_REAIS: 'OFF'

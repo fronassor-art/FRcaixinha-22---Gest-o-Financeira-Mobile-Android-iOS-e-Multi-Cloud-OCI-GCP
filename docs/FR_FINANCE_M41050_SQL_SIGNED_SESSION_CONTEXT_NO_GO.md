@@ -1,30 +1,26 @@
-# FR Finance M41050 — contexto SQL de sessão assinado (protótipo NO-GO)
+# FR Finance M41050 — contexto RLS vinculado a ticket (protótipo NO-GO)
 
-Data-base do código: M41040, HEAD 72a9a7f654da. Escopo exclusivo de laboratório descartável PostgreSQL 18 e testes offline. O pacote não altera rotas da aplicação, migrations, runtime, chaves reais ou política de produção.
+Data-base: M41040, SHA 72a9a7f654da. Laboratório exclusivo PostgreSQL 18 descartável e testes offline. O pacote aproveita a emissão assinada de M40700 e o consumo de uso único de M40680; não cria segunda chave HMAC, segundo emissor SQL ou role privilegiada. Não altera rotas reais, migrations, runtime, banco original ou flags.
 
 ## Mapeamento de requisitos
 
-CP26-0019 exige sessão verificada e segregação de papéis e tenants. CP26-0003 e CP26-0004 exigem que Master não alcance dados privados dos tenants e que Admin/Membro permaneçam isolados. CP26-0061 e CP26-0062 exigem contexto de API e validação RLS em leitura e escrita. A matriz de 330 IDs e 2.310 etapas permanece intacta; este pacote é evidência de engenharia em laboratório, não aceite independente ou gate de produção.
+CP26-0019 exige sessão verificada e segregação de papéis e tenants. CP26-0003 e CP26-0004 preservam Master fora dos dados privados e restringem Admin/Membro aos próprios tenants. CP26-0061 e CP26-0062 exigem sessão com papel explícito e validação RLS. Os IDs e sete etapas por requisito na matriz 330/2.310 ficam intactos; este pacote é prova técnica isolada, não aceite nem gate de produção.
 
-## O que o experimento verifica
+## Lacuna coberta no laboratório
 
-A reprodução M40570 mostra que app.current_role e app.current_user_id são valores SQL que o papel de aplicação pode definir. O fixture M41050 mantém uma tabela de baseline vulnerável apenas para repetir esse comportamento com dados sintéticos. A tabela protegida usa a identidade derivada de um capability aleatório cuja impressão digital está armazenada no PostgreSQL; a aplicação não escolhe user, papel ou tenant a partir dos GUCs antigos.
+M40570 comprovou que um papel SQL de aplicação consegue definir app.current_role e app.current_user_id. M41050 acrescenta ao fixture M40700 um passo posterior: o papel financeiro consome o ticket já assinado, consulta o ticket/sessão verificados e cria um capability aleatório de curta duração. O PostgreSQL guarda somente o hash do capability, o digest da sessão, tenant e expiração. O capability é instalado por set_config transacional; o RLS ignora os GUCs antigos e resolve identidade pelo registro que só foi criado após consumo do ticket.
 
-O código canônico assina, fora do SQL, session_id, user_id, role, tenant, nonce, expiração e escopo READ_ONLY por HMAC-SHA-256. Uma função SECURITY DEFINER no fixture aceita somente a role emissora e verifica a prova contra material de verificação em tabela inacessível às roles emissora e aplicação. O nonce é consumido por chave única dentro da transação; a função devolve um capability aleatório de curta duração, e o banco armazena somente seu hash. O RLS consulta claims associados a esse capability, ignora os GUCs antigos e confere papel, usuário, tenant, escopo, revogação e expiração.
+O teste cobre login app sem capability com GUCs Master falsos, capability de membro acompanhado por GUCs que alegam Master/outro tenant, Admin restrito ao tenant próprio, leitura de membro limitada ao próprio registro, cruzamento de tenants, tentativa Master, replay do mesmo ticket, consumo concorrente por seis conexões e revogação da sessão após emissão. Não há rota FastAPI conectada ao protótipo.
 
-A suíte PostgreSQL 18 descartável verifica falsificação direta de GUC, login emissor sem prova, alteração de claims assinados, expiração, replay concorrente, revogação, cruzamento entre tenants e negação de acesso do Master a linhas financeiras de membro. As credenciais e a chave são fictícias e geradas apenas no job efêmero.
+## Limites mantidos como NO-GO
 
-## Limites remanescentes
+- M40710 já provou que o owner/superuser do PostgreSQL pode extrair o HMAC secret de M40700 e forjar claims. M41050 reutiliza exatamente essa autoridade de laboratório; não a corrige.
+- M40710 também provou que uma assinatura válida capturada antes do primeiro consumo pode ganhar a corrida. O capability de M41050 não repara esse risco de origem/canal.
+- SQL arbitrário dentro da conexão autenticada pode ler o GUC app.session_capability e reutilizá-lo até expirar. A claim continua limitada ao papel, tenant e escopo que foram validados no ticket; vazamento da sessão e comprometimento do processo permanecem riscos.
+- M40700 aceita apenas sessões TENANT_ADMIN e TENANT_MEMBER. Uma sessão MASTER não recebe ticket neste experimento e continua negada; fluxos administrativos Master permanecem bloqueados.
+- A função e a política RLS são apenas dados e DDL sintéticos de CI. O PostgreSQL original continua usando o código e políticas históricos; nenhuma migration foi proposta ou aplicada.
+- A saída atesta somente comportamento em uma instância descartável. Não prova credenciais, runtime, rotação/segredo independente, tráfego TLS, Android, OCI staging ou revisão independente.
 
-- O material de verificação HMAC reside no fixture PostgreSQL. Owner/superuser pode ler ou trocar a chave e executar código privilegiado; esta ameaça permanece aberta. O protótipo não apresenta cofre, KMS/HSM, rotação de chaves ou custódia independente atestada.
-- Não há serviço emissor real nem processo/UID/host separado validado. A chave no teste é mantida pelo harness de CI; isso não prova isolamento operacional do signer.
-- O capability é um segredo bearer para a sessão assinada. SQL arbitrário na própria conexão consegue ler o GUC do capability e agir dentro da identidade, tenant e escopo daquela sessão enquanto estiver válido. Ele não permite trocar claims sem nova prova válida; vazamento, replay de acesso permitido e comprometimento do processo continuam riscos.
-- O mecanismo existe somente em código de laboratório. A aplicação real ainda usa a fronteira GUC histórica; nenhuma rota foi conectada ao helper.
-- Não é um desenho revisado independentemente nem uma candidata de migration. Não usar este fixture como SQL112/113 nem aplicar SQL ao banco original.
-- Nenhum ciclo foi aberto e nenhum pagamento, convite, usuário ou comunicação real foi criado.
+M41050 pode orientar uma futura integração após corrigir a custódia de chave, origem de ticket, escopos e sessões reais. Hoje não remove M40840 NO-GO, M40930 HTTP 503 nem fecha issue #5.
 
-## Resultado e controles
-
-M41050 pode reduzir a falsificação de identidade em um canal SQL separado se integrado a um signer verdadeiramente isolado e a chaves administradas fora do banco. A evidência atual não basta para substituir a autenticação de produção, remover M40840 NO-GO, remover M40930 HTTP 503 ou fechar a issue #5.
-
-CI do pacote: pytest offline + PostgreSQL 18 descartável. Produção continua BLOCKED. SQL local, migrations, conexões ao banco autoritativo, reinícios e reloads são NONE. PIX_REAL, PAGAMENTOS_REAIS, ATIVACAO_REAL e comunicações reais permanecem OFF.
+MIGRATIONS=NONE; banco local, escritas e conexões = NONE; reload/restart = NONE. PIX_REAL, PAGAMENTOS_REAIS, ATIVACAO_REAL e comunicações reais = OFF. PRODUCTION=BLOCKED.
