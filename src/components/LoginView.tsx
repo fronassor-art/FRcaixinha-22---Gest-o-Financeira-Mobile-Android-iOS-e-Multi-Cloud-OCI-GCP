@@ -453,6 +453,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, sessionExp
         <p className="mt-4 text-center text-[11px] text-emerald-100/60">
           Homologação · build {build} · sem operações financeiras reais
         </p>
+        <p className="mt-2 text-center text-[11px] text-emerald-100/80">
+          Ideia, criação, projeto e desenvolvimento: Fábio Rossano Araújo Medeiros.
+        </p>
       </div>
     </main>
   );

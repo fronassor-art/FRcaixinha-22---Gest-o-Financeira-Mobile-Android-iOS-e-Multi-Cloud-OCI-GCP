@@ -1,0 +1,42 @@
+name: FR Finance M40961 V2.2 pool binding and document integrity
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/database.py'
+      - 'backend/tests/test_m40961_pool_binding_ci.py'
+      - 'docs/FR_Finance_*V2_2_2026-11-24.md'
+      - 'src/components/LoginView.tsx'
+      - 'metadata.json'
+      - '.github/workflows/frfinance-m40961-v22-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/database.py'
+      - 'backend/tests/test_m40961_pool_binding_ci.py'
+      - 'docs/FR_Finance_*V2_2_2026-11-24.md'
+      - 'src/components/LoginView.tsx'
+      - 'metadata.json'
+      - '.github/workflows/frfinance-m40961-v22-ci.yml'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          echo 'e33ac4a0ed0f036c4a3812eabfa20e616765acb07009273b6998a75f8a27d721  docs/FR_Finance_Caderno_Mestre_V2_2_2026-11-24.md' | sha256sum -c -
+          echo 'cf8fa48ccf6d068b79ace295a32ba856754df9271c81c7aa8274e80f8647214c  docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md' | sha256sum -c -
+          grep -F 'Ideia, criação, projeto e desenvolvimento: Fábio Rossano Araújo Medeiros.' src/components/LoginView.tsx
+      - run: python -m pip install pytest==8.3.4 pytest-asyncio==0.25.3 fastapi==0.115.8 pydantic==2.10.6 asyncpg==0.30.0
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40961_pool_binding_ci.py backend/tests/test_m40840_financial_sql_release_ci.py backend/tests/test_m40850_dsn_downgrade_ci.py

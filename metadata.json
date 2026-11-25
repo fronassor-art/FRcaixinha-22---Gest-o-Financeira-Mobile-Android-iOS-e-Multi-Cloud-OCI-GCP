@@ -1,6 +1,6 @@
 {
   "name": "FR Finance — Gestão Financeira",
-  "description": "FR Finance AI Studio: gestão e controle financeiro por caixinha, perfis segregados, contabilidade e rotinas de homologação. Pix e ativação reais permanecem desativados.",
+  "description": "FR Finance: gestão e automação financeira por caixinha, perfis segregados, contabilidade e rotinas de homologação. Pix e ativação reais permanecem desativados.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

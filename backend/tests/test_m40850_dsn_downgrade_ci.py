@@ -84,6 +84,7 @@ async def test_cached_pool_with_matching_nonprod_target_is_only_syntax_accepted(
     monkeypatch.setenv("FRCAIXINHA_TERMUX_LOCAL_API","1")
     for flag in ("PIX_REAL","PAGAMENTOS_REAIS","ATIVACAO_REAL"):
         monkeypatch.setenv(flag,"OFF")
+    monkeypatch.setattr(db, "_db_pool_binding", db._pool_binding(db.settings.DATABASE_URL, dict(__import__('os').environ)))
     assert await db.get_db_pool() is fake
 
 

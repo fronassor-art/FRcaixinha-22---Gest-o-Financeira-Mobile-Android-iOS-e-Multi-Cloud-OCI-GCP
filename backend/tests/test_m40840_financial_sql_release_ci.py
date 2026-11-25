@@ -106,6 +106,7 @@ async def test_existing_nonproduction_inert_pool_still_available(monkeypatch):
         monkeypatch.setenv(flag,"OFF")
     # The cached inert pool is usable only with an explicit, valid DSN shape.
     # No database connection is opened in this unit test.
+    monkeypatch.setattr(db, "_db_pool_binding", db._pool_binding(db.settings.DATABASE_URL, dict(__import__('os').environ)))
     assert await db.get_db_pool() is old
 
 

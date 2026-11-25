@@ -10,6 +10,9 @@ PADRÕES DE SEGURANÇA:
 """
 
 import os
+import asyncio
+import hashlib
+import json
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 from fastapi import Depends, HTTPException, status
@@ -19,58 +22,81 @@ from .m40610_verified_rls_session import UnverifiedRLSSession, require_verified_
 
 # Variável de pool global
 _db_pool = None
+_db_pool_binding = None
+_db_pool_lock = asyncio.Lock()
+
+
+def _pool_binding(dsn: str, env) -> str:
+    """Process-local configuration fingerprint; never expose it or its inputs."""
+    fields = [dsn, *(env.get(k) for k in (
+        "ENVIRONMENT", "FRCAIXINHA_TERMUX_LOCAL_API",
+        "AUTH_DATABASE_URL", "AUTH_VERIFIER_DATABASE_URL",
+        "DATABASE_URL", "PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL",
+    ))]
+    return hashlib.sha256(json.dumps(fields, ensure_ascii=True).encode()).hexdigest()
+
 
 async def get_db_pool():
     """Inicializa e retorna o pool de conexões PostgreSQL (asyncpg)."""
-    global _db_pool
-    # M40840: prevent even an already-cached pool from being used in production.
+    global _db_pool, _db_pool_binding
     from .m40840_financial_sql_release_no_go import require_nonproduction_financial_sql
-    require_nonproduction_financial_sql(os.environ)
-    # M40850: revalidate target even if a pool is already cached. In
-    # particular, environment downgrades must not reuse privileged DSNs.
-    # M40943: revalidate even when the configured DSN was cleared. A cached
-    # connection must not become usable merely because DATABASE_URL is empty.
-    if _db_pool is not None:
-        from .m40800_financial_dsn_guard import require_financial_dsn_shape
-        require_financial_dsn_shape(settings.DATABASE_URL, os.environ)
-    if _db_pool is None:
-        if not settings.DATABASE_URL or not settings.DATABASE_URL.startswith("postgres"):
-            raise RuntimeError(
-                "DATABASE_URL não configurada ou não aponta para instância PostgreSQL válida."
-            )
-        # M40800: syntax/identity preflight before ANY financial pool open.
-        # This does not attest SQL privileges or fix GUC spoofing.
-        from .m40800_financial_dsn_guard import (
-            FinancialDSNBlocked, require_financial_dsn_shape,
-        )
-        try:
+    from .m40800_financial_dsn_guard import (
+        FinancialDSNBlocked, require_financial_dsn_shape,
+    )
+    # Serialize creation/closure; a different valid DSN must never reuse
+    # a connection pool created under another configuration.
+    async with _db_pool_lock:
+        require_nonproduction_financial_sql(os.environ)
+        dsn = settings.DATABASE_URL
+        env = dict(os.environ)
+        binding = None
+        if _db_pool is not None:
             require_financial_dsn_shape(settings.DATABASE_URL, os.environ)
-            if os.environ.get("ENVIRONMENT") == "production":
-                from .production_auth_gate import require_production_auth
-                require_production_auth(os.environ)
-        except (FinancialDSNBlocked, ValueError, RuntimeError) as exc:
-            raise RuntimeError("M40800_FINANCIAL_DSN_BLOCKED") from None
-        try:
-            import asyncpg
-            _db_pool = await asyncpg.create_pool(
-                dsn=settings.DATABASE_URL,
-                min_size=2,
-                max_size=20,
-                command_timeout=30,
+            require_financial_dsn_shape(dsn, env)
+            binding = _pool_binding(dsn, env)
+            if _db_pool_binding != binding:
+                raise RuntimeError("M40961_FINANCIAL_POOL_CONFIGURATION_CHANGED")
+        if _db_pool is None:
+            if not dsn or not dsn.startswith("postgres"):
+                raise RuntimeError("DATABASE_URL não configurada ou inválida.")
+            try:
+                require_financial_dsn_shape(dsn, env)
+                binding = _pool_binding(dsn, env)
+                if os.environ.get("ENVIRONMENT") == "production":
+                    from .production_auth_gate import require_production_auth
+                    require_production_auth(os.environ)
+            except (FinancialDSNBlocked, ValueError, RuntimeError):
+                raise RuntimeError("M40800_FINANCIAL_DSN_BLOCKED") from None
+            try:
+                import asyncpg
+            except ImportError:
+                raise RuntimeError("Driver asyncpg não instalado.") from None
+            candidate = await asyncpg.create_pool(
+                dsn=dsn, min_size=2, max_size=20, command_timeout=30,
             )
-        except ImportError:
-            raise RuntimeError(
-                "Driver asyncpg não instalado. Execute 'pip install -r backend/requirements.txt'."
-            )
-    return _db_pool
+            try:
+                current_env = dict(os.environ)
+                require_nonproduction_financial_sql(current_env)
+                require_financial_dsn_shape(settings.DATABASE_URL, current_env)
+                if _pool_binding(settings.DATABASE_URL, current_env) != binding:
+                    raise RuntimeError("M40961_FINANCIAL_POOL_CONFIGURATION_CHANGED")
+            except BaseException:
+                # Discard only the newly-created client pool, not PostgreSQL.
+                candidate.terminate()
+                raise
+            _db_pool = candidate
+            _db_pool_binding = binding
+        return _db_pool
 
 
 async def close_db_pool():
     """Encerra graciosamente o pool de conexões."""
-    global _db_pool
-    if _db_pool is not None:
-        await _db_pool.close()
-        _db_pool = None
+    global _db_pool, _db_pool_binding
+    async with _db_pool_lock:
+        if _db_pool is not None:
+            await _db_pool.close()
+            _db_pool = None
+            _db_pool_binding = None
 
 
 async def get_rls_db_connection(
