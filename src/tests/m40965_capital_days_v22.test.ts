@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import {
   calculateCapitalDaysV22,
+  createCapitalDaysPreviewEnvelopeV22,
   CapitalDaysV22Error,
   type CapitalDaysInputV22,
   type CapitalEventV22,
 } from "../services/capitalDaysV22";
+import type {ExplicitCycleWindowAcceptanceV22} from "../services/cycleWindowV22";
 
 const scope = {tenantId: "tenant-demo", cycleId: "cycle-demo"} as const;
 
@@ -19,6 +21,26 @@ function rejected(input: CapitalDaysInputV22, code: string) {
   assert.throws(() => calculateCapitalDaysV22(input), (error: unknown) =>
     error instanceof CapitalDaysV22Error && error.code === code,
   );
+}
+
+function explicitWindowAcceptance(
+  cycleStart: string,
+  cycleEndExclusive: string,
+  overrides: Partial<ExplicitCycleWindowAcceptanceV22> = {},
+): ExplicitCycleWindowAcceptanceV22 {
+  return {
+    mode: "EXPLICIT_ACCEPTED_WINDOW",
+    scope,
+    cycleStart,
+    cycleEndExclusive,
+    versionId: "policy-custom-v1",
+    policyDigest: "b".repeat(64),
+    accepted: true,
+    acceptedAt: "2026-11-25T12:00:00.000Z",
+    frozenAt: "2026-11-25T12:05:00.000Z",
+    acceptanceEvidenceRef: "acceptance:custom-cycle-window",
+    ...overrides,
+  };
 }
 
 const base: CapitalDaysInputV22 = {
@@ -125,6 +147,80 @@ rejected({...base, cycleEndExclusive: "2028-01-01"}, "INVALID_CYCLE_WINDOW");
 assert.equal(calculateCapitalDaysV22({...tieInput, cycleStart: "2027-12-31", cycleEndExclusive: "2028-12-31", members: []}).cycleEndExclusive, "2028-12-31");
 assert.equal(calculateCapitalDaysV22({...tieInput, cycleStart: "2028-02-29", cycleEndExclusive: "2029-02-28", members: []}).cycleEndExclusive, "2029-02-28");
 rejected({...base, cycleStart: "2028-02-29", cycleEndExclusive: "2029-03-01"}, "INVALID_CYCLE_WINDOW");
+
+const customStart = "2026-12-10";
+const includeFinalDateEnd = "2027-12-21";
+const customIncluded = calculateCapitalDaysV22({
+  scope, cycleStart: customStart, cycleEndExclusive: includeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, includeFinalDateEnd),
+  netProfitCents: 0, adminShareBps: 0,
+  members: [{
+    ...scope, membershipId: "member-final-date", openingCapitalCents: 10000,
+    eligibilityPeriods: [{startDate: customStart, endDateExclusive: includeFinalDateEnd}],
+    events: [event("member-final-date", {
+      eventId: "final-date-contribution", effectiveDate: "2027-12-20",
+      kind: "CONTRIBUTION", amountCents: 100, status: "CONFIRMED",
+    })],
+  }],
+});
+assert.equal(customIncluded.members[0].eligibleCapitalDays, "3760100");
+assert.equal(customIncluded.cycleEndExclusive, includeFinalDateEnd);
+
+const excludeFinalDateEnd = "2027-12-20";
+const customExcluded = calculateCapitalDaysV22({
+  scope, cycleStart: customStart, cycleEndExclusive: excludeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, excludeFinalDateEnd),
+  netProfitCents: 0, adminShareBps: 0,
+  members: [{
+    ...scope, membershipId: "member-before-final-date", openingCapitalCents: 10000,
+    eligibilityPeriods: [{startDate: customStart, endDateExclusive: excludeFinalDateEnd}],
+    events: [],
+  }],
+});
+assert.equal(customExcluded.members[0].eligibleCapitalDays, "3750000");
+rejected({
+  scope, cycleStart: customStart, cycleEndExclusive: excludeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, excludeFinalDateEnd),
+  netProfitCents: 0, adminShareBps: 0,
+  members: [{
+    ...scope, membershipId: "member-after-cutoff", openingCapitalCents: 10000,
+    eligibilityPeriods: [{startDate: customStart, endDateExclusive: excludeFinalDateEnd}],
+    events: [event("member-after-cutoff", {
+      eventId: "after-cutoff", effectiveDate: "2027-12-20",
+      kind: "CONTRIBUTION", amountCents: 1, status: "CONFIRMED",
+    })],
+  }],
+}, "CAPITAL_EVENT_OUTSIDE_CYCLE");
+rejected({
+  scope, cycleStart: customStart, cycleEndExclusive: includeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, includeFinalDateEnd, {
+    scope: {tenantId: "tenant-other", cycleId: scope.cycleId},
+  }),
+  netProfitCents: 0, adminShareBps: 0, members: [],
+}, "INVALID_CYCLE_WINDOW_ACCEPTANCE");
+rejected({
+  ...base, cycleStart: customStart, cycleEndExclusive: includeFinalDateEnd, members: [],
+}, "INVALID_CYCLE_WINDOW");
+rejected({
+  scope, cycleStart: customStart, cycleEndExclusive: includeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, includeFinalDateEnd, {accepted: false}),
+  netProfitCents: 0, adminShareBps: 0, members: [],
+}, "INVALID_CYCLE_WINDOW_ACCEPTANCE");
+const endOnlyInput: CapitalDaysInputV22 = {
+  scope, cycleStart: customStart, cycleEndExclusive: excludeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, excludeFinalDateEnd),
+  netProfitCents: 0, adminShareBps: 0, members: [],
+};
+const includeFinalDateInput: CapitalDaysInputV22 = {
+  scope, cycleStart: customStart, cycleEndExclusive: includeFinalDateEnd,
+  cycleWindowAcceptance: explicitWindowAcceptance(customStart, includeFinalDateEnd),
+  netProfitCents: 0, adminShareBps: 0, members: [],
+};
+const endOnlyEnvelope = await createCapitalDaysPreviewEnvelopeV22(endOnlyInput, "policy-v1", "nonce-1");
+const includeFinalEnvelope = await createCapitalDaysPreviewEnvelopeV22(
+  includeFinalDateInput, "policy-v1", "nonce-1",
+);
+assert.notEqual(endOnlyEnvelope.digest, includeFinalEnvelope.digest);
 rejected({...base, netProfitCents: 1.5}, "INVALID_NET_PROFIT_CENTS");
 rejected({...base, adminShareBps: 10001}, "INVALID_ADMIN_SHARE_BPS");
 rejected({...base, members: [base.members[0], {...base.members[1], membershipId: "mem-a"}]}, "INVALID_MEMBER");

@@ -85,6 +85,49 @@ assert.throws(() => calculateCycleDistributionPreviewV22(input({
 })), (error: unknown) => error instanceof CycleDistributionPreviewV22Error
   && error.code === "INVALID_POLICY_ACCEPTANCE_WINDOW");
 
+const customStart = "2026-12-10";
+for (const [customEndExclusive, expectedDays] of [
+  ["2027-12-20", 375],
+  ["2027-12-21", 376],
+] as const) {
+  const customPolicy: AcceptedCycleDistributionPolicyV22 = {
+    ...policy, cycleStart: customStart, cycleEndExclusive: customEndExclusive,
+    cycleWindowMode: "EXPLICIT_ACCEPTED_WINDOW",
+  };
+  const customMember = {
+    ...member("member-custom-window", 1000),
+    eligibilityPeriods: [{startDate: customStart, endDateExclusive: customEndExclusive}],
+  };
+  const customResult = calculateCycleDistributionPreviewV22(input({
+    cycleStart: customStart,
+    cycleEndExclusive: customEndExclusive,
+    policy: customPolicy,
+    members: [customMember],
+    profitLines: [],
+  }));
+  assert.equal(customResult.calculation.capitalDays.cycleEndExclusive, customEndExclusive);
+  assert.equal(customResult.calculation.capitalDays.members[0].eligibleCapitalDays,
+    String(1000 * expectedDays));
+}
+const nonAcceptedWindowPolicy: AcceptedCycleDistributionPolicyV22 = {
+  ...policy, cycleStart: customStart, cycleEndExclusive: "2027-12-21",
+};
+assert.throws(() => calculateCycleDistributionPreviewV22(input({
+  cycleStart: customStart,
+  cycleEndExclusive: "2027-12-21",
+  policy: nonAcceptedWindowPolicy,
+  members: [{
+    ...member("member-unaccepted-window", 1000),
+    eligibilityPeriods: [{startDate: customStart, endDateExclusive: "2027-12-21"}],
+  }],
+  profitLines: [],
+})), (error: unknown) => error instanceof CycleDistributionPreviewV22Error
+  && error.code === "INVALID_CYCLE_WINDOW");
+assert.throws(() => calculateCycleDistributionPreviewV22(input({
+  policy: {...policy, cycleWindowMode: "UNKNOWN" as "ANNIVERSARY_12_MONTH"},
+})), (error: unknown) => error instanceof CycleDistributionPreviewV22Error
+  && error.code === "INVALID_CYCLE_WINDOW_MODE");
+
 const mismatchedLine = {...revenue, tenantId: "another-tenant"};
 assert.throws(() => calculateCycleDistributionPreviewV22(input({profitLines: [mismatchedLine]})),
   /LINE_SCOPE_MISMATCH/);

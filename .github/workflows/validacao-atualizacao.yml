@@ -38,6 +38,15 @@ on:
       - 'backend/app/m40800_financial_dsn_guard.py'
       - 'backend/tests/test_m40850_dsn_downgrade_ci.py'
       - '.github/workflows/frfinance-m40850-dsn-downgrade-no-go-ci.yml'
+      - '.github/workflows/frfinance-m41010-explicit-cycle-window-v22-ci.yml'
+      - 'docs/FR_FINANCE_M41010_EXPLICIT_CYCLE_WINDOW_PREVIEW.md'
+      - 'src/services/cycleWindowV22.ts'
+      - 'src/services/capitalDaysV22.ts'
+      - 'src/services/eligibleProfitBasisV22.ts'
+      - 'src/services/cycleDistributionPreviewV22.ts'
+      - 'src/tests/m40965_capital_days_v22.test.ts'
+      - 'src/tests/m40970_profit_basis_v22.test.ts'
+      - 'src/tests/m40971_cycle_distribution_preview_v22.test.ts'
       - 'src/index.css'
       - 'src/components/LoginView.tsx'
       - 'src/tests/m40860_android_single_inset_ci.test.ts'
@@ -82,6 +91,12 @@ jobs:
         run: npm run test:audit
       - name: Testes de integração do estado financeiro
         run: npx tsx src/tests/server_integration.test.ts
+      - name: M40965 — Capital-Dias V2, janelas anual e explícita
+        run: npx tsx src/tests/m40965_capital_days_v22.test.ts
+      - name: M40970 — lucro realizado em janela explícita
+        run: npx tsx src/tests/m40970_profit_basis_v22.test.ts
+      - name: M40971 — aceite e prévia de rateio com janela explícita
+        run: npx tsx src/tests/m40971_cycle_distribution_preview_v22.test.ts
       - name: Testes de identidade única, contexto e concorrência no cliente
         run: npx tsx src/tests/auth_context_security.test.ts
       - name: Testar cliente dos tres perfis no APK

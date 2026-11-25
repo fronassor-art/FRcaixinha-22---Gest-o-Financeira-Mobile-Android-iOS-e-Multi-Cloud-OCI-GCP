@@ -1,0 +1,54 @@
+name: FR Finance M41010 explicit cycle window V2.2 CI
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - "src/services/cycleWindowV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/tests/m40965_capital_days_v22.test.ts"
+      - "src/tests/m40970_profit_basis_v22.test.ts"
+      - "src/tests/m40971_cycle_distribution_preview_v22.test.ts"
+      - ".github/workflows/frfinance-m41010-explicit-cycle-window-v22-ci.yml"
+      - ".github/workflows/validacao-atualizacao.yml"
+      - "docs/FR_FINANCE_M41010_EXPLICIT_CYCLE_WINDOW_PREVIEW.md"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/services/cycleWindowV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/tests/m40965_capital_days_v22.test.ts"
+      - "src/tests/m40970_profit_basis_v22.test.ts"
+      - "src/tests/m40971_cycle_distribution_preview_v22.test.ts"
+      - ".github/workflows/frfinance-m41010-explicit-cycle-window-v22-ci.yml"
+      - ".github/workflows/validacao-atualizacao.yml"
+      - "docs/FR_FINANCE_M41010_EXPLICIT_CYCLE_WINDOW_PREVIEW.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  explicit-cycle-window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - name: M40965 Capital-Dias V2, datas e rateio
+        run: npx tsx src/tests/m40965_capital_days_v22.test.ts
+      - name: M40970 lucro realizado e janela explícita
+        run: npx tsx src/tests/m40970_profit_basis_v22.test.ts
+      - name: M40971 aceite e prévia de distribuição
+        run: npx tsx src/tests/m40971_cycle_distribution_preview_v22.test.ts

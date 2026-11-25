@@ -4,6 +4,12 @@ import {
   type CapitalDaysInputV22,
   type CapitalDaysResultV22,
 } from "./capitalDaysV22";
+import {
+  civilDateDayNumberV22,
+  CycleWindowV22Error,
+  validateCycleWindowV22,
+  type ExplicitCycleWindowAcceptanceV22,
+} from "./cycleWindowV22";
 
 export type ProfitBasisLineKindV22 =
   | "REALIZED_REVENUE"
@@ -40,6 +46,7 @@ export interface EligibleProfitBasisInputV22 {
   scope: {tenantId: string; cycleId: string};
   cycleStart: string;
   cycleEndExclusive: string;
+  cycleWindowAcceptance?: ExplicitCycleWindowAcceptanceV22;
   lines: ProfitBasisLineV22[];
 }
 
@@ -78,8 +85,6 @@ export class EligibleProfitBasisV22Error extends Error {
   }
 }
 
-const DAY_MS = 86_400_000;
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 
 function fail(code: string): never {
@@ -87,16 +92,12 @@ function fail(code: string): never {
 }
 
 function dayNumber(value: string): number {
-  if (typeof value !== "string" || !DATE_ONLY.test(value)) return fail("INVALID_DATE");
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) return fail("INVALID_DATE");
-  const stamp = Date.UTC(year, month - 1, day);
-  if (!Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== value) {
+  try {
+    return civilDateDayNumberV22(value);
+  } catch (error) {
+    if (error instanceof CycleWindowV22Error) return fail(error.code);
     return fail("INVALID_DATE");
   }
-  return stamp / DAY_MS;
 }
 
 function validId(value: unknown): value is string {
@@ -114,15 +115,14 @@ function compareId(a: string, b: string): number {
 }
 
 function cycleWindow(input: EligibleProfitBasisInputV22): {start: number; end: number} {
-  const start = dayNumber(input.cycleStart);
-  const end = dayNumber(input.cycleEndExclusive);
-  const startDate = new Date(start * DAY_MS);
-  const year = startDate.getUTCFullYear() + 1;
-  const month = startDate.getUTCMonth();
-  const day = Math.min(startDate.getUTCDate(), new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
-  const anniversary = Date.UTC(year, month, day) / DAY_MS;
-  if (end !== anniversary || end - start > 366) return fail("INVALID_CYCLE_WINDOW");
-  return {start, end};
+  try {
+    return validateCycleWindowV22(
+      input.scope, input.cycleStart, input.cycleEndExclusive, input.cycleWindowAcceptance,
+    );
+  } catch (error) {
+    if (error instanceof CycleWindowV22Error) return fail(error.code);
+    return fail("INVALID_CYCLE_WINDOW");
+  }
 }
 
 function inCycle(value: string, start: string, endExclusive: string): boolean {
@@ -296,6 +296,7 @@ export function calculateCapitalDaysFromProfitBasisV22(
     scope: input.scope,
     cycleStart: input.cycleStart,
     cycleEndExclusive: input.cycleEndExclusive,
+    cycleWindowAcceptance: input.cycleWindowAcceptance,
     lines: profitLines,
   });
   const distributable = BigInt(profitBasis.distributableNetProfitCents);

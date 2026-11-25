@@ -7,6 +7,7 @@ import {
   type EligibleProfitBasisInputV22,
   type ProfitBasisLineV22,
 } from "../services/eligibleProfitBasisV22";
+import type {ExplicitCycleWindowAcceptanceV22} from "../services/cycleWindowV22";
 
 const scope = {tenantId: "tenant-profit", cycleId: "cycle-profit"};
 const cycleStart = "2025-01-01";
@@ -111,6 +112,50 @@ assert.equal(integrated.profitBasis.distributableNetProfitCents, "1625");
 assert.equal(integrated.capitalDays.netProfitCents, "1625");
 assert.equal(integrated.capitalDays.adminShareCents, "325");
 assert.equal(integrated.capitalDays.memberPoolCents, "1300");
+
+const customStart = "2026-12-10";
+const customEndExclusive = "2027-12-21";
+const customAcceptance: ExplicitCycleWindowAcceptanceV22 = {
+  mode: "EXPLICIT_ACCEPTED_WINDOW",
+  scope,
+  cycleStart: customStart,
+  cycleEndExclusive: customEndExclusive,
+  versionId: "policy-custom-v1",
+  policyDigest: "c".repeat(64),
+  accepted: true,
+  acceptedAt: "2026-11-25T12:00:00.000Z",
+  frozenAt: "2026-11-25T12:05:00.000Z",
+  acceptanceEvidenceRef: "acceptance:custom-cycle-window",
+};
+const finalDateRevenue = line("final-date-revenue", "REALIZED_REVENUE", 250, {
+  competenceDate: "2027-12-20",
+  recognizedDate: "2027-12-20",
+  financialDate: "2027-12-20",
+});
+const customBasis = calculateEligibleProfitBasisV22({
+  scope, cycleStart: customStart, cycleEndExclusive: customEndExclusive,
+  cycleWindowAcceptance: customAcceptance, lines: [finalDateRevenue],
+});
+assert.equal(customBasis.realizedRevenueCents, "250");
+assert.equal(customBasis.lines[0].included, true);
+assert.throws(() => calculateEligibleProfitBasisV22({
+  scope, cycleStart: customStart, cycleEndExclusive: customEndExclusive,
+  lines: [finalDateRevenue],
+}), (error: unknown) => error instanceof EligibleProfitBasisV22Error
+  && error.code === "INVALID_CYCLE_WINDOW");
+
+const customMember = {
+  ...scopedMember,
+  openingCapitalCents: 1000,
+  eligibilityPeriods: [{startDate: customStart, endDateExclusive: customEndExclusive}],
+};
+const customIntegrated = calculateCapitalDaysFromProfitBasisV22({
+  scope, cycleStart: customStart, cycleEndExclusive: customEndExclusive,
+  cycleWindowAcceptance: customAcceptance, adminShareBps: 0,
+  members: [customMember], profitLines: [finalDateRevenue],
+});
+assert.equal(customIntegrated.capitalDays.members[0].eligibleCapitalDays, "376000");
+assert.equal(customIntegrated.capitalDays.netProfitCents, "250");
 
 assert.throws(() => calculateCapitalDaysFromProfitBasisV22({
   scope, cycleStart, cycleEndExclusive, adminShareBps: 0,

@@ -1,6 +1,13 @@
+import {
+  civilDateDayNumberV22,
+  CycleWindowV22Error,
+  validateCycleWindowV22,
+  type ExplicitCycleWindowAcceptanceV22,
+} from "./cycleWindowV22";
+
 /**
- * M40965–M40969 — source-only Capital-Dias V2 calculation and scope/reversal fences.
- * Pure integer-cent preview for one cycle. It does not authorize or settle money.
+ * M40965–M40969, M41010 — source-only Capital-Dias V2 calculation and scope/reversal fences.
+ * Pure integer-cent preview for one accepted cycle window. It does not authorize or settle money.
  */
 export type CapitalEventKindV22 = "CONTRIBUTION" | "RESTITUTION" | "REVERSAL";
 export type CapitalEventStatusV22 = "CONFIRMED" | "PENDING" | "REVERSED";
@@ -35,6 +42,7 @@ export interface CapitalDaysInputV22 {
   scope: {tenantId: string; cycleId: string};
   cycleStart: string; // inclusive
   cycleEndExclusive: string; // exclusive
+  cycleWindowAcceptance?: ExplicitCycleWindowAcceptanceV22;
   netProfitCents: number; // realized cycle net result; losses are capped at zero
   adminShareBps: number; // explicit accepted policy, integer basis points, no default
   members: CapitalDaysMemberV22[];
@@ -71,24 +79,31 @@ export class CapitalDaysV22Error extends Error {
   }
 }
 
-const DAY_MS = 86_400_000;
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
 function fail(code: string): never {
   throw new CapitalDaysV22Error(code);
 }
 
 function dayNumber(value: string): number {
-  if (typeof value !== "string" || !DATE_ONLY.test(value)) return fail("INVALID_DATE");
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) return fail("INVALID_DATE");
-  const stamp = Date.UTC(year, month - 1, day);
-  if (!Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== value) {
+  try {
+    return civilDateDayNumberV22(value);
+  } catch (error) {
+    if (error instanceof CycleWindowV22Error) return fail(error.code);
     return fail("INVALID_DATE");
   }
-  return stamp / DAY_MS;
+}
+
+function cycleWindow(
+  scope: {tenantId: string; cycleId: string},
+  cycleStart: string,
+  cycleEndExclusive: string,
+  acceptance?: ExplicitCycleWindowAcceptanceV22,
+): {start: number; end: number} {
+  try {
+    return validateCycleWindowV22(scope, cycleStart, cycleEndExclusive, acceptance);
+  } catch (error) {
+    if (error instanceof CycleWindowV22Error) return fail(error.code);
+    return fail("INVALID_CYCLE_WINDOW");
+  }
 }
 
 function requireNonNegativeSafeInteger(value: number, code: string): bigint {
@@ -135,17 +150,9 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
   }
   const {tenantId, cycleId} = input.scope;
 
-  const start = dayNumber(input.cycleStart);
-  const end = dayNumber(input.cycleEndExclusive);
-  const startDate = new Date(start * DAY_MS);
-  const targetYear = startDate.getUTCFullYear() + 1;
-  const targetMonth = startDate.getUTCMonth();
-  const targetDay = Math.min(
-    startDate.getUTCDate(),
-    new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate(),
+  const {start, end} = cycleWindow(
+    input.scope, input.cycleStart, input.cycleEndExclusive, input.cycleWindowAcceptance,
   );
-  const expectedEnd = Date.UTC(targetYear, targetMonth, targetDay) / DAY_MS;
-  if (end !== expectedEnd || end - start > 366) return fail("INVALID_CYCLE_WINDOW");
 
   if (!Number.isSafeInteger(input.netProfitCents)) return fail("INVALID_NET_PROFIT_CENTS");
   const profit = BigInt(Math.max(0, input.netProfitCents));
@@ -270,11 +277,20 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
       }
     }
 
+    const boundaries = new Set<number>([start, end]);
+    for (const day of deltas.keys()) boundaries.add(day);
+    for (const period of periods) {
+      boundaries.add(period.start);
+      boundaries.add(period.end);
+    }
+    const orderedBoundaries = [...boundaries].sort((a, b) => a - b);
     let weight = 0n;
-    for (let day = start; day < end; day++) {
+    for (let index = 0; index < orderedBoundaries.length - 1; index += 1) {
+      const day = orderedBoundaries[index];
       openingBalance += deltas.get(day) ?? 0n;
       if (openingBalance < 0n) return fail("RESTITUTION_EXCEEDS_CONFIRMED_CAPITAL");
-      if (isInEligibility(day, periods)) weight += openingBalance;
+      const daysInSegment = BigInt(orderedBoundaries[index + 1] - day);
+      if (isInEligibility(day, periods)) weight += openingBalance * daysInSegment;
     }
     prepared.push({membershipId: member.membershipId, weight, deltas});
   }
@@ -379,6 +395,19 @@ export async function createCapitalDaysPreviewEnvelopeV22(
     scope: {tenantId: input.scope.tenantId, cycleId: input.scope.cycleId},
     cycleStart: input.cycleStart,
     cycleEndExclusive: input.cycleEndExclusive,
+    cycleWindowAcceptance: input.cycleWindowAcceptance === undefined ? null : {
+      mode: input.cycleWindowAcceptance.mode,
+      scope: {tenantId: input.cycleWindowAcceptance.scope.tenantId,
+        cycleId: input.cycleWindowAcceptance.scope.cycleId},
+      cycleStart: input.cycleWindowAcceptance.cycleStart,
+      cycleEndExclusive: input.cycleWindowAcceptance.cycleEndExclusive,
+      versionId: input.cycleWindowAcceptance.versionId,
+      policyDigest: input.cycleWindowAcceptance.policyDigest,
+      accepted: input.cycleWindowAcceptance.accepted,
+      acceptedAt: input.cycleWindowAcceptance.acceptedAt,
+      frozenAt: input.cycleWindowAcceptance.frozenAt,
+      acceptanceEvidenceRef: input.cycleWindowAcceptance.acceptanceEvidenceRef,
+    },
     netProfitCents: input.netProfitCents,
     adminShareBps: input.adminShareBps,
     members: input.members

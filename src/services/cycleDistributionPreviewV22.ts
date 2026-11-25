@@ -5,6 +5,12 @@ import {
   type CapitalDaysWithProfitBasisResultV22,
   type ProfitBasisLineV22,
 } from "./eligibleProfitBasisV22";
+import {
+  CycleWindowV22Error,
+  validateCycleWindowV22,
+  type CycleWindowModeV22,
+  type ExplicitCycleWindowAcceptanceV22,
+} from "./cycleWindowV22";
 
 export interface AcceptedCycleDistributionPolicyV22 {
   scope: {tenantId: string; cycleId: string};
@@ -19,10 +25,12 @@ export interface AcceptedCycleDistributionPolicyV22 {
   acceptedAt: string;
   frozenAt: string;
   acceptanceEvidenceRef: string;
+  cycleWindowMode?: CycleWindowModeV22;
 }
 
 export type CycleDistributionPreviewInputV22 =
-  Omit<CapitalDaysFromProfitBasisInputV22, "adminShareBps" | "profitLines"> & {
+  Omit<CapitalDaysFromProfitBasisInputV22,
+    "adminShareBps" | "profitLines" | "cycleWindowAcceptance"> & {
     policy: AcceptedCycleDistributionPolicyV22;
     profitLines: ProfitBasisLineV22[];
   };
@@ -107,7 +115,9 @@ function canonicalJson(value: unknown, ancestors: Set<object> = new Set()): stri
   }
 }
 
-function validatePolicy(input: CycleDistributionPreviewInputV22): void {
+function validatePolicy(
+  input: CycleDistributionPreviewInputV22,
+): ExplicitCycleWindowAcceptanceV22 | undefined {
   const policy = input.policy;
   if (policy === null || typeof policy !== "object") return fail("INVALID_POLICY");
   if (!policy.scope || policy.scope.tenantId !== input.scope?.tenantId
@@ -136,6 +146,34 @@ function validatePolicy(input: CycleDistributionPreviewInputV22): void {
       || policy.acceptanceEvidenceRef !== policy.acceptanceEvidenceRef.trim()) {
     return fail("MISSING_POLICY_ACCEPTANCE_EVIDENCE");
   }
+  if (policy.cycleWindowMode !== undefined
+      && policy.cycleWindowMode !== "ANNIVERSARY_12_MONTH"
+      && policy.cycleWindowMode !== "EXPLICIT_ACCEPTED_WINDOW") {
+    return fail("INVALID_CYCLE_WINDOW_MODE");
+  }
+  const cycleWindowAcceptance = policy.cycleWindowMode === "EXPLICIT_ACCEPTED_WINDOW"
+    ? {
+      mode: "EXPLICIT_ACCEPTED_WINDOW" as const,
+      scope: policy.scope,
+      cycleStart: policy.cycleStart,
+      cycleEndExclusive: policy.cycleEndExclusive,
+      versionId: policy.versionId,
+      policyDigest: policy.policyDigest,
+      accepted: policy.accepted,
+      acceptedAt: policy.acceptedAt,
+      frozenAt: policy.frozenAt,
+      acceptanceEvidenceRef: policy.acceptanceEvidenceRef,
+    }
+    : undefined;
+  try {
+    validateCycleWindowV22(
+      input.scope, input.cycleStart, input.cycleEndExclusive, cycleWindowAcceptance,
+    );
+  } catch (error) {
+    if (error instanceof CycleWindowV22Error) return fail(error.code);
+    return fail("INVALID_CYCLE_WINDOW");
+  }
+  return cycleWindowAcceptance;
 }
 
 /**
@@ -148,11 +186,12 @@ export function calculateCycleDistributionPreviewV22(
 ): CycleDistributionPreviewV22 {
   if (input === null || typeof input !== "object" || !Array.isArray(input.profitLines)
       || !Array.isArray(input.members)) return fail("INVALID_INPUT");
-  validatePolicy(input);
+  const cycleWindowAcceptance = validatePolicy(input);
   const calculation = calculateCapitalDaysFromProfitBasisV22({
     scope: input.scope,
     cycleStart: input.cycleStart,
     cycleEndExclusive: input.cycleEndExclusive,
+    cycleWindowAcceptance,
     adminShareBps: input.policy.adminShareBps,
     members: input.members,
     profitLines: input.profitLines,
