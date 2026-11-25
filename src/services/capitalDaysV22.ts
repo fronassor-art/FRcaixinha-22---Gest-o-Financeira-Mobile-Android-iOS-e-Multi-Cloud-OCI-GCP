@@ -298,3 +298,79 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
     members: memberResults,
   };
 }
+
+
+export interface CapitalDaysPreviewEnvelopeV22 {
+  envelope: "CAPITAL_DAYS_V2_PREVIEW_ONLY";
+  digestAlgorithm: "SHA-256";
+  policyVersion: string;
+  digest: string;
+  result: CapitalDaysResultV22;
+}
+
+/**
+ * Creates a deterministic, non-persisted preview envelope over the validated
+ * calculation input, accepted policy version, and calculated result. This hash
+ * is an integrity fingerprint only: it is not a signature, approval, or proof
+ * that the supplied policy/events are authentic.
+ */
+export async function createCapitalDaysPreviewEnvelopeV22(
+  input: CapitalDaysInputV22,
+  policyVersion: string,
+): Promise<CapitalDaysPreviewEnvelopeV22> {
+  if (!validScopeId(policyVersion)) return fail("INVALID_POLICY_VERSION");
+
+  const result = calculateCapitalDaysV22(input);
+  const canonicalInput = {
+    scope: {tenantId: input.scope.tenantId, cycleId: input.scope.cycleId},
+    cycleStart: input.cycleStart,
+    cycleEndExclusive: input.cycleEndExclusive,
+    netProfitCents: input.netProfitCents,
+    adminShareBps: input.adminShareBps,
+    members: input.members
+      .map(member => ({
+        tenantId: member.tenantId,
+        cycleId: member.cycleId,
+        membershipId: member.membershipId,
+        openingCapitalCents: member.openingCapitalCents,
+        eligibilityPeriods: [...member.eligibilityPeriods]
+          .map(period => ({startDate: period.startDate, endDateExclusive: period.endDateExclusive}))
+          .sort((a, b) => compareId(a.startDate, b.startDate)
+            || compareId(a.endDateExclusive, b.endDateExclusive)),
+        events: [...member.events]
+          .map(event => ({
+            tenantId: event.tenantId,
+            cycleId: event.cycleId,
+            membershipId: event.membershipId,
+            eventId: event.eventId,
+            effectiveDate: event.effectiveDate,
+            kind: event.kind,
+            amountCents: event.amountCents,
+            status: event.status,
+          }))
+          .sort((a, b) => compareId(a.effectiveDate, b.effectiveDate)
+            || compareId(a.eventId, b.eventId)),
+      }))
+      .sort((a, b) => compareId(a.membershipId, b.membershipId)),
+  };
+  const canonical = JSON.stringify({
+    envelope: "CAPITAL_DAYS_V2_PREVIEW_ONLY",
+    digestAlgorithm: "SHA-256",
+    algorithm: result.calculation,
+    policyVersion,
+    input: canonicalInput,
+    result,
+  });
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return fail("CRYPTO_UNAVAILABLE");
+  const digest = await subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  const hex = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+
+  return {
+    envelope: "CAPITAL_DAYS_V2_PREVIEW_ONLY",
+    digestAlgorithm: "SHA-256",
+    policyVersion,
+    digest: hex,
+    result,
+  };
+}
