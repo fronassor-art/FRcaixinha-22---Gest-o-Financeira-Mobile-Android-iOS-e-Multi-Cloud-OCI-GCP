@@ -65,7 +65,7 @@ const changed = await createCapitalDaysPreviewEnvelopeV22(otherInput, "policy-v2
 assert.notEqual(changed.digest, first.digest);
 
 await assert.rejects(
-  createCapitalDaysPreviewEnvelopeV22(input, " "),
+  createCapitalDaysPreviewEnvelopeV22(input, " ", "nonce-preview-001"),
   (error: unknown) => error instanceof CapitalDaysV22Error && error.code === "INVALID_POLICY_VERSION",
 );
 
