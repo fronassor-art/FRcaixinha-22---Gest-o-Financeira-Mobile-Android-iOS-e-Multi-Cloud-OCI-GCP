@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/public/contract-models", tags=["Modelos contratuais públicos"])
 
-_MANIFEST_PATH = Path(__file__).with_name("contract_model_manifest_v22.json")
+_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "contract_model_manifest_v22.json"
 try:
     _MANIFEST = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
 except (OSError, UnicodeError, json.JSONDecodeError) as exc:
