@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 ROOT=Path(__file__).resolve().parents[2]
 TERMUX=Path("/data/data/com.termux/files/home")
@@ -73,6 +74,11 @@ def evaluate(*, env: dict[str,str], home: Path, root: Path,
     if git_read("status","--porcelain","--untracked-files=no"):
         raise CheckpointBlocked("M40941_DIRTY_TRACKED_FILES")
 
+    # Make this standalone Termux script independent of caller PYTHONPATH.
+    # No package installation or filesystem write is performed.
+    backend_path=str(ROOT/"backend")
+    if backend_path not in sys.path:
+        sys.path.insert(0,backend_path)
     # Source-only inventory. This validates dependencies and enforces NO-GO;
     # it never approves SQL, provider money, migrations or runtime reload.
     from scripts.frfinance_m40939_release_gate import MANIFEST, validate
@@ -113,7 +119,7 @@ def main(argv=None) -> int:
             print(key+"="+value)
         print("M40941_STATUS=PASS_SOURCE_ONLY_NO_GO")
         return 0
-    except (CheckpointBlocked,OSError,ValueError,KeyError,
+    except (CheckpointBlocked,OSError,ValueError,KeyError,ImportError,
             subprocess.TimeoutExpired) as exc:
         print("M40941_STATUS=BLOCKED_"+(
             str(exc) if isinstance(exc,CheckpointBlocked)

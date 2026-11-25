@@ -95,3 +95,31 @@ def test_no_git_mutations_and_doc_policy():
         assert key in doc
     assert "test_m40941_termux_readonly_checkpoint_ci.py" in yml
     assert "contents: read" in yml
+
+
+def test_valid_metadata_resolves_gate_without_external_pythonpath(monkeypatch):
+    import importlib
+    import sys
+
+    mod=importlib.import_module(
+        "scripts.frfinance_m40941_termux_post_sync_checkpoint_readonly"
+    )
+    backend_path=str(ROOT/"backend")
+    monkeypatch.setattr(mod,"ROOT",ROOT)
+    monkeypatch.setattr(mod,"native_termux",lambda *args:True)
+    monkeypatch.setattr(
+        sys,"path",[entry for entry in sys.path
+                    if Path(entry or ".").resolve()!=Path(backend_path).resolve()]
+    )
+    # Force a fresh namespace import so cached CI modules cannot mask the
+    # standalone script's missing-PYTHONPATH regression.
+    monkeypatch.delitem(sys.modules,"scripts.frfinance_m40939_release_gate",raising=False)
+    monkeypatch.delitem(sys.modules,"scripts",raising=False)
+    observed,markers=mod.evaluate(
+        env={},home=TERMUX,root=TERMUX/"fr-finance",
+        expected_head=SHA,git_read=fixture_git()
+    )
+    assert observed==SHA
+    assert backend_path in sys.path
+    assert markers["M40941_PLAN"]=="VALIDATED_NO_GO"
+    assert markers["M40941_PRODUCTION"]=="BLOCKED"
