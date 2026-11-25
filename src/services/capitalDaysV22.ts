@@ -263,7 +263,9 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
     }
   }
 
-  const memberResults = prepared.map(member => {
+  const memberResults = [...prepared]
+    .sort((a, b) => compareId(a.membershipId, b.membershipId))
+    .map(member => {
     const share = shares.get(member.membershipId)!;
     const amount = share.base + (share.bonus ? 1n : 0n);
     return {
