@@ -35,8 +35,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: |
-          echo 'e33ac4a0ed0f036c4a3812eabfa20e616765acb07009273b6998a75f8a27d721  docs/FR_Finance_Caderno_Mestre_V2_2_2026-11-24.md' | sha256sum -c -
-          echo 'cf8fa48ccf6d068b79ace295a32ba856754df9271c81c7aa8274e80f8647214c  docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md' | sha256sum -c -
+          echo '1bfc140cbcd5077d0c47dd65112d953a7025715c34c382e266cf72690aa47a1b  docs/FR_Finance_Caderno_Mestre_V2_2_2026-11-24.md' | sha256sum -c -
+          echo 'a9eef40aae0b728c160e25fa068e02c2f913c598172d470d29aaa6fbbd346297  docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md' | sha256sum -c -
           grep -F 'Ideia, criação, projeto e desenvolvimento: Fábio Rossano Araújo Medeiros.' src/components/LoginView.tsx
       - run: python -m pip install pytest==8.3.4 pytest-asyncio==0.25.3 fastapi==0.115.8 pydantic==2.10.6 asyncpg==0.30.0
       - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40961_pool_binding_ci.py backend/tests/test_m40840_financial_sql_release_ci.py backend/tests/test_m40850_dsn_downgrade_ci.py
