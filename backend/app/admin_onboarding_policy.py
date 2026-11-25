@@ -1,6 +1,6 @@
 """Blueprint somente leitura de convite administrativo, SEM efeitos colaterais.
 
-FRcaixinha AI Studio Mobile: nunca emite token, senha, e-mail, memberships
+FR Finance: nunca emite token, senha, e-mail, memberships
 ou aprovacoes. A API de producao deve implementar persistencia transacional
 e controles juridicos/tecnicos adicionais antes de liberar qualquer acao.
 """

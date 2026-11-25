@@ -34,6 +34,18 @@ def test_visible_metadata_backend_and_package_identity():
     assert '"FR Caixinha"' not in main
     assert '"FR Finance"' in main
 
+def test_active_onboarding_copy_uses_fr_finance_without_changing_audit_ids():
+    policy=text("backend/app/admin_onboarding_policy.py")
+    onboarding=text("backend/app/aistudio_onboarding.py")
+    assert "FR Finance" in policy
+    assert "AI Studio" not in policy
+    assert "AI Studio" not in onboarding
+    # Keep existing gate and audit event keys until a separate compatibility migration.
+    assert 'AI_STUDIO_ALLOW_ROLE_ONBOARDING' in onboarding
+    assert 'AI_STUDIO_LOCAL_ROLE_ENROLLED' in onboarding
+    assert 'AI_STUDIO_LOCAL_TENANT_CREATED' in onboarding
+
+
 def test_legacy_identifiers_and_pdfs_remain_untouched():
     cap=text("capacitor.config.ts")
     cfg=text("backend/app/config.py")

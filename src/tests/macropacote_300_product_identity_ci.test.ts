@@ -9,6 +9,9 @@ assert.match(readme,/nome do produto e a única marca pública deste aplicativo/
 assert.doesNotMatch(readme,/Google AI Studio|Frente FR Finance AI Studio|FR Caixinha 2\.2/);
 assert.match(file('index.html'),/<title>FR Finance/);
 assert.match(file('capacitor.config.ts'),/appName: 'FR Finance'/);
+const androidGradle=file('android/app/build.gradle');
+assert.match(androidGradle,/versionNameSuffix "-FR-FINANCE-TEST"/);
+assert.doesNotMatch(androidGradle,/AI-STUDIO-TEST|Android AI Studio/);
 assert.match(file('capacitor.config.ts'),/appId: 'com.frcaixinha.app'/);
 assert.match(file('src/App.tsx'),/FR Finance<\/span>/);
 assert.doesNotMatch(file('src/App.tsx'),/OCI \+ GCP Ativos/);

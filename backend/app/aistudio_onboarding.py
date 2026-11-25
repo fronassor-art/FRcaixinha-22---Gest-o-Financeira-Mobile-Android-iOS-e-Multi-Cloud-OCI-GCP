@@ -1,7 +1,7 @@
 """Provisionamento local de homologacao: identidade unica, tenant, Admin e Membro.
 
 NAO eh cadastro publico, entrega de convite ou verificacao de titularidade de e-mail.
-Apenas cluster AI Studio do Termux ou PostgreSQL descartavel isolado do CI.
+Apenas ambiente autorizado do FR Finance no Termux ou PostgreSQL descartavel, isolado do CI.
 O Master autoriza com a propria senha; o operador usa credencial SQL local.
 """
 import os
@@ -36,7 +36,7 @@ def _guard_database(conn):
     elif ident[:3] == CI_IDENTITY and os.getenv("FRCAIXINHA_CI_ISOLATED") == "1":
         pass
     else:
-        raise OnboardingDenied("Banco/role nao pertencem ao AI Studio autorizado")
+        raise OnboardingDenied("Banco/role nao pertencem ao ambiente autorizado do FR Finance")
 
 
 def _email(value):

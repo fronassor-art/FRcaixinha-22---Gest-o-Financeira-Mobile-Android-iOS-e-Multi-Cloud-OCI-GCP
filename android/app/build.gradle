@@ -85,10 +85,10 @@ android {
         }
     }
     buildTypes {
-        // MESMO applicationId em todas as atualizacoes Android AI Studio.
+        // Mesmo applicationId em todas as atualizacoes do aplicativo FR Finance.
         debug {
             applicationIdSuffix diagnosticParallel ? ".aistudio.diag" : ".aistudio"
-            versionNameSuffix "-AI-STUDIO-TEST"
+            versionNameSuffix "-FR-FINANCE-TEST"
             if (stableSigningRequired) {
                 signingConfig signingConfigs.stableDebug
             }
