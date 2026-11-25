@@ -121,7 +121,11 @@ def test_m40957_engineering_completion_is_not_production_approval():
     obj = manifest()
     obj["tasks"][4]["status"] = "DONE_SOURCE_ONLY"
     report = validate(obj)
-    assert report["M40939_BLOCKED_OR_CI_PENDING"] == 32
+    expected_pending=sum(
+        row["status"]!="DONE_SOURCE_ONLY"
+        for row in obj["production_gates"]+obj["tasks"]
+    )
+    assert report["M40939_BLOCKED_OR_CI_PENDING"] == expected_pending
     assert report["M40939_PRODUCTION_GATES"] == 20
     assert report["M40939_DECISION"] == "NO_GO"
     assert report["M40939_MIGRATION"] == "NOT_AUTHORIZED"
