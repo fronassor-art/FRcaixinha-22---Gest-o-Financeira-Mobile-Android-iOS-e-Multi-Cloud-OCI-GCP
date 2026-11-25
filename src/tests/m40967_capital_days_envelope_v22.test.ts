@@ -35,9 +35,10 @@ const input: CapitalDaysInputV22 = {
 };
 
 const before = structuredClone(input);
-const first = await createCapitalDaysPreviewEnvelopeV22(input, "policy-v2.2-cycle-7");
+const first = await createCapitalDaysPreviewEnvelopeV22(input, "policy-v2.2-cycle-7", "nonce-preview-001");
 assert.equal(first.envelope, "CAPITAL_DAYS_V2_PREVIEW_ONLY");
 assert.equal(first.digestAlgorithm, "SHA-256");
+assert.equal(first.nonce, "nonce-preview-001");
 assert.match(first.digest, /^[a-f0-9]{64}$/);
 assert.equal(first.result.calculation, "CAPITAL_DAYS_V2_SOURCE_ONLY");
 assert.deepEqual(input, before);
@@ -50,15 +51,17 @@ const reordered: CapitalDaysInputV22 = {
     events: [...member.events].reverse(),
   })),
 };
-const same = await createCapitalDaysPreviewEnvelopeV22(reordered, "policy-v2.2-cycle-7");
+const same = await createCapitalDaysPreviewEnvelopeV22(reordered, "policy-v2.2-cycle-7", "nonce-preview-001");
 assert.equal(same.digest, first.digest);
 assert.deepEqual(same.result.members.map(member => member.membershipId), ["member-a", "member-b"]);
 
-const otherPolicy = await createCapitalDaysPreviewEnvelopeV22(input, "policy-v2.2-cycle-8");
+const otherPolicy = await createCapitalDaysPreviewEnvelopeV22(input, "policy-v2.2-cycle-8", "nonce-preview-001");
 assert.notEqual(otherPolicy.digest, first.digest);
+const otherNonce = await createCapitalDaysPreviewEnvelopeV22(input, "policy-v2.2-cycle-7", "nonce-preview-002");
+assert.notEqual(otherNonce.digest, first.digest);
 const otherInput = structuredClone(input);
 otherInput.members[0].openingCapitalCents += 1;
-const changed = await createCapitalDaysPreviewEnvelopeV22(otherInput, "policy-v2.2-cycle-7");
+const changed = await createCapitalDaysPreviewEnvelopeV22(otherInput, "policy-v2.2-cycle-7", "nonce-preview-001");
 assert.notEqual(changed.digest, first.digest);
 
 await assert.rejects(

@@ -306,6 +306,7 @@ export interface CapitalDaysPreviewEnvelopeV22 {
   envelope: "CAPITAL_DAYS_V2_PREVIEW_ONLY";
   digestAlgorithm: "SHA-256";
   policyVersion: string;
+  nonce: string;
   digest: string;
   result: CapitalDaysResultV22;
 }
@@ -319,8 +320,10 @@ export interface CapitalDaysPreviewEnvelopeV22 {
 export async function createCapitalDaysPreviewEnvelopeV22(
   input: CapitalDaysInputV22,
   policyVersion: string,
+  nonce: string,
 ): Promise<CapitalDaysPreviewEnvelopeV22> {
   if (!validScopeId(policyVersion)) return fail("INVALID_POLICY_VERSION");
+  if (!validScopeId(nonce)) return fail("INVALID_PREVIEW_NONCE");
 
   const result = calculateCapitalDaysV22(input);
   const canonicalInput = {
@@ -360,6 +363,7 @@ export async function createCapitalDaysPreviewEnvelopeV22(
     digestAlgorithm: "SHA-256",
     algorithm: result.calculation,
     policyVersion,
+    nonce,
     input: canonicalInput,
     result,
   });
@@ -372,6 +376,7 @@ export async function createCapitalDaysPreviewEnvelopeV22(
     envelope: "CAPITAL_DAYS_V2_PREVIEW_ONLY",
     digestAlgorithm: "SHA-256",
     policyVersion,
+    nonce,
     digest: hex,
     result,
   };
