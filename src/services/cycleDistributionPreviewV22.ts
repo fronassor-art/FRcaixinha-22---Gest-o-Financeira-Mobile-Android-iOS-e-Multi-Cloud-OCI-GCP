@@ -13,7 +13,7 @@ export interface AcceptedCycleDistributionPolicyV22 {
   versionId: string;
   policyDigest: string;
   adminShareBps: number;
-  accepted: true;
+  accepted: boolean;
   acceptedAt: string;
   frozenAt: string;
   acceptanceEvidenceRef: string;

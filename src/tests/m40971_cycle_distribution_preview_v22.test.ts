@@ -63,7 +63,7 @@ assert.equal(emptyWeights.calculation.capitalDays.adminShareCents, "0");
 assert.equal(emptyWeights.calculation.capitalDays.members[0].memberShareCents, "0");
 
 assert.throws(() => calculateCycleDistributionPreviewV22(input({
-  policy: {...policy, accepted: false} as AcceptedCycleDistributionPolicyV22,
+  policy: {...policy, accepted: false},
 })), (error: unknown) => error instanceof CycleDistributionPreviewV22Error
   && error.code === "POLICY_NOT_ACCEPTED");
 assert.throws(() => calculateCycleDistributionPreviewV22(input({
