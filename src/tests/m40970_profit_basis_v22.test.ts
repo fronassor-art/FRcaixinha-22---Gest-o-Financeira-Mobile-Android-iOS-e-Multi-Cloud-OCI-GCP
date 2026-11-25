@@ -3,6 +3,7 @@ import {
   calculateCapitalDaysFromProfitBasisV22,
   calculateEligibleProfitBasisV22,
   EligibleProfitBasisV22Error,
+  type CapitalDaysFromProfitBasisInputV22,
   type EligibleProfitBasisInputV22,
   type ProfitBasisLineV22,
 } from "../services/eligibleProfitBasisV22";
