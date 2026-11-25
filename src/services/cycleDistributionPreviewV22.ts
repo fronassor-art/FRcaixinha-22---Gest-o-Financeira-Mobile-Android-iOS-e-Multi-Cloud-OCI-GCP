@@ -8,6 +8,8 @@ import {
 
 export interface AcceptedCycleDistributionPolicyV22 {
   scope: {tenantId: string; cycleId: string};
+  administratorId: string;
+  administratorMembershipId: string | null;
   cycleStart: string;
   cycleEndExclusive: string;
   versionId: string;
@@ -25,11 +27,24 @@ export type CycleDistributionPreviewInputV22 =
     profitLines: ProfitBasisLineV22[];
   };
 
+export type CycleDistributionEntitlementKindV22 =
+  | "ADMINISTRATOR_COMPENSATION"
+  | "MEMBER_PROFIT"
+  | "PENDING_MEMBER_POOL";
+
+export interface CycleDistributionEntitlementV22 {
+  kind: CycleDistributionEntitlementKindV22;
+  beneficiaryId: string | null;
+  membershipId: string | null;
+  amountCents: string;
+}
+
 export interface CycleDistributionPreviewV22 {
   preview: "CYCLE_DISTRIBUTION_SOURCE_ONLY";
   policyAttestation: "CALLER_SUPPLIED_NOT_AUTHENTICATED";
   executionAuthorized: false;
   policy: AcceptedCycleDistributionPolicyV22;
+  entitlements: CycleDistributionEntitlementV22[];
   calculation: CapitalDaysWithProfitBasisResultV22;
 }
 
@@ -64,23 +79,32 @@ function validInstant(value: unknown): value is string {
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value === "string" || typeof value === "boolean"
-      || typeof value === "number") {
+function canonicalJson(value: unknown, ancestors: Set<object> = new Set()): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
     const encoded = JSON.stringify(value);
     if (encoded === undefined) return fail("NON_CANONICAL_INPUT");
     return encoded;
   }
-  if (typeof value === "number" && !Number.isFinite(value)) return fail("NON_CANONICAL_INPUT");
-  if (Array.isArray(value)) {
-    return "[" + Array.from(value, item => item === undefined ? "null" : canonicalJson(item)).join(",") + "]";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return fail("NON_CANONICAL_INPUT");
+    return JSON.stringify(value);
   }
   if (typeof value !== "object") return fail("NON_CANONICAL_INPUT");
-  const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).filter(key => record[key] !== undefined).sort();
-  return "{" + keys
-    .map(key => JSON.stringify(key) + ":" + canonicalJson(record[key]))
-    .join(",") + "}";
+  if (ancestors.has(value)) return fail("CYCLIC_CANONICAL_INPUT");
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return "[" + Array.from(value, item => item === undefined ? "null"
+        : canonicalJson(item, ancestors)).join(",") + "]";
+    }
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record).filter(key => record[key] !== undefined).sort();
+    return "{" + keys
+      .map(key => JSON.stringify(key) + ":" + canonicalJson(record[key], ancestors))
+      .join(",") + "}";
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function validatePolicy(input: CycleDistributionPreviewInputV22): void {
@@ -90,6 +114,9 @@ function validatePolicy(input: CycleDistributionPreviewInputV22): void {
       || policy.scope.cycleId !== input.scope?.cycleId) return fail("POLICY_SCOPE_MISMATCH");
   if (policy.cycleStart !== input.cycleStart
       || policy.cycleEndExclusive !== input.cycleEndExclusive) return fail("POLICY_CYCLE_MISMATCH");
+  if (!validId(policy.administratorId)) return fail("INVALID_ADMINISTRATOR_ID");
+  if (policy.administratorMembershipId !== null
+      && !validId(policy.administratorMembershipId)) return fail("INVALID_ADMINISTRATOR_MEMBERSHIP_ID");
   if (!validId(policy.versionId)) return fail("INVALID_POLICY_VERSION");
   if (typeof policy.policyDigest !== "string" || !/^[a-f0-9]{64}$/.test(policy.policyDigest)) {
     return fail("INVALID_POLICY_DIGEST");
@@ -143,11 +170,41 @@ export function calculateCycleDistributionPreviewV22(
       || (BigInt(capital.eligibleCapitalDaysTotal) > 0n && pending !== 0n)) {
     return fail("PENDING_POOL_INVARIANT_FAILED");
   }
+  const membershipIds = new Set(capital.members.map(member => member.membershipId));
+  if (input.policy.administratorMembershipId !== null
+      && !membershipIds.has(input.policy.administratorMembershipId)) {
+    return fail("ADMINISTRATOR_MEMBERSHIP_NOT_IN_CYCLE");
+  }
+  const entitlements: CycleDistributionEntitlementV22[] = [
+    {
+      kind: "ADMINISTRATOR_COMPENSATION",
+      beneficiaryId: input.policy.administratorId,
+      membershipId: input.policy.administratorMembershipId,
+      amountCents: capital.adminShareCents,
+    },
+    ...capital.members.map(member => ({
+      kind: "MEMBER_PROFIT" as const,
+      beneficiaryId: member.membershipId,
+      membershipId: member.membershipId,
+      amountCents: member.memberShareCents,
+    })),
+  ];
+  if (pending > 0n) {
+    entitlements.push({
+      kind: "PENDING_MEMBER_POOL",
+      beneficiaryId: null,
+      membershipId: null,
+      amountCents: pending.toString(),
+    });
+  }
+  const entitlementTotal = entitlements.reduce((sum, row) => sum + BigInt(row.amountCents), 0n);
+  if (entitlementTotal !== profit) return fail("ENTITLEMENT_CONSERVATION_FAILED");
   return {
     preview: "CYCLE_DISTRIBUTION_SOURCE_ONLY",
     policyAttestation: "CALLER_SUPPLIED_NOT_AUTHENTICATED",
     executionAuthorized: false,
     policy: {...input.policy, scope: {...input.policy.scope}},
+    entitlements,
     calculation,
   };
 }

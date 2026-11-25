@@ -1,0 +1,45 @@
+name: FR Finance M40973 dual-role entitlement and canonical input CI
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/tests/m40971_cycle_distribution_preview_v22.test.ts"
+      - "src/tests/m40972_preview_fingerprint_optional_fields.test.ts"
+      - "src/tests/m40973_dual_role_entitlements_and_canonical_input.test.ts"
+      - ".github/workflows/frfinance-m40973-dual-role-entitlement-ci.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/tests/m40971_cycle_distribution_preview_v22.test.ts"
+      - "src/tests/m40972_preview_fingerprint_optional_fields.test.ts"
+      - "src/tests/m40973_dual_role_entitlements_and_canonical_input.test.ts"
+      - ".github/workflows/frfinance-m40973-dual-role-entitlement-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dual-role-entitlements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/m40971_cycle_distribution_preview_v22.test.ts
+      - run: npx tsx src/tests/m40972_preview_fingerprint_optional_fields.test.ts
+      - run: npx tsx src/tests/m40973_dual_role_entitlements_and_canonical_input.test.ts

@@ -13,6 +13,8 @@ const policy: AcceptedCycleDistributionPolicyV22 = {
   scope,
   cycleStart,
   cycleEndExclusive,
+  administratorId: "admin-user",
+  administratorMembershipId: null,
   versionId: "policy-optional-fields",
   policyDigest: "b".repeat(64),
   adminShareBps: 0,
