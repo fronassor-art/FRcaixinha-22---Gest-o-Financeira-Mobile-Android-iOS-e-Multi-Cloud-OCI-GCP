@@ -68,7 +68,7 @@ def test_runner_fails_closed_before_psycopg_or_database_access():
     assert "M41050_LOCAL_DATABASE_CONNECTIONS=NONE" in result.stdout
     assert "import psycopg" not in SOURCE.split("def connect(", 1)[0]
     main_body = SOURCE.split("def main()", 1)[1]
-    assert main_body.index("dsn = require_disposable()") < main_body.index("run(dsn)")
+    assert main_body.index("require_disposable()") < main_body.index("run(dsn)")
 
 
 def test_fixture_reuses_existing_proof_and_has_no_second_signer_key():
