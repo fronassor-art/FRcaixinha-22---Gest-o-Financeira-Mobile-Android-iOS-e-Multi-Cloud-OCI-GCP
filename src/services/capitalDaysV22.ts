@@ -1,11 +1,14 @@
 /**
- * M40965 — source-only Capital-Dias V2 calculation.
+ * M40965–M40966 — source-only Capital-Dias V2 calculation and scope fence.
  * Pure integer-cent preview for one cycle. It does not authorize or settle money.
  */
 export type CapitalEventKindV22 = "CONTRIBUTION" | "RESTITUTION";
 export type CapitalEventStatusV22 = "CONFIRMED" | "PENDING" | "REVERSED";
 
 export interface CapitalEventV22 {
+  tenantId: string;
+  cycleId: string;
+  membershipId: string;
   eventId: string;
   effectiveDate: string; // local civil date, YYYY-MM-DD
   kind: CapitalEventKindV22;
@@ -19,6 +22,8 @@ export interface EligibilityPeriodV22 {
 }
 
 export interface CapitalDaysMemberV22 {
+  tenantId: string;
+  cycleId: string;
   membershipId: string;
   openingCapitalCents: number; // reconciled capital at the close before cycleStart
   eligibilityPeriods: EligibilityPeriodV22[]; // supplied by the accepted cycle policy
@@ -26,6 +31,7 @@ export interface CapitalDaysMemberV22 {
 }
 
 export interface CapitalDaysInputV22 {
+  scope: {tenantId: string; cycleId: string};
   cycleStart: string; // inclusive
   cycleEndExclusive: string; // exclusive
   netProfitCents: number; // realized cycle net result; losses are capped at zero
@@ -44,6 +50,7 @@ export interface CapitalDaysMemberResultV22 {
 
 export interface CapitalDaysResultV22 {
   calculation: "CAPITAL_DAYS_V2_SOURCE_ONLY";
+  scope: {tenantId: string; cycleId: string};
   cycleStart: string;
   cycleEndExclusive: string;
   netProfitCents: string;
@@ -93,6 +100,11 @@ function requirePositiveSafeInteger(value: number, code: string): bigint {
   return BigInt(value);
 }
 
+function validScopeId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0
+    && value === value.trim() && value.length <= 128;
+}
+
 function compareId(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
@@ -116,6 +128,11 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
   if (input === null || typeof input !== "object" || !Array.isArray(input.members)) {
     return fail("INVALID_INPUT");
   }
+  if (input.scope === null || typeof input.scope !== "object"
+      || !validScopeId(input.scope.tenantId) || !validScopeId(input.scope.cycleId)) {
+    return fail("INVALID_SCOPE");
+  }
+  const {tenantId, cycleId} = input.scope;
 
   const start = dayNumber(input.cycleStart);
   const end = dayNumber(input.cycleEndExclusive);
@@ -144,6 +161,10 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
   }> = [];
 
   for (const member of input.members) {
+    if (member !== null && typeof member === "object"
+        && (member.tenantId !== tenantId || member.cycleId !== cycleId)) {
+      return fail("MEMBER_SCOPE_MISMATCH");
+    }
     if (member === null || typeof member !== "object"
         || typeof member.membershipId !== "string"
         || member.membershipId.trim().length === 0
@@ -174,6 +195,14 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
 
     const deltas = new Map<number, bigint>();
     for (const event of member.events) {
+      if (event !== null && typeof event === "object"
+          && (event.tenantId !== tenantId || event.cycleId !== cycleId)) {
+        return fail("EVENT_SCOPE_MISMATCH");
+      }
+      if (event !== null && typeof event === "object"
+          && event.membershipId !== member.membershipId) {
+        return fail("EVENT_MEMBERSHIP_MISMATCH");
+      }
       if (event === null || typeof event !== "object"
           || typeof event.eventId !== "string"
           || event.eventId.trim().length === 0
@@ -256,6 +285,7 @@ export function calculateCapitalDaysV22(input: CapitalDaysInputV22): CapitalDays
 
   return {
     calculation: "CAPITAL_DAYS_V2_SOURCE_ONLY",
+    scope: {tenantId, cycleId},
     cycleStart: input.cycleStart,
     cycleEndExclusive: input.cycleEndExclusive,
     netProfitCents: profit.toString(),
