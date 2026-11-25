@@ -1,4 +1,4 @@
-"""AI Studio — adaptadores HTTPS reais Mercado Pago Pix IN e Payouts.
+"""FR Finance — adaptadores HTTPS reais Mercado Pago Pix IN e Payouts.
 
 Independent provider gateway; no auto-start, no public routes, no live
 credentials, no ledger writes. Real network only with deployment-time
@@ -212,7 +212,7 @@ async def create_collection_pix(
                 operation_id=command.external_reference,
                 amount_cents=command.amount_cents,
                 payer_email=payer_email,
-                description="FR Caixinha "+command.obligation.kind.value,
+                description="FR Finance "+command.obligation.kind.value,
                 idempotency_key=command.idempotency_key,
             ),
         )

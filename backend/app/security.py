@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Módulo de Segurança Criptográfica do Servidor
+FR Finance — Módulo de Segurança Criptográfica do Servidor
 Hashing com Argon2id/Bcrypt, Tokens de Sessão Opostos e Prevenção de Força Bruta
 Em conformidade estrita com o Contrato Técnico Mestre (Cláusulas 2.3, 11.2 e 16.4)
 """

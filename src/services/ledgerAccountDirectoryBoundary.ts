@@ -1,4 +1,4 @@
-/** FR Caixinha / AI Studio: metadados sem saldos para mostrar contas em livro vazio. */
+/** FR Finance / FR Finance: metadados sem saldos para mostrar contas em livro vazio. */
 export interface LedgerAccountDirectoryItem {
   id:string;
   account_code:string;

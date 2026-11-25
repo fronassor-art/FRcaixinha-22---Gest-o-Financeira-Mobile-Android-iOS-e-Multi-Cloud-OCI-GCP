@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Rotas de Contribuições Mensais e Cotas
+FR Finance — Rotas de Contribuições Mensais e Cotas
 Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 4.5, 6.3, 6.4, 7.1, 14.1 e 16.4)
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP e prevenção estrita de saldo fictício.
 """

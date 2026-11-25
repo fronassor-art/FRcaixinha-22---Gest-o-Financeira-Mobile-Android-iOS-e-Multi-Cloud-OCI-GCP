@@ -1,4 +1,4 @@
-/** FR Caixinha AI Studio — M1081: revisão documental em sandbox. */
+/** FR Finance — M1081: revisão documental em sandbox. */
 export type ReviewKind =
   'ADMIN_DOCUMENTS_REQUESTED'|'ADMIN_REVIEW_ACCEPTED_SANDBOX'|
   'ADMIN_REVIEW_REJECTED_SANDBOX'|'MEMBER_CONTESTED';

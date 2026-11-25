@@ -154,7 +154,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
       title: `Pagamento de Bilhete #${ticket.number.toString().padStart(3, '0')}`,
       amount: ticket.price,
       description: `Rifa ${currentCampaign.title} - Bilhete #${ticket.number} (Cota #${card.quota_number})`,
-      recipientName: 'FRcaixinha Gestão Coletiva',
+      recipientName: 'FR Finance Gestão Coletiva',
       referenceId: ticket.id,
       onConfirm: () => {
         appStore.payRaffleTicket(ticket.id, ticket.buyer_name || card.member_name);
@@ -167,7 +167,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
       title: `Quitação Integral de Cartela #${card.id.split('-').pop()}`,
       amount: card.amount_pending,
       description: `Quitação de 10 bilhetes da Cota #${card.quota_number} (${card.member_name}) - ${currentCampaign.title}`,
-      recipientName: 'FRcaixinha Gestão Coletiva',
+      recipientName: 'FR Finance Gestão Coletiva',
       referenceId: card.id,
       onConfirm: () => {
         appStore.payRaffleCardFull(card.id);
@@ -211,7 +211,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
                 <Ticket className="w-3.5 h-3.5" /> Rifas — demonstração
               </span>
               <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">
-                Regra FRcaixinha 2.2
+                Regra FR Finance
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
@@ -1272,7 +1272,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
             {/* Cabeçalho da Cartela Impressa */}
             <div className="border-b-2 border-dashed border-slate-200 pb-5 text-center">
               <span className="text-[11px] font-black tracking-widest uppercase bg-slate-900 text-white px-3 py-1 rounded-full">
-                CARTELA DIGITAL DEMONSTRATIVA • FRCAIXINHA 2.2
+                CARTELA DIGITAL DEMONSTRATIVA • FR Finance
               </span>
               <h2 className="text-xl font-black text-slate-900 mt-2">
                 {currentCampaign.title}
@@ -1343,7 +1343,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
                     {inspectCard.authenticity_code}
                   </div>
                   <p className="text-[10px] text-slate-400 leading-tight">
-                    Validação em conformidade com as regras financeiras da FRcaixinha 2.2. Modalidade interna
+                    Validação em conformidade com as regras financeiras da FR Finance. Modalidade interna
                     autorizada com prestação de contas no livro-razão.
                   </p>
                 </div>
@@ -1353,7 +1353,7 @@ export const RaffleModuleView: React.FC<RaffleModuleViewProps> = ({ state, onOpe
             {/* Rodapé / Botão de Fechar */}
             <div className="flex items-center justify-between border-t border-slate-200 pt-4">
               <span className="text-xs text-slate-400 font-mono">
-                Emitida eletronicamente pelo applet FRcaixinha
+                Emitida eletronicamente pelo applet FR Finance
               </span>
               <button
                 onClick={() => setInspectCard(null)}

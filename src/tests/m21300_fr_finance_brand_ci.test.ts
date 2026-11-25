@@ -7,7 +7,9 @@ const files=[
  'android/app/src/debug/res/values/strings.xml',
  'android/app/src/main/assets/capacitor.config.json',
  'index.html','public/manifest.webmanifest','public/icon.svg',
- 'src/components/Navbar.tsx','src/components/LoginView.tsx',
+ 'src/components/Navbar.tsx','src/components/LoginView.tsx','src/components/MobileInstallModal.tsx',
+ 'src/components/RaffleModuleView.tsx','src/services/financialEngine.ts',
+ 'src/services/financialApiService.ts',
  'src/App.tsx','src/components/NotificationsView.tsx',
  'docs/FR_CAIXINHA_M21200_MERCADO_PAGO_CONFIGURATION.md',
  'README.md','server.ts','metadata.json'

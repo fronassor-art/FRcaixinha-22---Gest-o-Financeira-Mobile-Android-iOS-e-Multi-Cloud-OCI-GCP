@@ -1,4 +1,4 @@
-"""M27700 — FR Finance AI Studio nonsecret provider-intake contract.
+"""M27700 — FR Finance nonsecret provider-intake contract.
 
 Only PUBLIC identifiers/hostnames may be stored. Never collect tokens,
 passwords, client secrets, email webhook secrets, DSNs or key material here.

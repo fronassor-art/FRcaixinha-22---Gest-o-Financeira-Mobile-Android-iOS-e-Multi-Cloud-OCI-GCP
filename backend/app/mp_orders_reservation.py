@@ -1,4 +1,4 @@
-"""AI Studio M5100 — durable Orders reservation adapter, OCI STAGING ONLY.
+"""FR Finance M5100 — durable Orders reservation adapter, OCI STAGING ONLY.
 
 The pool must be injected by an authorized background worker using the
 unprivileged `frcaixinha_mp_financial_worker` login. No network/PSP calls or

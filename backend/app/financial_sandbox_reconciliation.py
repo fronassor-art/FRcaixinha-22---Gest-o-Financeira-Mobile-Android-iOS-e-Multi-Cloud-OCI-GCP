@@ -1,4 +1,4 @@
-"""AI Studio M1561+: laboratório DETERMINÍSTICO de conciliação, sem I/O.
+"""FR Finance M1561+: laboratório DETERMINÍSTICO de conciliação, sem I/O.
 
 Não conecta ao Mercado Pago, não consulta PostgreSQL, não aceita recibos como
 prova bancária, não executa Pix e não modifica qualquer lançamento. Uma

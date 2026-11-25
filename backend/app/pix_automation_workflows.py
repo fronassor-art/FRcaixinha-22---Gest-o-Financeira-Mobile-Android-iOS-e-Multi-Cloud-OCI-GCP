@@ -1,4 +1,4 @@
-"""AI Studio — Pix IN/OUT workflow orchestrator; server-only dependency injection.
+"""FR Finance — Pix IN/OUT workflow orchestrator; server-only dependency injection.
 
 The app is the command/control plane. Mercado Pago is payment rail; never
 let client confirm payment. The repository holds immutable state and performs

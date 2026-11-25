@@ -1,4 +1,4 @@
-"""M25600 — actionable FR Finance AI Studio launch requirements.
+"""M25600 — actionable FR Finance launch requirements.
 
 This inventory deliberately reports *evidence still missing*, not automatic
 production enablement. No DB/network calls, no secret values, no side effects.

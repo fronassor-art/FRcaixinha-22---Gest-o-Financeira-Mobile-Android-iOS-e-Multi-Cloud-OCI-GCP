@@ -1,6 +1,6 @@
 """M6200: tenant-scoped credit liquidity PREVIEW, not reservation/transfer.
 
-FR Caixinha does not hold client money. Free cash only comes from a fresh
+FR Finance does not hold client money. Free cash only comes from a fresh
 external authenticated account statement for the respective tenant's
 provider account, minus already committed financial obligations. This
 contract has no database or payout side effects, and never authorizes

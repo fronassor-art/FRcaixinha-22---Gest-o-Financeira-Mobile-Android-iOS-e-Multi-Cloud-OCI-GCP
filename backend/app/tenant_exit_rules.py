@@ -1,4 +1,4 @@
-"""AI Studio: encerramento voluntário de tenant ≠ saída de membro ≠ licença SaaS.
+"""FR Finance: encerramento voluntário de tenant ≠ saída de membro ≠ licença SaaS.
 
 Contrato Mestre 3.10 e 10.6. Toda mudança permanece PENDENTE de liquidação,
 documento, prova e autoridade. Nenhum código aqui executa cancelamento.

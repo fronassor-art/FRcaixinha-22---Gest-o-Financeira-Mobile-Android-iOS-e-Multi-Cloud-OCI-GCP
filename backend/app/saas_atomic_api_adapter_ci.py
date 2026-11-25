@@ -117,8 +117,8 @@ class CIAtomicSQLExecutor:
         # guards against accidental substitution with a local app DB.
         meta=worker_conn.execute(
             "SELECT current_database(),session_user,current_setting('is_superuser'),"
-            "current_setting('frcaixinha.saas_atomic_ci',true),"
-            "current_setting('frcaixinha.saas_preprep_ci',true),inet_server_port()"
+            "current_setting('FR Finance.saas_atomic_ci',true),"
+            "current_setting('FR Finance.saas_preprep_ci',true),inet_server_port()"
         ).fetchone()
         if meta!=("frcaixinha_staging","frcaixinha_saas_preprep_ci","off","1","1",5432):
             raise ValueError("M37465_WRONG_DATABASE_OR_SQL_WORKER_ROLE")

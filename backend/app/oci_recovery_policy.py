@@ -1,4 +1,4 @@
-"""AI Studio M3200: contract-based OCI backup/recovery evidence preflight.
+"""FR Finance M3200: contract-based OCI backup/recovery evidence preflight.
 
 This is a local validator for signed/verified operational observations. It
 does NOT read OCI infrastructure, conduct restore, attest signatures, grant

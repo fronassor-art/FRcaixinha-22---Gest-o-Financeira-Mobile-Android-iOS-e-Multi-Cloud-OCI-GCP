@@ -1,4 +1,4 @@
-/** FR Caixinha AI Studio: authenticated local in-app inbox, no fake fixtures. */
+/** FR Finance: authenticated local in-app inbox, no fake fixtures. */
 import { authService, getApiBaseUrl } from './authService';
 
 export interface InboxNotification {

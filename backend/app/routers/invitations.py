@@ -1,4 +1,4 @@
-"""FR Finance AI Studio — convites e pré-diagnóstico seguro.
+"""FR Finance — convites e pré-diagnóstico seguro.
 
 As rotas de criação real permanecem bloqueadas até existirem entrega,
 verificação de titularidade, aceite contratual, RLS e auditoria aprovados.

@@ -1,5 +1,5 @@
 /**
- * FRcaixinha AI Studio Mobile - Serviço de Autenticação com Fronteira de Servidor Real
+ * FR Finance - Serviço de Autenticação com Fronteira de Servidor Real
  * Implementa comunicação com /api/auth, guarda tokens sensíveis exclusivamente em memória
  * e encerra sessões expiradas conforme exigência de segurança e LGPD.
  */
@@ -484,7 +484,7 @@ class AuthService {
   public invalidateSession(): void {
     this.clearSession();
     this.notify();
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('frcaixinha:session-expired'));
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('FR Finance:session-expired'));
   }
 
   public async logout(): Promise<void> {
@@ -608,7 +608,7 @@ class AuthService {
     this.clearSession();
     this.notify();
     // Dispatch event to show toast or notification
-    window.dispatchEvent(new CustomEvent('frcaixinha:session-expired'));
+    window.dispatchEvent(new CustomEvent('FR Finance:session-expired'));
   }
 
   private clearSession() {

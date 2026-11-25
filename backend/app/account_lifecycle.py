@@ -1,4 +1,4 @@
-"""Ciclo de vida de conta do AI Studio — laboratório CI ISOLADO.
+"""Ciclo de vida de conta do FR Finance — laboratório CI ISOLADO.
 
 NÃO é API pública. Os fluxos precisam de verificação de e-mail, autorização,
 entrega confiável, políticas de rate-limit distribuídas e revisão antes de

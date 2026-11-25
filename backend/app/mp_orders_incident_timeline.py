@@ -1,4 +1,4 @@
-"""AI Studio M8700-M9000: deterministic incident timeline verification.
+"""FR Finance M8700-M9000: deterministic incident timeline verification.
 
 Only pure in-memory review PREVIEWS. Digests detect accidental mutations but
 are not digital signatures, independently authenticated identities, immutable

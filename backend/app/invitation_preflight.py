@@ -1,4 +1,4 @@
-"""M24900 — pré-diagnóstico de convite AI Studio, somente leitura.
+"""M24900 — pré-diagnóstico de convite FR Finance, somente leitura.
 
 Este módulo não emite, entrega, aceita ou revoga convites. Não verifica
 identidade real, publicação de documento ou direitos de um tenant no banco.

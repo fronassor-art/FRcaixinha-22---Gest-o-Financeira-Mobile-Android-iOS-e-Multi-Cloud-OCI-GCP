@@ -1,4 +1,4 @@
-"""AI Studio M12700-M13000: STRICT UNAUTHENTICATED staging readiness matrix.
+"""FR Finance M12700-M13000: STRICT UNAUTHENTICATED staging readiness matrix.
 
 Every input flag is a CLAIM. Even if all flags are True, no real system
 attestation, authenticated storage, migration approval, bank reconciliation,

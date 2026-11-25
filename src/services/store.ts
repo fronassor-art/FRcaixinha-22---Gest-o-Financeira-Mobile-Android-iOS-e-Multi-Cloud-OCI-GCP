@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Estado Central e Regras de Negócio
+ * FR Finance - Estado Central e Regras de Negócio
  * Implementa persistência local, troca de papéis/tenants e validações do Contrato Mestre.
  */
 
@@ -69,7 +69,7 @@ const SEED_USERS: UserIdentity[] = [
     id: 'usr-master',
     name: 'Carlos Master (Plataforma)',
     cpf: '000.111.222-33',
-    email: 'master@frcaixinha.com.br',
+    email: 'master@FR Finance.com.br',
     email_verified_at: '2026-01-01T10:00:00Z',
     phone: '(91) 98111-0001',
     auth_subject: 'auth|master',
@@ -619,7 +619,7 @@ export class AppStore {
           actor_id: 'usr-master',
           actor_role: 'MASTER',
           object_type: 'CONTRACT',
-          object_id: 'FRCAIXINHA-2.2',
+          object_id: 'FR Finance-2.2',
           action: 'APROVACAO_DOCUMENTAL_G1',
           timestamp: '2026-10-16T12:00:00Z',
           reason: 'Homologação e aprovação das 147 cláusulas do Contrato Técnico Mestre',
@@ -1329,7 +1329,7 @@ export class AppStore {
     this.persist();
   }
 
-  // --- Módulo de Rifas (Proposta Consolidada FRcaixinha 2.2) ---
+  // --- Módulo de Rifas (Proposta Consolidada FR Finance) ---
   public updateRafflePrize(campaignId: string, newAmount: number, reason: string) {
     const campaign = this.state.raffleCampaigns.find(c => c.id === campaignId);
     if (!campaign) throw new Error('Campanha de rifa não encontrada');

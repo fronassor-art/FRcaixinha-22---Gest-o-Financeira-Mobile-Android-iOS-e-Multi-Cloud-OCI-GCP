@@ -1,4 +1,4 @@
-"""AI Studio M2800: REAL Mercado Pago OAuth token HTTP client, NOT wired.
+"""FR Finance M2800: REAL Mercado Pago OAuth token HTTP client, NOT wired.
 
 This adapter can communicate with the official HTTPS endpoint if explicitly
 enabled on a configured server. It never creates a payment or writes a token.

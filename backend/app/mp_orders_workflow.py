@@ -1,6 +1,6 @@
 """M4600 — Orders API application workflow and settlement journaling ports.
 
-FR Caixinha manages payment obligations; Mercado Pago executes them.
+FR Finance manages payment obligations; Mercado Pago executes them.
 No public callback may claim financial settlement. Real posting requires
 independent source + transactional ledger repository not provided here.
 """

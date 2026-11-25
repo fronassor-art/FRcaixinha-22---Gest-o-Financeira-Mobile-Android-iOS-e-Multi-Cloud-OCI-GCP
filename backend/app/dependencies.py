@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Injeção de Dependências e Autorização Server-Side (RBAC)
+FR Finance — Injeção de Dependências e Autorização Server-Side (RBAC)
 Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 4.1 e 16.4)
 """
 

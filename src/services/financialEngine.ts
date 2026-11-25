@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Motor Financeiro e Contábil Regulatório
+ * FR Finance - Motor Financeiro e Contábil Regulatório
  * Fórmulas aprovadas: Price com 1º período irregular, Imputação Parcial em 4 etapas,
  * Capital-Dias V2 e Método dos Maiores Restos para centavos residuais.
  */
@@ -621,7 +621,7 @@ export function calculateLicenseUpgradeProRata(
 }
 
 /**
- * MÓDULO DE RIFAS - FRCAIXINHA 2.2
+ * MÓDULO DE RIFAS - FR Finance
  * Seção 9: Regra de inadimplência com mora simples de 20% ao mês proporcional aos dias de atraso.
  * - Vencimento: dia 20. Início do atraso: dia 21.
  * - Taxa mensal: 20% (0.20). Mês financeiro: 30 dias.

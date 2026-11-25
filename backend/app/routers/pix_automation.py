@@ -1,4 +1,4 @@
-"""AI Studio: in-app Pix control plane; no direct financial confirmation."""
+"""FR Finance: in-app Pix control plane; no direct financial confirmation."""
 from __future__ import annotations
 
 from decimal import Decimal

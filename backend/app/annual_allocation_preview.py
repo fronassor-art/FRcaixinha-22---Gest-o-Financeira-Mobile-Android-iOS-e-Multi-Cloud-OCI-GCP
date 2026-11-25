@@ -1,4 +1,4 @@
-"""FRcaixinha AI Studio — cálculo PURO de prévia de rateio.
+"""FR Finance — cálculo PURO de prévia de rateio.
 Não recebe conexão, não persiste, não faz Pix e não autoriza fechamento.
 """
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, InvalidOperation

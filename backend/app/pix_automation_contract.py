@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio — motor Pix de obrigações e crédito.
+"""FR Finance — motor Pix de obrigações e crédito.
 
 Contrato 6.2–6.4, 8.2–8.8, 9.1–9.9, 16.2; sem dinheiro real.
 As rotinas NÃO leem a rede nem alteram banco. Precisam de provas

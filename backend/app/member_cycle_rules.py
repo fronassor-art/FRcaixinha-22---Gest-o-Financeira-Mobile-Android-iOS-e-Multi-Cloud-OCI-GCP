@@ -1,6 +1,6 @@
-"""AI Studio / M401+: avaliação PURA de membro, inadimplência e Capital-Dias V2.
+"""FR Finance / M401+: avaliação PURA de membro, inadimplência e Capital-Dias V2.
 
-Autoridade: Caderno Mestre AI Studio, 6.2-6.6, 8.6 e 10.1-10.6.
+Autoridade: Caderno Mestre FR Finance, 6.2-6.6, 8.6 e 10.1-10.6.
 A regra especial da caixinha do proprietário depende de validação jurídica.
 Nenhum evento aqui grava no DB, cobra multa, confisca principal, aciona Pix,
 encerra conta ou substitui os termos aceitos por cada tenant.

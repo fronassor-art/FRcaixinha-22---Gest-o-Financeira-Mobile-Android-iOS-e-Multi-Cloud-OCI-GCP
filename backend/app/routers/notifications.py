@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio — in-app notifications for local authenticated testing.
+"""FR Finance — in-app notifications for local authenticated testing.
 
 No public SQL access, no untrusted event publisher, no emails/push/WhatsApp.
 The real local path is enabled only after 001-027+031, session provisioning,

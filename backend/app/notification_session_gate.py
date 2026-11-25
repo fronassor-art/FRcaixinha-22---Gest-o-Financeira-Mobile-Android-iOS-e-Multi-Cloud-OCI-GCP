@@ -1,4 +1,4 @@
-"""AI Studio M18000: notifications session-to-recipient boundary.
+"""FR Finance M18000: notifications session-to-recipient boundary.
 
 Only get_current_session is authorized to supply identity upstream.
 This module validates shape/role consistency. It does NOT authenticate a

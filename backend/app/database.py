@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Gerenciador Transacional de Banco de Dados com RLS
+FR Finance — Gerenciador Transacional de Banco de Dados com RLS
 Contrato Técnico Mestre (Cláusulas 1.2, 2.3, 2.8, 14.1 e 16.2)
 
 PADRÕES DE SEGURANÇA:

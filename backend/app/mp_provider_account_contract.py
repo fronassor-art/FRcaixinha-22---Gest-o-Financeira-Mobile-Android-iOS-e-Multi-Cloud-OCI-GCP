@@ -1,4 +1,4 @@
-"""AI Studio M3100: conta recebedora MP não é novo perfil funcional.
+"""FR Finance M3100: conta recebedora MP não é novo perfil funcional.
 
 seller_id no protocolo do MP = identificador técnico da conta conectada.
 Não introduzir papel SELLER/VENDEDOR; os únicos papéis de usuário são os

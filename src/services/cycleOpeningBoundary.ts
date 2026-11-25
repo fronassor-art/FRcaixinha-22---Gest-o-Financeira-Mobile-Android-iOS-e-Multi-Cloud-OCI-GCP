@@ -1,4 +1,4 @@
-/** FR Caixinha AI Studio M20900: preview only, no permission to write. */
+/** FR Finance M20900: preview only, no permission to write. */
 export type CycleOpeningPreview={
  contract:'AI_STUDIO_M20800_CYCLE_OPENING_PREVIEW_V1';
  source:'POSTGRESQL_RLS_AUTHENTICATED_ADMIN';tenant_id:string;

@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Módulo de Bolões Oficiais (Versão de Revisão 1.1 - 30/10/2026)
+ * FR Finance - Módulo de Bolões Oficiais (Versão de Revisão 1.1 - 30/10/2026)
  * Dados iniciais das 3 campanhas especiais:
  * - Quina de São João (9 jogos de 6 dezenas)
  * - Lotofácil da Independência (3 jogos de 16 dezenas)

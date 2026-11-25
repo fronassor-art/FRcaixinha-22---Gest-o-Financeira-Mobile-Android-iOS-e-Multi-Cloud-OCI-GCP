@@ -1,5 +1,5 @@
 """
-FR Finance AI Studio — Rotas Oficiais de Autenticação e Sessão
+FR Finance — Rotas Oficiais de Autenticação e Sessão
 Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 14.1 e 16.4)
 """
 
@@ -150,7 +150,7 @@ async def login(payload: LoginRequest, response: Response):
                     raise HTTPException(status_code=503, detail='Protecao de autenticacao indisponivel.')
                 # Origem REAL e verificada do alerta interno de sessão:
                 # o token recém-promovido é revalidado no próprio PostgreSQL.
-                # Só modo local AI Studio autorizado; sem envio externo.
+                # Só modo local FR Finance autorizado; sem envio externo.
                 if (os.getenv('AI_STUDIO_IN_APP_NOTIFICATIONS') == 'YES'
                         and os.getenv('FRCAIXINHA_TERMUX_LOCAL_API') == '1'):
                     notification_id = await conn.fetchval(

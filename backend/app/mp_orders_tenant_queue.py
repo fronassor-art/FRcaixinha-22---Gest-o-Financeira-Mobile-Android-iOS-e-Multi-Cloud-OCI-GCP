@@ -1,4 +1,4 @@
-"""AI Studio M9100-M9400: bounded tenant recovery scheduling previews.
+"""FR Finance M9100-M9400: bounded tenant recovery scheduling previews.
 
 All inputs are untrusted snapshots; this does not acquire distributed leases,
 authorize HTTP requests, read any bank statement, or persist incident notes.

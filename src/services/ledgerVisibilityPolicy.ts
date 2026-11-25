@@ -1,4 +1,4 @@
-/** FR Caixinha: decisao de leitura sem autorizar saldos em livro vazio. */
+/** FR Finance: decisao de leitura sem autorizar saldos em livro vazio. */
 import type {LedgerIntegrityPreview} from './ledgerIntegrityPreview';
 export type LedgerReadMode = 'INTEGRITY_REVIEW_BLOCKED'|'DIRECTORY_WITHOUT_BALANCES'|'DETAIL_PREVIEW';
 export function ledgerReadMode(integrity:LedgerIntegrityPreview):LedgerReadMode {

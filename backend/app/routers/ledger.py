@@ -1,5 +1,5 @@
 """
-FRcaixinha AI Studio Mobile — Leitura do Livro-Razão (partidas dobradas)
+FR Finance — Leitura do Livro-Razão (partidas dobradas)
 Projeto isolado. Consultas autorizadas por sessao, tenant e RLS.
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP.
 """

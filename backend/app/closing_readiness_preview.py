@@ -1,4 +1,4 @@
-"""FRcaixinha AI Studio: pré-condições sintéticas, SEM AUTORIZAR fechamento.
+"""FR Finance: pré-condições sintéticas, SEM AUTORIZAR fechamento.
 
 Este módulo não consulta banco, não processa pagamentos, não persiste aceites
 e não substitui conciliação bancária ou auditoria independente.

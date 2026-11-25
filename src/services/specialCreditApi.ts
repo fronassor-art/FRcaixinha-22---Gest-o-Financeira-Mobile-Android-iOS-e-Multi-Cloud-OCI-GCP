@@ -1,4 +1,4 @@
-/** FR Finance AI Studio — Crédito Especial (somente homologação).
+/** FR Finance — Crédito Especial (somente homologação).
  * Sessão no backend + tenant explícito. Sem mocks, sem envio real, sem Pix.
  */
 import { authService, getApiBaseUrl } from './authService';

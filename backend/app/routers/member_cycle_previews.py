@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio — leitura de risco contratual com dados registrados.
+"""FR Finance — leitura de risco contratual com dados registrados.
 
 A cláusula 6.5 pode ser codificada, testada e demonstrada antes da fase
 jurídica. O histórico cadastral sozinho, sem prova de Pix/banco, NÃO ativa

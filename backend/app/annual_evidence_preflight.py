@@ -1,4 +1,4 @@
-"""AI Studio M1721–M1880: prévia ANUAL de registros, não de extratos.
+"""FR Finance M1721–M1880: prévia ANUAL de registros, não de extratos.
 
 Não comprova banco, não confunde capital com receitas, não executa fechamento,
 distribuição, débito, cobrança, desconto em restituição ou pagamentos.

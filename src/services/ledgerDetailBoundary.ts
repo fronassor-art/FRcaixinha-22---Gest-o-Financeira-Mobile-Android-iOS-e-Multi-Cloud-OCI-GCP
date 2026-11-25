@@ -1,4 +1,4 @@
-/** FRcaixinha AI Studio: fronteira de apresentação do livro-razão. */
+/** FR Finance: fronteira de apresentação do livro-razão. */
 export interface DisplayLedgerAccount {
  id:string;tenant_id:string;account_code:string;account_name:string;
  account_type:string;balance_cents:number;

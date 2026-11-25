@@ -1,4 +1,4 @@
-/** FR Caixinha AI Studio M1401: obrigações CADASTRAIS, nunca liquidação. */
+/** FR Finance M1401: obrigações CADASTRAIS, nunca liquidação. */
 export interface MemberObligationsPreview {
   tenant_id:string;
   cycle_id:string;

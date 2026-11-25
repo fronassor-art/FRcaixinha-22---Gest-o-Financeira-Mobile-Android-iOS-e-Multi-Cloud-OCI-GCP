@@ -1,4 +1,4 @@
-"""AI Studio M3000: standalone OCI staging webhook server (receive ONLY).
+"""FR Finance M3000: standalone OCI staging webhook server (receive ONLY).
 
 This ASGI process is separate from app.main and disabled by default.
 It has no payments, ledger, closing, payout or bank reconciliation endpoints.
@@ -164,7 +164,7 @@ def create_staging_app(
                 await pool.close()
 
     app=FastAPI(
-        title="FR Caixinha AI Studio — OCI webhook staging",
+        title="FR Finance — OCI webhook staging",
         lifespan=lifespan,
         docs_url=None,redoc_url=None,openapi_url=None,
     )

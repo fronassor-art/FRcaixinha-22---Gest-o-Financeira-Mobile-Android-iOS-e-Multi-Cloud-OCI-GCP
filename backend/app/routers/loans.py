@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Rotas de Empréstimos (Tabela Price, Imputação e Quitação Antecipada)
+FR Finance — Rotas de Empréstimos (Tabela Price, Imputação e Quitação Antecipada)
 Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 4.2, 5.4, 8.2, 8.4, 8.5, 8.6, 8.8, 16.2 e 16.4)
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP (Sem uso de float para cálculos autoritativos).
 """

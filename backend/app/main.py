@@ -1,6 +1,6 @@
-"""
-FR Finance — backend da frente AI Studio.
-Contrato Tecnico Mestre FR Finance exclusivo deste repositorio; FR Caixinha 2.2 independente.
+"""FR Finance — API do aplicativo.
+
+Contrato Técnico Mestre vigente do FR Finance; serviço do aplicativo oficial.
 """
 
 from fastapi import FastAPI, Request, Response, HTTPException

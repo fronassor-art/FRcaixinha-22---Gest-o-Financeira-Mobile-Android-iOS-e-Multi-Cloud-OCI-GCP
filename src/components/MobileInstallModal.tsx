@@ -298,10 +298,10 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                     Depois, cole esse comando no Termux para extrair em pasta nova sem sobrescrever:
                   </p>
                   <div className="bg-slate-900 p-2.5 rounded-xl font-mono text-[10px] text-emerald-400 space-y-1 relative">
-                    <div>mkdir -p ~/frcaixinha-build && cd ~/frcaixinha-build</div>
+                    <div>mkdir -p ~/FR Finance-build && cd ~/FR Finance-build</div>
                     <div>unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip</div>
                     <button
-                      onClick={() => handleCopy('mkdir -p ~/frcaixinha-build && cd ~/frcaixinha-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip', 'termux-step3')}
+                      onClick={() => handleCopy('mkdir -p ~/FR Finance-build && cd ~/FR Finance-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip', 'termux-step3')}
                       className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] flex items-center gap-1 cursor-pointer"
                     >
                       {copiedCommand === 'termux-step3' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -362,7 +362,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   <button
                     onClick={() =>
                       handleCopy(
-                        'pkg update -y && pkg install -y nodejs-lts git openjdk-17 unzip curl && termux-setup-storage && mkdir -p ~/frcaixinha-build && cd ~/frcaixinha-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip && npm ci && npm run dev',
+                        'pkg update -y && pkg install -y nodejs-lts git openjdk-17 unzip curl && termux-setup-storage && mkdir -p ~/FR Finance-build && cd ~/FR Finance-build && unzip -q ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip && npm ci && npm run dev',
                         'termux-all'
                       )
                     }
@@ -396,11 +396,11 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   <div className="text-slate-400 mt-1"># 2. Gerar APK debug com Gradle Wrapper:</div>
                   <div>cd android && chmod +x gradlew && ./gradlew assembleDebug</div>
                   <div className="text-slate-400 mt-1"># 3. Copiar APK gerado para Downloads:</div>
-                  <div>cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FRcaixinha-2.2-debug.apk</div>
+                  <div>cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FR Finance-2.2-debug.apk</div>
                   <button
                     onClick={() =>
                       handleCopy(
-                        'npm run cap:build && cd android && chmod +x gradlew && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FRcaixinha-2.2-debug.apk',
+                        'npm run cap:build && cd android && chmod +x gradlew && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ~/storage/downloads/FR Finance-2.2-debug.apk',
                         'termux-apk-cmd'
                       )
                     }
@@ -449,10 +449,10 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                   </p>
                   <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-emerald-400 space-y-1 relative">
                     <div>pkg install -y python</div>
-                    <div>cd ~/frcaixinha/dist</div>
+                    <div>cd ~/FR Finance/dist</div>
                     <div>python -m http.server 3000</div>
                     <button
-                      onClick={() => handleCopy('pkg install -y python && cd ~/frcaixinha/dist && python -m http.server 3000', 'termux-python')}
+                      onClick={() => handleCopy('pkg install -y python && cd ~/FR Finance/dist && python -m http.server 3000', 'termux-python')}
                       className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] flex items-center gap-1 cursor-pointer"
                     >
                       {copiedCommand === 'termux-python' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -496,14 +496,12 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
           {platform === 'QR' && (
             <div className="flex flex-col items-center text-center space-y-4">
               
-              {/* Alerta explicativo do Erro 404 no ais-pre */}
+              {/* Orientação para links de desenvolvimento e publicação */}
               <div className="w-full text-left p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <div className="font-bold text-amber-950 text-xs">Aviso sobre o Erro 404 (ais-pre vs ais-dev):</div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    O link terminado em <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-[10px]">ais-pre-...</code> só fica ativo no Google Cloud após você clicar no botão <strong>"Share" (Compartilhar)</strong> no menu superior do Google AI Studio. O link que já está <strong>100% ativo agora</strong> é o <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-[10px]">ais-dev-...</code>.
-                  </p>
+                  <div className="font-bold text-amber-950 text-xs">Sobre os endereços de acesso:</div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">O endereço público só funciona depois da publicação e da configuração do serviço de hospedagem. Links de desenvolvimento podem exigir autenticação e não devem ser tratados como versão de produção.</p>
                 </div>
               </div>
 
@@ -519,7 +517,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    🟢 Link Dev (Ativo Agora)
+                    🟢 Link de desenvolvimento
                   </button>
                   <button
                     onClick={() => setSelectedUrlType('PRE')}
@@ -529,7 +527,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    🌐 Link Share (Público)
+                    🌐 Link público (após publicação)
                   </button>
                 </div>
               </div>
@@ -559,9 +557,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                       Abre o servidor em tempo real. No celular, certifique-se de estar conectado no Chrome com a sua conta Google (<strong>fr.onassor@gmail.com</strong>).
                     </span>
                   ) : (
-                    <span>
-                      Link público sem necessidade de login no Google. <em>(Requer que você tenha clicado no botão "Share/Publicar" no cabeçalho do AI Studio).</em>
-                    </span>
+                    <span>O acesso público depende da publicação e das regras de acesso configuradas no serviço de hospedagem.</span>
                   )}
                 </p>
               </div>
@@ -679,14 +675,14 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                 <div className="bg-slate-900 p-2.5 rounded-xl font-mono text-[10px] text-slate-200 space-y-1 relative">
                   <div className="text-slate-400"># Comandos para gerar o projeto Android com Capacitor:</div>
                   <div>npm install @capacitor/core @capacitor/cli @capacitor/android</div>
-                  <div>npx cap init "FR Finance" "com.frcaixinha.app" --web-dir dist</div>
+                  <div>npx cap init "FR Finance" "com.FR Finance.app" --web-dir dist</div>
                   <div>npm run build</div>
                   <div>npx cap add android</div>
                   <div>npx cap open android</div>
                   <button
                     onClick={() =>
                       handleCopy(
-                        'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "FR Finance" "com.frcaixinha.app" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap open android',
+                        'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "FR Finance" "com.FR Finance.app" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap open android',
                         'cmd-cap'
                       )
                     }
@@ -710,7 +706,7 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ isOpen, 
                     Tokens de sessão nunca devem ser armazenados em <code className="font-mono bg-amber-100 px-1 rounded">localStorage</code> ou <code className="font-mono bg-amber-100 px-1 rounded">SharedPreferences</code> no celular. No app nativo Android, deve-se obrigatoriamente instalar o plugin <code className="font-mono bg-amber-100 px-1 rounded">@capacitor-community/secure-storage-plugin</code> para criptografia de hardware via <strong>Android Keystore (AES-256-GCM)</strong> e <strong>iOS Keychain</strong>.
                   </p>
                   <p className="text-[10px] text-slate-600 font-medium pt-1">
-                    Status no ambiente AI Studio: <span className="font-bold text-amber-700">BLOQUEADO</span> (exige computador com Android Studio e JDK instalados; não é possível compilar binários nativos .apk diretamente pelo sandbox Web).
+                    Compilação nativa de APK: bloqueada neste navegador. O arquivo precisa ser gerado e verificado pelo fluxo de build Android configurado.
                   </p>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Tipos de Dados e Modelos Contratuais
+ * FR Finance - Tipos de Dados e Modelos Contratuais
  * Baseado no Contrato Técnico Mestre e Caderno Mestre (147 Cláusulas)
  */
 
@@ -392,7 +392,7 @@ export interface LotteryCampaignDemo {
   disclaimer: string;
 }
 
-// Módulo de Rifas Consolidado - FRcaixinha 2.2
+// Módulo de Rifas Consolidado - FR Finance
 export type RaffleTicketStatus = 'GERADO' | 'NAO_VENDIDO' | 'PAGAMENTO_PENDENTE' | 'PAGO' | 'CANCELADO';
 
 export interface RaffleCampaign {

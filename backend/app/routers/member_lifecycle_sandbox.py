@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio — pedidos de ciclo em HOMOLOGAÇÃO.
+"""FR Finance — pedidos de ciclo em HOMOLOGAÇÃO.
 
 Registra pedido de saída voluntária ou revisão administrativa sem mexer em
 membership status, capital, multa, lucro, lançamento contábil ou Pix.

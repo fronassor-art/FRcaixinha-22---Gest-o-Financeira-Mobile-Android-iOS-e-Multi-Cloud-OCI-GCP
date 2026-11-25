@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio: fronteiras de tesouraria e rateio financeiro SEM I/O.
+"""FR Finance: fronteiras de tesouraria e rateio financeiro SEM I/O.
 
 Duas tesourarias independentes: PLATAFORMA (mensalidade SaaS) e TENANT
 (cotas/credito/receita da própria caixinha). Nenhum cálculo confirma Pix,

@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio — Orders API Pix MLB, M4100.
+"""FR Finance — Orders API Pix MLB, M4100.
 
 Checkout Transparente (Brasil) new integrations use /v1/orders. This
 adapter does NOT provision merchants, post ledger, reconcile bank, or mark

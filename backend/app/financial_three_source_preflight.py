@@ -1,4 +1,4 @@
-"""AI Studio M2041-M2200: pré-conciliação de 3 fontes SINTÉTICAS, sem I/O.
+"""FR Finance M2041-M2200: pré-conciliação de 3 fontes SINTÉTICAS, sem I/O.
 
 Não consulta provedor, extrato ou banco, não confirma liquidação. Confronta
 apenas intenção, resposta de GET SIMULADA e extrato sintético independente.

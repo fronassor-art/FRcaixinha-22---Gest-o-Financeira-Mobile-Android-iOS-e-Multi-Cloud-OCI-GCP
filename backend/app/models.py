@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Modelos de Dados e Schemas
+FR Finance — Modelos de Dados e Schemas
 Contrato Técnico Mestre (Cláusulas 2.3, 2.8, 4.2, 4.5, 5.4, 6.3, 6.4, 8.2, 8.6, 8.8, 10.3, 10.4, 12.2, 16.2 e 16.4)
 Precisão Monetária: Uso de Decimal e centavos auditáveis com ROUND_HALF_UP.
 """

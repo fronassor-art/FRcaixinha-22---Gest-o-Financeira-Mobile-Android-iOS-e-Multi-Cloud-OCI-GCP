@@ -1,5 +1,5 @@
 """
-FRcaixinha 2.2 — Rotas Exclusivas do Administrador Master
+FR Finance — Rotas Exclusivas do Administrador Master
 Contrato Técnico Mestre (Cláusulas 1.3, 2.8, 3.2, 5.4, 11.2 e 16.4)
 """
 

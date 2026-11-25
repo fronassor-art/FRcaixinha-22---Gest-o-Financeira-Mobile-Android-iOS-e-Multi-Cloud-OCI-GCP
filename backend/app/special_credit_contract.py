@@ -1,4 +1,4 @@
-"""FR Finance AI Studio — pure, fail-closed special-credit contract.
+"""FR Finance — pure, fail-closed special-credit contract.
 
 This module never approves/disburses a loan and never sends marketing.
 The exception grants the right to REQUEST simulation, not financial authority.

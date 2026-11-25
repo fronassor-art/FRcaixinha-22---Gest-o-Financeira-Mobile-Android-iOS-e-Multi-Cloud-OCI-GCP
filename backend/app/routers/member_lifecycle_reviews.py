@@ -1,4 +1,4 @@
-"""M1081+ FR Caixinha AI Studio — revisão de documentos e contestação sandbox.
+"""M1081+ FR Finance — revisão de documentos e contestação sandbox.
 
 Não executa bloqueio, desbloqueio, saída, rateio, restituição, Pix,
 fechamento ou transação real. Toda decisão é apenas EVENTO TÉCNICO.

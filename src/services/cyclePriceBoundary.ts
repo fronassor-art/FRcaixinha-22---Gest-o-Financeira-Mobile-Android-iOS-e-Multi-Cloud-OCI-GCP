@@ -1,4 +1,4 @@
-/** AI Studio M20400 — signed-session tenant-cycle contribution policy boundary. */
+/** FR Finance M20400 — signed-session tenant-cycle contribution policy boundary. */
 export type CycleContributionPolicy={
  contract:string;source:'POSTGRESQL_VERIFIED_SESSION';tenant_id:string;
  cycle_id:string;cycle_year:number;start_date:string;end_date:string;

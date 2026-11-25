@@ -1,4 +1,4 @@
-"""AI Studio M12100-M12600: offline restart checkpoint comparison.
+"""FR Finance M12100-M12600: offline restart checkpoint comparison.
 
 The caller supplies ALL snapshots and the claimed prior checkpoint. This
 module NEVER reads a durable database, authenticates an operator, signs a

@@ -1,4 +1,4 @@
-/** FR Caixinha: apenas o histórico parcial de UMA conta autorizada. */
+/** FR Finance: apenas o histórico parcial de UMA conta autorizada. */
 export interface LedgerAccountJournalEntry {
  id:string;transaction_id:string;transaction_date:string;description:string;
  reference_id:string;entry_type:'DR'|'CR';amount_cents:number;

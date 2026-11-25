@@ -1,4 +1,4 @@
-"""FR Finance AI Studio — sandbox-only special-credit permissions and campaigns.
+"""FR Finance — sandbox-only special-credit permissions and campaigns.
 
 No loan approval, reservation, Pix or external delivery. All operations are
 transactional through the EXISTING RLS session-scoped PostgreSQL connection.

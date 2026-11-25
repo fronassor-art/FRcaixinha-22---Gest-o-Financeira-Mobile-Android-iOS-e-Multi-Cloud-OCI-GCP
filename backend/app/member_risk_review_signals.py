@@ -1,4 +1,4 @@
-"""FR Finance AI Studio: read-only, non-punitive delinquency review signals."""
+"""FR Finance: read-only, non-punitive delinquency review signals."""
 from dataclasses import dataclass
 from datetime import date
 

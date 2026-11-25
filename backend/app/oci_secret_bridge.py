@@ -1,4 +1,4 @@
-"""AI Studio M2800: read-only OCI Secret Retrieval (Instance Principal).
+"""FR Finance M2800: read-only OCI Secret Retrieval (Instance Principal).
 
 Real OCI SDK adapter, dormant until a deployed server calls it explicitly.
 No OCI secret or private key is required on Termux; this module never writes

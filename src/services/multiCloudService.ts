@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Multi-Cloud Infrastructure Service (OCI + GCP)
+ * FR Finance - Multi-Cloud Infrastructure Service (OCI + GCP)
  * Gerencia a topologia híbrida de nuvem soberana:
  * - Google Cloud Platform (GCP): Cloud Run, Firebase Auth, GCS, Cloud Monitoring (São Paulo)
  * - Oracle Cloud Infrastructure (OCI): OCI Autonomous DB, OCI WORM Storage (Vinhedo), OCI Vault
@@ -225,7 +225,7 @@ class MultiCloudService {
       tamperDetected: false,
       hashSha256: newHash,
       verifiedAt: new Date().toLocaleString('pt-BR'),
-      ociStorageBucket: 'oci-br-vinhedo-frcaixinha-immutable-worm-ledger',
+      ociStorageBucket: 'oci-br-vinhedo-FR Finance-immutable-worm-ledger',
       gcpSyncParityPct: 100.0,
     };
   }

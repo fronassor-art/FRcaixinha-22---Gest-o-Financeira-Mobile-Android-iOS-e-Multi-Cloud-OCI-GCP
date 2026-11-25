@@ -1,4 +1,4 @@
-"""Consultas autoritativas das caixinhas para o aplicativo AI Studio.
+"""Consultas autoritativas das caixinhas para o aplicativo FR Finance.
 
 Nunca retorna dados seed nem permite acesso MASTER a finanças.
 Todas as consultas usam transacao com contexto da sessao e RLS PostgreSQL.

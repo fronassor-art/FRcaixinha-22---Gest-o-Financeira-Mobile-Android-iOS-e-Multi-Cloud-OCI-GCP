@@ -46,6 +46,20 @@ def test_active_onboarding_copy_uses_fr_finance_without_changing_audit_ids():
     assert 'AI_STUDIO_LOCAL_TENANT_CREATED' in onboarding
 
 
+def test_current_app_code_uses_fr_finance_product_name():
+    paths=(
+        "backend/app/main.py", "backend/app/config.py",
+        "backend/app/database.py", "backend/app/routers/contributions.py",
+        "backend/app/routers/loans.py", "src/components/MobileInstallModal.tsx",
+        "src/components/RaffleModuleView.tsx", "src/services/financialEngine.ts",
+        "src/services/financialApiService.ts",
+    )
+    import re
+    for path in paths:
+        body=text(path)
+        assert not re.search(r"AI\\s+Studio|FR\\s*Caixinha\\s*2\\.2|FRcaixinha\\s*2\\.2",body,re.I), path
+
+
 def test_legacy_identifiers_and_pdfs_remain_untouched():
     cap=text("capacitor.config.ts")
     cfg=text("backend/app/config.py")

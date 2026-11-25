@@ -1,6 +1,6 @@
 """M4300 Money Out: commercial and signing gates for Brazilian Pix OUT.
 
-FR Caixinha is management software, not a financial institution.
+FR Finance is management software, not a financial institution.
 Money Out is an external provider rail. No flag here authorizes payout;
 operator/PSP attestation and audited signer are outside this module.
 """

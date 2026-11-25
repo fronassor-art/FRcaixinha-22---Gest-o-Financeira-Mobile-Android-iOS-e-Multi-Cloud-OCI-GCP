@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio M1401: obrigações cadastrais de membro.
+"""FR Finance M1401: obrigações cadastrais de membro.
 
 Confronta contribuições e cronogramas de empréstimos registrados, com
 centavos inteiros e segregação por tenant/ciclo. Não atesta Pix, não calcula

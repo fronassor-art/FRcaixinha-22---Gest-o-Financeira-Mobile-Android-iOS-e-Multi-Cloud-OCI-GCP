@@ -1,4 +1,4 @@
-"""AI Studio M14100-M15000: notification policy; no messages are sent here.
+"""FR Finance M14100-M15000: notification policy; no messages are sent here.
 
 The contract requires accurate information, regularization/security notices,
 tenant and role separation and provider webhook authentication. It does NOT

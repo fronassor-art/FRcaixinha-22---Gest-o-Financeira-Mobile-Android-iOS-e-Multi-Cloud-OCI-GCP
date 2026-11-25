@@ -1,4 +1,4 @@
-"""AI Studio M6600: untrusted settlement -> durable HOLD, never paid.
+"""FR Finance M6600: untrusted settlement -> durable HOLD, never paid.
 
 Only a server-bound, unprivileged staging Orders journal may append a
 reconciliation hold. There is deliberately no mark-paid / release / credit

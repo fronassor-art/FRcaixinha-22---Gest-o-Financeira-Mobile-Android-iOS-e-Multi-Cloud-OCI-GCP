@@ -1,4 +1,4 @@
-"""AI Studio M401+: oráculo PURO do encerramento anual, sem liquidação Pix.
+"""FR Finance M401+: oráculo PURO do encerramento anual, sem liquidação Pix.
 
 Caderno Mestre 10.1–10.8. A base de distribuição NÃO inclui cotas nem
 empréstimos. Rateio usa Capital-Dias V2 e carteira técnica segregada.

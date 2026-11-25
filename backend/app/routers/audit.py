@@ -1,5 +1,5 @@
 """
-FRcaixinha AI Studio — Rotas de auditoria de tenant (consulta administrativa)
+FR Finance — Rotas de auditoria de tenant (consulta administrativa)
 Contrato Técnico Mestre (Cláusulas 2.8, 14.1 e 16.4)
 """
 

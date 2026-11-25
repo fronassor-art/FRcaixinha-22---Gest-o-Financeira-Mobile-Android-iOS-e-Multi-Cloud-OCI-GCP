@@ -1,4 +1,4 @@
-/* FR Caixinha AI Studio: official Pix checkout, not demonstrative.
+/* FR Finance: official Pix checkout, not demonstrative.
  * Untrusted API JSON only becomes a payable QR after strict validation.
  * No local "confirm" button can mark a monthly fee or loan settled.
  */

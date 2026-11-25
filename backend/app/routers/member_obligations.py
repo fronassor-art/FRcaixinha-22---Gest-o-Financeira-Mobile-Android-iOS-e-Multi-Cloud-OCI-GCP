@@ -1,4 +1,4 @@
-"""M1401 AI Studio — obrigações cadastrais por membro (RLS + SOMENTE SELECT).
+"""M1401 FR Finance — obrigações cadastrais por membro (RLS + SOMENTE SELECT).
 
 A prévia não é boleto, cobrança, prova de pagamento ou cálculo de restituição.
 Parcela de empréstimo SOLICITADO/APROVADO/RESERVADO nunca é dívida.

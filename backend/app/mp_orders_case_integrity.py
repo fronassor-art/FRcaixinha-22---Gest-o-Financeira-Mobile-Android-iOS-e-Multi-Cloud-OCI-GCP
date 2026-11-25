@@ -1,4 +1,4 @@
-"""AI Studio M9500-M9900: cross-component case consistency preflight.
+"""FR Finance M9500-M9900: cross-component case consistency preflight.
 
 This is PURE, OFFLINE and UNAUTHENTICATED. Inputs are claims, not bank
 proof. Digest consistency is NOT a signature or an immutable audit log.

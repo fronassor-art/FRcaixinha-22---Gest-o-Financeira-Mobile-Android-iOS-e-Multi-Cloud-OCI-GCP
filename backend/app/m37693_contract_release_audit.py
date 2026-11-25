@@ -1,4 +1,4 @@
-"""M37693-M37973: offline clause and release audit for FR Finance AI Studio.
+"""M37693-M37973: offline clause and release audit for FR Finance.
 
 The 147 clauses are a historical inventory, not current contract approval.
 No database, network, secrets, provider or runtime state are inspected here.

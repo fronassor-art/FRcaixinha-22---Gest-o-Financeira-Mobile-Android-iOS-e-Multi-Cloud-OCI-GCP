@@ -1,4 +1,4 @@
-"""FR Finance AI Studio M36900-M37300: read-only OCI staging inventory.
+"""FR Finance M36900-M37300: read-only OCI staging inventory.
 
 Queries the actual Oracle CLI, but NEVER provisions resources, extracts
 secrets, uses a paid upgrade, changes firewall, deploys code or applies SQL.

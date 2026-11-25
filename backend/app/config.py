@@ -1,5 +1,5 @@
 """
-FR Finance — configuracoes da frente AI Studio
+FR Finance — configuracoes da aplicativo FR Finance
 Referencias: Caderno Mestre e Contrato Tecnico Mestre FR Finance, exclusivos desta frente.
 """
 

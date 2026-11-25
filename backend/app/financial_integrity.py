@@ -1,4 +1,4 @@
-"""FR Caixinha AI Studio — M601: auditoria cruzada sem operações financeiras.
+"""FR Finance — M601: auditoria cruzada sem operações financeiras.
 
 Compara direitos cadastrados, membros, políticas e partidas dobradas reais
 do PostgreSQL. NUNCA identifica extrato bancário, webhook, lucro disponível

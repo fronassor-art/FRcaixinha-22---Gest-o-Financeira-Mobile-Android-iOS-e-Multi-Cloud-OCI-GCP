@@ -1,4 +1,4 @@
-"""FRcaixinha AI Studio: diagnóstico sintático de trilha, nunca comprovação de autenticidade."""
+"""FR Finance: diagnóstico sintático de trilha, nunca comprovação de autenticidade."""
 import uuid
 from datetime import datetime
 from fastapi import HTTPException

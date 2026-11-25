@@ -1,4 +1,4 @@
-"""AI Studio: cobrança de parcela de CRÉDITO em atraso — apenas cálculo puro.
+"""FR Finance: cobrança de parcela de CRÉDITO em atraso — apenas cálculo puro.
 
 Caderno Mestre 8.6: parcela mais antiga; juros remuneratórios vencidos,
 mora simples 20%/30 na caixinha do proprietário; multa única R$10 por

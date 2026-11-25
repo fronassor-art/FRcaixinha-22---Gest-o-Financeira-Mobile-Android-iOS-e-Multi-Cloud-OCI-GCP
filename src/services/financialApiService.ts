@@ -1,5 +1,5 @@
 /**
- * FRcaixinha AI Studio Mobile — Serviço Central de API Financeira
+ * FR Finance — Serviço Central de API Financeira
  * Integra o frontend diretamente aos endpoints oficiais FastAPI + PostgreSQL.
  *
  * REGRA INVIOLÁVEL:
@@ -117,7 +117,7 @@ class FinancialApiService {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-FRcaixinha-Client': 'web-react-19',
+      'X-FR Finance-Client': 'web-react-19',
       ...(options.headers as Record<string, string> || {}),
     };
 

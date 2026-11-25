@@ -1,4 +1,4 @@
-"""AI Studio M20400 — per-tenant, per-cycle contribution policy; signed DB session.
+"""FR Finance M20400 — per-tenant, per-cycle contribution policy; signed DB session.
 
 Updating the policy before billing is allowed; existing obligations are NEVER
 repriced by this route. Those create a pending review audit record instead.

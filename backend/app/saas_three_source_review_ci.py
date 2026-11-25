@@ -1,4 +1,4 @@
-"""FR Finance AI Studio M36400-M36800: synthetic SaaS three-source review.
+"""FR Finance M36400-M36800: synthetic SaaS three-source review.
 
 Pure, read-only bridge between M35800 provider review, the M36300
 append-only staging history, and a *synthetic* settlement statement.

@@ -1,6 +1,6 @@
 """
 FR Finance — rota legada de consulta de fechamento anual (Capital-Dias V2)
-Apenas frente AI Studio deste repositório; FR Caixinha 2.2 é projeto independente.
+Apenas aplicativo FR Finance deste repositório; FR Finance é projeto independente.
 O POST de liquidação permanece bloqueado (503); não executa pagamentos nem rateio.
 Precisão Monetária: Uso de Decimal com ROUND_HALF_UP e Método dos Maiores Restos (Hamilton/Hare-Niemeyer).
 """
