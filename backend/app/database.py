@@ -100,8 +100,8 @@ async def close_db_pool():
 
 
 async def get_rls_db_connection(
-    request: Request,
-    session: AuthenticatedSession = Depends(get_current_session)
+    session: AuthenticatedSession = Depends(get_current_session),
+    request: Request = None,
 ) -> AsyncGenerator:
     """
     Injeta conexão transacional com RLS configurado de forma estrita no PostgreSQL.
@@ -119,7 +119,8 @@ async def get_rls_db_connection(
     # M41180: the legacy custom-GUC context is not an approved HTTP read boundary.
     # Contain GET/HEAD requests before acquiring the financial connection pool.
     # This does not remediate SQL GUC spoofing or issuer/credential custody.
-    if request.method in {"GET", "HEAD"}:
+    # FastAPI injects Request for HTTP calls; None preserves direct unit-test calls.
+    if request is not None and request.method in {"GET", "HEAD"}:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Leitura financeira bloqueada até contexto SQL atestado."
