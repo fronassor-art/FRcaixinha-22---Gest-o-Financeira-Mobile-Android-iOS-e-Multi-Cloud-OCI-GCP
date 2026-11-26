@@ -98,6 +98,7 @@ def main():
     from app.dependencies import get_current_session
     from app.security import hash_password_secure
 
+    assert not app.dependency_overrides
     with psycopg.connect(host="127.0.0.1",port=5432,dbname=DB,
             user="postgres",password="postgres",connect_timeout=3) as pg:
         version=pg.execute(
