@@ -11,7 +11,8 @@ import os
 from pathlib import Path
 import secrets
 import sys
-from threading import Barrier
+from threading import Barrier, Event
+from time import monotonic, sleep
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -42,6 +43,7 @@ def require_disposable() -> str:
         "CI_M41080_DISPOSABLE": "1",
         "CI_M41090_DISPOSABLE": "1",
         "CI_M41100_DISPOSABLE": "1",
+        "CI_M41140_DISPOSABLE": "1",
         "CI_M40700_DISPOSABLE": "1",
         "CI_M40680_DISPOSABLE": "1",
         "CI_M40560_DISPOSABLE": "1",
@@ -67,6 +69,7 @@ def require_disposable() -> str:
             and os.environ.get("CI_M41080_DATABASE_URL") == dsn
             and os.environ.get("CI_M41090_DATABASE_URL") == dsn
             and os.environ.get("CI_M41100_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41140_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -379,23 +382,134 @@ def build_context_schema(owner) -> None:
     """)
     owner.execute("""
         CREATE FUNCTION m41050.can_write_entry(p_tenant uuid,p_member uuid)
-        RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+        RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER
         SET search_path=pg_catalog,pg_temp
         AS $body$
-          SELECT EXISTS(
-            SELECT 1
-              FROM m41050.current_claims() AS c
-              JOIN m40650.memberships AS m
-                ON m.user_id=p_member
-               AND m.tenant_id=p_tenant
-               AND m.role='TENANT_MEMBER'
-               AND m.status='ATIVA'
-              JOIN m40650.users AS u
-                ON u.id=m.user_id AND u.status='ACTIVE'
-             WHERE c.scope_name='WRITE_TEST_ENTRY'
-               AND c.role_name='TENANT_ADMIN'
-               AND c.tenant_id=p_tenant
-          )
+        DECLARE
+          v_capability text;
+          v_token_hash bytea;
+          v_session_digest text;
+          v_actor uuid;
+          v_role text;
+          v_tenant uuid;
+          v_scope text;
+          v_generation bigint;
+          v_cap_expiry timestamptz;
+          v_initial_cap_revoked timestamptz;
+          v_locked_digest text;
+          v_locked_actor uuid;
+          v_locked_role text;
+          v_locked_tenant uuid;
+          v_locked_scope text;
+          v_locked_generation bigint;
+          v_locked_expiry timestamptz;
+          v_locked_revoked timestamptz;
+          v_session_user uuid;
+          v_session_role text;
+          v_session_tenant uuid;
+          v_session_generation bigint;
+          v_session_expiry timestamptz;
+          v_session_revoked timestamptz;
+          v_actor_status text;
+          v_member_status text;
+          v_admin_membership_status text;
+          v_member_membership_status text;
+        BEGIN
+          IF p_tenant IS NULL OR p_member IS NULL THEN RETURN false; END IF;
+          v_capability:=pg_catalog.current_setting(
+            'app.session_capability',true
+          );
+          IF v_capability IS NULL OR v_capability !~ '^[0-9a-f]{64}$'
+          THEN RETURN false; END IF;
+          v_token_hash:=pg_catalog.sha256(
+            pg_catalog.convert_to(v_capability,'UTF8')
+          );
+
+          -- Read protected context only to acquire locks in stable order.
+          SELECT c.session_digest,c.bound_user_id,c.bound_role,c.tenant_id,
+                 c.scope_name,c.context_generation,c.expires_at,c.revoked_at
+            INTO v_session_digest,v_actor,v_role,v_tenant,v_scope,
+                 v_generation,v_cap_expiry,v_initial_cap_revoked
+            FROM m41050.session_caps AS c
+           WHERE c.token_hash=v_token_hash;
+          IF NOT FOUND THEN RETURN false; END IF;
+          IF v_actor IS NULL OR v_role<>'TENANT_ADMIN'
+             OR v_tenant IS DISTINCT FROM p_tenant
+             OR v_scope<>'WRITE_TEST_ENTRY'
+          THEN RETURN false; END IF;
+
+          -- Lifecycle revocation locks its user or membership before rotating
+          -- the session and capability. Use the same deterministic lock order.
+          PERFORM u.id
+            FROM m40650.users AS u
+           WHERE u.id=v_actor OR u.id=p_member
+           ORDER BY u.id
+           FOR SHARE;
+          PERFORM m.user_id
+            FROM m40650.memberships AS m
+           WHERE m.tenant_id=p_tenant
+             AND ((m.user_id=v_actor AND m.role='TENANT_ADMIN')
+               OR (m.user_id=p_member AND m.role='TENANT_MEMBER'))
+           ORDER BY m.user_id,m.tenant_id,m.role
+           FOR SHARE;
+
+          SELECT u.status INTO v_actor_status
+            FROM m40650.users AS u WHERE u.id=v_actor;
+          IF NOT FOUND THEN RETURN false; END IF;
+          SELECT u.status INTO v_member_status
+            FROM m40650.users AS u WHERE u.id=p_member;
+          IF NOT FOUND THEN RETURN false; END IF;
+          SELECT m.status INTO v_admin_membership_status
+            FROM m40650.memberships AS m
+           WHERE m.user_id=v_actor AND m.tenant_id=p_tenant
+             AND m.role='TENANT_ADMIN';
+          IF NOT FOUND THEN RETURN false; END IF;
+          SELECT m.status INTO v_member_membership_status
+            FROM m40650.memberships AS m
+           WHERE m.user_id=p_member AND m.tenant_id=p_tenant
+             AND m.role='TENANT_MEMBER';
+          IF NOT FOUND THEN RETURN false; END IF;
+
+          SELECT s.user_id,s.active_role,s.active_tenant_id,
+                 s.context_generation,s.expires_at,s.revoked_at
+            INTO v_session_user,v_session_role,v_session_tenant,
+                 v_session_generation,v_session_expiry,v_session_revoked
+            FROM m40650.sessions AS s
+           WHERE s.token_digest=v_session_digest
+           FOR SHARE;
+          IF NOT FOUND THEN RETURN false; END IF;
+
+          SELECT c.session_digest,c.bound_user_id,c.bound_role,c.tenant_id,
+                 c.scope_name,c.context_generation,c.expires_at,c.revoked_at
+            INTO v_locked_digest,v_locked_actor,v_locked_role,v_locked_tenant,
+                 v_locked_scope,v_locked_generation,v_locked_expiry,v_locked_revoked
+            FROM m41050.session_caps AS c
+           WHERE c.token_hash=v_token_hash
+           FOR SHARE;
+          IF NOT FOUND THEN RETURN false; END IF;
+
+          RETURN v_locked_digest IS NOT DISTINCT FROM v_session_digest
+             AND v_locked_actor IS NOT DISTINCT FROM v_actor
+             AND v_locked_role IS NOT DISTINCT FROM v_role
+             AND v_locked_tenant IS NOT DISTINCT FROM v_tenant
+             AND v_locked_scope IS NOT DISTINCT FROM v_scope
+             AND v_locked_generation IS NOT DISTINCT FROM v_generation
+             AND v_locked_expiry IS NOT DISTINCT FROM v_cap_expiry
+             AND v_locked_revoked IS NULL
+             AND v_locked_expiry>pg_catalog.clock_timestamp()
+             AND v_initial_cap_revoked IS NULL
+             AND v_cap_expiry>pg_catalog.clock_timestamp()
+             AND v_session_user=v_actor
+             AND v_session_role=v_role
+             AND v_session_tenant=p_tenant
+             AND v_session_generation=v_generation
+             AND v_session_revoked IS NULL
+             AND v_session_expiry>pg_catalog.clock_timestamp()
+             AND v_actor_status='ACTIVE'
+             AND v_member_status='ACTIVE'
+             AND v_admin_membership_status='ATIVA'
+             AND v_member_membership_status='ATIVA';
+        END
         $body$
     """)
     owner.execute("""
@@ -673,6 +787,7 @@ def _m41080_validate_disposable_dsn(dsn: str):
         "CI_M41080_DISPOSABLE": "1",
         "CI_M41090_DISPOSABLE": "1",
         "CI_M41100_DISPOSABLE": "1",
+        "CI_M41140_DISPOSABLE": "1",
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41060_DISPOSABLE": "1",
         "PIX_REAL": "OFF",
@@ -696,6 +811,7 @@ def _m41080_validate_disposable_dsn(dsn: str):
             and os.environ.get("CI_M41080_DATABASE_URL") == dsn
             and os.environ.get("CI_M41090_DATABASE_URL") == dsn
             and os.environ.get("CI_M41100_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41140_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -1483,6 +1599,317 @@ def assert_acl(owner) -> None:
     print("M41060_WRITE_RLS_POLICY_PRESENT=PASS")
 
 
+def _m41140_change_lifecycle(connection, kind, suspended, user_id, tenant_id):
+    if kind == "account":
+        result=connection.execute(
+            "UPDATE m40650.users SET status=%s WHERE id=%s",
+            ("SUSPENDED" if suspended else "ACTIVE",user_id),
+        )
+    elif kind == "admin_membership":
+        result=connection.execute(
+            "UPDATE m40650.memberships SET status=%s "
+            "WHERE user_id=%s AND tenant_id=%s AND role='TENANT_ADMIN'",
+            ("DESLIGADA" if suspended else "ATIVA",user_id,tenant_id),
+        )
+    elif kind == "member_membership":
+        result=connection.execute(
+            "UPDATE m40650.memberships SET status=%s "
+            "WHERE user_id=%s AND tenant_id=%s AND role='TENANT_MEMBER'",
+            ("DESLIGADA" if suspended else "ATIVA",user_id,tenant_id),
+        )
+    else:
+        raise AssertionError("M41140_UNKNOWN_REVOCATION_KIND")
+    assert result.rowcount==1, "M41140_LIFECYCLE_ROW"
+    return result.rowcount
+
+
+def _m41140_attempt_insert(app_dsn, capability, tenant_id, member_id,
+                           idempotency_key, started, outcome, decision, state):
+    import psycopg
+    app=None
+    try:
+        app=psycopg.connect(app_dsn,autocommit=False)
+        app.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        app.execute("SET LOCAL lock_timeout='15s'")
+        app.execute("SET LOCAL ROLE m40650_app")
+        app.execute(
+            "SELECT pg_catalog.set_config('app.session_capability',%s,true)",
+            (capability,),
+        )
+        state["pid"]=app.execute(
+            "SELECT pg_catalog.pg_backend_pid()"
+        ).fetchone()[0]
+        started.set()
+        try:
+            result=app.execute(
+                "INSERT INTO m41050.protected_entries "
+                "(entry_id,tenant_id,member_id,amount_cents,idempotency_key) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (uuid4(),tenant_id,member_id,16000,idempotency_key),
+            )
+        except psycopg.Error as exc:
+            state["sqlstate"]=exc.sqlstate
+            outcome.set()
+            app.rollback()
+            return
+        state["rowcount"]=result.rowcount
+        state["sqlstate"]=None
+        outcome.set()
+        if not decision.wait(20):
+            state["decision_timeout"]=True
+            app.rollback()
+        elif state.get("decision")=="commit":
+            app.commit()
+        else:
+            app.rollback()
+    except Exception as exc:
+        state["error_type"]=type(exc).__name__
+        state["error"]=str(exc)
+        outcome.set()
+        if app is not None:
+            app.rollback()
+        raise
+    finally:
+        if app is not None:
+            app.close()
+
+
+def _m41140_revoke_in_worker(dsn, kind, user_id, tenant_id, started, state):
+    import psycopg
+    with psycopg.connect(dsn,autocommit=False) as revoker:
+        revoker.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        revoker.execute("SET LOCAL lock_timeout='15s'")
+        state["pid"]=revoker.execute(
+            "SELECT pg_catalog.pg_backend_pid()"
+        ).fetchone()[0]
+        started.set()
+        result=_m41140_change_lifecycle(
+            revoker,kind,True,user_id,tenant_id
+        )
+        revoker.commit()
+        state["rowcount"]=result
+
+
+def _m41140_wait_for_blocker(dsn, waiting_pid, blocker_pid, timeout=6.0):
+    deadline=monotonic()+timeout
+    with connect(dsn,autocommit=True) as monitor:
+        while monotonic()<deadline:
+            blockers=monitor.execute(
+                "SELECT pg_catalog.pg_blocking_pids(%s)",(waiting_pid,)
+            ).fetchone()[0]
+            if blocker_pid in blockers:
+                return True
+            sleep(0.05)
+    return False
+
+
+def _m41140_entry_count(dsn, tenant_id, idempotency_key):
+    with connect(dsn,autocommit=True) as verify:
+        return verify.execute(
+            "SELECT count(*) FROM m41050.protected_entries "
+            "WHERE tenant_id=%s AND idempotency_key=%s",
+            (tenant_id,idempotency_key),
+        ).fetchone()[0]
+
+
+def _m41140_capability_revoked(dsn, capability):
+    token_hash=sha256(capability.encode("utf-8")).digest()
+    with connect(dsn,autocommit=True) as verify:
+        row=verify.execute(
+            "SELECT revoked_at FROM m41050.session_caps WHERE token_hash=%s",
+            (token_hash,),
+        ).fetchone()
+    return row is not None and row[0] is not None
+
+
+def _m41140_new_write_capability(owner, auth_dsn, app_dsn, key,
+                                admin_digest, tenant_id):
+    ticket=issue_ticket(
+        owner,auth_dsn,key,admin_digest,tenant_id,scope=WRITE_SCOPE
+    )
+    assert ticket is not None, "M41140_FRESH_TICKET"
+    capability=bind_ticket(app_dsn,ticket,tenant_id)
+    assert capability is not None, "M41140_FRESH_CAPABILITY"
+    return capability
+
+
+def _m41140_revoke_first(dsn, auth_dsn, app_dsn, key, admin_digest,
+                         tenant_id, member_id, admin_id, kind):
+    capability=None
+    idempotency_key="m41140:revoke-first:"+kind+":"+uuid4().hex
+    try:
+        with connect(dsn,autocommit=True) as owner:
+            capability=_m41140_new_write_capability(
+                owner,auth_dsn,app_dsn,key,admin_digest,tenant_id
+            )
+        revoker=connect(dsn,autocommit=False)
+        started,outcome,decision=Event(),Event(),Event()
+        state={}
+        blocked=False
+        try:
+            revoker.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            _m41140_change_lifecycle(
+                revoker,kind,True,
+                admin_id if kind!="member_membership" else member_id,
+                tenant_id,
+            )
+            revoker_pid=revoker.execute(
+                "SELECT pg_catalog.pg_backend_pid()"
+            ).fetchone()[0]
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future=pool.submit(
+                    _m41140_attempt_insert,app_dsn,capability,tenant_id,
+                    member_id,idempotency_key,started,outcome,decision,state,
+                )
+                try:
+                    assert started.wait(5), "M41140_WRITE_DID_NOT_START"
+                    blocked=_m41140_wait_for_blocker(
+                        dsn,state["pid"],revoker_pid
+                    )
+                    if blocked:
+                        revoker.commit()
+                    else:
+                        revoker.rollback()
+                    assert outcome.wait(18), "M41140_WRITE_OUTCOME_TIMEOUT"
+                    if state.get("rowcount") is not None:
+                        state["decision"]="rollback"
+                        decision.set()
+                    future.result(timeout=20)
+                finally:
+                    state["decision"]="rollback"
+                    decision.set()
+            assert blocked, "M41140_REVOKE_FIRST_NOT_SERIALIZED"
+            assert state.get("sqlstate")=="42501", "M41140_REVOKE_FIRST_WRITE_NOT_DENIED"
+            assert _m41140_entry_count(dsn,tenant_id,idempotency_key)==0
+        finally:
+            revoker.rollback()
+            revoker.close()
+        if kind in ("account","admin_membership"):
+            assert _m41140_capability_revoked(dsn,capability), "M41140_REVOKE_FIRST_CAP_NOT_REVOKED"
+        print("M41140_"+kind.upper()+"_REVOKE_FIRST=PASS")
+    finally:
+        with connect(dsn,autocommit=True) as owner:
+            _m41140_change_lifecycle(
+                owner,kind,False,
+                admin_id if kind!="member_membership" else member_id,
+                tenant_id,
+            )
+
+
+def _m41140_write_first(dsn, auth_dsn, app_dsn, key, admin_digest,
+                        tenant_id, member_id, admin_id, kind):
+    capability=None
+    idempotency_key="m41140:write-first:"+kind+":"+uuid4().hex
+    writer=None
+    try:
+        with connect(dsn,autocommit=True) as owner:
+            capability=_m41140_new_write_capability(
+                owner,auth_dsn,app_dsn,key,admin_digest,tenant_id
+            )
+        import psycopg
+        writer=psycopg.connect(app_dsn,autocommit=False)
+        writer.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        writer.execute("SET LOCAL lock_timeout='15s'")
+        writer.execute("SET LOCAL ROLE m40650_app")
+        writer.execute(
+            "SELECT pg_catalog.set_config('app.session_capability',%s,true)",
+            (capability,),
+        )
+        writer_pid=writer.execute(
+            "SELECT pg_catalog.pg_backend_pid()"
+        ).fetchone()[0]
+        result=writer.execute(
+            "INSERT INTO m41050.protected_entries "
+            "(entry_id,tenant_id,member_id,amount_cents,idempotency_key) "
+            "VALUES (%s,%s,%s,%s,%s)",
+            (uuid4(),tenant_id,member_id,16000,idempotency_key),
+        )
+        assert result.rowcount==1, "M41140_WRITE_FIRST_INSERT"
+        started=Event()
+        state={}
+        blocked=False
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future=pool.submit(
+                _m41140_revoke_in_worker,dsn,kind,
+                admin_id if kind!="member_membership" else member_id,
+                tenant_id,started,state,
+            )
+            assert started.wait(5), "M41140_REVOKER_DID_NOT_START"
+            blocked=_m41140_wait_for_blocker(dsn,state["pid"],writer_pid)
+            if blocked:
+                writer.commit()
+            else:
+                writer.rollback()
+            future.result(timeout=20)
+        assert blocked, "M41140_WRITE_FIRST_REVOKE_NOT_SERIALIZED"
+        assert state.get("rowcount")==1, "M41140_WRITE_FIRST_REVOCATION"
+        assert _m41140_entry_count(dsn,tenant_id,idempotency_key)==1
+        expect_insert_denied(
+            app_dsn,capability,tenant_id,member_id,16000,
+            "m41140:after-revoke:"+kind+":"+uuid4().hex,
+        )
+        if kind in ("account","admin_membership"):
+            with connect(dsn,autocommit=True) as owner:
+                _m41140_change_lifecycle(
+                    owner,kind,False,admin_id,tenant_id
+                )
+                assert _m41140_capability_revoked(dsn,capability), "M41140_WRITE_FIRST_CAP_NOT_REVOKED"
+                expect_insert_denied(
+                    app_dsn,capability,tenant_id,member_id,16000,
+                    "m41140:after-reactivation:"+kind+":"+uuid4().hex,
+                )
+                fresh=_m41140_new_write_capability(
+                    owner,auth_dsn,app_dsn,key,admin_digest,tenant_id
+                )
+            assert insert_entry(
+                app_dsn,fresh,tenant_id,member_id,16000,
+                "m41140:fresh:"+kind+":"+uuid4().hex,verify_authorized=True,
+            )==1
+        else:
+            with connect(dsn,autocommit=True) as owner:
+                _m41140_change_lifecycle(
+                    owner,kind,False,member_id,tenant_id
+                )
+                fresh=_m41140_new_write_capability(
+                    owner,auth_dsn,app_dsn,key,admin_digest,tenant_id
+                )
+            assert insert_entry(
+                app_dsn,fresh,tenant_id,member_id,16000,
+                "m41140:reactivated:"+uuid4().hex,verify_authorized=True,
+            )==1
+        print("M41140_"+kind.upper()+"_WRITE_FIRST=PASS")
+    finally:
+        if writer is not None:
+            writer.rollback()
+            writer.close()
+        with connect(dsn,autocommit=True) as owner:
+            _m41140_change_lifecycle(
+                owner,kind,False,
+                admin_id if kind!="member_membership" else member_id,
+                tenant_id,
+            )
+
+
+def _m41140_exercise_revocation_write_races(owner, dsn, auth_dsn, app_dsn,
+                                            key, tenant_id, member_id, admin_id):
+    row=owner.execute(
+        "SELECT token_digest FROM m40650.sessions "
+        "WHERE user_id=%s AND active_role='TENANT_ADMIN' AND active_tenant_id=%s "
+        "AND revoked_at IS NULL ORDER BY expires_at DESC LIMIT 1",
+        (admin_id,tenant_id),
+    ).fetchone()
+    assert row is not None, "M41140_ADMIN_SESSION"
+    admin_digest=row[0]
+    for kind in ("account","admin_membership","member_membership"):
+        _m41140_revoke_first(
+            dsn,auth_dsn,app_dsn,key,admin_digest,tenant_id,member_id,admin_id,kind
+        )
+        _m41140_write_first(
+            dsn,auth_dsn,app_dsn,key,admin_digest,tenant_id,member_id,admin_id,kind
+        )
+    print("M41140_STATUS=PASS_DISPOSABLE_REVOCATION_WRITE_RACES_ONLY")
+
+
 def run(dsn: str) -> None:
     from m40700_request_proof_disposable import bootstrap as bootstrap_m40700
 
@@ -1830,6 +2257,9 @@ def run(dsn: str) -> None:
             owner,auth_dsn,app_dsn,key,tenant_a,tenant_b,member_a,admin_a,member_other
         )
         print("M41130_STATUS=PASS_DISPOSABLE_LIFECYCLE_ONLY")
+        _m41140_exercise_revocation_write_races(
+            owner,dsn,auth_dsn,app_dsn,key,tenant_a,member_a,admin_a
+        )
         print("M41080_STATUS=PASS_DISPOSABLE_ASYNCPG_RLS_ONLY")
         print("M41050_GATE=NO_GO_UNTIL_KEY_CUSTODY_AND_RUNTIME_ATTESTATION")
         print("M41060_STATUS=PASS_DISPOSABLE_WRITE_RLS_ONLY")
@@ -1844,10 +2274,12 @@ def main() -> int:
         diagnostic = str(exc)
         if (
             isinstance(exc, AssertionError)
-            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_", "M41110_", "M41130_"))
+            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_", "M41110_", "M41130_", "M41140_"))
             and diagnostic.replace("_", "").isalnum()
         ):
-            if diagnostic.startswith("M41130_"):
+            if diagnostic.startswith("M41140_"):
+                prefix = "M41140_DIAGNOSTIC="
+            elif diagnostic.startswith("M41130_"):
                 prefix = "M41130_DIAGNOSTIC="
             elif diagnostic.startswith("M41110_"):
                 prefix = "M41110_DIAGNOSTIC="

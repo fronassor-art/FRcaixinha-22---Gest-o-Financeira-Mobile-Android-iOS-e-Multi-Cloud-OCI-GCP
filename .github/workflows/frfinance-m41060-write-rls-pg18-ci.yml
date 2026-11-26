@@ -19,6 +19,7 @@ on:
       - 'docs/FR_FINANCE_M41110_ROLE_BOUND_CAPABILITY_NO_GO.md'
       - 'docs/FR_FINANCE_M41120_SIGNED_TICKET_CONTEXT_NO_GO.md'
       - 'docs/FR_FINANCE_M41130_LIFECYCLE_GENERATION_NO_GO.md'
+      - 'docs/FR_FINANCE_M41140_REVOKE_WRITE_RACE_NO_GO.md'
   pull_request:
     paths:
       - 'backend/tests/m40700_request_proof_disposable.py'
@@ -37,6 +38,7 @@ on:
       - 'docs/FR_FINANCE_M41110_ROLE_BOUND_CAPABILITY_NO_GO.md'
       - 'docs/FR_FINANCE_M41120_SIGNED_TICKET_CONTEXT_NO_GO.md'
       - 'docs/FR_FINANCE_M41130_LIFECYCLE_GENERATION_NO_GO.md'
+      - 'docs/FR_FINANCE_M41140_REVOKE_WRITE_RACE_NO_GO.md'
 permissions:
   contents: read
 jobs:
@@ -89,6 +91,8 @@ jobs:
       CI_M41090_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41100_DISPOSABLE: '1'
       CI_M41100_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41140_DISPOSABLE: '1'
+      CI_M41140_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41060_DISPOSABLE: '1'
       CI_M40700_DISPOSABLE: '1'
       CI_M40680_DISPOSABLE: '1'

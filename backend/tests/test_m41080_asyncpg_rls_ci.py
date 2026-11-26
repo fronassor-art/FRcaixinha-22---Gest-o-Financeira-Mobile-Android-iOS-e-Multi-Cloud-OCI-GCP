@@ -11,6 +11,7 @@ M41060_WORKFLOW = ROOT / ".github" / "workflows" / "frfinance-m41060-write-rls-p
 DOC = ROOT / "docs" / "FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md"
 DOC90 = ROOT / "docs" / "FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md"
 DOC100 = ROOT / "docs" / "FR_FINANCE_M41100_ASYNCPG_REVOKED_SESSION_POOL_NO_GO.md"
+DOC41140 = ROOT / "docs" / "FR_FINANCE_M41140_REVOKE_WRITE_RACE_NO_GO.md"
 SOURCE = RUNNER.read_text(encoding="utf-8")
 
 
@@ -227,3 +228,65 @@ def test_m41130_lifecycle_invalidation_is_scoped_and_transactional():
         "M41130_STATUS=PASS_DISPOSABLE_LIFECYCLE_ONLY",
     ):
         assert marker in SOURCE
+
+
+def test_m41140_serializes_disposable_revocation_and_financial_write_races():
+    for marker in (
+        "RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER",
+        "ORDER BY u.id",
+        "ORDER BY m.user_id,m.tenant_id,m.role",
+        "FROM m40650.sessions AS s",
+        "FROM m41050.session_caps AS c",
+        "FOR SHARE;",
+        "pg_catalog.pg_blocking_pids",
+        "_m41140_revoke_first(",
+        "_m41140_write_first(",
+        'print("M41140_"+kind.upper()+"_REVOKE_FIRST=PASS")',
+        'print("M41140_"+kind.upper()+"_WRITE_FIRST=PASS")',
+        "CI_M41140_DISPOSABLE",
+        "CI_M41140_DATABASE_URL",
+        "M41140_STATUS=PASS_DISPOSABLE_REVOCATION_WRITE_RACES_ONLY",
+    ):
+        assert marker in SOURCE
+
+    doc = DOC41140.read_text(encoding="utf-8")
+    for marker in (
+        "CP26-0061", "CP26-0062", "CTM-07", "CTM-08",
+        "330 IDs", "2.310 etapas",
+        "ACCOUNT_REVOKE_FIRST", "ACCOUNT_WRITE_FIRST",
+        "ADMIN_MEMBERSHIP_REVOKE_FIRST", "ADMIN_MEMBERSHIP_WRITE_FIRST",
+        "MEMBER_MEMBERSHIP_REVOKE_FIRST", "MEMBER_MEMBERSHIP_WRITE_FIRST",
+        "pg_blocking_pids", "MIGRATIONS=NONE",
+        "ORIGINAL_DATABASE=NOT_ACCESSED",
+        "PIX_REAL=OFF", "PAGAMENTOS_REAIS=OFF",
+        "ATIVACAO_REAL=OFF", "PRODUCTION=BLOCKED",
+        "PENDING_INDEPENDENT_EVIDENCE",
+    ):
+        assert marker in doc
+    assert "PRODUCTION=GO" not in doc
+
+
+def test_m41140_workflow_guards_the_disposable_database_and_paths():
+    for workflow_path in (M41050_WORKFLOW, M41060_WORKFLOW):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        for marker in (
+            "CI_M41140_DISPOSABLE: '1'",
+            "CI_M41140_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci",
+            "docs/FR_FINANCE_M41140_REVOKE_WRITE_RACE_NO_GO.md",
+            "PIX_REAL: 'OFF'",
+            "PAGAMENTOS_REAIS: 'OFF'",
+            "ATIVACAO_REAL: 'OFF'",
+            "postgres:18",
+            "contents: read",
+        ):
+            assert marker in workflow
+        assert workflow.count("docs/FR_FINANCE_M41140_REVOKE_WRITE_RACE_NO_GO.md") == 2
+        for forbidden in (
+            "127.0.0.1:5433",
+            "backend/migrations/",
+            "pg_ctl",
+            "PIX_REAL: 'ON'",
+            "PAGAMENTOS_REAIS: 'ON'",
+            "ATIVACAO_REAL: 'ON'",
+        ):
+            assert forbidden not in workflow
