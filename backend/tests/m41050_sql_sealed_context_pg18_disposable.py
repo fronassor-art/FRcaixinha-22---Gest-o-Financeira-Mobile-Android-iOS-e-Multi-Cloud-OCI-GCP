@@ -496,6 +496,23 @@ async def _m41080_asyncpg_visible_entries(
             await install_session_capability(connection, capability)
             if forged is not None:
                 await _m41080_set_forged_gucs(connection, forged)
+            context = await connection.fetchrow(
+                "SELECT current_user::text AS effective_role, "
+                "session_user::text AS login_role, "
+                "count(*)::int AS claim_count, "
+                "min(role_name) AS claim_role, min(scope_name) AS claim_scope "
+                "FROM m41050.current_claims()"
+            )
+            print(
+                "M41080_ASYNCPG_CONTEXT="
+                + ":".join(
+                    str(context[key] or "-")
+                    for key in (
+                        "effective_role", "login_role", "claim_count",
+                        "claim_role", "claim_scope",
+                    )
+                )
+            )
             rows = await connection.fetch(
                 "SELECT tenant_id, member_id, amount_cents "
                 "FROM m41050.protected_entries ORDER BY tenant_id, member_id"
