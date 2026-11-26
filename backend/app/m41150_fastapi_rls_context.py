@@ -9,6 +9,7 @@ short-lived capability.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 import inspect
 import os
 import re
@@ -45,7 +46,10 @@ class SessionCapabilityProvider(Protocol):
         self, session: AuthenticatedSession, *, scope: str, request_nonce: UUID
     ) -> object: ...
 
-    async def bind_ticket(self, ticket: str, *, tenant_id: UUID) -> object: ...
+    async def bind_ticket(
+        self, ticket: str, *, tenant_id: UUID, backend_pid: int,
+        virtual_xid: str, transaction_started_at: datetime,
+    ) -> object: ...
 
 
 class InvalidSessionTicket(ValueError):
@@ -109,7 +113,7 @@ async def _require_bound_read_claims(connection: object, expected: tuple) -> Non
     try:
         rows = await connection.fetch(
             "SELECT user_id, role_name, tenant_id, scope_name, session_id, request_nonce "
-            "FROM m41050.current_claims_v3()"
+            "FROM m41050.current_claims_v4()"
         )
         if not isinstance(rows, list):
             raise TypeError("M41190_INVALID_SQL_CLAIMS")
@@ -132,6 +136,31 @@ async def _require_bound_read_claims(connection: object, expected: tuple) -> Non
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão financeira inválida.",
         )
+
+
+async def _read_transaction_identity(connection: object) -> tuple[int, str, datetime]:
+    """Read server-owned identity of the current top-level transaction."""
+    try:
+        row = await connection.fetchrow(
+            "SELECT pg_catalog.pg_backend_pid() AS backend_pid, "
+            "l.virtualxid AS virtual_xid, "
+            "pg_catalog.transaction_timestamp() AS transaction_started_at "
+            "FROM pg_catalog.pg_locks AS l "
+            "WHERE l.pid=pg_catalog.pg_backend_pid() "
+            "AND l.locktype='virtualxid' AND l.mode='ExclusiveLock' "
+            "AND l.granted AND l.virtualxid=l.virtualtransaction"
+        )
+        pid, vxid, started = row["backend_pid"], row["virtual_xid"], row["transaction_started_at"]
+        if (type(pid) is not int or pid <= 0 or type(vxid) is not str
+                or re.fullmatch(r"[0-9]+/[0-9]+", vxid) is None
+                or not isinstance(started, datetime) or started.utcoffset() is None):
+            raise ValueError("M41220_INVALID_TRANSACTION_IDENTITY")
+        return pid, vxid, started
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Autorização financeira indisponível.",
+        ) from None
 
 
 @asynccontextmanager
@@ -183,22 +212,6 @@ async def _capability_db_connection(
             detail="Sessão financeira inválida.",
         ) from None
 
-    capability_value = await _provider_call(
-        provider, "bind_ticket", ticket, tenant_id=tenant
-    )
-    if capability_value is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sessão ausente, revogada ou fora do escopo.",
-        )
-    try:
-        capability = validate_session_capability(capability_value)
-    except InvalidSessionCapability:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sessão financeira inválida.",
-        ) from None
-
     try:
         require_verified_rls_session(session)
     except UnverifiedRLSSession:
@@ -220,6 +233,24 @@ async def _capability_db_connection(
             # Only the opaque capability is installed. No caller-supplied
             # tenant, role, or user GUC participates in this route's RLS.
             async with connection.transaction(readonly=True):
+                backend_pid, virtual_xid, transaction_started_at = await _read_transaction_identity(connection)
+                capability_value = await _provider_call(
+                    provider, "bind_ticket", ticket, tenant_id=tenant,
+                    backend_pid=backend_pid, virtual_xid=virtual_xid,
+                    transaction_started_at=transaction_started_at,
+                )
+                if capability_value is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Sessão ausente, revogada ou fora do escopo.",
+                    )
+                try:
+                    capability = validate_session_capability(capability_value)
+                except InvalidSessionCapability:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Sessão financeira inválida.",
+                    ) from None
                 try:
                     await install_session_capability(connection, capability)
                 except InvalidSessionCapability:

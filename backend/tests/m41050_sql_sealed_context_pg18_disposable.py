@@ -207,6 +207,11 @@ def build_context_schema(owner) -> None:
           bound_user_id uuid NOT NULL,
           bound_session_id uuid NOT NULL,
           request_nonce uuid NOT NULL UNIQUE,
+          bound_backend_pid integer,
+          bound_virtual_xid text,
+          bound_transaction_started_at timestamptz,
+          CHECK ((bound_backend_pid IS NULL AND bound_virtual_xid IS NULL AND bound_transaction_started_at IS NULL)
+              OR (bound_backend_pid IS NOT NULL AND bound_backend_pid > 0 AND bound_virtual_xid IS NOT NULL AND bound_transaction_started_at IS NOT NULL)),
           bound_role text NOT NULL CHECK (bound_role IN ('TENANT_ADMIN','TENANT_MEMBER')),
           context_generation bigint NOT NULL,
           tenant_id uuid NOT NULL,
@@ -349,6 +354,13 @@ def build_context_schema(owner) -> None:
              AND c.expires_at>pg_catalog.statement_timestamp()
              AND s.user_id=c.bound_user_id
              AND s.id=c.bound_session_id
+             AND (c.bound_backend_pid IS NULL OR (
+                 c.bound_backend_pid=pg_catalog.pg_backend_pid()
+                 AND c.bound_transaction_started_at=pg_catalog.transaction_timestamp()
+                 AND EXISTS (SELECT 1 FROM pg_catalog.pg_locks AS l
+                     WHERE l.pid=pg_catalog.pg_backend_pid() AND l.locktype='virtualxid'
+                       AND l.mode='ExclusiveLock' AND l.granted
+                       AND l.virtualxid=l.virtualtransaction AND l.virtualxid=c.bound_virtual_xid)))
              AND s.active_role=c.bound_role
              AND s.context_generation=c.context_generation
              AND s.active_tenant_id=c.tenant_id
@@ -399,6 +411,69 @@ def build_context_schema(owner) -> None:
         $body$
     """)
     owner.execute("ALTER FUNCTION m41050.current_claims_v3() OWNER TO m40650_owner")
+    owner.execute("""
+        CREATE FUNCTION m41050.bind_read_transaction(
+          p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz
+        ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        DECLARE v_cap text;
+        BEGIN
+          IF p_pid IS NULL OR p_pid<=0 OR p_pid=pg_catalog.pg_backend_pid()
+             OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+$'
+             OR p_started IS NULL
+             OR p_started>pg_catalog.clock_timestamp()
+             OR p_started<pg_catalog.clock_timestamp()-interval '30 seconds'
+             OR NOT EXISTS (
+                 SELECT 1 FROM pg_catalog.pg_locks AS l
+                  WHERE l.pid=p_pid AND l.locktype='virtualxid'
+                    AND l.virtualxid=p_vxid AND l.virtualtransaction=p_vxid
+                    AND l.mode='ExclusiveLock' AND l.granted)
+          THEN RETURN NULL; END IF;
+          v_cap:=m41050.bind_ticket(p_ticket,p_tenant);
+          IF v_cap IS NULL THEN RETURN NULL; END IF;
+          UPDATE m41050.session_caps
+             SET bound_backend_pid=p_pid,bound_virtual_xid=p_vxid,
+                 bound_transaction_started_at=p_started
+           WHERE token_hash=pg_catalog.sha256(pg_catalog.convert_to(v_cap,'UTF8'))
+             AND scope_name='READ_ENTRIES' AND bound_backend_pid IS NULL;
+          IF NOT FOUND THEN
+            DELETE FROM m41050.session_caps
+             WHERE token_hash=pg_catalog.sha256(pg_catalog.convert_to(v_cap,'UTF8'));
+            RETURN NULL;
+          END IF;
+          RETURN v_cap;
+        END
+        $body$
+    """)
+    owner.execute("""
+        CREATE FUNCTION m41050.current_claims_v4()
+        RETURNS TABLE(user_id uuid,role_name text,tenant_id uuid,
+                      scope_name text,session_id uuid,request_nonce uuid)
+        LANGUAGE sql STABLE SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp
+        AS $body$
+          SELECT claims.user_id,claims.role_name,claims.tenant_id,
+                 claims.scope_name,claims.session_id,claims.request_nonce
+            FROM m41050.current_claims_v3() AS claims
+            JOIN m41050.session_caps AS c
+              ON c.token_hash=pg_catalog.sha256(pg_catalog.convert_to(
+                   pg_catalog.current_setting('app.session_capability',true),'UTF8'))
+             AND c.bound_session_id=claims.session_id
+             AND c.request_nonce=claims.request_nonce
+           WHERE c.scope_name='READ_ENTRIES'
+             AND c.bound_backend_pid=pg_catalog.pg_backend_pid()
+             AND c.bound_transaction_started_at=pg_catalog.transaction_timestamp()
+             AND EXISTS (
+                 SELECT 1 FROM pg_catalog.pg_locks AS l
+                  WHERE l.pid=pg_catalog.pg_backend_pid()
+                    AND l.locktype='virtualxid' AND l.granted
+                    AND l.mode='ExclusiveLock'
+                    AND l.virtualxid=l.virtualtransaction
+                    AND l.virtualxid=c.bound_virtual_xid)
+        $body$
+    """)
+    owner.execute("ALTER FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz) OWNER TO m40650_owner")
+    owner.execute("ALTER FUNCTION m41050.current_claims_v4() OWNER TO m40650_owner")
     owner.execute(
         "ALTER TABLE m41050.session_caps OWNER TO m40650_owner"
     )
@@ -704,6 +779,10 @@ def build_context_schema(owner) -> None:
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v2() TO m40650_app")
     owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v3() FROM PUBLIC,m40680_auth")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v3() TO m40650_app")
+    owner.execute("REVOKE ALL ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz) FROM PUBLIC,m40680_auth")
+    owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v4() FROM PUBLIC,m40680_auth")
+    owner.execute("GRANT EXECUTE ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz) TO m40650_app")
+    owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v4() TO m40650_app")
     owner.execute("""
         GRANT EXECUTE ON FUNCTION m41050.can_write_entry(uuid,uuid)
         TO m40650_app

@@ -214,7 +214,7 @@ async def test_m41190_readback_compares_all_claims_and_rejects_ambiguous_results
         async def fetch(self, sql):
             assert sql == (
                 "SELECT user_id, role_name, tenant_id, scope_name, session_id, request_nonce "
-                "FROM m41050.current_claims_v3()"
+                "FROM m41050.current_claims_v4()"
             )
             if isinstance(self.rows, Exception):
                 raise self.rows
@@ -276,6 +276,12 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
             else:
                 events.append("commit")
 
+        async def fetchrow(self, sql):
+            assert "pg_catalog.pg_locks" in sql
+            events.append("identity")
+            return {"backend_pid": 123, "virtual_xid": "5/42",
+                    "transaction_started_at": now}
+
         async def fetch(self, sql):
             events.append("claims")
             return [{"user_id": user, "role_name": "TENANT_ADMIN",
@@ -316,8 +322,11 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
             assert isinstance(request_nonce, UUID) and request_nonce.version == 4
             issued_nonces.append(request_nonce)
             return "a" * 64
-        async def bind_ticket(self, ticket, *, tenant_id):
+        async def bind_ticket(self, ticket, *, tenant_id, backend_pid,
+                              virtual_xid, transaction_started_at):
             assert tenant_id == tenant
+            assert (backend_pid, virtual_xid, transaction_started_at) == (123, "5/42", now)
+            events.append("bind")
             return "b" * 64
 
     monkeypatch.setenv("ENVIRONMENT", "development")
@@ -332,7 +341,7 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
     )
     dependency = gateway.get_ledger_readonly_db_connection(request, session)
     await anext(dependency)
-    assert events == ["acquire", "begin", "install", "claims"]
+    assert events == ["acquire", "begin", "identity", "bind", "install", "claims"]
 
     if failure == "route":
         with pytest.raises(ValueError, match="route failure"):
@@ -352,3 +361,16 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
         with pytest.raises(asyncio.CancelledError):
             await anext(dependency)
         assert events[-4:] == ["commit", "reset", "terminate", "release"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("row", [None, {}, {"backend_pid": 0, "virtual_xid": "1/2", "transaction_started_at": None}, {"backend_pid": 1, "virtual_xid": "forged", "transaction_started_at": None}])
+async def test_m41220_invalid_transaction_identity_fails_closed(row):
+    from fastapi import HTTPException
+    from backend.app.m41150_fastapi_rls_context import _read_transaction_identity
+    class Connection:
+        async def fetchrow(self, sql):
+            return row
+    with pytest.raises(HTTPException) as exc:
+        await _read_transaction_identity(Connection())
+    assert exc.value.status_code == 503

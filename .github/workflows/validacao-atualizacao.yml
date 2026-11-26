@@ -22,6 +22,7 @@ on:
       - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
       - 'docs/FR_FINANCE_M41200_INDIVIDUAL_SESSION_SQL_BINDING_NO_GO.md'
       - 'docs/FR_FINANCE_M41210_REQUEST_NONCE_REPLAY_NO_GO.md'
+      - 'docs/FR_FINANCE_M41220_TRANSACTION_BOUND_LEDGER_NO_GO.md'
       - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
       - 'backend/tests/m41150_fastapi_rls_context_pg18_disposable.py'
       - 'docs/FR_FINANCE_M41190_LEDGER_SQL_CLAIMS_TRANSACTION_NO_GO.md'

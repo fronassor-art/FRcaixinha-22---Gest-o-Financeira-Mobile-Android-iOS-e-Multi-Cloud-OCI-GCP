@@ -202,7 +202,7 @@ async def exercise(dsn: str) -> None:
                 FOR SELECT TO m40650_app
                 USING (
                   EXISTS (
-                    SELECT 1 FROM m41050.current_claims() AS claims
+                    SELECT 1 FROM m41050.current_claims_v4() AS claims
                      WHERE claims.scope_name='READ_ENTRIES'
                        AND claims.role_name='TENANT_ADMIN'
                        AND claims.tenant_id={table_name}.tenant_id
@@ -215,6 +215,14 @@ async def exercise(dsn: str) -> None:
         owner.execute(
             "GRANT EXECUTE ON FUNCTION m41050.current_claims() TO m40650_app"
         )
+
+        def bind_read(ticket, tenant, pid, vxid, started):
+            with psycopg.connect(app_dsn, autocommit=True) as app:
+                app.execute("SET ROLE m40650_app")
+                return app.execute(
+                    "SELECT m41050.bind_read_transaction(%s,%s,%s,%s,%s)",
+                    (ticket, tenant, pid, vxid, started),
+                ).fetchone()[0]
 
         async def set_app_role(connection):
             await connection.execute("SET ROLE m40650_app")
@@ -369,8 +377,10 @@ async def exercise(dsn: str) -> None:
                     self.last_ticket = ticket
                 return ticket
 
-            async def bind_ticket(self, ticket, *, tenant_id):
-                capability = fixture.bind_ticket(app_dsn, ticket, tenant_id)
+            async def bind_ticket(self, ticket, *, tenant_id, backend_pid,
+                                  virtual_xid, transaction_started_at):
+                capability = bind_read(ticket, tenant_id, backend_pid,
+                                       virtual_xid, transaction_started_at)
                 if capability:
                     self.last_capability = capability
                 if self.expire_next and capability:
@@ -508,9 +518,12 @@ async def exercise(dsn: str) -> None:
             }
             async with pool.acquire() as connection:
                 async with connection.transaction(readonly=True):
-                    await gateway.install_session_capability(
-                        connection, active_capability
-                    )
+                    pid, vxid, started = await gateway._read_transaction_identity(connection)
+                    ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
+                    assert ticket
+                    direct_cap = bind_read(ticket, tenant_a, pid, vxid, started)
+                    assert direct_cap
+                    await gateway.install_session_capability(connection, direct_cap)
                     for table_name, expected_count in expected_tenant_rows.items():
                         rows = await connection.fetch(
                             f"SELECT tenant_id FROM public.{table_name}"
@@ -520,6 +533,57 @@ async def exercise(dsn: str) -> None:
                             raise AssertionError(
                                 f"M41160_RLS_TENANT_ISOLATION_{table_name}"
                             )
+            # A valid bound capability must die at transaction end, even on
+            # the same pooled physical connection or a different connection.
+            async with pool.acquire() as first, pool.acquire() as second:
+                async with first.transaction(readonly=True):
+                    pid, vxid, started = await gateway._read_transaction_identity(first)
+                    ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
+                    assert ticket
+                    assert bind_read(ticket, tenant_a, pid, "0/0", started) is None
+                    cap = bind_read(ticket, tenant_a, pid, vxid, started)
+                    assert cap
+                    await gateway.install_session_capability(first, cap)
+                    assert len(await first.fetch("SELECT id FROM public.ledger_accounts")) == 2
+                    async with second.transaction(readonly=True):
+                        await gateway.install_session_capability(second, cap)
+                        assert not await second.fetch("SELECT id FROM public.ledger_accounts")
+                        assert not await second.fetch("SELECT * FROM m41050.current_claims_v4()")
+                    assert len(await first.fetch("SELECT id FROM public.ledger_accounts")) == 2
+                async with first.transaction(readonly=True):
+                    assert await first.fetchval("SELECT pg_catalog.pg_backend_pid()") == pid
+                    await gateway.install_session_capability(first, cap)
+                    assert not await first.fetch("SELECT id FROM public.ledger_accounts")
+                    assert not await first.fetch("SELECT * FROM m41050.current_claims_v3()")
+                # Rollback does not restore the externally consumed ticket.
+                tx = first.transaction(readonly=True)
+                await tx.start()
+                try:
+                    pid, vxid, started = await gateway._read_transaction_identity(first)
+                    ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
+                    assert ticket
+                    rolled_cap = bind_read(ticket, tenant_a, pid, vxid, started)
+                    assert rolled_cap
+                    await gateway.install_session_capability(first, rolled_cap)
+                    assert len(await first.fetch("SELECT id FROM public.ledger_accounts")) == 2
+                finally:
+                    await tx.rollback()
+                async with first.transaction(readonly=True):
+                    pid, vxid, started = await gateway._read_transaction_identity(first)
+                    assert bind_read(ticket, tenant_a, pid, vxid, started) is None
+                    await gateway.install_session_capability(first, rolled_cap)
+                    assert not await first.fetch("SELECT id FROM public.ledger_accounts")
+                # Old unbound issuance cannot access any ledger table.
+                ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
+                assert ticket
+                unbound = fixture.bind_ticket(app_dsn, ticket, tenant_a)
+                assert unbound
+                async with first.transaction(readonly=True):
+                    await gateway.install_session_capability(first, unbound)
+                    for name in expected_tenant_rows:
+                        assert not await first.fetch(f"SELECT id FROM public.{name}")
+            print("M41220_CROSS_BACKEND_AND_SAME_BACKEND_REPLAY_DENIED=PASS")
+            print("M41220_ROLLBACK_AND_UNBOUND_LEDGER_REPLAY_DENIED=PASS")
             print("M41160_RLS_TENANT_ISOLATION=PASS")
             print("M41150_FASTAPI_LEDGER_DIRECTORY=PASS")
             print("M41160_FASTAPI_LEDGER_READ_ROUTES=6_OF_6_PASS")
@@ -588,15 +652,15 @@ async def exercise(dsn: str) -> None:
             assert fresh.status_code == 200
             used_capability = provider.last_capability
             assert used_capability
-            # Legacy SQL remains callable until expiry; HTTP must reject replay.
+            # The same capability is now invalid in another SQL transaction.
             async with pool.acquire() as connection:
                 async with connection.transaction(readonly=True):
                     await gateway.install_session_capability(connection, used_capability)
                     claims = await connection.fetch(
                         "SELECT session_id,request_nonce FROM m41050.current_claims_v3()"
                     )
-                    assert len(claims) == 1
-                    assert claims[0]["session_id"] == admin_session_id
+                    assert not claims
+                    assert not await connection.fetch("SELECT id FROM public.ledger_accounts")
             provider.replay_capability = used_capability
             try:
                 denied = await client.get(path_a, headers=admin_headers)
