@@ -270,12 +270,16 @@ async def exercise(dsn: str) -> None:
         app = FastAPI()
         app.include_router(ledger.router, prefix="/api/v1")
 
-        async def synthetic_current_session(request: Request):
+        async def synthetic_current_session(request):
             raw = request.headers.get("authorization")
             session = sessions.get(raw)
             if session is None:
                 raise HTTPException(status_code=401, detail="Unauthorized")
             return session
+
+        # Request is imported locally after preflight; bind its runtime type
+        # because postponed annotations cannot resolve exercise-local names.
+        synthetic_current_session.__annotations__["request"] = Request
 
         app.dependency_overrides[get_current_session] = synthetic_current_session
         setattr(app.state, gateway.PROVIDER_STATE_ATTRIBUTE, provider)
