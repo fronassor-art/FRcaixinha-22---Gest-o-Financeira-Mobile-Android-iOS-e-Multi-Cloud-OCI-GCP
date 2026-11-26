@@ -80,18 +80,29 @@ def test_get_and_head_fail_closed_before_financial_pool_under_concurrency(monkey
     assert pool_calls == []
 
 
-def test_m40070_disposable_exception_requires_marker_and_exact_local_dsns(monkeypatch):
+def _configure_disposable_ci_fixture(
+    monkeypatch,
+    *,
+    profile,
+    database_name,
+    app_user,
+    app_password,
+    auth_user,
+    auth_password,
+    guc,
+    verifier=None,
+):
     app_dsn = (
-        "postgresql://fr_m40070_app:m40070-app-ci-only"
-        "@127.0.0.1:5432/frcaixinha_ci"
+        f"postgresql://{app_user}:{app_password}"
+        f"@127.0.0.1:5432/{database_name}"
     )
     auth_dsn = (
-        "postgresql://fr_m40070_auth:m40070-auth-ci-only"
-        "@127.0.0.1:5432/frcaixinha_ci"
+        f"postgresql://{auth_user}:{auth_password}"
+        f"@127.0.0.1:5432/{database_name}"
     )
     for key, value in {
         "GITHUB_ACTIONS": "true",
-        "CI_M40070_DISPOSABLE": "1",
+        f"CI_{profile}_DISPOSABLE": "1",
         "ENVIRONMENT": "development",
         "FRCAIXINHA_TEST_AUTH": "1",
         "PIX_REAL": "OFF",
@@ -100,30 +111,139 @@ def test_m40070_disposable_exception_requires_marker_and_exact_local_dsns(monkey
         "FR_FINANCE_PIX_REAL": "OFF",
         "FR_FINANCE_REAL_PAYMENTS": "OFF",
         "FR_FINANCE_REAL_USER_ACTIVATION": "OFF",
-        "PGOPTIONS": "-c frfinance.m40070_ci=DISPOSABLE_ONLY",
+        "PGOPTIONS": f"-c frfinance.{guc}=DISPOSABLE_ONLY",
         "DATABASE_URL": app_dsn,
         "AUTH_DATABASE_URL": auth_dsn,
     }.items():
         monkeypatch.setenv(key, value)
+    if verifier is None:
+        monkeypatch.delenv("AUTH_VERIFIER_DATABASE_URL", raising=False)
+    else:
+        verifier_user, verifier_password = verifier
+        monkeypatch.setenv(
+            "AUTH_VERIFIER_DATABASE_URL",
+            f"postgresql://{verifier_user}:{verifier_password}"
+            f"@127.0.0.1:5432/{database_name}",
+        )
     monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=app_dsn))
-    state = SimpleNamespace(frfinance_m40070_disposable_read_test=True)
-    request = SimpleNamespace(app=SimpleNamespace(state=state))
+    state = SimpleNamespace(frfinance_ci_disposable_read_test=True)
+    return app_dsn, auth_dsn, SimpleNamespace(
+        app=SimpleNamespace(state=state)
+    )
 
-    assert database._m41180_m40070_disposable_read_exception(request) is True
-    state.frfinance_m40070_disposable_read_test = False
-    assert database._m41180_m40070_disposable_read_exception(request) is False
-    state.frfinance_m40070_disposable_read_test = True
-    monkeypatch.setenv("PIX_REAL", "ON")
-    assert database._m41180_m40070_disposable_read_exception(request) is False
-    monkeypatch.setenv("PIX_REAL", "OFF")
-    monkeypatch.setenv("PGOPTIONS", "")
-    assert database._m41180_m40070_disposable_read_exception(request) is False
-    monkeypatch.setenv("PGOPTIONS", "-c frfinance.m40070_ci=DISPOSABLE_ONLY")
+
+def test_ci_disposable_exception_accepts_only_marked_fixture_profiles(monkeypatch):
+    profiles = (
+        {
+            "profile": "M40070",
+            "database_name": "frcaixinha_ci",
+            "app_user": "fr_m40070_app",
+            "app_password": "m40070-app-ci-only",
+            "auth_user": "fr_m40070_auth",
+            "auth_password": "m40070-auth-ci-only",
+            "guc": "m40070_ci",
+        },
+        {
+            "profile": "M40340",
+            "database_name": "frfinance_ci_credit",
+            "app_user": "frc_ai_app",
+            "app_password": "m40340-app-ci-only",
+            "auth_user": "fr_m40340_auth",
+            "auth_password": "m40340-auth-ci-only",
+            "guc": "m40340_ci",
+        },
+        {
+            "profile": "M40380",
+            "database_name": "frfinance_ci_credit",
+            "app_user": "frc_ai_app",
+            "app_password": "m40380-app-ci-only",
+            "auth_user": "fr_m40380_auth",
+            "auth_password": "m40380-auth-ci-only",
+            "guc": "m40380_ci",
+            "verifier": ("fr_m40380_verifier", "m40380-verifier-ci-only"),
+        },
+    )
+    for profile in profiles:
+        _, _, request = _configure_disposable_ci_fixture(monkeypatch, **profile)
+        assert database._m41180_ci_disposable_read_exception(request) is True
+
+
+def test_ci_disposable_exception_rejects_missing_marker_and_unsafe_context(monkeypatch):
+    app_dsn, auth_dsn, request = _configure_disposable_ci_fixture(
+        monkeypatch,
+        profile="M40070",
+        database_name="frcaixinha_ci",
+        app_user="fr_m40070_app",
+        app_password="m40070-app-ci-only",
+        auth_user="fr_m40070_auth",
+        auth_password="m40070-auth-ci-only",
+        guc="m40070_ci",
+    )
+    state = request.app.state
+    state.frfinance_ci_disposable_read_test = False
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    state.frfinance_ci_disposable_read_test = True
+
+    monkeypatch.delenv("CI_M40070_DISPOSABLE")
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("CI_M40070_DISPOSABLE", "1")
+
     monkeypatch.setenv("ENVIRONMENT", "production")
-    assert database._m41180_m40070_disposable_read_exception(request) is False
+    assert database._m41180_ci_disposable_read_exception(request) is False
     monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://attacker@10.0.0.2:5432/prod")
-    assert database._m41180_m40070_disposable_read_exception(request) is False
+
+    for flag in (
+        "PIX_REAL",
+        "PAGAMENTOS_REAIS",
+        "ATIVACAO_REAL",
+        "FR_FINANCE_PIX_REAL",
+        "FR_FINANCE_REAL_PAYMENTS",
+        "FR_FINANCE_REAL_USER_ACTIVATION",
+    ):
+        monkeypatch.setenv(flag, "ON")
+        assert database._m41180_ci_disposable_read_exception(request) is False
+        monkeypatch.setenv(flag, "OFF")
+
+    monkeypatch.setenv("PGOPTIONS", "")
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv(
+        "PGOPTIONS", "-c frfinance.m40070_ci=DISPOSABLE_ONLY"
+    )
+
+    wrong_dsn = "postgresql://fr_m40070_app:ci-only@10.0.0.2:5432/frcaixinha_ci"
+    monkeypatch.setenv("DATABASE_URL", wrong_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=wrong_dsn))
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("DATABASE_URL", app_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=app_dsn))
+
+    unsafe_dsn = "postgresql://fr_m40070_app:ci-only@127.0.0.1:5432/production"
+    monkeypatch.setenv("DATABASE_URL", unsafe_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=unsafe_dsn))
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("DATABASE_URL", app_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=app_dsn))
+
+    privileged_dsn = "postgresql://postgres:ci-only@127.0.0.1:5432/frcaixinha_ci"
+    monkeypatch.setenv("DATABASE_URL", privileged_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=privileged_dsn))
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("DATABASE_URL", app_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=app_dsn))
+
+    no_password = "postgresql://fr_m40070_app@127.0.0.1:5432/frcaixinha_ci"
+    monkeypatch.setenv("DATABASE_URL", no_password)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=no_password))
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("DATABASE_URL", app_dsn)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=app_dsn))
+
+    bad_auth_dsn = auth_dsn.replace("127.0.0.1", "10.0.0.3")
+    monkeypatch.setenv("AUTH_DATABASE_URL", bad_auth_dsn)
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("AUTH_DATABASE_URL", auth_dsn)
+    monkeypatch.delenv("AUTH_DATABASE_URL")
+    assert database._m41180_ci_disposable_read_exception(request) is False
 
 
 def test_post_method_keeps_existing_dependency_path_with_only_fake_connection(monkeypatch):

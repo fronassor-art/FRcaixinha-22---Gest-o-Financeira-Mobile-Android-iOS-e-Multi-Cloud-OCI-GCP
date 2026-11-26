@@ -26,10 +26,10 @@ _db_pool_binding = None
 _db_pool_lock = asyncio.Lock()
 
 
-def _m41180_m40070_disposable_read_exception(request: Request) -> bool:
-    """Allow only M40070's preflighted disposable PG18 HTTP/RLS integration."""
+def _m41180_ci_disposable_read_exception(request: Request) -> bool:
+    """Permit legacy GUC reads only in marked, preflighted disposable CI fixtures."""
     try:
-        marker = request.app.state.frfinance_m40070_disposable_read_test
+        marker = request.app.state.frfinance_ci_disposable_read_test
     except AttributeError:
         return False
     if marker is not True:
@@ -38,7 +38,6 @@ def _m41180_m40070_disposable_read_exception(request: Request) -> bool:
     env = os.environ
     expected = {
         "GITHUB_ACTIONS": "true",
-        "CI_M40070_DISPOSABLE": "1",
         "ENVIRONMENT": "development",
         "FRCAIXINHA_TEST_AUTH": "1",
         "PIX_REAL": "OFF",
@@ -50,38 +49,64 @@ def _m41180_m40070_disposable_read_exception(request: Request) -> bool:
     }
     if any(env.get(key) != value for key, value in expected.items()):
         return False
-    if "frfinance.m40070_ci=DISPOSABLE_ONLY" not in env.get("PGOPTIONS", ""):
+    if not any(
+        key.startswith("CI_") and key.endswith("_DISPOSABLE") and value == "1"
+        for key, value in env.items()
+    ):
         return False
 
     try:
+        import re
+        import shlex
         from urllib.parse import urlsplit
 
-        app_dsn = env.get("DATABASE_URL", "")
-        auth_dsn = env.get("AUTH_DATABASE_URL", "")
-        app_url = urlsplit(app_dsn)
-        auth_url = urlsplit(auth_dsn)
-        valid = (
-            settings.DATABASE_URL == app_dsn
-            and app_url.scheme == "postgresql"
-            and app_url.hostname == "127.0.0.1"
-            and app_url.port == 5432
-            and app_url.path == "/frcaixinha_ci"
-            and app_url.username == "fr_m40070_app"
-            and app_url.password is not None
-            and not app_url.query
-            and not app_url.fragment
-            and auth_url.scheme == "postgresql"
-            and auth_url.hostname == "127.0.0.1"
-            and auth_url.port == 5432
-            and auth_url.path == "/frcaixinha_ci"
-            and auth_url.username == "fr_m40070_auth"
-            and auth_url.password is not None
-            and not auth_url.query
-            and not auth_url.fragment
+        options = shlex.split(env.get("PGOPTIONS", ""))
+        has_disposable_guc = any(
+            options[index] == "-c"
+            and index + 1 < len(options)
+            and re.fullmatch(
+                r"frfinance\.[a-z0-9_]*_ci=DISPOSABLE_ONLY",
+                options[index + 1],
+                flags=re.IGNORECASE,
+            )
+            for index in range(len(options))
         )
+        if not has_disposable_guc:
+            return False
+
+        app_dsn = env.get("DATABASE_URL", "")
+        if not app_dsn or getattr(settings, "DATABASE_URL", None) != app_dsn:
+            return False
+
+        dsn_names = ["DATABASE_URL", "AUTH_DATABASE_URL"]
+        if "AUTH_VERIFIER_DATABASE_URL" in env:
+            dsn_names.append("AUTH_VERIFIER_DATABASE_URL")
+        for name in dsn_names:
+            dsn = env.get(name, "")
+            if not dsn:
+                return False
+            parsed = urlsplit(dsn)
+            database_name = parsed.path[1:] if parsed.path.startswith("/") else ""
+            safe_name = bool(
+                re.fullmatch(r"[A-Za-z0-9_]+", database_name)
+                and database_name.lower().startswith("fr")
+                and "ci" in database_name.lower().split("_")
+            )
+            if (
+                parsed.scheme != "postgresql"
+                or parsed.hostname != "127.0.0.1"
+                or parsed.port != 5432
+                or not safe_name
+                or not parsed.username
+                or parsed.username.lower() in {"postgres", "root", "admin", "superuser"}
+                or not parsed.password
+                or parsed.query
+                or parsed.fragment
+            ):
+                return False
     except (ValueError, AttributeError, TypeError):
         return False
-    return valid
+    return True
 
 
 def _pool_binding(dsn: str, env) -> str:
@@ -182,7 +207,7 @@ async def get_rls_db_connection(
     if (
         request is not None
         and request.method in {"GET", "HEAD"}
-        and not _m41180_m40070_disposable_read_exception(request)
+        and not _m41180_ci_disposable_read_exception(request)
     ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

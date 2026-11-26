@@ -8,14 +8,37 @@ class TestM40340(unittest.TestCase):
   s=(R/"backend/tests/m40340_bearer_credit_runtime_ci.py").read_text()
   ast.parse(s)
   for x in ("require_disposable_ci()", "from app.main import app",
+   "app.state.frfinance_ci_disposable_read_test = True",
+   "current_setting('frfinance.m40340_ci',true)",
    "Depends(get_current_session)", "Depends(get_rls_db_connection)",
    "not app.dependency_overrides", "with TestClient(app) as client:",
    "M40340_SESSION_BOUND_VISIBILITY=PASS_60_OF_60",
    "M40340_AUTH_SQL_HELPERS=SYNTHETIC_NOT_PRODUCTION_PROOF"):
    self.assertIn(x,s)
+  self.assertLess(
+   s.index("current_setting('frfinance.m40340_ci',true)"),
+   s.index("app.state.frfinance_ci_disposable_read_test = True"))
+  self.assertLess(
+   s.index("app.state.frfinance_ci_disposable_read_test = True"),
+   s.index("with TestClient(app) as client:"))
   for x in ("frcaixinha_aistudio_dev","app.dependency_overrides[",
             "DROP DATABASE","subprocess.run(","os.kill("):
    self.assertNotIn(x,s)
+
+ def test_m40380_marker_follows_its_disposable_pg18_preflight(self):
+  s=(R/"backend/tests/m40380_real_auth_credit_rls_ci.py").read_text()
+  ast.parse(s)
+  main=next(n for n in ast.walk(ast.parse(s))
+            if isinstance(n,ast.FunctionDef) and n.name=="main")
+  self.assertEqual(main.body[0].value.func.id,"require_ci")
+  marker="app.state.frfinance_ci_disposable_read_test = True"
+  self.assertIn(marker,s)
+  self.assertLess(
+   s.index("current_setting('frfinance.m40380_ci',true)"),
+   s.index(marker))
+  self.assertLess(s.index(marker),s.index("with TestClient(app) as client:"))
+  self.assertIn("not app.dependency_overrides",s)
+
  def test_m40350_pool_boundaries_and_no_service_loss_false_positive(self):
   s=(R/"backend/tests/m40340_bearer_credit_runtime_ci.py").read_text()
   for expected in (

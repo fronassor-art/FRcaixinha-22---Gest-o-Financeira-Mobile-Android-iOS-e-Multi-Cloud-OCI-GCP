@@ -1,7 +1,7 @@
 # FR Finance M41180 — contenção de leituras HTTP com GUC legado
 
 Data: 26/11/2026  
-Base de código: 4cc342b9fa610b24cc9bc392e2616b20862258b8  
+Base revisada antes do refinamento: 159eed876ae2431204f560017c9fbfb31bb32379  
 Situação: contenção source-only; NO-GO de produção preservado.
 
 ## Escopo
@@ -14,7 +14,7 @@ A autenticação da requisição pode consultar seu armazenamento de sessões an
 
 As seis rotas de leitura do ledger protegidas pelo M41150 continuam usando sua dependência própria. Na ausência do provider, M41170 já as fecha com HTTP 503 antes do pool.
 
-A única exceção de leitura GET ao guard é para os harnesses M40070/M40080 na fixture PostgreSQL 18 descartável. Ambos validam os DSNs loopback, papéis sintéticos, flags OFF e GUC de ambiente antes de importar a aplicação, e marcam explicitamente a instância FastAPI em memória. O guard exige essa marca e os mesmos limites. O M40070 mantém a prova positiva de autenticação/RLS; o M40080 usa a mesma fixture para validar revogação de sessão e troca de titularidade. Nenhum deles habilita leituras no Termux nem em produção.
+A exceção de leitura GET exige uma marca definida dentro da instância FastAPI em memória por um dos harnesses CI já existentes: M40070, M40080, M40340 ou M40380. Cada driver primeiro verifica o ambiente, DSNs loopback, banco e GUC de descarte, versão PostgreSQL 18 e fixture correspondente; só então define a marca e abre o TestClient. O guard também confere flags reais OFF, configuração de desenvolvimento, indicador CI descartável, GUC explícito e todos os DSNs no loopback com nomes de banco contendo o componente `ci`. O M40070/M40080 usa `frcaixinha_ci`; M40340/M40380 usa `frfinance_ci_credit`. Essas exceções mantêm provas positivas existentes de autenticação, RLS e revogação exclusivamente nesses harnesses. Nenhuma habilita leituras no Termux ou em produção.
 
 ## Evidência automatizada
 

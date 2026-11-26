@@ -74,6 +74,9 @@ def main():
                     (tenant,)).fetchone()[0]
     assert n>0,(table,"fixture missing")
 
+ # The app marker follows the disposable PG18, GUC, role and fixture checks.
+ app.state.frfinance_ci_disposable_read_test = True
+
  # Extra endpoints exist only in the CI process, never in deployed app code.
  @app.get("/__ci_m40340/rls",include_in_schema=False)
  async def probe(session=Depends(get_current_session),

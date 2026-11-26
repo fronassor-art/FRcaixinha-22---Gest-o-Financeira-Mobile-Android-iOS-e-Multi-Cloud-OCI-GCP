@@ -18,7 +18,7 @@ class M40080SourceGate(unittest.TestCase):
         self.assertEqual(first.value.func.id,"require_disposable_ci")
         for mark in (
             "m40070_pg18_policy_runtime_ci import require_disposable_ci",
-            "app.state.frfinance_m40070_disposable_read_test = True",
+            "app.state.frfinance_ci_disposable_read_test = True",
             "SELECT current_database(),session_user,",
             "current_setting('frfinance.m40070_ci',true)",
             "M40080_REVOKED_TOKEN_DENIED_AFTER_COMMIT=PASS",
@@ -27,6 +27,14 @@ class M40080SourceGate(unittest.TestCase):
             "M40080_ORIGINAL_DATABASE_ACCESS=NONE",
         ):
             self.assertIn(mark,s)
+        self.assertLess(
+            s.index("current_setting('server_version_num')::int"),
+            s.index("app.state.frfinance_ci_disposable_read_test = True"),
+        )
+        self.assertLess(
+            s.index("app.state.frfinance_ci_disposable_read_test = True"),
+            s.index("with TestClient(app) as client:"),
+        )
         for forbidden in (
             "frcaixinha_aistudio_dev","frcaixinha_2_2",
             "DROP DATABASE","CREATE DATABASE","os.kill(",

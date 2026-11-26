@@ -140,6 +140,8 @@ def main():
      "SELECT count(*) FROM public."+table+" WHERE tenant_id=$1",tenant)
   return {"role":session.role,"tenant":session.tenant_id,"counts":counts}
  checks=0
+ # The marker follows the PG18 identity, GUC, RLS and seed-fixture preflight.
+ app.state.frfinance_ci_disposable_read_test = True
  with TestClient(app) as client:
   for name,own,other,role in (
    ("admin_a",A,B,"TENANT_ADMIN"),("admin_b",B,A,"TENANT_ADMIN"),

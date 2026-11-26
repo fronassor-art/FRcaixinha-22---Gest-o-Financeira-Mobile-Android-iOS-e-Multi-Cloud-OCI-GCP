@@ -15,9 +15,6 @@ def main() -> None:
     import psycopg
     from app.main import app
 
-    # The exact disposable PG18 preflight above is also required by the guard.
-    app.state.frfinance_m40070_disposable_read_test = True
-
     A = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
     B = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
     ACTOR_B = UUID("33333333-3333-4333-8333-333333333333")
@@ -49,6 +46,8 @@ def main() -> None:
         assert db.execute("SELECT admin_user_id FROM public.tenants WHERE id=%s",
                           (B,)).fetchone()[0] == ACTOR_B
 
+        # Set the marker only after the live PG18 identity, GUC and fixture checks.
+        app.state.frfinance_ci_disposable_read_test = True
         with TestClient(app) as client:
             assert client.get(PATH(A),headers=HEADERS["a"]).status_code == 200
             assert client.get(PATH(B),headers=HEADERS["b"]).status_code == 200

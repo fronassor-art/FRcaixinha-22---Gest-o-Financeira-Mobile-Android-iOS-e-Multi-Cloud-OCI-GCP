@@ -40,7 +40,7 @@ class M40070StaticReview(unittest.TestCase):
             "from app.main import app", "from app.database import get_rls_db_connection",
             "from app.dependencies import get_current_session, require_master",
             "not app.dependency_overrides",
-            "app.state.frfinance_m40070_disposable_read_test = True",
+            "app.state.frfinance_ci_disposable_read_test = True",
             "with TestClient(app) as client:",
             "M40070_REAL_BEARER_HASH_MASTER_SAAS=PASS",
             "M40070_RLS_TENANT_AND_OWNER_BARRIERS=PASS",
@@ -49,6 +49,14 @@ class M40070StaticReview(unittest.TestCase):
             "M40070_CI_AUTH_REFRESH_ONLY_EXPECTED=TRUE",
         ):
             self.assertIn(name,self.driver)
+        self.assertLess(
+            self.driver.index("current_setting('server_version_num')::int"),
+            self.driver.index("app.state.frfinance_ci_disposable_read_test = True"),
+        )
+        self.assertLess(
+            self.driver.index("app.state.frfinance_ci_disposable_read_test = True"),
+            self.driver.index("with TestClient(app) as client:"),
+        )
         for forbidden in (
             "app.dependency_overrides[", "mock.patch(", "monkeypatch",
             "http://example.com", "https://api.mercadopago",
