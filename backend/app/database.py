@@ -15,7 +15,7 @@ import hashlib
 import json
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from .config import settings
 from .dependencies import get_current_session, AuthenticatedSession
 from .m40610_verified_rls_session import UnverifiedRLSSession, require_verified_rls_session
@@ -100,6 +100,7 @@ async def close_db_pool():
 
 
 async def get_rls_db_connection(
+    request: Request,
     session: AuthenticatedSession = Depends(get_current_session)
 ) -> AsyncGenerator:
     """
@@ -114,6 +115,16 @@ async def get_rls_db_connection(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão financeira não verificada ou expirada."
         ) from None
+
+    # M41180: the legacy custom-GUC context is not an approved HTTP read boundary.
+    # Contain GET/HEAD requests before acquiring the financial connection pool.
+    # This does not remediate SQL GUC spoofing or issuer/credential custody.
+    if request.method in {"GET", "HEAD"}:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Leitura financeira bloqueada até contexto SQL atestado."
+        )
+
     if not settings.is_database_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
