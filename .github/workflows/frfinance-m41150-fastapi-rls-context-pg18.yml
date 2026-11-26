@@ -11,6 +11,7 @@ on:
       - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
       - 'docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md'
       - 'docs/FR_FINANCE_M41170_LEDGER_PROVIDER_ABSENT_FAIL_CLOSED_NO_GO.md'
+      - 'docs/FR_FINANCE_M41190_LEDGER_SQL_CLAIMS_TRANSACTION_NO_GO.md'
   pull_request:
     paths:
       - 'backend/app/m41150_fastapi_rls_context.py'
@@ -21,6 +22,7 @@ on:
       - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
       - 'docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md'
       - 'docs/FR_FINANCE_M41170_LEDGER_PROVIDER_ABSENT_FAIL_CLOSED_NO_GO.md'
+      - 'docs/FR_FINANCE_M41190_LEDGER_SQL_CLAIMS_TRANSACTION_NO_GO.md'
 permissions:
   contents: read
 jobs:

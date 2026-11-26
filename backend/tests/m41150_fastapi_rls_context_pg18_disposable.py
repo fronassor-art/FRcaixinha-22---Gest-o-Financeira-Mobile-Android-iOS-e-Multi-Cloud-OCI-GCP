@@ -86,7 +86,7 @@ async def exercise(dsn: str) -> None:
             raise AssertionError("M41150_FIXTURE_SIGNER_KEY_MISSING")
 
         tenant_a, tenant_b = uuid4(), uuid4()
-        admin_id, member_id = uuid4(), uuid4()
+        admin_id, member_id, admin_b_id = uuid4(), uuid4(), uuid4()
         owner.execute(
             "INSERT INTO m40650.users(id,status,is_master) VALUES (%s,'ACTIVE',false)",
             (admin_id,),
@@ -95,9 +95,14 @@ async def exercise(dsn: str) -> None:
             "INSERT INTO m40650.users(id,status,is_master) VALUES (%s,'ACTIVE',false)",
             (member_id,),
         )
+        owner.execute(
+            "INSERT INTO m40650.users(id,status,is_master) VALUES (%s,'ACTIVE',false)",
+            (admin_b_id,),
+        )
         for user_id, tenant_id, role in (
             (admin_id, tenant_a, "TENANT_ADMIN"),
             (member_id, tenant_a, "TENANT_MEMBER"),
+            (admin_b_id, tenant_b, "TENANT_ADMIN"),
         ):
             owner.execute(
                 "INSERT INTO m40650.memberships(user_id,tenant_id,role,status) "
@@ -110,6 +115,10 @@ async def exercise(dsn: str) -> None:
         )
         _, member_digest = fixture.create_session(
             owner, member_id, "TENANT_MEMBER", tenant_a
+        )
+
+        _, admin_b_digest = fixture.create_session(
+            owner, admin_b_id, "TENANT_ADMIN", tenant_b
         )
 
         account_a_id, account_offset_id = uuid4(), uuid4()
@@ -308,6 +317,7 @@ async def exercise(dsn: str) -> None:
                 self.last_ticket = None
                 self.last_capability = None
                 self.reuse_next = False
+                self.override_capability = None
                 self.issue_calls = 0
 
             async def issue_ticket(self, session, *, scope):
@@ -334,6 +344,10 @@ async def exercise(dsn: str) -> None:
                 capability = fixture.bind_ticket(app_dsn, ticket, tenant_id)
                 if capability:
                     self.last_capability = capability
+                if self.override_capability is not None:
+                    override = self.override_capability
+                    self.override_capability = None
+                    return override
                 return capability
 
         provider = FixtureCapabilityProvider()
@@ -471,6 +485,34 @@ async def exercise(dsn: str) -> None:
             print("M41150_FASTAPI_LEDGER_DIRECTORY=PASS")
             print("M41160_FASTAPI_LEDGER_READ_ROUTES=6_OF_6_PASS")
             print("M41160_CONCURRENT_READS=PASS")
+
+            # A valid opaque capability for another identity or tenant
+            # must not turn into an empty successful read.
+            for digest, tenant in ((member_digest, tenant_a),
+                                   (admin_b_digest, tenant_b)):
+                wrong_ticket = fixture.issue_ticket(
+                    owner, auth_dsn, key, digest, tenant, scope="READ_ENTRIES",
+                )
+                assert wrong_ticket
+                wrong_capability = fixture.bind_ticket(app_dsn, wrong_ticket, tenant)
+                assert wrong_capability
+                provider.override_capability = wrong_capability
+                denied = await client.get(path_a, headers=admin_headers)
+                assert denied.status_code == 401, denied.status_code
+            provider.override_capability = "0" * 64
+            unknown = await client.get(path_a, headers=admin_headers)
+            assert unknown.status_code == 401, unknown.status_code
+            async with pool.acquire() as first, pool.acquire() as second:
+                for connection in (first, second):
+                    assert not connection.is_in_transaction()
+                    assert not await connection.fetch(
+                        "SELECT user_id FROM m41050.current_claims()"
+                    )
+            recovered = await client.get(path_a, headers=admin_headers)
+            assert recovered.status_code == 200
+            assert len(recovered.json()["accounts"]) == 2
+            print("M41190_WRONG_SQL_CLAIMS_AND_UNKNOWN_CAPABILITY_DENIED=PASS")
+            print("M41190_POOL_RECOVERY_AFTER_DENIAL=PASS")
 
             provider.reuse_next = True
             replay = await client.get(path_a, headers=admin_headers)

@@ -196,3 +196,148 @@ def test_document_keeps_external_evidence_and_production_gates_open():
     ):
         assert marker in doc
     assert "PRODUCTION=GO" not in doc
+
+
+@pytest.mark.asyncio
+async def test_m41190_readback_compares_all_claims_and_rejects_ambiguous_results():
+    from uuid import uuid4
+    from fastapi import HTTPException
+    from backend.app.m41150_fastapi_rls_context import _require_bound_read_claims
+
+    user, tenant = uuid4(), uuid4()
+    expected = (user, "TENANT_ADMIN", tenant, "READ_ENTRIES")
+    valid = dict(zip(("user_id", "role_name", "tenant_id", "scope_name"), expected))
+
+    class Connection:
+        def __init__(self, rows):
+            self.rows = rows
+        async def fetch(self, sql):
+            assert sql == (
+                "SELECT user_id, role_name, tenant_id, scope_name "
+                "FROM m41050.current_claims()"
+            )
+            if isinstance(self.rows, Exception):
+                raise self.rows
+            return self.rows
+
+    await _require_bound_read_claims(Connection([valid]), expected)
+    for rows in ([], [valid, valid], [{**valid, "user_id": uuid4()}],
+                 [{**valid, "tenant_id": uuid4()}],
+                 [{**valid, "role_name": "TENANT_MEMBER"}],
+                 [{**valid, "scope_name": "WRITE_ENTRIES"}]):
+        with pytest.raises(HTTPException) as exc:
+            await _require_bound_read_claims(Connection(rows), expected)
+        assert exc.value.status_code == 401
+    for rows in (None, [{}], RuntimeError("sensitive fixture error")):
+        with pytest.raises(HTTPException) as exc:
+            await _require_bound_read_claims(Connection(rows), expected)
+        assert exc.value.status_code == 503
+        assert "sensitive fixture error" not in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["route", "cancel_route", "reset", "cancel_reset"])
+async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from fastapi import HTTPException
+    from backend.app import m41150_fastapi_rls_context as gateway
+
+    now = datetime.now(timezone.utc)
+    user, tenant = uuid4(), uuid4()
+    session = SimpleNamespace(
+        user_id=str(user), role="TENANT_ADMIN", tenant_id=str(tenant),
+        is_master=False, verified_session_id=str(uuid4()),
+        verified_session_at=now, verified_session_expires_at=now + timedelta(minutes=1),
+        verification_source="POSTGRES_TOKEN_HASH_REFRESH",
+    )
+    events = []
+
+    class Connection:
+        @asynccontextmanager
+        async def transaction(self, *, readonly):
+            assert readonly is True
+            events.append("begin")
+            try:
+                yield
+            except BaseException:
+                events.append("rollback")
+                raise
+            else:
+                events.append("commit")
+
+        async def fetch(self, sql):
+            events.append("claims")
+            return [{"user_id": user, "role_name": "TENANT_ADMIN",
+                     "tenant_id": tenant, "scope_name": "READ_ENTRIES"}]
+
+        async def execute(self, sql):
+            assert sql == "RESET ALL; DISCARD TEMP;"
+            events.append("reset")
+            if failure == "reset":
+                raise RuntimeError("sensitive fixture error")
+            if failure == "cancel_reset":
+                raise asyncio.CancelledError()
+
+        def terminate(self):
+            events.append("terminate")
+
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            events.append("acquire")
+            try:
+                yield Connection()
+            finally:
+                events.append("release")
+
+    async def get_pool():
+        return Pool()
+
+    async def install(connection, capability):
+        assert capability == "b" * 64
+        events.append("install")
+
+    class Provider:
+        async def issue_ticket(self, session, *, scope):
+            assert scope == "READ_ENTRIES"
+            return "a" * 64
+        async def bind_ticket(self, ticket, *, tenant_id):
+            assert tenant_id == tenant
+            return "b" * 64
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    for key in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        monkeypatch.setenv(key, "OFF")
+    monkeypatch.setattr(gateway, "get_db_pool", get_pool)
+    monkeypatch.setattr(gateway, "install_session_capability", install)
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(
+            frfinance_session_capability_provider=Provider())),
+        path_params={"tenant_id": str(tenant)},
+    )
+    dependency = gateway.get_ledger_readonly_db_connection(request, session)
+    await anext(dependency)
+    assert events == ["acquire", "begin", "install", "claims"]
+
+    if failure == "route":
+        with pytest.raises(ValueError, match="route failure"):
+            await dependency.athrow(ValueError("route failure"))
+        assert events[-3:] == ["rollback", "reset", "release"]
+    elif failure == "cancel_route":
+        with pytest.raises(asyncio.CancelledError):
+            await dependency.athrow(asyncio.CancelledError())
+        assert events[-3:] == ["rollback", "reset", "release"]
+    elif failure == "reset":
+        with pytest.raises(HTTPException) as exc:
+            await anext(dependency)
+        assert exc.value.status_code == 503
+        assert "sensitive fixture error" not in str(exc.value.detail)
+        assert events[-4:] == ["commit", "reset", "terminate", "release"]
+    else:
+        with pytest.raises(asyncio.CancelledError):
+            await anext(dependency)
+        assert events[-4:] == ["commit", "reset", "terminate", "release"]

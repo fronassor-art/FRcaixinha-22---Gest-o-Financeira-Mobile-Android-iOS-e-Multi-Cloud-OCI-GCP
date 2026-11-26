@@ -8,6 +8,7 @@ short-lived capability.
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import inspect
 import os
 import re
@@ -99,6 +100,40 @@ def _ledger_tenant(request: Request, session: AuthenticatedSession) -> UUID:
     return tenant
 
 
+async def _require_bound_read_claims(connection: object, expected: tuple) -> None:
+    """Compare SQL's verified claims, not the opaque token's shape.
+
+    The fixed SQL interface is the existing disposable prototype contract.
+    Missing function/privilege or malformed results never fall back.
+    """
+    try:
+        rows = await connection.fetch(
+            "SELECT user_id, role_name, tenant_id, scope_name "
+            "FROM m41050.current_claims()"
+        )
+        if not isinstance(rows, list):
+            raise TypeError("M41190_INVALID_SQL_CLAIMS")
+        if len(rows) != 1:
+            matches = False
+        else:
+            row = rows[0]
+            matches = (
+                row["user_id"], row["role_name"],
+                row["tenant_id"], row["scope_name"],
+            ) == expected
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Autorização financeira indisponível.",
+        ) from None
+    if not matches:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão financeira inválida.",
+        )
+
+
+@asynccontextmanager
 async def _capability_db_connection(
     request: Request,
     session: AuthenticatedSession,
@@ -112,6 +147,8 @@ async def _capability_db_connection(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão financeira não verificada ou expirada.",
         ) from None
+
+    expected_claims = (UUID(session.user_id), session.role, tenant, READ_SCOPE)
 
     # M40840 stays authoritative: provider presence never enables production.
     try:
@@ -155,6 +192,14 @@ async def _capability_db_connection(
         ) from None
 
     try:
+        require_verified_rls_session(session)
+    except UnverifiedRLSSession:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão financeira não verificada ou expirada.",
+        ) from None
+
+    try:
         pool = await get_db_pool()
     except Exception:
         raise HTTPException(
@@ -174,13 +219,23 @@ async def _capability_db_connection(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Sessão financeira inválida.",
                     ) from None
+                await _require_bound_read_claims(connection, expected_claims)
+                try:
+                    require_verified_rls_session(session)
+                except UnverifiedRLSSession:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Sessão financeira não verificada ou expirada.",
+                    ) from None
                 yield connection
         finally:
             try:
                 await connection.execute("RESET ALL; DISCARD TEMP;")
-            except Exception:
-                # Do not return a connection with unknown session state to pool.
+            except BaseException as exc:
+                # Cancellation during reset is also an unknown session state.
                 connection.terminate()
+                if not isinstance(exc, Exception):
+                    raise
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Conexão financeira indisponível.",
@@ -207,7 +262,8 @@ async def get_ledger_readonly_db_connection(
             detail="Sessão financeira não verificada ou expirada.",
         ) from None
     tenant = _ledger_tenant(request, session)
-    async for connection in _capability_db_connection(
+    # Propagate the consumer's exception into the transaction before release.
+    async with _capability_db_connection(
         request, session, provider, tenant
-    ):
+    ) as connection:
         yield connection
