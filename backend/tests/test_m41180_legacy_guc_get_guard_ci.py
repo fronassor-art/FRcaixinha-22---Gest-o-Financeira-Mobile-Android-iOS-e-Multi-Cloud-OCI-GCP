@@ -1,9 +1,11 @@
 """M41180 offline proof for the legacy GUC-backed GET/HEAD read guard."""
 from __future__ import annotations
 
+import ast
 import asyncio
 import datetime as dt
 import importlib
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -142,6 +144,16 @@ def test_ci_disposable_exception_accepts_only_marked_fixture_profiles(monkeypatc
             "auth_user": "fr_m40070_auth",
             "auth_password": "m40070-auth-ci-only",
             "guc": "m40070_ci",
+        },
+        {
+            "profile": "M40360",
+            "database_name": "frcaixinha_ci",
+            "app_user": "fr_m40360_app",
+            "app_password": "m40360-app-ci-only",
+            "auth_user": "fr_m40360_auth",
+            "auth_password": "m40360-auth-ci-only",
+            "guc": "m40360_ci",
+            "verifier": ("fr_m40360_verifier", "m40360-verifier-ci-only"),
         },
         {
             "profile": "M40340",
@@ -317,3 +329,63 @@ def test_post_method_keeps_existing_dependency_path_with_only_fake_connection(mo
     assert transaction_events == ["start", "commit"]
     assert sum("set_config('app.current_" in query for query in statements) == 3
     assert "RESET ALL; DISCARD TEMP;" in statements
+
+
+
+def test_existing_rls_http_harness_marks_only_after_disposable_database_preflight():
+    repo_root = Path(__file__).resolve().parents[2]
+    rls_path = repo_root / "backend" / "tests" / "test_rls_isolation_ci.py"
+    rls_source = rls_path.read_text(encoding="utf-8")
+    rls_tree = ast.parse(rls_source, filename=str(rls_path))
+    fixture = next(
+        node
+        for node in rls_tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "isolated_rows"
+    )
+    fixture_source = ast.get_source_segment(rls_source, fixture)
+    assert fixture_source is not None
+    assert "monkeypatch" in {arg.arg for arg in fixture.args.args}
+    assert "current_database()" in fixture_source
+    assert "inet_server_port()" in fixture_source
+    assert "server_version_num" in fixture_source
+    assert (
+        fixture_source.index("identity = await app.fetchrow")
+        < fixture_source.index("_mark_preflighted_disposable_read_app(monkeypatch)")
+        < fixture_source.index("yield app, ids")
+    )
+
+    marker = next(
+        node
+        for node in rls_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_mark_preflighted_disposable_read_app"
+    )
+    marker_source = ast.get_source_segment(rls_source, marker)
+    assert marker_source is not None
+    assert "frfinance_ci_disposable_read_test" in marker_source
+    assert "database._m41180_ci_disposable_read_exception(request)" in marker_source
+
+    workflow_path = repo_root / ".github" / "workflows" / "validacao-atualizacao.yml"
+    workflow_source = workflow_path.read_text(encoding="utf-8")
+
+    def step_block(name: str) -> str:
+        start = workflow_source.index(f"      - name: {name}")
+        end = workflow_source.find("\n      - name:", start + 1)
+        return workflow_source[start:] if end < 0 else workflow_source[start:end]
+
+    for name in (
+        "Testar isolamento com registros sintéticos",
+        "M40360/M40370 — login original, Crédito Especial e dados RLS de duas caixinhas",
+    ):
+        block = step_block(name)
+        assert "CI_M40360_DISPOSABLE: '1'" in block
+        assert "PGOPTIONS: '-c frfinance.m40360_ci=DISPOSABLE_ONLY'" in block
+        for flag in (
+            "PIX_REAL",
+            "PAGAMENTOS_REAIS",
+            "ATIVACAO_REAL",
+            "FR_FINANCE_PIX_REAL",
+            "FR_FINANCE_REAL_PAYMENTS",
+            "FR_FINANCE_REAL_USER_ACTIVATION",
+        ):
+            assert f"{flag}: 'OFF'" in block

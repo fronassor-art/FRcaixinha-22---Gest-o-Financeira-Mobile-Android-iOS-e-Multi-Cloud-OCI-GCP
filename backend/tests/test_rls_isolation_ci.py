@@ -2,6 +2,7 @@
 
 import os
 import uuid
+from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import asyncpg
@@ -16,13 +17,54 @@ pytestmark = pytest.mark.skipif(
 def _ci_dsn(name: str) -> str:
     dsn = os.environ[name]
     parsed = urlparse(dsn)
-    if parsed.hostname not in {"localhost", "127.0.0.1"} or parsed.path != "/frcaixinha_ci":
-        raise RuntimeError("Os testes só podem ser executados no banco local descartável frcaixinha_ci")
+    try:
+        safe = (
+            parsed.scheme == "postgresql"
+            and parsed.hostname in {"localhost", "127.0.0.1"}
+            and parsed.port == 5432
+            and parsed.path == "/frcaixinha_ci"
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except ValueError:
+        safe = False
+    if not safe:
+        raise RuntimeError(
+            "Os testes só podem usar PostgreSQL local descartável "
+            "frcaixinha_ci na porta 5432"
+        )
     return dsn
 
 
+def _mark_preflighted_disposable_read_app(monkeypatch) -> None:
+    """Enable legacy GETs only for this verified, in-process disposable fixture."""
+    from app import database
+    from app.config import settings
+    from app.main import app as fastapi_app
+
+    app_dsn = _ci_dsn("DATABASE_URL")
+    monkeypatch.setattr(settings, "DATABASE_URL", app_dsn)
+    monkeypatch.setenv("AUTH_DATABASE_URL", _ci_dsn("CI_AUTH_DATABASE_URL"))
+    monkeypatch.setenv(
+        "AUTH_VERIFIER_DATABASE_URL", _ci_dsn("CI_VERIFIER_DATABASE_URL")
+    )
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
+    monkeypatch.setattr(
+        fastapi_app.state,
+        "frfinance_ci_disposable_read_test",
+        True,
+        raising=False,
+    )
+    request = SimpleNamespace(app=fastapi_app)
+    if not database._m41180_ci_disposable_read_exception(request):
+        raise AssertionError(
+            "M41180 recusou a fixture PostgreSQL descartável já pré-validada"
+        )
+
+
 @pytest.fixture
-async def isolated_rows():
+async def isolated_rows(monkeypatch):
     admin = await asyncpg.connect(_ci_dsn("CI_ADMIN_DATABASE_URL"))
     app = await asyncpg.connect(_ci_dsn("DATABASE_URL"))
     ids = {key: uuid.uuid4() for key in (
@@ -32,6 +74,16 @@ async def isolated_rows():
         "quota_a", "quota_a2", "quota_b",
     )}
     try:
+        identity = await app.fetchrow(
+            "SELECT current_database() AS database_name, "
+            "inet_server_port() AS server_port, "
+            "current_setting('server_version_num')::integer AS server_version_num"
+        )
+        assert identity is not None
+        assert identity["database_name"] == "frcaixinha_ci"
+        assert identity["server_port"] == 5432
+        assert 160000 <= identity["server_version_num"] < 200000
+
         role = await app.fetchrow(
             "SELECT r.rolsuper, r.rolbypassrls, r.rolname, c.relowner = r.oid AS is_owner "
             "FROM pg_roles r CROSS JOIN pg_class c "
@@ -72,6 +124,7 @@ async def isolated_rows():
                 "INSERT INTO quotas (id,tenant_id,membership_id,quota_number,value_brl) VALUES ($1,$2,$3,$4,150.00)",
                 ids[quota], ids[tenant], ids[membership], number,
             )
+        _mark_preflighted_disposable_read_app(monkeypatch)
         yield app, ids
     finally:
         await app.close()

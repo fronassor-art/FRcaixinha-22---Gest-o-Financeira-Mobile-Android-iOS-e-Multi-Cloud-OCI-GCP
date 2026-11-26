@@ -844,6 +844,14 @@ jobs:
         env:
           PYTHONPATH: backend
           FRCAIXINHA_CI_ISOLATED: '1'
+          CI_M40360_DISPOSABLE: '1'
+          PGOPTIONS: '-c frfinance.m40360_ci=DISPOSABLE_ONLY'
+          PIX_REAL: 'OFF'
+          PAGAMENTOS_REAIS: 'OFF'
+          ATIVACAO_REAL: 'OFF'
+          FR_FINANCE_PIX_REAL: 'OFF'
+          FR_FINANCE_REAL_PAYMENTS: 'OFF'
+          FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_auth_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_verifier_ci:ci-test-only@127.0.0.1:5432/frcaixinha_ci
@@ -1112,6 +1120,8 @@ jobs:
           GITHUB_ACTIONS: 'true'
           PYTHONPATH: backend
           FRCAIXINHA_CI_ISOLATED: '1'
+          CI_M40360_DISPOSABLE: '1'
+          PGOPTIONS: '-c frfinance.m40360_ci=DISPOSABLE_ONLY'
           CI_ADMIN_DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_AUTH_DATABASE_URL: postgresql://frcaixinha_pg18_auth:ci-test-only@127.0.0.1:5432/frcaixinha_ci
           CI_VERIFIER_DATABASE_URL: postgresql://frcaixinha_pg18_verifier:ci-test-only@127.0.0.1:5432/frcaixinha_ci
@@ -1121,6 +1131,9 @@ jobs:
           PIX_REAL: 'OFF'
           PAGAMENTOS_REAIS: 'OFF'
           ATIVACAO_REAL: 'OFF'
+          FR_FINANCE_PIX_REAL: 'OFF'
+          FR_FINANCE_REAL_PAYMENTS: 'OFF'
+          FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
         run: |
           set -euo pipefail
           python -B -m pytest -q --asyncio-mode=auto backend/tests/test_rls_isolation_ci.py -k test_m40360_real_password_login_special_credit_boundary
