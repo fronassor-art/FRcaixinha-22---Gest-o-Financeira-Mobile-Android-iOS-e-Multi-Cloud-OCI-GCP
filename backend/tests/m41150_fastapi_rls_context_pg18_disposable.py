@@ -72,18 +72,39 @@ async def exercise(dsn: str) -> None:
     from httpx import ASGITransport, AsyncClient
 
     import m41050_sql_sealed_context_pg18_disposable as fixture
+    from m41240_target_signer_disposable import TargetSigner
     from backend.app.dependencies import AuthenticatedSession, get_current_session
     from backend.app.routers import ledger
     import backend.app.m41150_fastapi_rls_context as gateway
 
     auth_dsn, app_dsn = fixture.connection_dsns(dsn)
     owner = fixture.connect(dsn, autocommit=True)
+    signer = None
     try:
         key = owner.execute(
             "SELECT key FROM m40700.verifier_secret WHERE singleton=true"
         ).fetchone()[0]
         if not key:
             raise AssertionError("M41150_FIXTURE_SIGNER_KEY_MISSING")
+
+        signer = TargetSigner()
+        target_key = signer.take_bootstrap_key()
+        assert target_key != key
+        owner.execute(
+            "INSERT INTO m41050.target_verifier_secret(singleton,key) VALUES(true,%s)",
+            (target_key,),
+        )
+        del target_key
+        for dsn_, role in ((auth_dsn, "m40680_auth"), (app_dsn, "m40650_app")):
+            with psycopg.connect(dsn_, autocommit=True) as denied:
+                denied.execute("SET ROLE " + role)
+                try:
+                    denied.execute("SELECT key FROM m41050.target_verifier_secret")
+                except psycopg.errors.InsufficientPrivilege:
+                    pass
+                else:
+                    raise AssertionError("M41240_TARGET_KEY_VISIBLE")
+        print("M41240_DISTINCT_TARGET_KEY_AND_SQL_ACL=PASS")
 
         tenant_a, tenant_b = uuid4(), uuid4()
         admin_id, member_id, admin_b_id = uuid4(), uuid4(), uuid4()
@@ -218,7 +239,7 @@ async def exercise(dsn: str) -> None:
 
         def bind_read(ticket, tenant, pid, vxid, started, *, proof=None):
             if proof is None:
-                proof = fixture.sign_read_transaction(key, ticket, tenant, pid, vxid, started)
+                proof = signer.sign(ticket, tenant, pid, vxid, started)
             with psycopg.connect(app_dsn, autocommit=True) as app:
                 app.execute("SET ROLE m40650_app")
                 return app.execute(
@@ -543,7 +564,10 @@ async def exercise(dsn: str) -> None:
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
                     assert ticket
                     assert bind_read(ticket, tenant_a, pid, "0/0", started) is None
-                    proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started)
+                    proof = signer.sign(ticket, tenant_a, pid, vxid, started)
+                    issuer_proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started)
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof=issuer_proof) is None
+                    print("M41240_ISSUER_KEY_CANNOT_BIND_TARGET=PASS")
                     assert bind_read(ticket, tenant_a, pid, vxid, started, proof="0" * 64) is None
                     assert bind_read(ticket, tenant_a, pid, vxid, started, proof="") is None
                     assert bind_read(ticket, tenant_a, pid, vxid,
@@ -796,8 +820,29 @@ async def exercise(dsn: str) -> None:
                         "SELECT session_id FROM m41050.current_claims_v2()"
                     )
             print("M41200_INDEPENDENT_SESSION_REVOCATION=PASS")
+            # Remove only the disposable verifier, prove no fallback to issuer.
+            async with pool.acquire() as connection:
+                async with connection.transaction(readonly=True):
+                    pid, vxid, started = await gateway._read_transaction_identity(connection)
+                    ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_second_digest, tenant_a)
+                    assert ticket
+                    proof = signer.sign(ticket, tenant_a, pid, vxid, started)
+                    owner.execute("DELETE FROM m41050.target_verifier_secret")
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof=proof) is None
+                    assert not await connection.fetch("SELECT id FROM public.ledger_accounts")
+            print("M41240_MISSING_TARGET_KEY_FAILS_CLOSED=PASS")
+            signer.close()
+            unavailable = await client.get(path_a, headers=second_headers)
+            assert unavailable.status_code == 503, unavailable.status_code
+            assert "M41240" not in unavailable.text
+            async with pool.acquire() as connection:
+                assert not connection.is_in_transaction()
+                assert not await connection.fetch("SELECT * FROM m41050.current_claims_v4()")
+            print("M41240_SIGNER_UNAVAILABLE_HTTP503_POOL_CLEAN=PASS")
         await pool.close()
     finally:
+        if signer is not None:
+            signer.close()
         owner.close()
 
 

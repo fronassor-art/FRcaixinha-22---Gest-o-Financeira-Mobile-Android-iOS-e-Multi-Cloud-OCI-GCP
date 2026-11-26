@@ -200,6 +200,14 @@ def build_context_schema(owner) -> None:
     owner.execute("REVOKE ALL ON SCHEMA m41050 FROM PUBLIC")
     owner.execute("GRANT USAGE ON SCHEMA m41050 TO m40650_app")
     owner.execute("""
+        CREATE TABLE m41050.target_verifier_secret (
+          singleton boolean PRIMARY KEY CHECK(singleton),
+          key bytea NOT NULL CHECK(pg_catalog.octet_length(key)=32)
+        )
+    """)
+    owner.execute("ALTER TABLE m41050.target_verifier_secret OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON m41050.target_verifier_secret FROM PUBLIC,m40680_auth,m40650_app")
+    owner.execute("""
         CREATE TABLE m41050.session_caps (
           token_hash bytea PRIMARY KEY
             CHECK (pg_catalog.octet_length(token_hash)=32),
@@ -431,7 +439,7 @@ def build_context_schema(owner) -> None:
                     AND l.virtualxid=p_vxid AND l.virtualtransaction=p_vxid
                     AND l.mode='ExclusiveLock' AND l.granted)
           THEN RETURN NULL; END IF;
-          SELECT key INTO v_secret FROM m40700.verifier_secret WHERE singleton=true;
+          SELECT key INTO v_secret FROM m41050.target_verifier_secret WHERE singleton=true;
           IF NOT FOUND THEN RETURN NULL; END IF;
           v_payload:='FRF-M41230|v1|'||pg_catalog.encode(pg_catalog.sha256(
               pg_catalog.convert_to(p_ticket,'UTF8')),'hex')||'|'||p_tenant::text||'|'||

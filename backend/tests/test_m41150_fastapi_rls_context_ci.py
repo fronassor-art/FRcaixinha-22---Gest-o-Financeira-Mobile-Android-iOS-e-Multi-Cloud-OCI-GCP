@@ -383,3 +383,56 @@ def test_m41230_signed_transaction_target_contract():
     assert binding.index("p_proof<>v_expected") < binding.index("v_cap:=m41050.bind_ticket")
     assert "EXTRACT(EPOCH FROM p_started)*1000000" in binding
     assert "M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")
+
+
+def test_m41240_target_key_and_worker_contract():
+    source = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
+    binding = source.split("CREATE FUNCTION m41050.bind_read_transaction(", 1)[1].split("CREATE FUNCTION m41050.current_claims_v4()", 1)[0]
+    assert "FROM m41050.target_verifier_secret" in binding
+    assert "FROM m40700.verifier_secret" not in binding
+    assert "REVOKE ALL ON m41050.target_verifier_secret FROM PUBLIC,m40680_auth,m40650_app" in source
+    runner = RUNNER.read_text(encoding="utf-8")
+    for marker in ("M41240_DISTINCT_TARGET_KEY_AND_SQL_ACL=PASS",
+                   "M41240_ISSUER_KEY_CANNOT_BIND_TARGET=PASS",
+                   "M41240_MISSING_TARGET_KEY_FAILS_CLOSED=PASS",
+                   "M41240_SIGNER_UNAVAILABLE_HTTP503_POOL_CLEAN=PASS"):
+        assert marker in runner
+
+
+def test_m41240_worker_protocol_and_fail_closed(monkeypatch):
+    import hmac
+    import importlib.util
+    import sys
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    from hashlib import sha256
+
+    if sys.platform != "linux":
+        pytest.skip("Linux CI process boundary")
+    path = ROOT / "backend/tests/m41240_target_signer_disposable.py"
+    spec = importlib.util.spec_from_file_location("m41240_worker_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.delenv("CI_M41150_DISPOSABLE", raising=False)
+    with pytest.raises(RuntimeError):
+        module.TargetSigner()
+    for k, v in module.GATE.items():
+        monkeypatch.setenv(k, v)
+    signer = module.TargetSigner()
+    try:
+        key = signer.take_bootstrap_key()
+        with pytest.raises(RuntimeError):
+            signer.take_bootstrap_key()
+        tenant = uuid4()
+        started = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        ticket = "a" * 64
+        message = f"FRF-M41230|v1|{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000"
+        assert signer.sign(ticket, tenant, 123, "1/2", started) == hmac.new(
+            key, message.encode(), sha256
+        ).hexdigest()
+        with pytest.raises(ValueError):
+            signer.sign(ticket, tenant, 0, "1/2", started)
+    finally:
+        signer.close()
+    with pytest.raises(RuntimeError):
+        signer.sign(ticket, tenant, 123, "1/2", started)
