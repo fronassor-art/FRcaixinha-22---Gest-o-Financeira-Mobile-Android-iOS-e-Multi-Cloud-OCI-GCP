@@ -39,7 +39,9 @@ class M40070StaticReview(unittest.TestCase):
         for name in (
             "from app.main import app", "from app.database import get_rls_db_connection",
             "from app.dependencies import get_current_session, require_master",
-            "not app.dependency_overrides", "with TestClient(app) as client:",
+            "not app.dependency_overrides",
+            "app.state.frfinance_m40070_disposable_read_test = True",
+            "with TestClient(app) as client:",
             "M40070_REAL_BEARER_HASH_MASTER_SAAS=PASS",
             "M40070_RLS_TENANT_AND_OWNER_BARRIERS=PASS",
             "M40070_EXPIRED_REVOKED_UNKNOWN_ANONYMOUS=DENIED",

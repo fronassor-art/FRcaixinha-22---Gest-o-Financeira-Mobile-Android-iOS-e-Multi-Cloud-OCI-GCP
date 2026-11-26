@@ -64,6 +64,10 @@ def main() -> None:
     from app.database import get_rls_db_connection
     from app.dependencies import get_current_session, require_master
 
+    # This in-process marker is set only after require_disposable_ci() validates
+    # the isolated PG18 test database, roles, DSNs, flags and environment.
+    app.state.frfinance_m40070_disposable_read_test = True
+
     # These are synthetic test-only secrets; no real tokens are ever used.
     TOKENS = {
         "master": "m40070-ci-master-never-real",

@@ -80,6 +80,52 @@ def test_get_and_head_fail_closed_before_financial_pool_under_concurrency(monkey
     assert pool_calls == []
 
 
+def test_m40070_disposable_exception_requires_marker_and_exact_local_dsns(monkeypatch):
+    app_dsn = (
+        "postgresql://fr_m40070_app:m40070-app-ci-only"
+        "@127.0.0.1:5432/frcaixinha_ci"
+    )
+    auth_dsn = (
+        "postgresql://fr_m40070_auth:m40070-auth-ci-only"
+        "@127.0.0.1:5432/frcaixinha_ci"
+    )
+    for key, value in {
+        "GITHUB_ACTIONS": "true",
+        "CI_M40070_DISPOSABLE": "1",
+        "ENVIRONMENT": "development",
+        "FRCAIXINHA_TEST_AUTH": "1",
+        "PIX_REAL": "OFF",
+        "PAGAMENTOS_REAIS": "OFF",
+        "ATIVACAO_REAL": "OFF",
+        "FR_FINANCE_PIX_REAL": "OFF",
+        "FR_FINANCE_REAL_PAYMENTS": "OFF",
+        "FR_FINANCE_REAL_USER_ACTIVATION": "OFF",
+        "PGOPTIONS": "-c frfinance.m40070_ci=DISPOSABLE_ONLY",
+        "DATABASE_URL": app_dsn,
+        "AUTH_DATABASE_URL": auth_dsn,
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(database, "settings", SimpleNamespace(DATABASE_URL=app_dsn))
+    state = SimpleNamespace(frfinance_m40070_disposable_read_test=True)
+    request = SimpleNamespace(app=SimpleNamespace(state=state))
+
+    assert database._m41180_m40070_disposable_read_exception(request) is True
+    state.frfinance_m40070_disposable_read_test = False
+    assert database._m41180_m40070_disposable_read_exception(request) is False
+    state.frfinance_m40070_disposable_read_test = True
+    monkeypatch.setenv("PIX_REAL", "ON")
+    assert database._m41180_m40070_disposable_read_exception(request) is False
+    monkeypatch.setenv("PIX_REAL", "OFF")
+    monkeypatch.setenv("PGOPTIONS", "")
+    assert database._m41180_m40070_disposable_read_exception(request) is False
+    monkeypatch.setenv("PGOPTIONS", "-c frfinance.m40070_ci=DISPOSABLE_ONLY")
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    assert database._m41180_m40070_disposable_read_exception(request) is False
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://attacker@10.0.0.2:5432/prod")
+    assert database._m41180_m40070_disposable_read_exception(request) is False
+
+
 def test_post_method_keeps_existing_dependency_path_with_only_fake_connection(monkeypatch):
     pool_calls: list[str] = []
     statements: list[str] = []

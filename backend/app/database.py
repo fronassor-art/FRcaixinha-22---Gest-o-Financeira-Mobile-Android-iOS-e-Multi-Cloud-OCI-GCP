@@ -26,6 +26,64 @@ _db_pool_binding = None
 _db_pool_lock = asyncio.Lock()
 
 
+def _m41180_m40070_disposable_read_exception(request: Request) -> bool:
+    """Allow only M40070's preflighted disposable PG18 HTTP/RLS integration."""
+    try:
+        marker = request.app.state.frfinance_m40070_disposable_read_test
+    except AttributeError:
+        return False
+    if marker is not True:
+        return False
+
+    env = os.environ
+    expected = {
+        "GITHUB_ACTIONS": "true",
+        "CI_M40070_DISPOSABLE": "1",
+        "ENVIRONMENT": "development",
+        "FRCAIXINHA_TEST_AUTH": "1",
+        "PIX_REAL": "OFF",
+        "PAGAMENTOS_REAIS": "OFF",
+        "ATIVACAO_REAL": "OFF",
+        "FR_FINANCE_PIX_REAL": "OFF",
+        "FR_FINANCE_REAL_PAYMENTS": "OFF",
+        "FR_FINANCE_REAL_USER_ACTIVATION": "OFF",
+    }
+    if any(env.get(key) != value for key, value in expected.items()):
+        return False
+    if "frfinance.m40070_ci=DISPOSABLE_ONLY" not in env.get("PGOPTIONS", ""):
+        return False
+
+    try:
+        from urllib.parse import urlsplit
+
+        app_dsn = env.get("DATABASE_URL", "")
+        auth_dsn = env.get("AUTH_DATABASE_URL", "")
+        app_url = urlsplit(app_dsn)
+        auth_url = urlsplit(auth_dsn)
+        valid = (
+            settings.DATABASE_URL == app_dsn
+            and app_url.scheme == "postgresql"
+            and app_url.hostname == "127.0.0.1"
+            and app_url.port == 5432
+            and app_url.path == "/frcaixinha_ci"
+            and app_url.username == "fr_m40070_app"
+            and app_url.password is not None
+            and not app_url.query
+            and not app_url.fragment
+            and auth_url.scheme == "postgresql"
+            and auth_url.hostname == "127.0.0.1"
+            and auth_url.port == 5432
+            and auth_url.path == "/frcaixinha_ci"
+            and auth_url.username == "fr_m40070_auth"
+            and auth_url.password is not None
+            and not auth_url.query
+            and not auth_url.fragment
+        )
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return valid
+
+
 def _pool_binding(dsn: str, env) -> str:
     """Process-local configuration fingerprint; never expose it or its inputs."""
     fields = [dsn, *(env.get(k) for k in (
@@ -120,7 +178,12 @@ async def get_rls_db_connection(
     # Contain GET/HEAD requests before acquiring the financial connection pool.
     # This does not remediate SQL GUC spoofing or issuer/credential custody.
     # FastAPI injects Request for HTTP calls; None preserves direct unit-test calls.
-    if request is not None and request.method in {"GET", "HEAD"}:
+    # The only HTTP read exception is a preflighted disposable PG18 CI fixture.
+    if (
+        request is not None
+        and request.method in {"GET", "HEAD"}
+        and not _m41180_m40070_disposable_read_exception(request)
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Leitura financeira bloqueada até contexto SQL atestado."
