@@ -515,7 +515,8 @@ async def _m41080_asyncpg_visible_entries(
             )
             rows = await connection.fetch(
                 "SELECT tenant_id, member_id, amount_cents "
-                "FROM m41050.protected_entries ORDER BY tenant_id, member_id"
+                "FROM m41050.protected_entries "
+                "ORDER BY tenant_id, member_id, amount_cents, entry_id"
             )
             visible = [
                 (row["tenant_id"], row["member_id"], row["amount_cents"])
@@ -947,7 +948,14 @@ def run(dsn: str) -> None:
             own_rows = await _m41080_asyncpg_visible_entries(
                 dsn, async_read_cap, forged=forged_master
             )
-            assert own_rows == [(tenant_a, member_a, 1250000)], "M41080_ASYNCPG_MEMBER_RLS_MISMATCH"
+            # M41060 committed one prior admin append for member_a; a
+            # member capability must see both own rows and no other member.
+            expected_member_rows = [
+                (tenant_a, member_a, 15000),
+                (tenant_a, member_a, 1250000),
+            ]
+            assert own_rows == expected_member_rows, "M41080_ASYNCPG_MEMBER_RLS_MISMATCH"
+            print("M41080_ASYNCPG_M41060_PRIOR_MEMBER_ROW_ACCOUNTED=PASS")
             print("M41080_ASYNCPG_MEMBER_RLS_FORGED_CONTEXT=PASS")
 
             read_write = await _m41080_asyncpg_insert_entry(
