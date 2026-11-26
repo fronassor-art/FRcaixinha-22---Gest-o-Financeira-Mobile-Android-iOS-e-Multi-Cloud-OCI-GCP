@@ -126,7 +126,8 @@ def build_ticket_context(owner) -> None:
           ticket_digest text PRIMARY KEY REFERENCES m40700.ticket_scopes(ticket_digest),
           bound_user_id uuid NOT NULL,
           bound_role text NOT NULL CHECK(bound_role IN ('TENANT_MEMBER','TENANT_ADMIN')),
-          context_generation bigint NOT NULL CHECK(context_generation>=0)
+          context_generation bigint NOT NULL CHECK(context_generation>=0),
+          request_nonce uuid NOT NULL UNIQUE
         )
     """)
     owner.execute("ALTER TABLE m40700.ticket_context OWNER TO m40650_owner")
@@ -179,8 +180,8 @@ def build_ticket_context(owner) -> None:
           v_ticket_digest:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_ticket,'UTF8')),'hex');
           UPDATE m40650.m40680_tickets SET expires_at=LEAST(expires_at,v_session_expiry,
               pg_catalog.to_timestamp(p_expiry)) WHERE digest=v_ticket_digest;
-          INSERT INTO m40700.ticket_context(ticket_digest,bound_user_id,bound_role,context_generation)
-          VALUES(v_ticket_digest,p_user,p_role,p_generation);
+          INSERT INTO m40700.ticket_context(ticket_digest,bound_user_id,bound_role,context_generation,request_nonce)
+          VALUES(v_ticket_digest,p_user,p_role,p_generation,p_nonce);
           RETURN v_ticket;
         END
         $body$
@@ -205,6 +206,7 @@ def build_context_schema(owner) -> None:
           session_digest text NOT NULL,
           bound_user_id uuid NOT NULL,
           bound_session_id uuid NOT NULL,
+          request_nonce uuid NOT NULL UNIQUE,
           bound_role text NOT NULL CHECK (bound_role IN ('TENANT_ADMIN','TENANT_MEMBER')),
           context_generation bigint NOT NULL,
           tenant_id uuid NOT NULL,
@@ -240,6 +242,7 @@ def build_context_schema(owner) -> None:
           v_session_digest text;
           v_user_id uuid;
           v_session_id uuid;
+          v_request_nonce uuid;
           v_role text;
           v_tenant uuid;
           v_expiry timestamptz;
@@ -259,8 +262,8 @@ def build_context_schema(owner) -> None:
           v_ticket_digest := pg_catalog.encode(
             pg_catalog.sha256(pg_catalog.convert_to(p_ticket,'UTF8')),'hex'
           );
-          SELECT t.session_digest,t.expires_at,x.scope_name,c.bound_user_id,c.bound_role,c.context_generation
-            INTO v_session_digest,v_expiry,v_scope,v_bound_user,v_bound_role,v_generation
+          SELECT t.session_digest,t.expires_at,x.scope_name,c.bound_user_id,c.bound_role,c.context_generation,c.request_nonce
+            INTO v_session_digest,v_expiry,v_scope,v_bound_user,v_bound_role,v_generation,v_request_nonce
             FROM m40650.m40680_tickets AS t
             JOIN m40700.ticket_scopes AS x
               ON x.ticket_digest=t.digest
@@ -300,14 +303,14 @@ def build_context_schema(owner) -> None:
             || pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
           INSERT INTO m41050.session_caps(
             token_hash,session_digest,bound_user_id,bound_role,
-            context_generation,tenant_id,expires_at,scope_name,bound_session_id
+            context_generation,tenant_id,expires_at,scope_name,bound_session_id,request_nonce
           )
           VALUES(
             pg_catalog.sha256(
               pg_catalog.convert_to(v_capability,'UTF8')
             ),
             v_session_digest,v_user_id,v_role,v_generation,v_tenant,v_expiry,v_scope,
-            v_session_id
+            v_session_id,v_request_nonce
           );
           RETURN v_capability;
         END
@@ -375,6 +378,27 @@ def build_context_schema(owner) -> None:
         $body$
     """)
     owner.execute("ALTER FUNCTION m41050.current_claims_v2() OWNER TO m40650_owner")
+    owner.execute("""
+        CREATE FUNCTION m41050.current_claims_v3()
+        RETURNS TABLE(user_id uuid,role_name text,tenant_id uuid,
+                      scope_name text,session_id uuid,request_nonce uuid)
+        LANGUAGE sql STABLE SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp
+        AS $body$
+          SELECT claims.user_id,claims.role_name,claims.tenant_id,
+                 claims.scope_name,claims.session_id,c.request_nonce
+            FROM m41050.current_claims_v2() AS claims
+            JOIN m41050.session_caps AS c
+              ON c.token_hash=pg_catalog.sha256(pg_catalog.convert_to(
+                   pg_catalog.current_setting('app.session_capability',true),'UTF8'))
+             AND c.bound_session_id=claims.session_id
+             AND c.bound_user_id=claims.user_id
+             AND c.bound_role=claims.role_name
+             AND c.tenant_id=claims.tenant_id
+             AND c.scope_name=claims.scope_name
+        $body$
+    """)
+    owner.execute("ALTER FUNCTION m41050.current_claims_v3() OWNER TO m40650_owner")
     owner.execute(
         "ALTER TABLE m41050.session_caps OWNER TO m40650_owner"
     )
@@ -678,6 +702,8 @@ def build_context_schema(owner) -> None:
     """)
     owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v2() FROM PUBLIC,m40680_auth")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v2() TO m40650_app")
+    owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v3() FROM PUBLIC,m40680_auth")
+    owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v3() TO m40650_app")
     owner.execute("""
         GRANT EXECUTE ON FUNCTION m41050.can_write_entry(uuid,uuid)
         TO m40650_app

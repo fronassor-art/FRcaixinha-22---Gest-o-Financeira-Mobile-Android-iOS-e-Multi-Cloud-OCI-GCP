@@ -204,17 +204,17 @@ async def test_m41190_readback_compares_all_claims_and_rejects_ambiguous_results
     from fastapi import HTTPException
     from backend.app.m41150_fastapi_rls_context import _require_bound_read_claims
 
-    user, tenant, session_id = uuid4(), uuid4(), uuid4()
-    expected = (user, "TENANT_ADMIN", tenant, "READ_ENTRIES", session_id)
-    valid = dict(zip(("user_id", "role_name", "tenant_id", "scope_name", "session_id"), expected))
+    user, tenant, session_id, request_nonce = uuid4(), uuid4(), uuid4(), uuid4()
+    expected = (user, "TENANT_ADMIN", tenant, "READ_ENTRIES", session_id, request_nonce)
+    valid = dict(zip(("user_id", "role_name", "tenant_id", "scope_name", "session_id", "request_nonce"), expected))
 
     class Connection:
         def __init__(self, rows):
             self.rows = rows
         async def fetch(self, sql):
             assert sql == (
-                "SELECT user_id, role_name, tenant_id, scope_name, session_id "
-                "FROM m41050.current_claims_v2()"
+                "SELECT user_id, role_name, tenant_id, scope_name, session_id, request_nonce "
+                "FROM m41050.current_claims_v3()"
             )
             if isinstance(self.rows, Exception):
                 raise self.rows
@@ -226,11 +226,14 @@ async def test_m41190_readback_compares_all_claims_and_rejects_ambiguous_results
                  [{**valid, "role_name": "TENANT_MEMBER"}],
                  [{**valid, "scope_name": "WRITE_ENTRIES"}],
                  [{**valid, "session_id": uuid4()}],
-                 [{**valid, "session_id": None}]):
+                 [{**valid, "session_id": None}],
+                 [{**valid, "request_nonce": uuid4()}],
+                 [{**valid, "request_nonce": None}]):
         with pytest.raises(HTTPException) as exc:
             await _require_bound_read_claims(Connection(rows), expected)
         assert exc.value.status_code == 401
     for rows in (None, [{}], [{k: v for k, v in valid.items() if k != "session_id"}],
+                 [{k: v for k, v in valid.items() if k != "request_nonce"}],
                  RuntimeError("sensitive fixture error")):
         with pytest.raises(HTTPException) as exc:
             await _require_bound_read_claims(Connection(rows), expected)
@@ -258,6 +261,7 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
         verification_source="POSTGRES_TOKEN_HASH_REFRESH",
     )
     events = []
+    issued_nonces = []
 
     class Connection:
         @asynccontextmanager
@@ -276,7 +280,8 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
             events.append("claims")
             return [{"user_id": user, "role_name": "TENANT_ADMIN",
                      "tenant_id": tenant, "scope_name": "READ_ENTRIES",
-                     "session_id": UUID(session.verified_session_id)}]
+                     "session_id": UUID(session.verified_session_id),
+                     "request_nonce": issued_nonces[-1]}]
 
         async def execute(self, sql):
             assert sql == "RESET ALL; DISCARD TEMP;"
@@ -306,8 +311,10 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
         events.append("install")
 
     class Provider:
-        async def issue_ticket(self, session, *, scope):
+        async def issue_ticket(self, session, *, scope, request_nonce):
             assert scope == "READ_ENTRIES"
+            assert isinstance(request_nonce, UUID) and request_nonce.version == 4
+            issued_nonces.append(request_nonce)
             return "a" * 64
         async def bind_ticket(self, ticket, *, tenant_id):
             assert tenant_id == tenant

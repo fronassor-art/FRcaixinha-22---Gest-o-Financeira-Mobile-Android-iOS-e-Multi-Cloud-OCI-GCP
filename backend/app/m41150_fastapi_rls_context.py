@@ -13,7 +13,7 @@ import inspect
 import os
 import re
 from typing import AsyncGenerator, Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends, HTTPException, Request, status
 
@@ -42,7 +42,7 @@ class SessionCapabilityProvider(Protocol):
     """Runtime-supplied issuer/binder; no signing key is held by this module."""
 
     async def issue_ticket(
-        self, session: AuthenticatedSession, *, scope: str
+        self, session: AuthenticatedSession, *, scope: str, request_nonce: UUID
     ) -> object: ...
 
     async def bind_ticket(self, ticket: str, *, tenant_id: UUID) -> object: ...
@@ -108,8 +108,8 @@ async def _require_bound_read_claims(connection: object, expected: tuple) -> Non
     """
     try:
         rows = await connection.fetch(
-            "SELECT user_id, role_name, tenant_id, scope_name, session_id "
-            "FROM m41050.current_claims_v2()"
+            "SELECT user_id, role_name, tenant_id, scope_name, session_id, request_nonce "
+            "FROM m41050.current_claims_v3()"
         )
         if not isinstance(rows, list):
             raise TypeError("M41190_INVALID_SQL_CLAIMS")
@@ -120,6 +120,7 @@ async def _require_bound_read_claims(connection: object, expected: tuple) -> Non
             matches = (
                 row["user_id"], row["role_name"],
                 row["tenant_id"], row["scope_name"], row["session_id"],
+                row["request_nonce"],
             ) == expected
     except Exception:
         raise HTTPException(
@@ -148,9 +149,12 @@ async def _capability_db_connection(
             detail="Sessão financeira não verificada ou expirada.",
         ) from None
 
+    # Fresh server nonce, never supplied by a header, body or query parameter.
+    # The issuer signs this nonce and SQL copies it from the consumed ticket.
+    request_nonce = uuid4()
     expected_claims = (
         UUID(session.user_id), session.role, tenant, READ_SCOPE,
-        UUID(session.verified_session_id),
+        UUID(session.verified_session_id), request_nonce,
     )
 
     # M40840 stays authoritative: provider presence never enables production.
@@ -163,7 +167,8 @@ async def _capability_db_connection(
         ) from None
 
     ticket_value = await _provider_call(
-        provider, "issue_ticket", session, scope=READ_SCOPE
+        provider, "issue_ticket", session, scope=READ_SCOPE,
+        request_nonce=request_nonce,
     )
     if ticket_value is None:
         raise HTTPException(

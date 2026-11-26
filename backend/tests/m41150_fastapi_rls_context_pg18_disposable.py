@@ -341,9 +341,12 @@ async def exercise(dsn: str) -> None:
                 self.last_capability = None
                 self.reuse_next = False
                 self.override_capability = None
+                self.replay_capability = None
+                self.override_digest = None
+                self.expire_next = False
                 self.issue_calls = 0
 
-            async def issue_ticket(self, session, *, scope):
+            async def issue_ticket(self, session, *, scope, request_nonce):
                 self.issue_calls += 1
                 if scope != "READ_ENTRIES":
                     return None
@@ -353,11 +356,14 @@ async def exercise(dsn: str) -> None:
                 digest = self.session_digests.get(
                     (session.verified_session_id, session.user_id, session.role, session.tenant_id)
                 )
+                if self.override_digest is not None:
+                    digest = self.override_digest
+                    self.override_digest = None
                 if digest is None:
                     return None
                 ticket = fixture.issue_ticket(
                     owner, auth_dsn, key, digest, UUID(session.tenant_id),
-                    scope=scope,
+                    scope=scope, nonce=request_nonce,
                 )
                 if ticket:
                     self.last_ticket = ticket
@@ -367,6 +373,16 @@ async def exercise(dsn: str) -> None:
                 capability = fixture.bind_ticket(app_dsn, ticket, tenant_id)
                 if capability:
                     self.last_capability = capability
+                if self.expire_next and capability:
+                    self.expire_next = False
+                    updated = owner.execute(
+                        "UPDATE m41050.session_caps SET expires_at=pg_catalog.clock_timestamp() "
+                        "WHERE token_hash=pg_catalog.sha256(pg_catalog.convert_to(%s,'UTF8'))",
+                        (capability,),
+                    )
+                    assert updated.rowcount == 1
+                if self.replay_capability is not None:
+                    return self.replay_capability
                 if self.override_capability is not None:
                     override = self.override_capability
                     self.override_capability = None
@@ -559,6 +575,50 @@ async def exercise(dsn: str) -> None:
                 assert denied.status_code == 401, denied.status_code
             print("M41200_SAME_ACCOUNT_CROSS_SESSION_DENIED=PASS")
             print("M41200_TWO_SESSION_CONCURRENT_READS=PASS")
+
+            # Preserve the M41200 isolation test with an otherwise correct nonce.
+            for digest, headers in ((admin_second_digest, admin_headers),
+                                    (admin_digest, second_headers)):
+                provider.override_digest = digest
+                denied = await client.get(path_a, headers=headers)
+                assert denied.status_code == 401, denied.status_code
+            print("M41210_CORRECT_NONCE_WRONG_SESSION_DENIED=PASS")
+
+            fresh = await client.get(path_a, headers=admin_headers)
+            assert fresh.status_code == 200
+            used_capability = provider.last_capability
+            assert used_capability
+            # Legacy SQL remains callable until expiry; HTTP must reject replay.
+            async with pool.acquire() as connection:
+                async with connection.transaction(readonly=True):
+                    await gateway.install_session_capability(connection, used_capability)
+                    claims = await connection.fetch(
+                        "SELECT session_id,request_nonce FROM m41050.current_claims_v3()"
+                    )
+                    assert len(claims) == 1
+                    assert claims[0]["session_id"] == admin_session_id
+            provider.replay_capability = used_capability
+            try:
+                denied = await client.get(path_a, headers=admin_headers)
+                assert denied.status_code == 401
+                replays = await asyncio.gather(*(
+                    client.get(path, headers=admin_headers) for path in read_paths
+                ))
+                assert all(response.status_code == 401 for response in replays)
+            finally:
+                provider.replay_capability = None
+            print("M41210_SAME_SESSION_SEQUENTIAL_AND_CONCURRENT_REPLAY_DENIED=PASS")
+
+            provider.expire_next = True
+            expired = await client.get(path_a, headers=admin_headers)
+            assert expired.status_code == 401
+            assert not provider.expire_next
+            print("M41210_MATCHING_NONCE_EXPIRED_CAPABILITY_DENIED=PASS")
+
+            recovered = await client.get(path_a, headers=admin_headers)
+            assert recovered.status_code == 200
+            assert len(recovered.json()["accounts"]) == 2
+            print("M41210_FRESH_REQUEST_RECOVERY=PASS")
 
             provider.reuse_next = True
             replay = await client.get(path_a, headers=admin_headers)
