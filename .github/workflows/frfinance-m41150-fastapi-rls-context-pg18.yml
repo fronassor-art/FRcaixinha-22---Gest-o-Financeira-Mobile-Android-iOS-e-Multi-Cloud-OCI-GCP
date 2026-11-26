@@ -1,0 +1,90 @@
+name: FR Finance M41150 FastAPI ledger RLS capability PG18 disposable
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/m41150_fastapi_rls_context.py'
+      - 'backend/app/routers/ledger.py'
+      - 'backend/tests/m41150_fastapi_rls_context_pg18_disposable.py'
+      - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
+      - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
+      - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/m41150_fastapi_rls_context.py'
+      - 'backend/app/routers/ledger.py'
+      - 'backend/tests/m41150_fastapi_rls_context_pg18_disposable.py'
+      - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
+      - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
+      - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - run: >-
+          python -B -m pytest -q -p no:cacheprovider
+          backend/tests/test_m41150_fastapi_rls_context_ci.py
+
+  pg18-disposable:
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fr_m40700_disposable_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_m41050_disposable_ci
+        ports:
+          - 55439:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fr_m40700_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      FRCAIXINHA_CI_ISOLATED: '1'
+      CI_M41050_DISPOSABLE: '1'
+      CI_M41060_DISPOSABLE: '1'
+      CI_M41080_DISPOSABLE: '1'
+      CI_M41090_DISPOSABLE: '1'
+      CI_M41100_DISPOSABLE: '1'
+      CI_M41140_DISPOSABLE: '1'
+      CI_M40700_DISPOSABLE: '1'
+      CI_M40680_DISPOSABLE: '1'
+      CI_M40560_DISPOSABLE: '1'
+      CI_M41150_DISPOSABLE: '1'
+      CI_M41050_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M40700_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41080_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41090_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41100_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41140_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41150_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - run: python -B backend/tests/m41050_sql_sealed_context_pg18_disposable.py
+      - run: python -B backend/tests/m41150_fastapi_rls_context_pg18_disposable.py

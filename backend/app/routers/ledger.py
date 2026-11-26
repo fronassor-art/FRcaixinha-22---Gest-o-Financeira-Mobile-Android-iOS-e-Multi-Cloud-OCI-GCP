@@ -16,6 +16,7 @@ from ..models import (
 )
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
 from ..database import get_rls_db_connection
+from ..m41150_fastapi_rls_context import get_ledger_directory_db_connection
 from ..ledger_keyset import encode_cursor, decode_cursor, validate_rows
 
 router = APIRouter(prefix="/tenants/{tenant_id}/ledger", tags=["Livro-Razão e Contabilidade"])
@@ -156,7 +157,7 @@ def _validate_directory_accounts(rows, tenant: uuid.UUID) -> list:
 async def list_ledger_account_directory(
     tenant_id: str,
     session: AuthenticatedSession = Depends(get_current_session),
-    conn=Depends(get_rls_db_connection),
+    conn=Depends(get_ledger_directory_db_connection),
 ):
     """Metadados das contas, SEM saldos, inclusive quando nao ha transacoes.
 
