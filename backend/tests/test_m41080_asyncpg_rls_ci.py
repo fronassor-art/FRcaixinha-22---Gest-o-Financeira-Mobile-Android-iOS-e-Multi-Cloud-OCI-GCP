@@ -37,6 +37,7 @@ def test_real_asyncpg_capability_calls_are_bound_inside_transactions():
         "CI_M41080_DISPOSABLE",
         "CI_M41080_DATABASE_URL",
         "M41080_ASYNCPG_TRANSACTION_LOCAL_RESET=",
+        "M41080_ASYNCPG_CONTEXT=",
         "M41080_DIAGNOSTIC=",
         "M41080_ASYNCPG_MEMBER_RLS_FORGED_CONTEXT=PASS",
         "M41080_ASYNCPG_READ_SCOPE_CANNOT_WRITE=DENIED",
