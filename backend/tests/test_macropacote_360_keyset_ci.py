@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from app.dependencies import AuthenticatedSession, get_current_session
-from app.database import get_rls_db_connection
+from app.m41150_fastapi_rls_context import get_ledger_readonly_db_connection
 from app.main import app
 from app.routers.ledger import list_ledger_account_entries_keyset
 from app.ledger_keyset import encode_cursor, decode_cursor
@@ -147,7 +147,7 @@ def test_http_unauthenticated_query_bounds_and_no_cache():
     with TestClient(app) as client:
         assert client.get(path).status_code==401
     app.dependency_overrides[get_current_session]=actor
-    app.dependency_overrides[get_rls_db_connection]=lambda:ReadOnly([row(0)])
+    app.dependency_overrides[get_ledger_readonly_db_connection]=lambda:ReadOnly([row(0)])
     try:
         with TestClient(app) as client:
             for query in ("?page_size=0","?page_size=51","?cursor=!!!"):
@@ -158,4 +158,4 @@ def test_http_unauthenticated_query_bounds_and_no_cache():
             assert res.headers["cache-control"]=="no-store"
     finally:
         app.dependency_overrides.pop(get_current_session,None)
-        app.dependency_overrides.pop(get_rls_db_connection,None)
+        app.dependency_overrides.pop(get_ledger_readonly_db_connection,None)
