@@ -205,6 +205,8 @@ def test_ci_disposable_exception_rejects_missing_marker_and_unsafe_context(monke
 
     monkeypatch.setenv("ENVIRONMENT", "production")
     assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("ENVIRONMENT", "homologation")
+    assert database._m41180_ci_disposable_read_exception(request) is False
     monkeypatch.setenv("ENVIRONMENT", "development")
 
     for flag in (
@@ -389,3 +391,34 @@ def test_existing_rls_http_harness_marks_only_after_disposable_database_prefligh
             "FR_FINANCE_REAL_USER_ACTIVATION",
         ):
             assert f"{flag}: 'OFF'" in block
+
+    trigger_paths = workflow_source[
+        workflow_source.index("    paths:") : workflow_source.index("  pull_request:")
+    ]
+    assert "'backend/tests/test_rls_isolation_ci.py'" in trigger_paths
+    assert "'backend/tests/test_aistudio_roles_e2e_ci.py'" in trigger_paths
+
+
+def test_three_role_e2e_harness_marks_only_its_preflighted_disposable_database():
+    repo_root = Path(__file__).resolve().parents[2]
+    roles_path = repo_root / "backend" / "tests" / "test_aistudio_roles_e2e_ci.py"
+    roles_source = roles_path.read_text(encoding="utf-8")
+    roles_tree = ast.parse(roles_source, filename=str(roles_path))
+    test = next(
+        node
+        for node in roles_tree.body
+        if isinstance(node, ast.AsyncFunctionDef)
+        and node.name == "test_local_onboarding_three_roles_and_auth"
+    )
+    test_source = ast.get_source_segment(roles_source, test)
+    assert test_source is not None
+    assert 'monkeypatch.setenv("ENVIRONMENT", "development")' in test_source
+    assert "current_database()" in test_source
+    assert "inet_server_port()" in test_source
+    assert "server_version_num" in test_source
+    assert (
+        test_source.index("identity = db.execute")
+        < test_source.index("frfinance_ci_disposable_read_test")
+        < test_source.index("async with AsyncClient")
+    )
+    assert "database._m41180_ci_disposable_read_exception(request) is True" in test_source

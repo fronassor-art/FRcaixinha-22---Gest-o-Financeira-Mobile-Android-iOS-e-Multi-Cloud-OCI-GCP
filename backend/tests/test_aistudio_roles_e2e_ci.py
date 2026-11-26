@@ -1,5 +1,6 @@
 """Teste E2E (3 perfis), exclusivamente PostgreSQL descartavel CI."""
 import os
+from types import SimpleNamespace
 from uuid import uuid4
 from urllib.parse import urlparse
 
@@ -7,6 +8,7 @@ import psycopg
 import pytest
 from httpx import AsyncClient, ASGITransport
 
+from app import database
 from app.aistudio_onboarding import onboard_tenant_with_roles, OnboardingDenied
 from app.config import settings
 from app.database import close_db_pool
@@ -22,6 +24,13 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
     parsed = urlparse(dsn)
     assert (parsed.username,parsed.hostname,parsed.port,parsed.path) == (
         "postgres","127.0.0.1",5432,"/frcaixinha_ci")
+    for name in ("DATABASE_URL", "CI_AUTH_DATABASE_URL", "CI_VERIFIER_DATABASE_URL"):
+        candidate = urlparse(os.environ[name])
+        assert candidate.scheme == "postgresql"
+        assert (candidate.hostname, candidate.port, candidate.path) == (
+            "127.0.0.1", 5432, "/frcaixinha_ci")
+        assert candidate.username and candidate.password
+        assert not candidate.query and not candidate.fragment
     tag = uuid4().hex
     emails = [f"{role}-{tag}@example.com" for role in ("master","admin","member")]
     passwords = ["ci-pass-master-0123456789", "ci-pass-admin-0123456789",
@@ -34,7 +43,7 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
     monkeypatch.setenv("AUTH_DATABASE_URL", os.environ["CI_AUTH_DATABASE_URL"])
     monkeypatch.setenv("AUTH_VERIFIER_DATABASE_URL", os.environ["CI_VERIFIER_DATABASE_URL"])
     monkeypatch.setenv("FRCAIXINHA_TEST_AUTH", "1")
-    monkeypatch.setenv("ENVIRONMENT", "homologation")
+    monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("AUTH_RATE_LIMIT_HMAC_KEY",
                        "ci-only-test-hmac-secret-of-40-bytes-placeholder")
 
@@ -46,6 +55,13 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
 
     with psycopg.connect(dsn, autocommit=True) as db:
         try:
+            identity = db.execute(
+                "SELECT current_database(), inet_server_port(), "
+                "current_setting('server_version_num')::integer"
+            ).fetchone()
+            assert identity[0] == "frcaixinha_ci"
+            assert identity[1] == 5432
+            assert 160000 <= identity[2] < 200000
             db.execute(
                 "INSERT INTO public.users(id,email,full_name,cpf,phone,is_master) "
                 "VALUES(%s,%s,'Master CI','99988877766','11999999999',TRUE)",
@@ -146,6 +162,12 @@ async def test_local_onboarding_three_roles_and_auth(monkeypatch):
             assert db.execute(
                 "SELECT count(*) FROM public.tenants"
             ).fetchone()[0] == before
+
+            monkeypatch.setattr(
+                app.state, "frfinance_ci_disposable_read_test", True, raising=False
+            )
+            request = SimpleNamespace(app=app)
+            assert database._m41180_ci_disposable_read_exception(request) is True
 
             async with AsyncClient(
                 transport=ASGITransport(app=app),base_url="http://ci"

@@ -18,6 +18,8 @@ on:
       - '.github/workflows/frfinance-m40750-oauth-egress-no-go-ci.yml'
       - '.github/workflows/frfinance-m40760-readonly-egress-no-go-ci.yml'
       - 'backend/app/database.py'
+      - 'backend/tests/test_rls_isolation_ci.py'
+      - 'backend/tests/test_aistudio_roles_e2e_ci.py'
       - 'backend/tests/test_m41180_legacy_guc_get_guard_ci.py'
       - '.github/workflows/frfinance-m41180-legacy-guc-get-guard-ci.yml'
       - 'docs/FR_FINANCE_M41180_LEGACY_GUC_GET_GUARD_NO_GO.md'
