@@ -157,8 +157,17 @@ async def exercise(dsn: str) -> None:
         async def set_app_role(connection):
             await connection.execute("SET ROLE m40650_app")
 
+        # connection_dsns() returns a libpq keyword DSN for psycopg;
+        # asyncpg needs discrete connection parameters.
         pool = await asyncpg.create_pool(
-            dsn=app_dsn, min_size=1, max_size=2, init=set_app_role,
+            host="127.0.0.1",
+            port=PORT,
+            database=DATABASE,
+            user="m40650_ci_login",
+            password=fixture.APP_PASSWORD,
+            min_size=1,
+            max_size=2,
+            init=set_app_role,
             command_timeout=5,
         )
         async with pool.acquire() as probe_connection:
