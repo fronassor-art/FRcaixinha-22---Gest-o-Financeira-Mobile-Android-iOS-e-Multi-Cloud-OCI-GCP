@@ -418,6 +418,26 @@ def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
     raise AssertionError("M41060_EXPECTED_RLS_WRITE_DENIAL")
 
 
+def write_authorization_state(app_dsn: str, capability: str,
+                            tenant_id, member_id) -> tuple[list[tuple], bool]:
+    import psycopg
+    with psycopg.connect(app_dsn,autocommit=False) as app:
+        app.execute("SET ROLE m40650_app")
+        app.execute(
+            "SELECT pg_catalog.set_config('app.session_capability',%s,true)",
+            (capability,),
+        )
+        claims=app.execute(
+            "SELECT user_id,role_name,tenant_id,scope_name "
+            "FROM m41050.current_claims()"
+        ).fetchall()
+        allowed=app.execute(
+            "SELECT m41050.can_write_entry(%s,%s)",(tenant_id,member_id)
+        ).fetchone()[0]
+        app.commit()
+        return claims,allowed
+
+
 def visible_entries(app_dsn: str, *, capability: str | None = None,
                     forged: tuple[str,str,str] | None = None) -> list[tuple]:
     import psycopg
@@ -650,6 +670,15 @@ def run(dsn: str) -> None:
         assert admin_write_cap is not None
         assert visible_entries(app_dsn,capability=admin_write_cap)==[]
         print("M41060_WRITE_CAPABILITY_CANNOT_READ=DENIED")
+
+        admin_claims,admin_can_write=write_authorization_state(
+            app_dsn,admin_write_cap,tenant_a,member_a
+        )
+        assert admin_claims==[
+            (admin_a,"TENANT_ADMIN",tenant_a,WRITE_SCOPE)
+        ]
+        assert admin_can_write is True
+        print("M41060_ADMIN_WRITE_SCOPE_RESOLVED=PASS")
 
         forged_write=("MASTER",str(master),str(tenant_b))
         once_key="m41060:admin:"+uuid4().hex
