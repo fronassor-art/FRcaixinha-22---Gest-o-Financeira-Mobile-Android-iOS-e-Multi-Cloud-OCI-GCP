@@ -27,10 +27,14 @@ SOURCE = RUNNER.read_text(encoding="utf-8")
 class FakeConnection:
     def __init__(self):
         self.calls = []
+        self.active = True
 
-    async def execute(self, query, value):
+    def is_in_transaction(self):
+        return self.active
+
+    async def fetchval(self, query, value):
         self.calls.append((query, value))
-        return "SELECT 1"
+        return value
 
 
 def test_only_opaque_capability_shape_is_accepted():

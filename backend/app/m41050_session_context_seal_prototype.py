@@ -1,8 +1,8 @@
 """M41050 lab helper for a ticket-bound PostgreSQL session capability.
 
-Not wired into FR Finance routes or the authoritative database. The opaque
-capability is issued by the disposable SQL fixture after a signed one-use
-M40700 ticket is consumed; it is not a user-supplied identity claim.
+Not wired into FR Finance routes or the authoritative database. M41070 tightens
+the prototype so the opaque capability is installed only inside the active
+asyncpg transaction and only after PostgreSQL confirms the bound value.
 """
 from __future__ import annotations
 
@@ -26,13 +26,38 @@ def validate_session_capability(value: object) -> str:
     return value
 
 
-async def install_session_capability(connection: object, value: object) -> None:
-    """Bind the capability transaction-locally using asyncpg parameters."""
-    capability = validate_session_capability(value)
-    execute = getattr(connection, "execute", None)
-    if not callable(execute):
+def _require_active_transaction(connection: object) -> None:
+    checker = getattr(connection, "is_in_transaction", None)
+    if not callable(checker):
         raise InvalidSessionCapability("M41050_INVALID_SESSION_CAPABILITY")
-    result = execute(_SETTING_SQL, capability)
+    try:
+        active = checker()
+    except Exception:
+        raise InvalidSessionCapability(
+            "M41050_INVALID_SESSION_CAPABILITY"
+        ) from None
+    if inspect.isawaitable(active):
+        close = getattr(active, "close", None)
+        if callable(close):
+            close()
+        raise InvalidSessionCapability("M41050_INVALID_SESSION_CAPABILITY")
+    if active is not True:
+        raise InvalidSessionCapability("M41050_INVALID_SESSION_CAPABILITY")
+
+
+async def install_session_capability(connection: object, value: object) -> None:
+    """Bind a SQL-issued capability and prove it stayed transaction-local."""
+    capability = validate_session_capability(value)
+    _require_active_transaction(connection)
+
+    fetchval = getattr(connection, "fetchval", None)
+    if not callable(fetchval):
+        raise InvalidSessionCapability("M41050_INVALID_SESSION_CAPABILITY")
+    result = fetchval(_SETTING_SQL, capability)
     if not inspect.isawaitable(result):
         raise InvalidSessionCapability("M41050_INVALID_SESSION_CAPABILITY")
-    await result
+
+    bound_value = await result
+    _require_active_transaction(connection)
+    if bound_value != capability:
+        raise InvalidSessionCapability("M41050_INVALID_SESSION_CAPABILITY")
