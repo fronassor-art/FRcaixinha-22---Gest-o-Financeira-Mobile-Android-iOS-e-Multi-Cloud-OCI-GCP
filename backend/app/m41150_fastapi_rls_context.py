@@ -1,4 +1,4 @@
-"""M41150: optional FastAPI-to-PostgreSQL capability path for a read-only ledger route.
+"""M41160: optional FastAPI-to-PostgreSQL capability path for six read-only ledger routes.
 
 The capability provider is deliberately absent from the default application. The
 legacy database dependency remains the compatibility path while M40840 blocks
@@ -77,11 +77,11 @@ async def _provider_call(provider: object, method_name: str, *args, **kwargs):
         ) from None
 
 
-def _directory_tenant(request: Request, session: AuthenticatedSession) -> UUID:
+def _ledger_tenant(request: Request, session: AuthenticatedSession) -> UUID:
     if getattr(session, "role", None) != "TENANT_ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Diretório contábil exclusivo do administrador.",
+            detail="Livro-razão exclusivo do administrador.",
         )
     value = getattr(session, "tenant_id", None)
     target = request.path_params.get("tenant_id")
@@ -186,11 +186,11 @@ async def _capability_db_connection(
                 ) from None
 
 
-async def get_ledger_directory_db_connection(
+async def get_ledger_readonly_db_connection(
     request: Request,
     session: AuthenticatedSession = Depends(get_current_session),
 ) -> AsyncGenerator:
-    """Capability path for the read-only ledger directory when a provider exists.
+    """Capability path for read-only ledger endpoints when a provider exists.
 
     The normal application has no provider until independent key custody,
     schema review, and staging evidence are accepted. Without it, preserve the
@@ -209,7 +209,7 @@ async def get_ledger_directory_db_connection(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão financeira não verificada ou expirada.",
         ) from None
-    tenant = _directory_tenant(request, session)
+    tenant = _ledger_tenant(request, session)
     async for connection in _capability_db_connection(
         request, session, provider, tenant
     ):

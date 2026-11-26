@@ -9,6 +9,7 @@ on:
       - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
       - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
       - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
+      - 'docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md'
   pull_request:
     paths:
       - 'backend/app/m41150_fastapi_rls_context.py'
@@ -17,6 +18,7 @@ on:
       - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
       - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
       - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
+      - 'docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md'
 permissions:
   contents: read
 jobs:
@@ -69,6 +71,7 @@ jobs:
       CI_M40680_DISPOSABLE: '1'
       CI_M40560_DISPOSABLE: '1'
       CI_M41150_DISPOSABLE: '1'
+      CI_M41160_DISPOSABLE: '1'
       CI_M41050_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M40700_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41080_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
@@ -76,6 +79,7 @@ jobs:
       CI_M41100_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41140_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41150_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41160_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       PYTHONDONTWRITEBYTECODE: '1'
       PIX_REAL: 'OFF'
       PAGAMENTOS_REAIS: 'OFF'

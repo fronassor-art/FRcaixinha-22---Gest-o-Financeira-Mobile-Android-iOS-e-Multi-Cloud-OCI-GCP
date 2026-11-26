@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M41150 FastAPI ledger-directory to capability/RLS proof; disposable PG18 only."""
+"""M41150/M41160 FastAPI ledger reads to capability/RLS proof; disposable PG18 only."""
 from __future__ import annotations
 
 import asyncio
@@ -25,6 +25,7 @@ def require_disposable() -> str:
         "FRCAIXINHA_CI_ISOLATED": "1",
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41150_DISPOSABLE": "1",
+        "CI_M41160_DISPOSABLE": "1",
         "PIX_REAL": "OFF",
         "PAGAMENTOS_REAIS": "OFF",
         "ATIVACAO_REAL": "OFF",
@@ -54,6 +55,7 @@ def require_disposable() -> str:
             and os.environ.get("CI_M41090_DATABASE_URL") == dsn
             and os.environ.get("CI_M41100_DATABASE_URL") == dsn
             and os.environ.get("CI_M41140_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41160_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -109,13 +111,16 @@ async def exercise(dsn: str) -> None:
             owner, member_id, "TENANT_MEMBER", tenant_a
         )
 
+        account_a_id, account_offset_id = uuid4(), uuid4()
+        account_b_id, account_b_offset_id = uuid4(), uuid4()
         owner.execute("""
             CREATE TABLE public.ledger_accounts(
                 id uuid PRIMARY KEY,
                 tenant_id uuid NOT NULL,
                 account_code text NOT NULL,
                 account_name text NOT NULL,
-                account_type text NOT NULL
+                account_type text NOT NULL,
+                balance_cents bigint NOT NULL
             )
         """)
         owner.execute(
@@ -123,33 +128,66 @@ async def exercise(dsn: str) -> None:
         )
         owner.execute("""
             INSERT INTO public.ledger_accounts(
-                id,tenant_id,account_code,account_name,account_type
+                id,tenant_id,account_code,account_name,account_type,balance_cents
             ) VALUES
-              (%s,%s,'A-CASH','Caixa A','ASSET'),
-              (%s,%s,'B-CASH','Caixa B','ASSET')
-        """, (uuid4(), tenant_a, uuid4(), tenant_b))
-        owner.execute(
-            "ALTER TABLE public.ledger_accounts ENABLE ROW LEVEL SECURITY"
-        )
-        owner.execute(
-            "ALTER TABLE public.ledger_accounts FORCE ROW LEVEL SECURITY"
-        )
+              (%s,%s,'A-CASH','Caixa A','ASSET',1250),
+              (%s,%s,'A-OFFSET','Conta de contrapartida','LIABILITY',1250),
+              (%s,%s,'B-CASH','Caixa B','ASSET',9900),
+              (%s,%s,'B-OFFSET','Conta de contrapartida B','LIABILITY',9900)
+        """, (
+            account_a_id, tenant_a, account_offset_id, tenant_a,
+            account_b_id, tenant_b, account_b_offset_id, tenant_b,
+        ))
         owner.execute("""
-            CREATE POLICY m41150_ledger_directory_read
-            ON public.ledger_accounts
-            FOR SELECT TO m40650_app
-            USING (
-              EXISTS (
-                SELECT 1 FROM m41050.current_claims() AS claims
-                 WHERE claims.scope_name='READ_ENTRIES'
-                   AND claims.role_name='TENANT_ADMIN'
-                   AND claims.tenant_id=ledger_accounts.tenant_id
-              )
+            CREATE TABLE public.ledger_transactions(
+                id uuid PRIMARY KEY,
+                tenant_id uuid NOT NULL,
+                transaction_date timestamptz NOT NULL,
+                description text NOT NULL,
+                reference_id text NOT NULL
             )
         """)
         owner.execute(
-            "GRANT SELECT ON public.ledger_accounts TO m40650_app"
+            "ALTER TABLE public.ledger_transactions OWNER TO m40650_owner"
         )
+        owner.execute("""
+            CREATE TABLE public.ledger_entries(
+                id uuid PRIMARY KEY,
+                tenant_id uuid NOT NULL,
+                transaction_id uuid NOT NULL,
+                account_id uuid NOT NULL,
+                entry_type text NOT NULL,
+                amount_cents bigint NOT NULL
+            )
+        """)
+        owner.execute(
+            "ALTER TABLE public.ledger_entries OWNER TO m40650_owner"
+        )
+        for table_name in (
+            "ledger_accounts", "ledger_transactions", "ledger_entries",
+        ):
+            owner.execute(
+                f"ALTER TABLE public.{table_name} ENABLE ROW LEVEL SECURITY"
+            )
+            owner.execute(
+                f"ALTER TABLE public.{table_name} FORCE ROW LEVEL SECURITY"
+            )
+            owner.execute(f"""
+                CREATE POLICY m41160_{table_name}_read
+                ON public.{table_name}
+                FOR SELECT TO m40650_app
+                USING (
+                  EXISTS (
+                    SELECT 1 FROM m41050.current_claims() AS claims
+                     WHERE claims.scope_name='READ_ENTRIES'
+                       AND claims.role_name='TENANT_ADMIN'
+                       AND claims.tenant_id={table_name}.tenant_id
+                  )
+                )
+            """)
+            owner.execute(
+                f"GRANT SELECT ON public.{table_name} TO m40650_app"
+            )
         owner.execute(
             "GRANT EXECUTE ON FUNCTION m41050.current_claims() TO m40650_app"
         )
@@ -176,6 +214,33 @@ async def exercise(dsn: str) -> None:
             raise RuntimeError("M41150_EXPECTED_POSTGRES18")
         os.environ.setdefault("ENVIRONMENT", "development")
 
+        now = datetime.now(timezone.utc)
+        transaction_id, transaction_b_id = uuid4(), uuid4()
+        owner.execute(
+            "INSERT INTO public.ledger_transactions("
+            "id,tenant_id,transaction_date,description,reference_id"
+            ") VALUES (%s,%s,%s,%s,%s),(%s,%s,%s,%s,%s)",
+            (
+                transaction_id, tenant_a, now, "Lancamento teste M41160 A",
+                "M41160-TEST-A",
+                transaction_b_id, tenant_b, now, "Lancamento teste M41160 B",
+                "M41160-TEST-B",
+            ),
+        )
+        owner.execute(
+            "INSERT INTO public.ledger_entries("
+            "id,tenant_id,transaction_id,account_id,entry_type,amount_cents"
+            ") VALUES "
+            "(%s,%s,%s,%s,'DR',1250),(%s,%s,%s,%s,'CR',1250),"
+            "(%s,%s,%s,%s,'DR',9900),(%s,%s,%s,%s,'CR',9900)",
+            (
+                uuid4(), tenant_a, transaction_id, account_a_id,
+                uuid4(), tenant_a, transaction_id, account_offset_id,
+                uuid4(), tenant_b, transaction_b_id, account_b_id,
+                uuid4(), tenant_b, transaction_b_id, account_b_offset_id,
+            ),
+        )
+
         async with pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute(
@@ -190,14 +255,18 @@ async def exercise(dsn: str) -> None:
                     "SELECT pg_catalog.set_config('app.current_user_id',$1,true)",
                     str(admin_id),
                 )
-                forged = await connection.fetch(
-                    "SELECT id FROM public.ledger_accounts ORDER BY account_code"
-                )
-                if forged:
-                    raise AssertionError("M41150_LEGACY_GUC_FORGED_CONTEXT_VISIBLE")
+                for table_name in (
+                    "ledger_accounts", "ledger_transactions", "ledger_entries",
+                ):
+                    forged = await connection.fetch(
+                        f"SELECT id FROM public.{table_name} ORDER BY id"
+                    )
+                    if forged:
+                        raise AssertionError(
+                            f"M41160_LEGACY_GUC_FORGED_CONTEXT_VISIBLE_{table_name}"
+                        )
         print("M41150_FORGED_LEGACY_GUC_DENIED=PASS")
-
-        now = datetime.now(timezone.utc)
+        print("M41160_FORGED_LEGACY_GUC_DENIED=PASS")
 
         def make_session(user_id, role, tenant_id, *, verification_source=None):
             return AuthenticatedSession(
@@ -292,55 +361,119 @@ async def exercise(dsn: str) -> None:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://frfinance.test"
         ) as client:
-            path_a = (
-                f"/api/v1/tenants/{tenant_a}/ledger/accounts/directory"
+            path_a = f"/api/v1/tenants/{tenant_a}/ledger/accounts/directory"
+            accounts_path = f"/api/v1/tenants/{tenant_a}/ledger/accounts"
+            transactions_path = f"/api/v1/tenants/{tenant_a}/ledger/transactions"
+            integrity_path = f"/api/v1/tenants/{tenant_a}/ledger/integrity-preview"
+            entries_path = (
+                f"/api/v1/tenants/{tenant_a}/ledger/accounts/"
+                f"{account_a_id}/entries"
             )
-            response = await client.get(
-                path_a, headers={"Authorization": "Bearer m41150-admin"}
-            )
-            if response.status_code != 200:
-                raise AssertionError(
-                    f"M41150_DIRECTORY_HTTP_{response.status_code}: {response.text}"
-                )
-            payload = response.json()
-            if (len(payload.get("accounts", [])) != 1
-                    or payload["accounts"][0]["account_code"] != "A-CASH"
-                    or payload.get("balance_values_hidden") is not True
-                    or payload.get("financial_closing_authorized") is not False):
-                raise AssertionError("M41150_LEDGER_DIRECTORY_SCOPE_OR_SHAPE")
+            keyset_path = entries_path + "/keyset"
+            read_paths = [
+                path_a, integrity_path, accounts_path, transactions_path,
+                entries_path, keyset_path,
+            ]
+            admin_headers = {"Authorization": "Bearer m41150-admin"}
+            responses = await asyncio.gather(*(
+                client.get(path, headers=admin_headers) for path in read_paths
+            ))
+            if any(response.status_code != 200 for response in responses):
+                codes = [response.status_code for response in responses]
+                raise AssertionError(f"M41160_READ_ROUTE_HTTP_STATUS_{codes}")
+
+            directory_payload = responses[0].json()
+            if (len(directory_payload.get("accounts", [])) != 2
+                    or [item["account_code"] for item in directory_payload["accounts"]]
+                    != ["A-CASH", "A-OFFSET"]
+                    or directory_payload.get("balance_values_hidden") is not True
+                    or directory_payload.get("financial_closing_authorized") is not False):
+                raise AssertionError("M41160_LEDGER_DIRECTORY_SCOPE_OR_SHAPE")
+            if len(responses[2].json()) != 2:
+                raise AssertionError("M41160_LEDGER_ACCOUNTS_SHAPE")
+            tx_payload = responses[3].json()
+            if len(tx_payload) != 1 or len(tx_payload[0].get("entries", [])) != 2:
+                raise AssertionError("M41160_LEDGER_TRANSACTIONS_SHAPE")
+            if len(responses[4].json().get("entries", [])) != 1:
+                raise AssertionError("M41160_LEDGER_JOURNAL_PAGE_SHAPE")
+            if len(responses[5].json().get("entries", [])) != 1:
+                raise AssertionError("M41160_LEDGER_KEYSET_PAGE_SHAPE")
+            active_capability = provider.last_capability
+            if not active_capability:
+                raise AssertionError("M41160_FIXTURE_CAPABILITY_MISSING")
+            expected_tenant_rows = {
+                "ledger_accounts": 2,
+                "ledger_transactions": 1,
+                "ledger_entries": 2,
+            }
+            async with pool.acquire() as connection:
+                async with connection.transaction(readonly=True):
+                    await gateway.install_session_capability(
+                        connection, active_capability
+                    )
+                    for table_name, expected_count in expected_tenant_rows.items():
+                        rows = await connection.fetch(
+                            f"SELECT tenant_id FROM public.{table_name}"
+                        )
+                        if (len(rows) != expected_count
+                                or any(row["tenant_id"] != tenant_a for row in rows)):
+                            raise AssertionError(
+                                f"M41160_RLS_TENANT_ISOLATION_{table_name}"
+                            )
+            print("M41160_RLS_TENANT_ISOLATION=PASS")
             print("M41150_FASTAPI_LEDGER_DIRECTORY=PASS")
+            print("M41160_FASTAPI_LEDGER_READ_ROUTES=6_OF_6_PASS")
+            print("M41160_CONCURRENT_READS=PASS")
 
             provider.reuse_next = True
-            replay = await client.get(
-                path_a, headers={"Authorization": "Bearer m41150-admin"}
-            )
+            replay = await client.get(path_a, headers=admin_headers)
             if replay.status_code != 401:
                 raise AssertionError("M41150_REPLAYED_TICKET_ACCEPTED")
             print("M41150_TICKET_REPLAY_DENIED=PASS")
 
-            member_response = await client.get(
-                path_a,
-                headers={
-                    "Authorization": "Bearer m41150-member",
-                    "X-Role": "TENANT_ADMIN",
-                    "X-Tenant": str(tenant_a),
-                },
-            )
-            if member_response.status_code != 403:
-                raise AssertionError("M41150_FORGED_ROLE_HEADER_ACCEPTED")
-
-            cross_tenant = await client.get(
-                f"/api/v1/tenants/{tenant_b}/ledger/accounts/directory",
-                headers={"Authorization": "Bearer m41150-admin"},
-            )
-            if cross_tenant.status_code != 403:
-                raise AssertionError("M41150_CROSS_TENANT_DIRECTORY_ACCEPTED")
-
-            master_response = await client.get(
-                path_a, headers={"Authorization": "Bearer m41150-master"}
-            )
-            if master_response.status_code != 403:
-                raise AssertionError("M41150_MASTER_DIRECTORY_ACCEPTED")
+            for path in read_paths:
+                member_response = await client.get(
+                    path,
+                    headers={
+                        "Authorization": "Bearer m41150-member",
+                        "X-Role": "TENANT_ADMIN",
+                        "X-Tenant": str(tenant_a),
+                    },
+                )
+                if member_response.status_code != 403:
+                    raise AssertionError(
+                        f"M41160_MEMBER_ROUTE_AUTH_{member_response.status_code}"
+                    )
+                cross_tenant = await client.get(
+                    path.replace(str(tenant_a), str(tenant_b), 1),
+                    headers=admin_headers,
+                )
+                if cross_tenant.status_code != 403:
+                    raise AssertionError(
+                        f"M41160_CROSS_TENANT_ROUTE_{cross_tenant.status_code}"
+                    )
+                master_response = await client.get(
+                    path,
+                    headers={"Authorization": "Bearer m41150-master"},
+                )
+                if master_response.status_code != 403:
+                    raise AssertionError(
+                        f"M41160_MASTER_ROUTE_AUTH_{master_response.status_code}"
+                    )
+                unverified = await client.get(
+                    path,
+                    headers={"Authorization": "Bearer m41150-unverified"},
+                )
+                if unverified.status_code != 401:
+                    raise AssertionError(
+                        f"M41160_UNVERIFIED_ROUTE_AUTH_{unverified.status_code}"
+                    )
+                no_session = await client.get(path)
+                if no_session.status_code != 401:
+                    raise AssertionError(
+                        f"M41160_MISSING_SESSION_ROUTE_AUTH_{no_session.status_code}"
+                    )
+            print("M41160_TENANT_ROLE_NEGATIVE=PASS")
 
             issue_count = provider.issue_calls
             unverified = await client.get(
@@ -348,11 +481,6 @@ async def exercise(dsn: str) -> None:
             )
             if unverified.status_code != 401 or provider.issue_calls != issue_count:
                 raise AssertionError("M41150_UNVERIFIED_SESSION_REACHED_ISSUER")
-            no_session = await client.get(path_a)
-            if no_session.status_code != 401:
-                raise AssertionError("M41150_MISSING_SESSION_ACCEPTED")
-            print("M41150_NEGATIVE_ROUTE_AUTH=PASS")
-
             stale_capability = provider.last_capability
             if not stale_capability:
                 raise AssertionError("M41150_FIXTURE_CAPABILITY_MISSING")
@@ -401,6 +529,17 @@ def main() -> int:
     print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
     asyncio.run(exercise(dsn))
     print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41160_MIGRATIONS=NONE")
+    print("M41160_SERVICE_RESTARTS=NONE")
+    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41160_PIX_REAL=OFF")
+    print("M41160_PAGAMENTOS_REAIS=OFF")
+    print("M41160_ATIVACAO_REAL=OFF")
+    print("M41160_PRODUCTION=BLOCKED")
     print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
     print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
     print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")

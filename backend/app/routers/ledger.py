@@ -15,8 +15,7 @@ from ..models import (
     LedgerAccountDirectoryItemResponse, LedgerAccountJournalKeysetResponse,
 )
 from ..dependencies import get_current_session, require_tenant_access, AuthenticatedSession
-from ..database import get_rls_db_connection
-from ..m41150_fastapi_rls_context import get_ledger_directory_db_connection
+from ..m41150_fastapi_rls_context import get_ledger_readonly_db_connection
 from ..ledger_keyset import encode_cursor, decode_cursor, validate_rows
 
 router = APIRouter(prefix="/tenants/{tenant_id}/ledger", tags=["Livro-Razão e Contabilidade"])
@@ -84,7 +83,7 @@ def _summarize_integrity_rows(rows, tenant_id: str):
 async def get_ledger_integrity_preview(
     tenant_id: str,
     session: AuthenticatedSession = Depends(get_current_session),
-    conn=Depends(get_rls_db_connection),
+    conn=Depends(get_ledger_readonly_db_connection),
 ):
     """Aggregate ledger only for authorized tenant Admin; no journal entries exposed."""
     require_tenant_access(tenant_id, session)
@@ -157,7 +156,7 @@ def _validate_directory_accounts(rows, tenant: uuid.UUID) -> list:
 async def list_ledger_account_directory(
     tenant_id: str,
     session: AuthenticatedSession = Depends(get_current_session),
-    conn=Depends(get_ledger_directory_db_connection),
+    conn=Depends(get_ledger_readonly_db_connection),
 ):
     """Metadados das contas, SEM saldos, inclusive quando nao ha transacoes.
 
@@ -192,7 +191,7 @@ async def list_ledger_account_directory(
 async def list_ledger_accounts(
     tenant_id: str,
     session: AuthenticatedSession = Depends(get_current_session),
-    conn = Depends(get_rls_db_connection)
+    conn = Depends(get_ledger_readonly_db_connection)
 ):
     """
     Plano de contas e saldos consolidados da caixinha:
@@ -241,7 +240,7 @@ async def list_ledger_accounts(
 async def list_ledger_transactions(
     tenant_id: str,
     session: AuthenticatedSession = Depends(get_current_session),
-    conn = Depends(get_rls_db_connection)
+    conn = Depends(get_ledger_readonly_db_connection)
 ):
     """
     Extrato de transações em partidas dobradas:
@@ -313,7 +312,7 @@ async def list_ledger_account_entries(
     page: int = Query(1, ge=1, le=1000),
     page_size: int = Query(25, ge=1, le=MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE),
     session: AuthenticatedSession = Depends(get_current_session),
-    conn = Depends(get_rls_db_connection),
+    conn = Depends(get_ledger_readonly_db_connection),
 ):
     require_tenant_access(tenant_id, session)
     if session.role != "TENANT_ADMIN":
@@ -407,7 +406,7 @@ async def list_ledger_account_entries_keyset(
     cursor: str | None = Query(None, max_length=400),
     page_size: int = Query(25, ge=1, le=MAX_LEDGER_ACCOUNT_JOURNAL_PAGE_SIZE),
     session: AuthenticatedSession = Depends(get_current_session),
-    conn=Depends(get_rls_db_connection),
+    conn=Depends(get_ledger_readonly_db_connection),
 ):
     require_tenant_access(tenant_id, session)
     if session.role != "TENANT_ADMIN":
