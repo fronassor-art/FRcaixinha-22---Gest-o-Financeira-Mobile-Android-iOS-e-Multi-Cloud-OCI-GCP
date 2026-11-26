@@ -37,16 +37,18 @@ def allowed() -> bool:
 
 
 def payload(packet: dict) -> bytes:
-    if type(packet) is not dict or set(packet) != {"digest", "tenant", "pid", "vxid", "micros"}:
+    if type(packet) is not dict or set(packet) != {"digest", "tenant", "pid", "vxid", "micros", "challenge"}:
         raise ValueError("M41240_INVALID_PACKET")
     digest, tenant, pid, vxid, micros = (packet[k] for k in ("digest", "tenant", "pid", "vxid", "micros"))
-    if (type(digest) is not str or not HEX.fullmatch(digest)
+    challenge = packet["challenge"]
+    if (type(challenge) is not str or not HEX.fullmatch(challenge)
+            or type(digest) is not str or not HEX.fullmatch(digest)
             or type(tenant) is not str or str(UUID(tenant)) != tenant or UUID(tenant).int == 0
             or type(pid) is not int or not 0 < pid <= 2147483647
             or type(vxid) is not str or len(vxid) > 32 or not VXID.fullmatch(vxid)
             or type(micros) is not int or not 0 < micros < 2**63):
         raise ValueError("M41240_INVALID_PACKET")
-    return f"FRF-M41230|v1|{digest}|{tenant}|{pid}|{vxid}|{micros}".encode("ascii")
+    return f"FRF-M41270|v1|{digest}|{tenant}|{pid}|{vxid}|{micros}|{challenge}".encode("ascii")
 
 
 def process_credentials(pid: int) -> tuple[int, int, int]:
@@ -157,7 +159,7 @@ class TargetSigner:
             value, self._key = self._key, None
             return value
 
-    def sign(self, ticket, tenant, pid, vxid, started) -> str:
+    def sign(self, ticket, tenant, pid, vxid, started, *, challenge) -> str:
         if not isinstance(started, datetime) or started.utcoffset() is None:
             raise ValueError("M41240_INVALID_TIMESTAMP")
         if type(ticket) is not str or not HEX.fullmatch(ticket):
@@ -165,7 +167,7 @@ class TargetSigner:
         delta = started - datetime(1970, 1, 1, tzinfo=timezone.utc)
         packet = {
             "digest": sha256(ticket.encode("ascii")).hexdigest(), "tenant": str(tenant),
-            "pid": pid, "vxid": vxid,
+            "pid": pid, "vxid": vxid, "challenge": challenge,
             "micros": (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds,
         }
         payload(packet)

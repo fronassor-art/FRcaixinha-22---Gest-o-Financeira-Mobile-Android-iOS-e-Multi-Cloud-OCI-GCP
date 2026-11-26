@@ -386,7 +386,7 @@ async def test_m41220_invalid_transaction_identity_fails_closed(row):
 def test_m41230_signed_transaction_target_contract():
     fixture = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
     binding = fixture.split("CREATE FUNCTION m41050.bind_read_transaction(", 1)[1].split("CREATE FUNCTION m41050.current_claims_v4()", 1)[0]
-    assert "FRF-M41230|v1|" in binding
+    assert "FRF-M41270|v1|" in binding
     assert binding.index("p_proof<>v_expected") < binding.index("v_cap:=m41050.bind_ticket")
     assert "EXTRACT(EPOCH FROM p_started)*1000000" in binding
     assert "M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")
@@ -433,16 +433,17 @@ def test_m41240_worker_protocol_and_fail_closed(monkeypatch):
         tenant = uuid4()
         started = datetime(2026, 1, 1, tzinfo=timezone.utc)
         ticket = "a" * 64
-        message = f"FRF-M41230|v1|{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000"
-        assert signer.sign(ticket, tenant, 123, "1/2", started) == hmac.new(
+        challenge = "c" * 64
+        message = f"FRF-M41270|v1|{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000|{challenge}"
+        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64) == hmac.new(
             key, message.encode(), sha256
         ).hexdigest()
         with pytest.raises(ValueError):
-            signer.sign(ticket, tenant, 0, "1/2", started)
+            signer.sign(ticket, tenant, 0, "1/2", started, challenge=challenge)
     finally:
         signer.close()
     with pytest.raises(RuntimeError):
-        signer.sign(ticket, tenant, 123, "1/2", started)
+        signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64)
 
 
 def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
@@ -469,7 +470,7 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
         tenant, ticket = uuid4(), "b" * 64
         started = datetime(2026, 1, 1, tzinfo=timezone.utc)
         packet = {"digest": sha256(ticket.encode()).hexdigest(), "tenant": str(tenant),
-                  "pid": 123, "vxid": "1/2", "micros": 1767225600000000}
+                  "pid": 123, "vxid": "1/2", "micros": 1767225600000000, "challenge": "c" * 64}
         fd = signer._channel.fileno()
         # Deliberately pass the real descriptor to an unrelated same-UID child.
         # The kernel identifies the actual writer, not the owner of the socket.
@@ -485,7 +486,7 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
             pass_fds=(fd,), env={"PYTHONDONTWRITEBYTECODE": "1"},
             timeout=8, check=True,
         )
-        expected = signer.sign(ticket, tenant, 123, "1/2", started)
+        expected = signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64)
         assert len(expected) == 64
         # A valid parent still works after malformed and oversized packets.
         for invalid in (b"{}", b"x" * (module.MAX_FRAME + 1)):
@@ -493,7 +494,7 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
             response, cred = module.receive_frame(signer._channel, 64)
             assert response == b"DENIED"
             assert cred == module.process_credentials(signer._proc.pid)
-        assert signer.sign(ticket, tenant, 123, "1/2", started) == expected
+        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64) == expected
         print("M41250_SAME_UID_INHERITED_DESCRIPTOR_DENIED=PASS")
     finally:
         signer.close()
@@ -522,3 +523,43 @@ def test_m41260_challenge_checked_before_ticket_consumption():
     assert binding.index("p_challenge<>v_challenge_expected") < binding.index("v_cap:=m41050.bind_ticket")
     assert "FRF-M41260|v1|" in source
     assert "M41260_SQL_CHALLENGE_TARGET_SUBSTITUTION_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")
+
+
+def test_m41270_challenge_is_signed_and_legacy_domain_rejected(monkeypatch):
+    import importlib.util
+    import hmac
+    import sys
+    from datetime import datetime, timezone
+    from hashlib import sha256
+    from uuid import uuid4
+
+    if sys.platform != "linux":
+        pytest.skip("Linux CI process boundary")
+    path = ROOT / "backend/tests/m41240_target_signer_disposable.py"
+    spec = importlib.util.spec_from_file_location("m41270_worker_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for k, v in module.GATE.items():
+        monkeypatch.setenv(k, v)
+    signer = module.TargetSigner()
+    try:
+        key = signer.take_bootstrap_key()
+        tenant, ticket = uuid4(), "a" * 64
+        started = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        base = f"{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000"
+        a = signer.sign(ticket, tenant, 123, "1/2", started, challenge="b" * 64)
+        b = signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64)
+        assert a != b
+        assert a == hmac.new(key, ("FRF-M41270|v1|" + base + "|" + "b" * 64).encode(), sha256).hexdigest()
+        assert a != hmac.new(key, ("FRF-M41230|v1|" + base).encode(), sha256).hexdigest()
+        for invalid in (None, "", "A" * 64, "g" * 64, 123):
+            with pytest.raises(ValueError):
+                signer.sign(ticket, tenant, 123, "1/2", started, challenge=invalid)
+        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge="b" * 64) == a
+    finally:
+        signer.close()
+    source = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
+    binding = source.split("CREATE FUNCTION m41050.bind_read_transaction(", 1)[1].split("CREATE FUNCTION m41050.current_claims_v4()", 1)[0]
+    assert "'FRF-M41270|v1|'||v_payload||'|'||p_challenge" in binding
+    assert "FRF-M41230|v1|" not in binding
+    assert "M41270_LEGACY_AND_MIXED_PROOFS_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")

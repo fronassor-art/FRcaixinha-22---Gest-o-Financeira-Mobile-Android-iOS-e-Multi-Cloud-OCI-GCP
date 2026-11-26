@@ -481,18 +481,17 @@ def build_context_schema(owner) -> None:
           THEN RETURN NULL; END IF;
           SELECT key INTO v_secret FROM m41050.target_verifier_secret WHERE singleton=true;
           IF NOT FOUND THEN RETURN NULL; END IF;
-          v_payload:='FRF-M41230|v1|'||pg_catalog.encode(pg_catalog.sha256(
+          v_payload:=pg_catalog.encode(pg_catalog.sha256(
               pg_catalog.convert_to(p_ticket,'UTF8')),'hex')||'|'||p_tenant::text||'|'||
               p_pid::text||'|'||p_vxid||'|'||
               (EXTRACT(EPOCH FROM p_started)*1000000)::bigint::text;
           v_expected:=pg_catalog.encode(m40700.hmac(
-              pg_catalog.convert_to(v_payload,'UTF8'),v_secret,'sha256'),'hex');
+              pg_catalog.convert_to('FRF-M41270|v1|'||v_payload||'|'||p_challenge,'UTF8'),v_secret,'sha256'),'hex');
           IF p_proof<>v_expected THEN RETURN NULL; END IF;
           SELECT key INTO v_challenge_key FROM m41050.target_challenge_secret WHERE singleton=true;
           IF NOT FOUND THEN RETURN NULL; END IF;
           v_challenge_expected:=pg_catalog.encode(m40700.hmac(
-              pg_catalog.convert_to('FRF-M41260|v1|'||pg_catalog.substr(v_payload,
-                  pg_catalog.length('FRF-M41230|v1|')+1),'UTF8'),
+              pg_catalog.convert_to('FRF-M41260|v1|'||v_payload,'UTF8'),
               v_challenge_key,'sha256'),'hex');
           IF p_challenge<>v_challenge_expected THEN RETURN NULL; END IF;
           v_cap:=m41050.bind_ticket(p_ticket,p_tenant);
@@ -934,12 +933,14 @@ def issue_ticket(owner, auth_dsn: str, key: bytes, session_digest: str,
         ).fetchone()[0]
 
 
-def sign_read_transaction(key, ticket, tenant, pid, vxid, started):
+def sign_read_transaction(key, ticket, tenant, pid, vxid, started, *, challenge=None):
     """Synthetic issuer proof; never install this key in the real application."""
     delta = started - datetime(1970, 1, 1, tzinfo=timezone.utc)
     micros = (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds
     digest = sha256(ticket.encode("utf-8")).hexdigest()
-    payload = f"FRF-M41230|v1|{digest}|{tenant}|{pid}|{vxid}|{micros}"
+    base = f"{digest}|{tenant}|{pid}|{vxid}|{micros}"
+    payload = (f"FRF-M41230|v1|{base}" if challenge is None
+               else f"FRF-M41270|v1|{base}|{challenge}")
     return hmac.new(key, payload.encode("utf-8"), sha256).hexdigest()
 
 

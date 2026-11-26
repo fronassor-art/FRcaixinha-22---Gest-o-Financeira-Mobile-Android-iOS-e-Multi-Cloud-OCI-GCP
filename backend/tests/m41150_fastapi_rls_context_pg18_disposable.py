@@ -267,7 +267,7 @@ async def exercise(dsn: str) -> None:
 
         def bind_read(ticket, tenant, pid, vxid, started, *, challenge, proof=None):
             if proof is None:
-                proof = signer.sign(ticket, tenant, pid, vxid, started)
+                proof = signer.sign(ticket, tenant, pid, vxid, started, challenge=challenge)
             with psycopg.connect(app_dsn, autocommit=True) as app:
                 app.execute("SET ROLE m40650_app")
                 return app.execute(
@@ -594,8 +594,18 @@ async def exercise(dsn: str) -> None:
                     assert ticket
                     challenge = await gateway._read_target_challenge(first, ticket, tenant_a)
                     assert bind_read(ticket, tenant_a, pid, "0/0", started, challenge=challenge) is None
-                    proof = signer.sign(ticket, tenant_a, pid, vxid, started)
-                    issuer_proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started)
+                    proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=challenge)
+                    issuer_proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started, challenge=challenge)
+                    # Disposable owner constructs a negative legacy-domain proof only.
+                    legacy_key = owner.execute('SELECT key FROM m41050.target_verifier_secret WHERE singleton=true').fetchone()[0]
+                    legacy_proof = fixture.sign_read_transaction(legacy_key, ticket, tenant_a, pid, vxid, started)
+                    del legacy_key
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=legacy_proof) is None
+                    wrong_challenge = '0' * 64 if challenge != '0' * 64 else '1' * 64
+                    wrong_proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=wrong_challenge)
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=wrong_proof) is None
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=wrong_challenge, proof=wrong_proof) is None
+                    print('M41270_LEGACY_AND_MIXED_PROOFS_DENIED=PASS')
                     assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=issuer_proof) is None
                     print("M41240_ISSUER_KEY_CANNOT_BIND_TARGET=PASS")
                     for invalid_challenge in (None, "", "0" * 64, proof):
@@ -876,8 +886,8 @@ async def exercise(dsn: str) -> None:
                     pid, vxid, started = await gateway._read_transaction_identity(connection)
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_second_digest, tenant_a)
                     assert ticket
-                    proof = signer.sign(ticket, tenant_a, pid, vxid, started)
                     challenge = await gateway._read_target_challenge(connection, ticket, tenant_a)
+                    proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=challenge)
                     owner.execute("DELETE FROM m41050.target_verifier_secret")
                     assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=proof) is None
                     assert not await connection.fetch("SELECT id FROM public.ledger_accounts")

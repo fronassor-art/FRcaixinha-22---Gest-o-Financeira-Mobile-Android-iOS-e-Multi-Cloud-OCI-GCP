@@ -43,7 +43,8 @@ class SessionCapabilityProvider(Protocol):
     """Runtime-supplied issuer/binder; no signing key is held by this module.
 
     M41230: binding requires issuer authorization of the exact target transaction.
-    Independent real issuer/process custody is pending; no provider is enabled.
+    M41270: the disposable signer authenticates the exact SQL challenge as part
+    of the target proof. Independent real custody is pending; no provider is enabled.
     """
 
     async def issue_ticket(
