@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 DB = "fr_m40700_disposable_ci"
 PORT = 55439
 SCOPE = "READ_ENTRIES"
+WRITE_SCOPE = "WRITE_TEST_ENTRY"
 
 
 def require_disposable_ci() -> None:
@@ -84,6 +85,17 @@ def bootstrap(owner, verifier_secret: bytes) -> None:
     owner.execute("ALTER TABLE m40700.used_nonces OWNER TO m40650_owner")
     owner.execute("REVOKE ALL ON m40700.used_nonces FROM PUBLIC, m40680_auth, m40650_app")
     owner.execute("""
+        CREATE TABLE m40700.ticket_scopes(
+          ticket_digest text PRIMARY KEY
+            CHECK(ticket_digest ~ '^[0-9a-f]{64}$'),
+          scope_name text NOT NULL
+            CHECK(scope_name IN ('READ_ENTRIES','WRITE_TEST_ENTRY')),
+          issued_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+        )
+    """)
+    owner.execute("ALTER TABLE m40700.ticket_scopes OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON m40700.ticket_scopes FROM PUBLIC, m40680_auth, m40650_app")
+    owner.execute("""
         CREATE FUNCTION m40700.issue_bound(
             p_digest text, p_tenant uuid, p_nonce uuid,
             p_expiry bigint, p_scope text, p_proof text
@@ -100,7 +112,9 @@ def bootstrap(owner, verifier_secret: bytes) -> None:
         BEGIN
           IF p_digest IS NULL OR p_digest !~ '^[0-9a-f]{64}$'
              OR p_tenant IS NULL OR p_nonce IS NULL
-             OR p_expiry IS NULL OR p_scope IS DISTINCT FROM 'READ_ENTRIES'
+             OR p_expiry IS NULL
+             OR (p_scope IS DISTINCT FROM 'READ_ENTRIES'
+                 AND p_scope IS DISTINCT FROM 'WRITE_TEST_ENTRY')
              OR p_proof IS NULL OR p_proof !~ '^[0-9a-f]{64}$'
              OR p_expiry<=pg_catalog.floor(
                     pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint
@@ -146,6 +160,12 @@ def bootstrap(owner, verifier_secret: bytes) -> None:
               pg_catalog.sha256(pg_catalog.convert_to(v_ticket,'UTF8')),'hex'),
             p_digest,p_tenant,
             pg_catalog.clock_timestamp()+interval '20 seconds'
+          );
+          INSERT INTO m40700.ticket_scopes(ticket_digest,scope_name)
+          VALUES(
+            pg_catalog.encode(
+              pg_catalog.sha256(pg_catalog.convert_to(v_ticket,'UTF8')),'hex'),
+            p_scope
           );
           RETURN v_ticket;
         END

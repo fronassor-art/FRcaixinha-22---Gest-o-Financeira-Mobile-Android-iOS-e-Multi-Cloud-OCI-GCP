@@ -18,6 +18,7 @@ TESTS = ROOT / "backend" / "tests"
 sys.path.insert(0, str(TESTS))
 from m40700_request_proof_disposable import (
     SCOPE,
+    WRITE_SCOPE,
     bootstrap as bootstrap_m40700,
     sign as sign_m40700,
 )
@@ -34,6 +35,7 @@ def require_disposable() -> str:
         "GITHUB_ACTIONS": "true",
         "FRCAIXINHA_CI_ISOLATED": "1",
         "CI_M41050_DISPOSABLE": "1",
+        "CI_M41060_DISPOSABLE": "1",
         "CI_M40700_DISPOSABLE": "1",
         "CI_M40680_DISPOSABLE": "1",
         "CI_M40560_DISPOSABLE": "1",
@@ -85,6 +87,8 @@ def build_context_schema(owner) -> None:
           session_digest text NOT NULL,
           tenant_id uuid NOT NULL,
           expires_at timestamptz NOT NULL,
+          scope_name text NOT NULL
+            CHECK(scope_name IN ('READ_ENTRIES','WRITE_TEST_ENTRY')),
           revoked_at timestamptz
         )
     """)
@@ -93,7 +97,10 @@ def build_context_schema(owner) -> None:
           entry_id uuid PRIMARY KEY,
           tenant_id uuid NOT NULL,
           member_id uuid NOT NULL,
-          amount_cents integer NOT NULL CHECK (amount_cents>0)
+          amount_cents integer NOT NULL CHECK (amount_cents>0),
+          idempotency_key text NOT NULL
+            CHECK(pg_catalog.length(idempotency_key) BETWEEN 8 AND 128),
+          UNIQUE(tenant_id,idempotency_key)
         )
     """)
     owner.execute("""
@@ -110,6 +117,7 @@ def build_context_schema(owner) -> None:
           v_role text;
           v_tenant uuid;
           v_expiry timestamptz;
+          v_scope text;
           v_capability text;
         BEGIN
           IF p_ticket IS NULL OR p_ticket !~ '^[0-9a-f]{64}$'
@@ -125,9 +133,11 @@ def build_context_schema(owner) -> None:
           v_ticket_digest := pg_catalog.encode(
             pg_catalog.sha256(pg_catalog.convert_to(p_ticket,'UTF8')),'hex'
           );
-          SELECT t.session_digest,t.expires_at
-            INTO v_session_digest,v_expiry
+          SELECT t.session_digest,t.expires_at,x.scope_name
+            INTO v_session_digest,v_expiry,v_scope
             FROM m40650.m40680_tickets AS t
+            JOIN m40700.ticket_scopes AS x
+              ON x.ticket_digest=t.digest
            WHERE t.digest=v_ticket_digest
              AND t.tenant_id=p_tenant
              AND t.used_at IS NOT NULL;
@@ -159,13 +169,13 @@ def build_context_schema(owner) -> None:
             pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','')
             || pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
           INSERT INTO m41050.session_caps(
-            token_hash,session_digest,tenant_id,expires_at
+            token_hash,session_digest,tenant_id,expires_at,scope_name
           )
           VALUES(
             pg_catalog.sha256(
               pg_catalog.convert_to(v_capability,'UTF8')
             ),
-            v_session_digest,v_tenant,v_expiry
+            v_session_digest,v_tenant,v_expiry,v_scope
           );
           RETURN v_capability;
         END
@@ -186,7 +196,7 @@ def build_context_schema(owner) -> None:
           THEN RETURN; END IF;
 
           RETURN QUERY
-          SELECT s.user_id,s.active_role,s.active_tenant_id,'READ_ENTRIES'::text
+          SELECT s.user_id,s.active_role,s.active_tenant_id,c.scope_name
             FROM m41050.session_caps AS c
             JOIN m40650.sessions AS s
               ON s.token_digest=c.session_digest
@@ -243,6 +253,38 @@ def build_context_schema(owner) -> None:
           )
         )
     """)
+    owner.execute("""
+        CREATE FUNCTION m41050.can_write_entry(p_tenant uuid,p_member uuid)
+        RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp
+        AS $body$
+          SELECT EXISTS(
+            SELECT 1
+              FROM m41050.current_claims() AS c
+              JOIN m40650.memberships AS m
+                ON m.user_id=p_member
+               AND m.tenant_id=p_tenant
+               AND m.role='TENANT_MEMBER'
+               AND m.status='ATIVA'
+              JOIN m40650.users AS u
+                ON u.id=m.user_id AND u.status='ACTIVE'
+             WHERE c.scope_name='WRITE_TEST_ENTRY'
+               AND c.role_name='TENANT_ADMIN'
+               AND c.tenant_id=p_tenant
+          )
+        $body$
+    """)
+    owner.execute("""
+        ALTER FUNCTION m41050.can_write_entry(uuid,uuid)
+        OWNER TO m40650_owner
+    """)
+    owner.execute("""
+        CREATE POLICY tenant_write ON m41050.protected_entries
+        FOR INSERT TO m40650_app
+        WITH CHECK (
+          m41050.can_write_entry(tenant_id,member_id)
+        )
+    """)
     owner.execute("REVOKE ALL ON ALL TABLES IN SCHEMA m41050 FROM PUBLIC")
     owner.execute(
         "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA m41050 FROM PUBLIC"
@@ -257,6 +299,13 @@ def build_context_schema(owner) -> None:
     owner.execute("""
         GRANT EXECUTE ON FUNCTION m41050.current_claims()
         TO m40650_app
+    """)
+    owner.execute("""
+        GRANT EXECUTE ON FUNCTION m41050.can_write_entry(uuid,uuid)
+        TO m40650_app
+    """)
+    owner.execute("""
+        GRANT INSERT ON m41050.protected_entries TO m40650_app
     """)
 
 
@@ -301,16 +350,17 @@ def connection_dsns(dsn: str) -> tuple[str,str]:
 
 
 def issue_ticket(auth_dsn: str, key: bytes, session_digest: str,
-                 tenant_id, *, nonce=None, expiry=None) -> str | None:
+                 tenant_id, *, nonce=None, expiry=None,
+                 scope: str = SCOPE) -> str | None:
     import psycopg
     nonce = nonce or uuid4()
     expiry = expiry or int(datetime.now(timezone.utc).timestamp())+15
-    proof = sign_m40700(key,session_digest,tenant_id,nonce,expiry,SCOPE)
+    proof = sign_m40700(key,session_digest,tenant_id,nonce,expiry,scope)
     with psycopg.connect(auth_dsn,autocommit=True) as auth:
         auth.execute("SET ROLE m40680_auth")
         return auth.execute(
             "SELECT m40700.issue_bound(%s,%s,%s,%s,%s,%s)",
-            (session_digest,tenant_id,nonce,expiry,SCOPE,proof),
+            (session_digest,tenant_id,nonce,expiry,scope,proof),
         ).fetchone()[0]
 
 
@@ -321,6 +371,51 @@ def bind_ticket(app_dsn: str, ticket: str, tenant_id) -> str | None:
         return app.execute(
             "SELECT m41050.bind_ticket(%s,%s)",(ticket,tenant_id)
         ).fetchone()[0]
+
+
+def insert_entry(app_dsn: str, capability: str, tenant_id, member_id,
+                 amount_cents: int, idempotency_key: str,
+                 *, forged: tuple[str,str,str] | None = None) -> int:
+    import psycopg
+    with psycopg.connect(app_dsn,autocommit=False) as app:
+        app.execute("SET ROLE m40650_app")
+        app.execute(
+            "SELECT pg_catalog.set_config('app.session_capability',%s,true)",
+            (capability,),
+        )
+        if forged is not None:
+            role,user_id,claimed_tenant=forged
+            for key,value in (
+                ("app.current_role",role),
+                ("app.current_user_id",user_id),
+                ("app.current_tenant_id",claimed_tenant),
+            ):
+                app.execute(
+                    "SELECT pg_catalog.set_config(%s,%s,true)",(key,value)
+                )
+        result=app.execute(
+            "INSERT INTO m41050.protected_entries "
+            "(entry_id,tenant_id,member_id,amount_cents,idempotency_key) "
+            "VALUES (%s,%s,%s,%s,%s) "
+            "ON CONFLICT (tenant_id,idempotency_key) DO NOTHING",
+            (uuid4(),tenant_id,member_id,amount_cents,idempotency_key),
+        )
+        row_count=result.rowcount
+        app.commit()
+        return row_count
+
+
+def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
+    import psycopg
+    try:
+        insert_entry(app_dsn,*args,**kwargs)
+    except psycopg.errors.InsufficientPrivilege:
+        return
+    except psycopg.Error as exc:
+        if exc.sqlstate!="42501":
+            raise
+        return
+    raise AssertionError("M41060_EXPECTED_RLS_WRITE_DENIAL")
 
 
 def visible_entries(app_dsn: str, *, capability: str | None = None,
@@ -380,8 +475,41 @@ def assert_acl(owner) -> None:
         "FROM pg_catalog.pg_class WHERE oid='m41050.protected_entries'::regclass"
     ).fetchone()
     assert rls==(True,True)
+    assert owner.execute(
+        "SELECT has_table_privilege(%s,'m41050.protected_entries','SELECT')",
+        (app_role,),
+    ).fetchone()[0]
+    assert owner.execute(
+        "SELECT has_table_privilege(%s,'m41050.protected_entries','INSERT')",
+        (app_role,),
+    ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_table_privilege(%s,'m41050.protected_entries','UPDATE')",
+        (app_role,),
+    ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_table_privilege(%s,'m41050.protected_entries','DELETE')",
+        (app_role,),
+    ).fetchone()[0]
+    policy_commands={
+        row[0] for row in owner.execute(
+            "SELECT cmd FROM pg_catalog.pg_policies "
+            "WHERE schemaname='m41050' AND tablename='protected_entries'"
+        ).fetchall()
+    }
+    assert policy_commands=={"SELECT","INSERT"}
+    assert owner.execute(
+        "SELECT has_function_privilege(%s,'m41050.can_write_entry(uuid,uuid)','EXECUTE')",
+        (app_role,),
+    ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_table_privilege(%s,'m40700.ticket_scopes','SELECT')",
+        (app_role,),
+    ).fetchone()[0]
     print("M41050_APP_CANNOT_READ_CAPABILITY_STORE_OR_ISSUER=PASS")
     print("M41050_RLS_FORCE_AND_SCOPED_EXECUTE=PASS")
+    print("M41060_APPEND_ONLY_SELECT_INSERT_ACL=PASS")
+    print("M41060_WRITE_RLS_POLICY_PRESENT=PASS")
 
 
 def run(dsn: str) -> None:
@@ -440,9 +568,9 @@ def run(dsn: str) -> None:
             )
             owner.execute(
                 "INSERT INTO m41050.protected_entries "
-                "(entry_id,tenant_id,member_id,amount_cents) "
-                "VALUES (%s,%s,%s,%s)",
-                (entry,tenant,user,amount*100),
+                "(entry_id,tenant_id,member_id,amount_cents,idempotency_key) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (entry,tenant,user,amount*100,"seed:"+str(entry)),
             )
 
         assert_acl(owner)
@@ -488,6 +616,80 @@ def run(dsn: str) -> None:
         }
         print("M41050_ADMIN_MEMBER_RLS_READ_BOUNDARY=PASS")
 
+        # M41060 carries the signed action scope through ticket consumption.
+        # Read-only claims cannot write. Write claims are append-only and
+        # limited to active tenant admins and active members in that tenant.
+        expect_insert_denied(
+            app_dsn,cap_a,tenant_a,member_a,7777,
+            "m41060:readonly:"+uuid4().hex,
+        )
+        print("M41060_READ_SCOPE_CANNOT_WRITE=DENIED")
+
+        member_write_ticket=issue_ticket(
+            auth_dsn,key,digest_a,tenant_a,scope=WRITE_SCOPE
+        )
+        assert member_write_ticket is not None
+        member_write_cap=bind_ticket(app_dsn,member_write_ticket,tenant_a)
+        assert member_write_cap is not None
+        expect_insert_denied(
+            app_dsn,member_write_cap,tenant_a,member_a,8888,
+            "m41060:member:"+uuid4().hex,
+        )
+        print("M41060_MEMBER_WRITE=DENIED")
+
+        assert issue_ticket(
+            auth_dsn,key,digest_admin,tenant_a,scope="WRITE_ANYTHING"
+        ) is None
+        print("M41060_UNLISTED_SCOPE=DENIED")
+
+        admin_write_ticket=issue_ticket(
+            auth_dsn,key,digest_admin,tenant_a,scope=WRITE_SCOPE
+        )
+        assert admin_write_ticket is not None
+        admin_write_cap=bind_ticket(app_dsn,admin_write_ticket,tenant_a)
+        assert admin_write_cap is not None
+        assert visible_entries(app_dsn,capability=admin_write_cap)==[]
+        print("M41060_WRITE_CAPABILITY_CANNOT_READ=DENIED")
+
+        forged_write=("MASTER",str(master),str(tenant_b))
+        once_key="m41060:admin:"+uuid4().hex
+        assert insert_entry(
+            app_dsn,admin_write_cap,tenant_a,member_a,15000,once_key,
+            forged=forged_write,
+        )==1
+        assert insert_entry(
+            app_dsn,admin_write_cap,tenant_a,member_a,15000,once_key,
+            forged=forged_write,
+        )==0
+        expect_insert_denied(
+            app_dsn,admin_write_cap,tenant_b,member_b,15000,
+            "m41060:crosstenant:"+uuid4().hex,
+            forged=("TENANT_ADMIN",str(admin_a),str(tenant_a)),
+        )
+        print("M41060_ADMIN_TENANT_WRITE_AND_CROSS_TENANT_DENIAL=PASS")
+
+        # Six separate SQL sessions race the same tenant-scoped idempotency key.
+        race_key="m41060:race:"+uuid4().hex
+        workers=6
+        barrier=Barrier(workers,timeout=20)
+        def race_insert(_index):
+            barrier.wait(timeout=20)
+            return insert_entry(
+                app_dsn,admin_write_cap,tenant_a,member_other,22000,race_key
+            )
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            inserted=list(pool.map(race_insert,range(workers)))
+        assert sum(inserted)==1
+        with connect(dsn,autocommit=True) as verify:
+            count=verify.execute(
+                "SELECT count(*) FROM m41050.protected_entries "
+                "WHERE tenant_id=%s AND idempotency_key=%s",
+                (tenant_a,race_key),
+            ).fetchone()[0]
+        assert count==1
+        print("M41060_CONCURRENT_IDEMPOTENCY_SINGLE_ROW=PASS")
+        print("M41060_GATE=NO_GO_PENDING_REAL_STAGING_AND_INDEPENDENT_REVIEW")
+
         # Six app SQL connections race one valid ticket; atomic ticket consume
         # permits only one capability to be minted.
         race_ticket=issue_ticket(auth_dsn,key,digest_other,tenant_a)
@@ -518,6 +720,7 @@ def run(dsn: str) -> None:
         )==[]
         print("M41050_REVOKED_SESSION_CAPABILITY=DENIED")
         print("M41050_GATE=NO_GO_UNTIL_KEY_CUSTODY_AND_RUNTIME_ATTESTATION")
+        print("M41060_STATUS=PASS_DISPOSABLE_WRITE_RLS_ONLY")
 
 
 def main() -> int:

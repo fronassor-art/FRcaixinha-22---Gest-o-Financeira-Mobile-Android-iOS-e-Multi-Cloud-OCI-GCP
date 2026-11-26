@@ -99,6 +99,7 @@ def test_workflow_and_document_preserve_no_go_and_never_target_local_sql():
     doc = DOC.read_text(encoding="utf-8")
     for marker in (
         "postgres:18", "55439:5432", "CI_M41050_DISPOSABLE: '1'",
+        "CI_M41060_DISPOSABLE: '1'",
         "CI_M40700_DISPOSABLE: '1'", "PIX_REAL: 'OFF'",
         "PAGAMENTOS_REAIS: 'OFF'", "ATIVACAO_REAL: 'OFF'",
         "contents: read", "m41050_sql_sealed_context_pg18_disposable.py",
