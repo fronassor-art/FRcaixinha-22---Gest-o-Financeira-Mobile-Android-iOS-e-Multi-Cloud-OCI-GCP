@@ -375,7 +375,8 @@ def bind_ticket(app_dsn: str, ticket: str, tenant_id) -> str | None:
 
 def insert_entry(app_dsn: str, capability: str, tenant_id, member_id,
                  amount_cents: int, idempotency_key: str,
-                 *, forged: tuple[str,str,str] | None = None) -> int:
+                 *, forged: tuple[str,str,str] | None = None,
+                 verify_authorized: bool = False) -> int:
     import psycopg
     with psycopg.connect(app_dsn,autocommit=False) as app:
         app.execute("SET ROLE m40650_app")
@@ -393,13 +394,27 @@ def insert_entry(app_dsn: str, capability: str, tenant_id, member_id,
                 app.execute(
                     "SELECT pg_catalog.set_config(%s,%s,true)",(key,value)
                 )
-        result=app.execute(
-            "INSERT INTO m41050.protected_entries "
-            "(entry_id,tenant_id,member_id,amount_cents,idempotency_key) "
-            "VALUES (%s,%s,%s,%s,%s) "
-            "ON CONFLICT (tenant_id,idempotency_key) DO NOTHING",
-            (uuid4(),tenant_id,member_id,amount_cents,idempotency_key),
-        )
+        if verify_authorized:
+            allowed=app.execute(
+                "SELECT m41050.can_write_entry(%s,%s)",
+                (tenant_id,member_id),
+            ).fetchone()[0]
+            assert allowed is True
+            print("M41060_SAME_CONNECTION_WRITE_SCOPE=PASS")
+        app.execute("SAVEPOINT idempotency_attempt")
+        try:
+            result=app.execute(
+                "INSERT INTO m41050.protected_entries "
+                "(entry_id,tenant_id,member_id,amount_cents,idempotency_key) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (uuid4(),tenant_id,member_id,amount_cents,idempotency_key),
+            )
+        except psycopg.errors.UniqueViolation:
+            app.execute("ROLLBACK TO SAVEPOINT idempotency_attempt")
+            app.execute("RELEASE SAVEPOINT idempotency_attempt")
+            app.commit()
+            return 0
+        app.execute("RELEASE SAVEPOINT idempotency_attempt")
         row_count=result.rowcount
         app.commit()
         return row_count
@@ -697,6 +712,7 @@ def run(dsn: str) -> None:
         once_key="m41060:admin:"+uuid4().hex
         assert insert_entry(
             app_dsn,admin_write_cap,tenant_a,member_a,15000,once_key,
+            verify_authorized=True,
         )==1
         assert insert_entry(
             app_dsn,admin_write_cap,tenant_a,member_a,15000,once_key,
