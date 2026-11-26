@@ -419,7 +419,9 @@ def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
 
 
 def write_authorization_state(app_dsn: str, capability: str,
-                            tenant_id, member_id) -> tuple[list[tuple], bool]:
+                            tenant_id, member_id,
+                            *, forged: tuple[str,str,str] | None = None
+                            ) -> tuple[list[tuple], bool]:
     import psycopg
     with psycopg.connect(app_dsn,autocommit=False) as app:
         app.execute("SET ROLE m40650_app")
@@ -427,6 +429,16 @@ def write_authorization_state(app_dsn: str, capability: str,
             "SELECT pg_catalog.set_config('app.session_capability',%s,true)",
             (capability,),
         )
+        if forged is not None:
+            role,user_id,claimed_tenant=forged
+            for key,value in (
+                ("app.current_role",role),
+                ("app.current_user_id",user_id),
+                ("app.current_tenant_id",claimed_tenant),
+            ):
+                app.execute(
+                    "SELECT pg_catalog.set_config(%s,%s,true)",(key,value)
+                )
         claims=app.execute(
             "SELECT user_id,role_name,tenant_id,scope_name "
             "FROM m41050.current_claims()"
@@ -671,24 +683,23 @@ def run(dsn: str) -> None:
         assert visible_entries(app_dsn,capability=admin_write_cap)==[]
         print("M41060_WRITE_CAPABILITY_CANNOT_READ=DENIED")
 
+        forged_write=("MASTER",str(master),str(tenant_b))
         admin_claims,admin_can_write=write_authorization_state(
-            app_dsn,admin_write_cap,tenant_a,member_a
+            app_dsn,admin_write_cap,tenant_a,member_a,forged=forged_write
         )
         assert admin_claims==[
             (admin_a,"TENANT_ADMIN",tenant_a,WRITE_SCOPE)
         ]
         assert admin_can_write is True
         print("M41060_ADMIN_WRITE_SCOPE_RESOLVED=PASS")
+        print("M41060_ADMIN_WRITE_SCOPE_RESISTS_LEGACY_GUCS=PASS")
 
-        forged_write=("MASTER",str(master),str(tenant_b))
         once_key="m41060:admin:"+uuid4().hex
         assert insert_entry(
             app_dsn,admin_write_cap,tenant_a,member_a,15000,once_key,
-            forged=forged_write,
         )==1
         assert insert_entry(
             app_dsn,admin_write_cap,tenant_a,member_a,15000,once_key,
-            forged=forged_write,
         )==0
         expect_insert_denied(
             app_dsn,admin_write_cap,tenant_b,member_b,15000,

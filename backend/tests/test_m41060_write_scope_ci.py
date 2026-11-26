@@ -60,6 +60,7 @@ def test_read_write_policy_and_append_only_boundary_are_explicit():
         "M41060_MEMBER_WRITE=DENIED",
         "M41060_WRITE_CAPABILITY_CANNOT_READ=DENIED",
         "M41060_ADMIN_WRITE_SCOPE_RESOLVED=PASS",
+        "M41060_ADMIN_WRITE_SCOPE_RESISTS_LEGACY_GUCS=PASS",
         "def write_authorization_state",
         "M41060_ADMIN_TENANT_WRITE_AND_CROSS_TENANT_DENIAL=PASS",
         "M41060_APPEND_ONLY_SELECT_INSERT_ACL=PASS",
