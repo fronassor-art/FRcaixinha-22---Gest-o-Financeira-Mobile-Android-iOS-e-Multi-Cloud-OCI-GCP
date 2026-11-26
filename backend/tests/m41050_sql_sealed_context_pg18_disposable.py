@@ -40,6 +40,7 @@ def require_disposable() -> str:
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41060_DISPOSABLE": "1",
         "CI_M41080_DISPOSABLE": "1",
+        "CI_M41090_DISPOSABLE": "1",
         "CI_M40700_DISPOSABLE": "1",
         "CI_M40680_DISPOSABLE": "1",
         "CI_M40560_DISPOSABLE": "1",
@@ -63,6 +64,7 @@ def require_disposable() -> str:
             and not parsed.fragment
             and os.environ.get("CI_M40700_DATABASE_URL") == dsn
             and os.environ.get("CI_M41080_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41090_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -431,6 +433,7 @@ def _m41080_validate_disposable_dsn(dsn: str):
         "GITHUB_ACTIONS": "true",
         "FRCAIXINHA_CI_ISOLATED": "1",
         "CI_M41080_DISPOSABLE": "1",
+        "CI_M41090_DISPOSABLE": "1",
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41060_DISPOSABLE": "1",
         "PIX_REAL": "OFF",
@@ -452,6 +455,7 @@ def _m41080_validate_disposable_dsn(dsn: str):
             and not parsed.fragment
             and os.environ.get("CI_M41050_DATABASE_URL") == dsn
             and os.environ.get("CI_M41080_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41090_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -570,6 +574,121 @@ async def _m41080_asyncpg_insert_entry(
         return "INSERTED"
     finally:
         await connection.close()
+
+
+async def _m41090_create_asyncpg_pool(dsn: str):
+    parsed = _m41080_validate_disposable_dsn(dsn)
+    import asyncpg
+    return await asyncpg.create_pool(
+        host=parsed.hostname,
+        port=parsed.port,
+        database=DATABASE,
+        user="m40650_ci_login",
+        password=APP_PASSWORD,
+        min_size=1,
+        max_size=1,
+        timeout=5,
+        command_timeout=5,
+    )
+
+
+async def _m41090_assert_pool_clean(connection, expected_pid: int) -> None:
+    state = await connection.fetchrow(
+        "SELECT pg_backend_pid() AS backend_pid, "
+        "current_user::text AS effective_role, "
+        "session_user::text AS login_role, "
+        "pg_catalog.current_setting('app.session_capability', true) AS capability, "
+        "pg_catalog.current_setting('app.current_role', true) AS legacy_role, "
+        "pg_catalog.current_setting('app.current_user_id', true) AS legacy_user, "
+        "pg_catalog.current_setting('app.current_tenant_id', true) AS legacy_tenant"
+    )
+    assert state["backend_pid"] == expected_pid, "M41090_ASYNCPG_POOL_BACKEND_CHANGED"
+    assert state["effective_role"] == "m40650_ci_login", "M41090_ASYNCPG_POOL_ROLE_LEAK"
+    assert state["login_role"] == "m40650_ci_login", "M41090_ASYNCPG_POOL_LOGIN_CHANGED"
+    assert all(
+        state[key] in (None, "")
+        for key in ("capability", "legacy_role", "legacy_user", "legacy_tenant")
+    ), "M41090_ASYNCPG_POOL_CONTEXT_LEAK"
+
+    async with connection.transaction():
+        await connection.execute("SET LOCAL ROLE m40650_app")
+        claim_count = await connection.fetchval(
+            "SELECT count(*) FROM m41050.current_claims()"
+        )
+        rows = await connection.fetch(
+            "SELECT tenant_id, member_id, amount_cents "
+            "FROM m41050.protected_entries "
+            "ORDER BY tenant_id, member_id, amount_cents, entry_id"
+        )
+    assert claim_count == 0, "M41090_ASYNCPG_POOL_STALE_CLAIMS"
+    assert rows == [], "M41090_ASYNCPG_POOL_STALE_RLS_ROWS"
+
+
+async def _m41090_exercise_asyncpg_pool(
+    dsn: str,
+    capability: str,
+    expected_rows: list[tuple],
+    forged: tuple[str, str, str],
+) -> None:
+    pool = await _m41090_create_asyncpg_pool(dsn)
+    backend_pid = None
+
+    class _ExpectedRollback(Exception):
+        pass
+
+    try:
+        async with pool.acquire() as connection:
+            backend_pid = await connection.fetchval("SELECT pg_backend_pid()")
+            async with connection.transaction():
+                await connection.execute("SET LOCAL ROLE m40650_app")
+                await install_session_capability(connection, capability)
+                await _m41080_set_forged_gucs(connection, forged)
+                rows = await connection.fetch(
+                    "SELECT tenant_id, member_id, amount_cents "
+                    "FROM m41050.protected_entries "
+                    "ORDER BY tenant_id, member_id, amount_cents, entry_id"
+                )
+                visible = [
+                    (row["tenant_id"], row["member_id"], row["amount_cents"])
+                    for row in rows
+                ]
+                assert visible == expected_rows, "M41090_ASYNCPG_POOL_VALID_SCOPE"
+            await _m41090_assert_pool_clean(connection, backend_pid)
+            print("M41090_ASYNCPG_POOL_COMMIT_TRANSACTION_RESET=PASS")
+
+        async with pool.acquire() as connection:
+            await _m41090_assert_pool_clean(connection, backend_pid)
+            print("M41090_ASYNCPG_POOL_COMMIT_REACQUIRE_RESET=PASS")
+
+        async with pool.acquire() as connection:
+            assert await connection.fetchval("SELECT pg_backend_pid()") == backend_pid
+            try:
+                async with connection.transaction():
+                    await connection.execute("SET LOCAL ROLE m40650_app")
+                    await install_session_capability(connection, capability)
+                    await _m41080_set_forged_gucs(connection, forged)
+                    rows = await connection.fetch(
+                        "SELECT tenant_id, member_id, amount_cents "
+                        "FROM m41050.protected_entries "
+                        "ORDER BY tenant_id, member_id, amount_cents, entry_id"
+                    )
+                    visible = [
+                        (row["tenant_id"], row["member_id"], row["amount_cents"])
+                        for row in rows
+                    ]
+                    assert visible == expected_rows, "M41090_ASYNCPG_POOL_ROLLBACK_SCOPE"
+                    raise _ExpectedRollback()
+            except _ExpectedRollback:
+                pass
+            await _m41090_assert_pool_clean(connection, backend_pid)
+            print("M41090_ASYNCPG_POOL_ROLLBACK_TRANSACTION_RESET=PASS")
+
+        async with pool.acquire() as connection:
+            await _m41090_assert_pool_clean(connection, backend_pid)
+            print("M41090_ASYNCPG_POOL_ROLLBACK_REACQUIRE_RESET=PASS")
+        print("M41090_ASYNCPG_POOL_REUSED_SAME_BACKEND=PASS")
+    finally:
+        await pool.close()
 
 
 def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
@@ -945,15 +1064,18 @@ def run(dsn: str) -> None:
         async_race_key = "m41080:asyncpg-race:" + uuid4().hex
 
         async def exercise_m41080_asyncpg():
+            expected_member_rows = [
+                (tenant_a, member_a, 15000),
+                (tenant_a, member_a, 1250000),
+            ]
+            await _m41090_exercise_asyncpg_pool(
+                dsn, async_read_cap, expected_member_rows, forged_master
+            )
             own_rows = await _m41080_asyncpg_visible_entries(
                 dsn, async_read_cap, forged=forged_master
             )
             # M41060 committed one prior admin append for member_a; a
             # member capability must see both own rows and no other member.
-            expected_member_rows = [
-                (tenant_a, member_a, 15000),
-                (tenant_a, member_a, 1250000),
-            ]
             assert own_rows == expected_member_rows, "M41080_ASYNCPG_MEMBER_RLS_MISMATCH"
             print("M41080_ASYNCPG_M41060_PRIOR_MEMBER_ROW_ACCOUNTED=PASS")
             print("M41080_ASYNCPG_MEMBER_RLS_FORGED_CONTEXT=PASS")
@@ -1038,10 +1160,11 @@ def main() -> int:
         diagnostic = str(exc)
         if (
             isinstance(exc, AssertionError)
-            and diagnostic.startswith("M41080_ASYNCPG_")
+            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_"))
             and diagnostic.replace("_", "").isalnum()
         ):
-            print("M41080_DIAGNOSTIC="+diagnostic)
+            prefix = "M41090_DIAGNOSTIC=" if diagnostic.startswith("M41090_") else "M41080_DIAGNOSTIC="
+            print(prefix+diagnostic)
         print("M41050_STATUS=BLOCKED_"+type(exc).__name__)
         return 2
     finally:

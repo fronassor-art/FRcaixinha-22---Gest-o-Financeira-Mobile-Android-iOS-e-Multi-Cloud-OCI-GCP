@@ -9,6 +9,7 @@ RUNNER = ROOT / "backend" / "tests" / "m41050_sql_sealed_context_pg18_disposable
 M41050_WORKFLOW = ROOT / ".github" / "workflows" / "frfinance-m41050-signed-session-context-pg18-ci.yml"
 M41060_WORKFLOW = ROOT / ".github" / "workflows" / "frfinance-m41060-write-rls-pg18-ci.yml"
 DOC = ROOT / "docs" / "FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md"
+DOC90 = ROOT / "docs" / "FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md"
 SOURCE = RUNNER.read_text(encoding="utf-8")
 
 
@@ -62,6 +63,9 @@ def test_both_existing_disposable_workflows_include_m41080_without_real_flags():
             "asyncpg==0.30.0",
             "backend/tests/test_m41080_asyncpg_rls_ci.py",
             "docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md",
+            "docs/FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md",
+            "CI_M41090_DISPOSABLE",
+            "CI_M41090_DATABASE_URL",
             "PIX_REAL: 'OFF'",
             "PAGAMENTOS_REAIS: 'OFF'",
             "ATIVACAO_REAL: 'OFF'",
@@ -92,4 +96,35 @@ def test_document_preserves_traceability_and_no_go_limits():
     ):
         assert marker in doc
     assert "production_verified=true" not in doc
+    assert "PRODUCTION=GO" not in doc
+
+
+def test_asyncpg_pool_reuse_resets_capability_role_and_legacy_context():
+    for marker in (
+        "async def _m41090_create_asyncpg_pool",
+        "max_size=1",
+        "async def _m41090_assert_pool_clean",
+        "async def _m41090_exercise_asyncpg_pool",
+        "M41090_ASYNCPG_POOL_COMMIT_TRANSACTION_RESET=PASS",
+        "M41090_ASYNCPG_POOL_COMMIT_REACQUIRE_RESET=PASS",
+        "M41090_ASYNCPG_POOL_ROLLBACK_TRANSACTION_RESET=PASS",
+        "M41090_ASYNCPG_POOL_ROLLBACK_REACQUIRE_RESET=PASS",
+        "M41090_ASYNCPG_POOL_REUSED_SAME_BACKEND=PASS",
+        "M41090_ASYNCPG_POOL_CONTEXT_LEAK",
+        "M41090_DIAGNOSTIC=",
+        "M41090_ASYNCPG_POOL_STALE_CLAIMS",
+        "CI_M41090_DISPOSABLE",
+        "CI_M41090_DATABASE_URL",
+    ):
+        assert marker in SOURCE
+
+    doc = DOC90.read_text(encoding="utf-8")
+    for marker in (
+        "CP26-0061", "CP26-0062", "CTM-07", "CTM-08",
+        "COMMIT", "ROLLBACK", "REACQUIRE", "SAME_BACKEND",
+        "ORIGINAL_DATABASE=NOT_ACCESSED", "MIGRATIONS=NONE",
+        "PIX_REAL=OFF", "PAGAMENTOS_REAIS=OFF", "ATIVACAO_REAL=OFF",
+        "PRODUCTION=BLOCKED", "PENDING_INDEPENDENT_EVIDENCE",
+    ):
+        assert marker in doc
     assert "PRODUCTION=GO" not in doc

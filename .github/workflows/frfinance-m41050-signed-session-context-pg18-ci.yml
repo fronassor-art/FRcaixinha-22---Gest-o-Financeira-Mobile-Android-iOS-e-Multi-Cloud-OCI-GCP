@@ -13,6 +13,7 @@ on:
       - 'docs/FR_FINANCE_M41050_SQL_SIGNED_SESSION_CONTEXT_NO_GO.md'
       - 'backend/tests/test_m41080_asyncpg_rls_ci.py'
       - 'docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md'
+      - 'docs/FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md'
   pull_request:
     paths:
       - 'backend/app/m41050_session_context_seal_prototype.py'
@@ -25,6 +26,7 @@ on:
       - 'docs/FR_FINANCE_M41050_SQL_SIGNED_SESSION_CONTEXT_NO_GO.md'
       - 'backend/tests/test_m41080_asyncpg_rls_ci.py'
       - 'docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md'
+      - 'docs/FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md'
 permissions:
   contents: read
 jobs:
@@ -71,6 +73,8 @@ jobs:
       CI_M41050_DISPOSABLE: '1'
       CI_M41080_DISPOSABLE: '1'
       CI_M41080_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
+      CI_M41090_DISPOSABLE: '1'
+      CI_M41090_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41060_DISPOSABLE: '1'
       CI_M40700_DISPOSABLE: '1'
       CI_M40680_DISPOSABLE: '1'
