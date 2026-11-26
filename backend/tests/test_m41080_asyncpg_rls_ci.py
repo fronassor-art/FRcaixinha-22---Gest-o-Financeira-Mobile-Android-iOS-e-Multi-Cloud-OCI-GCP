@@ -207,3 +207,23 @@ def test_m41120_signed_ticket_context_and_generation():
         "M41120_STATUS=PASS_DISPOSABLE_TICKET_CONTEXT_ONLY",
     ):
         assert marker in SOURCE
+
+
+def test_m41130_lifecycle_invalidation_is_scoped_and_transactional():
+    for marker in (
+        "CREATE TRIGGER m41130_account_context",
+        "CREATE TRIGGER m41130_membership_context",
+        "OLD.context_generation IS DISTINCT FROM NEW.context_generation",
+        "SET context_generation=context_generation+1",
+        "active_tenant_id=OLD.tenant_id",
+        "active_role=OLD.role",
+        "M41130_LIFECYCLE_ACL=PASS",
+        "M41130_LIFECYCLE_ROLLBACK=PASS",
+        "M41130_MEMBERSHIP_SUSPENSION_ISOLATED=PASS",
+        "M41130_MEMBERSHIP_REACTIVATION_OLD_CAP=DENIED",
+        "M41130_MEMBERSHIP_RECREATE_OLD_PROOFS=DENIED",
+        "M41130_ACCOUNT_REACTIVATION_OLD_PROOFS=DENIED",
+        "M41130_ADMIN_OLD_WRITE_DENIED_FRESH_WRITE=PASS",
+        "M41130_STATUS=PASS_DISPOSABLE_LIFECYCLE_ONLY",
+    ):
+        assert marker in SOURCE

@@ -99,6 +99,7 @@ def build_ticket_context(owner) -> None:
              OR OLD.active_role IS DISTINCT FROM NEW.active_role
              OR OLD.active_tenant_id IS DISTINCT FROM NEW.active_tenant_id
              OR OLD.revoked_at IS DISTINCT FROM NEW.revoked_at
+             OR OLD.context_generation IS DISTINCT FROM NEW.context_generation
           THEN NEW.context_generation:=OLD.context_generation+1;
           ELSE NEW.context_generation:=OLD.context_generation;
           END IF;
@@ -420,6 +421,7 @@ def build_context_schema(owner) -> None:
              OR OLD.active_role IS DISTINCT FROM NEW.active_role
              OR OLD.active_tenant_id IS DISTINCT FROM NEW.active_tenant_id
              OR OLD.revoked_at IS DISTINCT FROM NEW.revoked_at
+             OR OLD.context_generation IS DISTINCT FROM NEW.context_generation
           THEN
             UPDATE m41050.session_caps
                SET revoked_at=pg_catalog.clock_timestamp()
@@ -435,9 +437,77 @@ def build_context_schema(owner) -> None:
     """)
     owner.execute("""
         CREATE TRIGGER m41110_invalidate_changed_session_caps
-        AFTER UPDATE OF user_id,active_role,active_tenant_id,revoked_at
+        AFTER UPDATE
         ON m40650.sessions FOR EACH ROW
         EXECUTE FUNCTION m41050.invalidate_changed_session_caps()
+    """)
+    # A privileged lifecycle change rotates the existing session generation.
+    # The old proof/ticket/capability cannot become valid again on reactivation.
+    owner.execute("""
+        CREATE FUNCTION m41050.rotate_account_context()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        BEGIN
+          IF TG_OP='UPDATE' THEN
+            IF OLD.status IS NOT DISTINCT FROM NEW.status
+               AND OLD.id IS NOT DISTINCT FROM NEW.id
+               AND OLD.is_master IS NOT DISTINCT FROM NEW.is_master
+            THEN RETURN NEW; END IF;
+          END IF;
+          UPDATE m40650.sessions SET context_generation=context_generation+1
+           WHERE user_id=OLD.id;
+          IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+          IF OLD.id IS DISTINCT FROM NEW.id THEN
+            UPDATE m40650.sessions SET context_generation=context_generation+1
+             WHERE user_id=NEW.id;
+          END IF;
+          RETURN NEW;
+        END
+        $body$
+    """)
+    owner.execute("""
+        CREATE FUNCTION m41050.rotate_membership_context()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        BEGIN
+          IF TG_OP='UPDATE' THEN
+            IF OLD.status IS NOT DISTINCT FROM NEW.status
+               AND ROW(OLD.user_id,OLD.tenant_id,OLD.role) IS NOT DISTINCT FROM
+                   ROW(NEW.user_id,NEW.tenant_id,NEW.role)
+            THEN RETURN NEW; END IF;
+          END IF;
+          IF TG_OP<>'INSERT' THEN
+            UPDATE m40650.sessions SET context_generation=context_generation+1
+             WHERE user_id=OLD.user_id AND active_tenant_id=OLD.tenant_id
+               AND active_role=OLD.role;
+          END IF;
+          IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+          IF TG_OP='INSERT' THEN
+            UPDATE m40650.sessions SET context_generation=context_generation+1
+             WHERE user_id=NEW.user_id AND active_tenant_id=NEW.tenant_id
+               AND active_role=NEW.role;
+          ELSIF ROW(OLD.user_id,OLD.tenant_id,OLD.role) IS DISTINCT FROM
+                ROW(NEW.user_id,NEW.tenant_id,NEW.role) THEN
+            UPDATE m40650.sessions SET context_generation=context_generation+1
+             WHERE user_id=NEW.user_id AND active_tenant_id=NEW.tenant_id
+               AND active_role=NEW.role;
+          END IF;
+          RETURN NEW;
+        END
+        $body$
+    """)
+    for function in ("rotate_account_context", "rotate_membership_context"):
+        owner.execute(f"ALTER FUNCTION m41050.{function}() OWNER TO m40650_owner")
+        owner.execute(f"REVOKE ALL ON FUNCTION m41050.{function}() FROM PUBLIC,m40650_app,m40680_auth")
+    owner.execute("""
+        CREATE TRIGGER m41130_account_context
+        AFTER UPDATE OR DELETE ON m40650.users FOR EACH ROW
+        EXECUTE FUNCTION m41050.rotate_account_context()
+    """)
+    owner.execute("""
+        CREATE TRIGGER m41130_membership_context
+        AFTER INSERT OR UPDATE OR DELETE ON m40650.memberships FOR EACH ROW
+        EXECUTE FUNCTION m41050.rotate_membership_context()
     """)
     owner.execute("REVOKE ALL ON ALL TABLES IN SCHEMA m41050 FROM PUBLIC")
     owner.execute(
@@ -1126,6 +1196,115 @@ def _m41120_exercise_ticket_context(owner, auth_dsn, app_dsn, key,
     print("M41120_FRESH_CONTEXT=PASS")
 
 
+def _m41130_exercise_lifecycle(owner, auth_dsn, app_dsn, key,
+                              tenant_a, tenant_b, member, admin, other_member):
+    _, digest_a = create_session(owner,member,"TENANT_MEMBER",tenant_a)
+    _, digest_b = create_session(owner,member,"TENANT_MEMBER",tenant_b)
+    _, digest_admin = create_session(owner,admin,"TENANT_ADMIN",tenant_a)
+
+    def generation(digest):
+        return fixture_context(owner,digest)[2]
+
+    def issue(digest,tenant,scope=SCOPE):
+        ticket=issue_ticket(owner,auth_dsn,key,digest,tenant,scope=scope)
+        assert ticket is not None, "M41130_FRESH_TICKET"
+        return ticket
+
+    def capability(digest,tenant,scope=SCOPE):
+        cap=bind_ticket(app_dsn,issue(digest,tenant,scope),tenant)
+        assert cap is not None, "M41130_FRESH_CAPABILITY"
+        return cap
+
+    def membership(status):
+        assert owner.execute(
+            "UPDATE m40650.memberships SET status=%s "
+            "WHERE user_id=%s AND tenant_id=%s AND role='TENANT_MEMBER'",
+            (status,member,tenant_a),
+        ).rowcount==1
+
+    a0,b0=generation(digest_a),generation(digest_b)
+    cap_a=capability(digest_a,tenant_a)
+    cap_b=capability(digest_b,tenant_b)
+    ticket_a=issue(digest_a,tenant_a)
+    original=fixture_context(owner,digest_a)
+    membership("ATIVA")
+    assert generation(digest_a)==a0, "M41130_NOOP_GENERATION"
+    # Rollback must restore both lifecycle and authorization state atomically.
+    class ExpectedRollback(Exception):
+        pass
+    try:
+        with owner.transaction():
+            membership("DESLIGADA")
+            assert generation(digest_a)==a0+1
+            raise ExpectedRollback()
+    except ExpectedRollback:
+        pass
+    assert generation(digest_a)==a0
+    assert visible_entries(app_dsn,capability=cap_a)
+    print("M41130_LIFECYCLE_ROLLBACK=PASS")
+    membership("DESLIGADA")
+    assert generation(digest_a)==a0+1 and generation(digest_b)==b0
+    assert visible_entries(app_dsn,capability=cap_a)==[]
+    assert bind_ticket(app_dsn,ticket_a,tenant_a) is None
+    assert issue_ticket(owner,auth_dsn,key,digest_a,tenant_a) is None
+    # Verify the unaffected tenant using claims, even if it has no own entries.
+    assert write_authorization_state(
+        app_dsn,cap_b,tenant_b,member
+    )[0]==[(member,"TENANT_MEMBER",tenant_b,SCOPE)]
+    print("M41130_MEMBERSHIP_SUSPENSION_ISOLATED=PASS")
+    membership("ATIVA")
+    assert generation(digest_a)==a0+2
+    assert visible_entries(app_dsn,capability=cap_a)==[]
+    assert issue_ticket(owner,auth_dsn,key,digest_a,tenant_a,context=original) is None
+    assert visible_entries(app_dsn,capability=capability(digest_a,tenant_a))
+    print("M41130_MEMBERSHIP_REACTIVATION_OLD_CAP=DENIED")
+
+    old_ticket=issue(digest_a,tenant_a)
+    old_cap=capability(digest_a,tenant_a)
+    assert owner.execute(
+        "DELETE FROM m40650.memberships WHERE user_id=%s AND tenant_id=%s "
+        "AND role='TENANT_MEMBER'",(member,tenant_a),
+    ).rowcount==1
+    add_membership(owner,member,tenant_a,"TENANT_MEMBER")
+    assert bind_ticket(app_dsn,old_ticket,tenant_a) is None
+    assert visible_entries(app_dsn,capability=old_cap)==[]
+    print("M41130_MEMBERSHIP_RECREATE_OLD_PROOFS=DENIED")
+
+    cap_a=capability(digest_a,tenant_a)
+    cap_b=capability(digest_b,tenant_b)
+    ticket_b=issue(digest_b,tenant_b)
+    a0,b0=generation(digest_a),generation(digest_b)
+    assert owner.execute("UPDATE m40650.users SET status='SUSPENDED' WHERE id=%s",
+                         (member,)).rowcount==1
+    assert generation(digest_a)==a0+1 and generation(digest_b)==b0+1
+    assert visible_entries(app_dsn,capability=cap_a)==[]
+    assert write_authorization_state(app_dsn,cap_b,tenant_b,member)[0]==[]
+    assert issue_ticket(owner,auth_dsn,key,digest_b,tenant_b) is None
+    assert owner.execute("UPDATE m40650.users SET status='ACTIVE' WHERE id=%s",
+                         (member,)).rowcount==1
+    assert bind_ticket(app_dsn,ticket_b,tenant_b) is None
+    assert visible_entries(app_dsn,capability=cap_a)==[]
+    assert write_authorization_state(app_dsn,cap_b,tenant_b,member)[0]==[]
+    assert visible_entries(app_dsn,capability=capability(digest_a,tenant_a))
+    print("M41130_ACCOUNT_REACTIVATION_OLD_PROOFS=DENIED")
+
+    old_write=capability(digest_admin,tenant_a,WRITE_SCOPE)
+    old_ticket=issue(digest_admin,tenant_a,WRITE_SCOPE)
+    assert owner.execute("UPDATE m40650.users SET status='SUSPENDED' WHERE id=%s",
+                         (admin,)).rowcount==1
+    expect_insert_denied(app_dsn,old_write,tenant_a,other_member,15000,
+                         "m41130:suspended:"+uuid4().hex)
+    assert owner.execute("UPDATE m40650.users SET status='ACTIVE' WHERE id=%s",
+                         (admin,)).rowcount==1
+    assert bind_ticket(app_dsn,old_ticket,tenant_a) is None
+    expect_insert_denied(app_dsn,old_write,tenant_a,other_member,15000,
+                         "m41130:old:"+uuid4().hex)
+    new_write=capability(digest_admin,tenant_a,WRITE_SCOPE)
+    assert insert_entry(app_dsn,new_write,tenant_a,other_member,15000,
+                        "m41130:fresh:"+uuid4().hex,verify_authorized=True)==1
+    print("M41130_ADMIN_OLD_WRITE_DENIED_FRESH_WRITE=PASS")
+
+
 def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
     import psycopg
     try:
@@ -1283,6 +1462,19 @@ def assert_acl(owner) -> None:
                 "SELECT has_table_privilege(%s,'m40700.ticket_context',%s)",
                 (role,privilege),
             ).fetchone()[0]
+    for role in ("m40650_app","m40680_auth"):
+        for function in ("rotate_account_context","rotate_membership_context"):
+            assert not owner.execute(
+                "SELECT has_function_privilege(%s,%s,'EXECUTE')",
+                (role,"m41050."+function+"()"),
+            ).fetchone()[0]
+        for table in ("sessions","users","memberships"):
+            for privilege in ("INSERT","UPDATE","DELETE"):
+                assert not owner.execute(
+                    "SELECT has_table_privilege(%s,%s,%s)",
+                    (role,"m40650."+table,privilege),
+                ).fetchone()[0]
+    print("M41130_LIFECYCLE_ACL=PASS")
     print("M41120_LEGACY_PATH_AND_CONTEXT_ACL=PASS")
     print("M41110_INVALIDATION_ACL=PASS")
     print("M41050_APP_CANNOT_READ_CAPABILITY_STORE_OR_ISSUER=PASS")
@@ -1634,6 +1826,10 @@ def run(dsn: str) -> None:
             owner, auth_dsn, app_dsn, key, tenant_a, member_a, member_other
         )
         print("M41120_STATUS=PASS_DISPOSABLE_TICKET_CONTEXT_ONLY")
+        _m41130_exercise_lifecycle(
+            owner,auth_dsn,app_dsn,key,tenant_a,tenant_b,member_a,admin_a,member_other
+        )
+        print("M41130_STATUS=PASS_DISPOSABLE_LIFECYCLE_ONLY")
         print("M41080_STATUS=PASS_DISPOSABLE_ASYNCPG_RLS_ONLY")
         print("M41050_GATE=NO_GO_UNTIL_KEY_CUSTODY_AND_RUNTIME_ATTESTATION")
         print("M41060_STATUS=PASS_DISPOSABLE_WRITE_RLS_ONLY")
@@ -1648,10 +1844,12 @@ def main() -> int:
         diagnostic = str(exc)
         if (
             isinstance(exc, AssertionError)
-            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_", "M41110_"))
+            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_", "M41110_", "M41130_"))
             and diagnostic.replace("_", "").isalnum()
         ):
-            if diagnostic.startswith("M41110_"):
+            if diagnostic.startswith("M41130_"):
+                prefix = "M41130_DIAGNOSTIC="
+            elif diagnostic.startswith("M41110_"):
                 prefix = "M41110_DIAGNOSTIC="
             elif diagnostic.startswith("M41100_"):
                 prefix = "M41100_DIAGNOSTIC="
