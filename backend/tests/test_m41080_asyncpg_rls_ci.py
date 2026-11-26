@@ -188,3 +188,22 @@ def test_m41110_capability_seals_subject_and_role_and_invalidates_switches():
     for marker in ("CP26-0061", "CP26-0062", "PRODUCTION=BLOCKED",
                    "MIGRATIONS=NONE", "PENDING_INDEPENDENT_EVIDENCE"):
         assert marker in doc
+
+
+def test_m41120_signed_ticket_context_and_generation():
+    for marker in (
+        "FRF-M41120|v2|", "CREATE FUNCTION m40700.issue_bound_v2",
+        "s.context_generation=p_generation", "s.context_generation=v_generation",
+        "s.context_generation=c.context_generation",
+        "CREATE TRIGGER m41120_context_generation",
+        "NEW.context_generation:=OLD.context_generation+1",
+        "REVOKE EXECUTE ON FUNCTION m40700.issue_bound(text,uuid,uuid,bigint,text,text)",
+        "REVOKE EXECUTE ON FUNCTION m40650.m40680_consume",
+        "M41120_LEGACY_PATH_AND_CONTEXT_ACL=PASS",
+        "M41120_SIGNED_CONTEXT_TAMPER_AND_NONCE=PASS",
+        "M41120_ISSUED_MEMBER_TICKET_AFTER_SWITCH=DENIED",
+        "M41120_RETURN_TO_ORIGINAL_ROLE_OLD_TICKET=DENIED",
+        "M41120_FRESH_CONTEXT=PASS",
+        "M41120_STATUS=PASS_DISPOSABLE_TICKET_CONTEXT_ONLY",
+    ):
+        assert marker in SOURCE

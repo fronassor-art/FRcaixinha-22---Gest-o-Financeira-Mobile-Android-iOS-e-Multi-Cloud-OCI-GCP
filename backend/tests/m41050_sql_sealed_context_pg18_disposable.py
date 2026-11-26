@@ -6,6 +6,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+import hmac
 import os
 from pathlib import Path
 import secrets
@@ -22,7 +23,6 @@ from m40700_request_proof_disposable import (
     SCOPE,
     WRITE_SCOPE,
     bootstrap as bootstrap_m40700,
-    sign as sign_m40700,
 )
 from m41050_session_context_seal_prototype import install_session_capability
 
@@ -85,7 +85,107 @@ def connect(dsn: str, *, user: str = "postgres", password: str = DATABASE_PASSWO
     )
 
 
+def build_ticket_context(owner) -> None:
+    owner.execute("""
+        ALTER TABLE m40650.sessions ADD COLUMN context_generation bigint
+        NOT NULL DEFAULT 0 CHECK(context_generation>=0)
+    """)
+    owner.execute("""
+        CREATE FUNCTION m40700.bump_context_generation()
+        RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp
+        AS $body$
+        BEGIN
+          IF OLD.user_id IS DISTINCT FROM NEW.user_id
+             OR OLD.active_role IS DISTINCT FROM NEW.active_role
+             OR OLD.active_tenant_id IS DISTINCT FROM NEW.active_tenant_id
+             OR OLD.revoked_at IS DISTINCT FROM NEW.revoked_at
+          THEN NEW.context_generation:=OLD.context_generation+1;
+          ELSE NEW.context_generation:=OLD.context_generation;
+          END IF;
+          RETURN NEW;
+        END
+        $body$
+    """)
+    owner.execute("ALTER FUNCTION m40700.bump_context_generation() OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON FUNCTION m40700.bump_context_generation() FROM PUBLIC")
+    owner.execute("""
+        CREATE TRIGGER m41120_context_generation BEFORE UPDATE ON m40650.sessions
+        FOR EACH ROW EXECUTE FUNCTION m40700.bump_context_generation()
+    """)
+    owner.execute("""
+        CREATE TABLE m40700.ticket_context(
+          ticket_digest text PRIMARY KEY REFERENCES m40700.ticket_scopes(ticket_digest),
+          bound_user_id uuid NOT NULL,
+          bound_role text NOT NULL CHECK(bound_role IN ('TENANT_MEMBER','TENANT_ADMIN')),
+          context_generation bigint NOT NULL CHECK(context_generation>=0)
+        )
+    """)
+    owner.execute("ALTER TABLE m40700.ticket_context OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON m40700.ticket_context FROM PUBLIC,m40680_auth,m40650_app")
+    owner.execute("""
+        CREATE FUNCTION m40700.issue_bound_v2(
+          p_digest text,p_tenant uuid,p_nonce uuid,p_expiry bigint,p_scope text,
+          p_user uuid,p_role text,p_generation bigint,p_proof text
+        ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        DECLARE
+          v_secret bytea;
+          v_payload text;
+          v_expected text;
+          v_legacy_proof text;
+          v_ticket text;
+          v_ticket_digest text;
+          v_session_expiry timestamptz;
+        BEGIN
+          IF p_digest IS NULL OR p_digest !~ '^[0-9a-f]{64}$'
+             OR p_tenant IS NULL OR p_nonce IS NULL OR p_expiry IS NULL
+             OR p_user IS NULL OR p_generation IS NULL OR p_generation<0
+             OR p_role IS NULL OR p_role NOT IN ('TENANT_MEMBER','TENANT_ADMIN')
+             OR p_scope IS NULL OR p_scope NOT IN ('READ_ENTRIES','WRITE_TEST_ENTRY')
+             OR p_proof IS NULL OR p_proof !~ '^[0-9a-f]{64}$'
+          THEN RETURN NULL; END IF;
+          SELECT key INTO v_secret FROM m40700.verifier_secret WHERE singleton=true;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          v_payload:='FRF-M41120|v2|'||p_digest||'|'||p_tenant::text||'|'||
+                     p_nonce::text||'|'||p_expiry::text||'|'||p_scope||'|'||
+                     p_user::text||'|'||p_role||'|'||p_generation::text;
+          v_expected:=pg_catalog.encode(
+              m40700.hmac(pg_catalog.convert_to(v_payload,'UTF8'),v_secret,'sha256'),'hex');
+          IF p_proof<>v_expected THEN RETURN NULL; END IF;
+          SELECT s.expires_at INTO v_session_expiry FROM m40650.sessions AS s
+           WHERE s.token_digest=p_digest AND s.user_id=p_user
+             AND s.active_role=p_role AND s.active_tenant_id=p_tenant
+             AND s.context_generation=p_generation AND s.revoked_at IS NULL
+             AND s.expires_at>pg_catalog.clock_timestamp()
+           FOR SHARE OF s;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          -- Reuse the existing issuer's nonce, time, account and membership checks.
+          -- Only this owner-controlled wrapper can invoke the old issuer here.
+          v_legacy_proof:=pg_catalog.encode(m40700.hmac(pg_catalog.convert_to(
+              'FRF-M40700|v1|'||p_digest||'|'||p_tenant::text||'|'||
+              p_nonce::text||'|'||p_expiry::text||'|'||p_scope,'UTF8'),
+              v_secret,'sha256'),'hex');
+          v_ticket:=m40700.issue_bound(p_digest,p_tenant,p_nonce,p_expiry,p_scope,v_legacy_proof);
+          IF v_ticket IS NULL THEN RETURN NULL; END IF;
+          v_ticket_digest:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_ticket,'UTF8')),'hex');
+          UPDATE m40650.m40680_tickets SET expires_at=LEAST(expires_at,v_session_expiry,
+              pg_catalog.to_timestamp(p_expiry)) WHERE digest=v_ticket_digest;
+          INSERT INTO m40700.ticket_context(ticket_digest,bound_user_id,bound_role,context_generation)
+          VALUES(v_ticket_digest,p_user,p_role,p_generation);
+          RETURN v_ticket;
+        END
+        $body$
+    """)
+    signature="m40700.issue_bound_v2(text,uuid,uuid,bigint,text,uuid,text,bigint,text)"
+    owner.execute("ALTER FUNCTION "+signature+" OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON FUNCTION "+signature+" FROM PUBLIC,m40650_app")
+    owner.execute("GRANT EXECUTE ON FUNCTION "+signature+" TO m40680_auth")
+    owner.execute("REVOKE EXECUTE ON FUNCTION m40700.issue_bound(text,uuid,uuid,bigint,text,text) FROM m40680_auth")
+    owner.execute("REVOKE EXECUTE ON FUNCTION m40650.m40680_consume(text,uuid) FROM m40650_app")
+
+
 def build_context_schema(owner) -> None:
+    build_ticket_context(owner)
     owner.execute("CREATE SCHEMA m41050 AUTHORIZATION m40650_owner")
     owner.execute("REVOKE ALL ON SCHEMA m41050 FROM PUBLIC")
     owner.execute("GRANT USAGE ON SCHEMA m41050 TO m40650_app")
@@ -96,6 +196,7 @@ def build_context_schema(owner) -> None:
           session_digest text NOT NULL,
           bound_user_id uuid NOT NULL,
           bound_role text NOT NULL CHECK (bound_role IN ('TENANT_ADMIN','TENANT_MEMBER')),
+          context_generation bigint NOT NULL,
           tenant_id uuid NOT NULL,
           expires_at timestamptz NOT NULL,
           scope_name text NOT NULL
@@ -122,6 +223,9 @@ def build_context_schema(owner) -> None:
         AS $body$
         DECLARE
           v_result jsonb;
+          v_bound_user uuid;
+          v_bound_role text;
+          v_generation bigint;
           v_ticket_digest text;
           v_session_digest text;
           v_user_id uuid;
@@ -144,11 +248,12 @@ def build_context_schema(owner) -> None:
           v_ticket_digest := pg_catalog.encode(
             pg_catalog.sha256(pg_catalog.convert_to(p_ticket,'UTF8')),'hex'
           );
-          SELECT t.session_digest,t.expires_at,x.scope_name
-            INTO v_session_digest,v_expiry,v_scope
+          SELECT t.session_digest,t.expires_at,x.scope_name,c.bound_user_id,c.bound_role,c.context_generation
+            INTO v_session_digest,v_expiry,v_scope,v_bound_user,v_bound_role,v_generation
             FROM m40650.m40680_tickets AS t
             JOIN m40700.ticket_scopes AS x
               ON x.ticket_digest=t.digest
+            JOIN m40700.ticket_context AS c ON c.ticket_digest=t.digest
            WHERE t.digest=v_ticket_digest
              AND t.tenant_id=p_tenant
              AND t.used_at IS NOT NULL;
@@ -169,6 +274,8 @@ def build_context_schema(owner) -> None:
              AND m.role=s.active_role
              AND m.status='ATIVA'
            WHERE s.token_digest=v_session_digest
+             AND s.user_id=v_bound_user AND s.active_role=v_bound_role
+             AND s.context_generation=v_generation
              AND s.revoked_at IS NULL
              AND s.expires_at>pg_catalog.statement_timestamp()
              AND s.active_role IN ('TENANT_ADMIN','TENANT_MEMBER')
@@ -182,13 +289,13 @@ def build_context_schema(owner) -> None:
             || pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
           INSERT INTO m41050.session_caps(
             token_hash,session_digest,bound_user_id,bound_role,
-            tenant_id,expires_at,scope_name
+            context_generation,tenant_id,expires_at,scope_name
           )
           VALUES(
             pg_catalog.sha256(
               pg_catalog.convert_to(v_capability,'UTF8')
             ),
-            v_session_digest,v_user_id,v_role,v_tenant,v_expiry,v_scope
+            v_session_digest,v_user_id,v_role,v_generation,v_tenant,v_expiry,v_scope
           );
           RETURN v_capability;
         END
@@ -227,6 +334,7 @@ def build_context_schema(owner) -> None:
              AND c.expires_at>pg_catalog.statement_timestamp()
              AND s.user_id=c.bound_user_id
              AND s.active_role=c.bound_role
+             AND s.context_generation=c.context_generation
              AND s.active_tenant_id=c.tenant_id
              AND s.active_role IN ('TENANT_ADMIN','TENANT_MEMBER')
              AND s.revoked_at IS NULL
@@ -395,18 +503,39 @@ def connection_dsns(dsn: str) -> tuple[str,str]:
     )
 
 
-def issue_ticket(auth_dsn: str, key: bytes, session_digest: str,
-                 tenant_id, *, nonce=None, expiry=None,
-                 scope: str = SCOPE) -> str | None:
+def fixture_context(owner, digest):
+    # Trusted synthetic fixture lookup, not a production identity source.
+    return owner.execute(
+        "SELECT user_id,active_role,context_generation FROM m40650.sessions WHERE token_digest=%s",
+        (digest,)
+    ).fetchone()
+
+
+def sign_context(key, digest, tenant, nonce, expiry, scope, context):
+    user, role, generation = context
+    message = (f"FRF-M41120|v2|{digest}|{tenant}|{nonce}|{expiry}|{scope}|"
+               f"{user}|{role}|{generation}").encode("utf-8")
+    return hmac.new(key, message, sha256).hexdigest()
+
+
+def issue_ticket(owner, auth_dsn: str, key: bytes, session_digest: str,
+                 tenant_id, *, nonce=None, expiry=None, scope: str = SCOPE,
+                 context=None, proof=None) -> str | None:
     import psycopg
     nonce = nonce or uuid4()
-    expiry = expiry or int(datetime.now(timezone.utc).timestamp())+15
-    proof = sign_m40700(key,session_digest,tenant_id,nonce,expiry,scope)
+    expiry = expiry if expiry is not None else int(datetime.now(timezone.utc).timestamp())+15
+    context = context if context is not None else fixture_context(owner, session_digest)
+    if context is None:
+        return None
+    user, role, generation = context
+    proof = proof if proof is not None else sign_context(
+        key,session_digest,tenant_id,nonce,expiry,scope,context
+    )
     with psycopg.connect(auth_dsn,autocommit=True) as auth:
         auth.execute("SET ROLE m40680_auth")
         return auth.execute(
-            "SELECT m40700.issue_bound(%s,%s,%s,%s,%s,%s)",
-            (session_digest,tenant_id,nonce,expiry,scope,proof),
+            "SELECT m40700.issue_bound_v2(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (session_digest,tenant_id,nonce,expiry,scope,user,role,generation,proof),
         ).fetchone()[0]
 
 
@@ -869,7 +998,7 @@ def _m41110_exercise_role_binding(owner, dsn, auth_dsn, app_dsn, key,
     _, digest = create_session(owner, member_id, "TENANT_MEMBER", tenant_id)
 
     def new_cap(scope=SCOPE):
-        ticket = issue_ticket(auth_dsn, key, digest, tenant_id, scope=scope)
+        ticket = issue_ticket(owner, auth_dsn, key, digest, tenant_id, scope=scope)
         assert ticket is not None
         cap = bind_ticket(app_dsn, ticket, tenant_id)
         assert cap is not None
@@ -934,6 +1063,67 @@ def _m41110_exercise_role_binding(owner, dsn, auth_dsn, app_dsn, key,
     )
     assert visible_entries(app_dsn, capability=admin_read) == []
     print("M41110_RETURN_TO_ADMIN_OLD_CAPS=DENIED")
+
+
+def _m41120_exercise_ticket_context(owner, auth_dsn, app_dsn, key,
+                                   tenant_id, member_id, other_member):
+    _, digest = create_session(owner, member_id, "TENANT_MEMBER", tenant_id)
+    original = fixture_context(owner,digest)
+    nonce = uuid4()
+    expiry = int(datetime.now(timezone.utc).timestamp())+15
+    proof = sign_context(key,digest,tenant_id,nonce,expiry,SCOPE,original)
+    for context,scope in (
+        ((original[0],"TENANT_ADMIN",original[2]),SCOPE),
+        ((other_member,original[1],original[2]),SCOPE),
+        (original,WRITE_SCOPE),
+        ((original[0],original[1],original[2]+1),SCOPE),
+    ):
+        assert issue_ticket(owner,auth_dsn,key,digest,tenant_id,nonce=nonce,
+                            expiry=expiry,context=context,proof=proof,scope=scope) is None
+    valid = issue_ticket(owner,auth_dsn,key,digest,tenant_id,nonce=nonce,
+                         expiry=expiry,context=original,proof=proof)
+    assert valid
+    assert issue_ticket(owner,auth_dsn,key,digest,tenant_id,nonce=nonce,
+                        expiry=expiry,context=original,proof=proof) is None
+    cap = bind_ticket(app_dsn,valid,tenant_id)
+    assert cap and visible_entries(app_dsn,capability=cap)
+    print("M41120_SIGNED_CONTEXT_TAMPER_AND_NONCE=PASS")
+    old_read = issue_ticket(owner,auth_dsn,key,digest,tenant_id)
+    old_write = issue_ticket(owner,auth_dsn,key,digest,tenant_id,scope=WRITE_SCOPE)
+    assert old_read and old_write
+    stale_nonce = uuid4()
+    stale_proof = sign_context(key,digest,tenant_id,stale_nonce,expiry,SCOPE,original)
+
+    def switch(role):
+        assert owner.execute(
+            "UPDATE m40650.sessions SET active_role=%s WHERE token_digest=%s",
+            (role,digest)
+        ).rowcount == 1
+
+    switch("TENANT_ADMIN")
+    assert fixture_context(owner,digest)[2] == original[2]+1
+    assert bind_ticket(app_dsn,old_read,tenant_id) is None
+    assert issue_ticket(owner,auth_dsn,key,digest,tenant_id,nonce=stale_nonce,
+                        expiry=expiry,context=original,proof=stale_proof) is None
+    admin_ticket = issue_ticket(owner,auth_dsn,key,digest,tenant_id)
+    assert admin_ticket
+    admin_cap = bind_ticket(app_dsn,admin_ticket,tenant_id)
+    assert admin_cap and any(row[1]==other_member for row in visible_entries(app_dsn,capability=admin_cap))
+    print("M41120_ISSUED_MEMBER_TICKET_AFTER_SWITCH=DENIED")
+    switch("TENANT_MEMBER")
+    assert fixture_context(owner,digest)[2]==original[2]+2
+    assert bind_ticket(app_dsn,old_write,tenant_id) is None
+    assert issue_ticket(owner,auth_dsn,key,digest,tenant_id,nonce=stale_nonce,
+                        expiry=expiry,context=original,proof=stale_proof) is None
+    assert visible_entries(app_dsn,capability=admin_cap)==[]
+    fresh = issue_ticket(owner,auth_dsn,key,digest,tenant_id)
+    assert fresh
+    fresh_cap = bind_ticket(app_dsn,fresh,tenant_id)
+    assert fresh_cap
+    rows = visible_entries(app_dsn,capability=fresh_cap)
+    assert rows and all(row[1]==member_id for row in rows)
+    print("M41120_RETURN_TO_ORIGINAL_ROLE_OLD_TICKET=DENIED")
+    print("M41120_FRESH_CONTEXT=PASS")
 
 
 def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
@@ -1078,6 +1268,22 @@ def assert_acl(owner) -> None:
         "SELECT has_table_privilege(%s,'m41050.session_caps','UPDATE')",
         (app_role,),
     ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_function_privilege('m40680_auth','m40700.issue_bound(text,uuid,uuid,bigint,text,text)','EXECUTE')"
+    ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_function_privilege('m40650_app','m40650.m40680_consume(text,uuid)','EXECUTE')"
+    ).fetchone()[0]
+    assert owner.execute(
+        "SELECT has_function_privilege('m40680_auth','m40700.issue_bound_v2(text,uuid,uuid,bigint,text,uuid,text,bigint,text)','EXECUTE')"
+    ).fetchone()[0]
+    for role in ("m40650_app","m40680_auth"):
+        for privilege in ("SELECT","INSERT","UPDATE","DELETE"):
+            assert not owner.execute(
+                "SELECT has_table_privilege(%s,'m40700.ticket_context',%s)",
+                (role,privilege),
+            ).fetchone()[0]
+    print("M41120_LEGACY_PATH_AND_CONTEXT_ACL=PASS")
     print("M41110_INVALIDATION_ACL=PASS")
     print("M41050_APP_CANNOT_READ_CAPABILITY_STORE_OR_ISSUER=PASS")
     print("M41050_RLS_FORCE_AND_SCOPED_EXECUTE=PASS")
@@ -1151,14 +1357,14 @@ def run(dsn: str) -> None:
         forged_master=("MASTER",str(master),str(tenant_b))
         assert visible_entries(app_dsn,forged=forged_master)==[]
         assert issue_ticket(
-            auth_dsn,key,digest_master,tenant_a
+            owner, auth_dsn,key,digest_master,tenant_a
         ) is None
         print("M41050_FORGED_GUCS_WITHOUT_CAPABILITY=DENIED")
         print("M41050_MASTER_SESSION_TICKET=DENIED")
 
         # Correct tenant-member ticket gives only its own rows, even when all
         # old GUCs claim Master and a different tenant.
-        ticket_a=issue_ticket(auth_dsn,key,digest_a,tenant_a)
+        ticket_a=issue_ticket(owner, auth_dsn,key,digest_a,tenant_a)
         assert ticket_a is not None
         cap_a=bind_ticket(app_dsn,ticket_a,tenant_a)
         assert cap_a is not None and len(cap_a)==64
@@ -1176,7 +1382,7 @@ def run(dsn: str) -> None:
 
         # Tenant Admin authority is derived from its verified session, not
         # the app.current_role GUC, and remains inside tenant A.
-        ticket_admin=issue_ticket(auth_dsn,key,digest_admin,tenant_a)
+        ticket_admin=issue_ticket(owner, auth_dsn,key,digest_admin,tenant_a)
         cap_admin=bind_ticket(app_dsn,ticket_admin,tenant_a)
         assert cap_admin is not None
         admin_rows=visible_entries(
@@ -1199,7 +1405,7 @@ def run(dsn: str) -> None:
         print("M41060_READ_SCOPE_CANNOT_WRITE=DENIED")
 
         member_write_ticket=issue_ticket(
-            auth_dsn,key,digest_a,tenant_a,scope=WRITE_SCOPE
+            owner, auth_dsn,key,digest_a,tenant_a,scope=WRITE_SCOPE
         )
         assert member_write_ticket is not None
         member_write_cap=bind_ticket(app_dsn,member_write_ticket,tenant_a)
@@ -1211,12 +1417,12 @@ def run(dsn: str) -> None:
         print("M41060_MEMBER_WRITE=DENIED")
 
         assert issue_ticket(
-            auth_dsn,key,digest_admin,tenant_a,scope="WRITE_ANYTHING"
+            owner, auth_dsn,key,digest_admin,tenant_a,scope="WRITE_ANYTHING"
         ) is None
         print("M41060_UNLISTED_SCOPE=DENIED")
 
         admin_write_ticket=issue_ticket(
-            auth_dsn,key,digest_admin,tenant_a,scope=WRITE_SCOPE
+            owner, auth_dsn,key,digest_admin,tenant_a,scope=WRITE_SCOPE
         )
         assert admin_write_ticket is not None
         admin_write_cap=bind_ticket(app_dsn,admin_write_ticket,tenant_a)
@@ -1274,7 +1480,7 @@ def run(dsn: str) -> None:
 
         # Six app SQL connections race one valid ticket; atomic ticket consume
         # permits only one capability to be minted.
-        race_ticket=issue_ticket(auth_dsn,key,digest_other,tenant_a)
+        race_ticket=issue_ticket(owner, auth_dsn,key,digest_other,tenant_a)
         assert race_ticket is not None
         workers=6
         barrier=Barrier(workers,timeout=20)
@@ -1289,7 +1495,7 @@ def run(dsn: str) -> None:
 
         # A capability is rejected immediately after its backing session is
         # revoked, even if the capability GUC is still present.
-        ticket_b=issue_ticket(auth_dsn,key,digest_b,tenant_b)
+        ticket_b=issue_ticket(owner, auth_dsn,key,digest_b,tenant_b)
         cap_b=bind_ticket(app_dsn,ticket_b,tenant_b)
         assert cap_b is not None
         owner.execute(
@@ -1309,7 +1515,7 @@ def run(dsn: str) -> None:
         )
         del raw_pool_member
         pool_ticket = issue_ticket(
-            auth_dsn, key, digest_pool_member, tenant_b
+            owner, auth_dsn, key, digest_pool_member, tenant_b
         )
         assert pool_ticket is not None
         pool_capability = bind_ticket(app_dsn, pool_ticket, tenant_b)
@@ -1323,13 +1529,13 @@ def run(dsn: str) -> None:
 
         # M41080 passes the SQL-issued capability through the real asyncpg
         # helper while each RLS query/write runs in the same transaction.
-        async_read_ticket = issue_ticket(auth_dsn, key, digest_a, tenant_a)
+        async_read_ticket = issue_ticket(owner, auth_dsn, key, digest_a, tenant_a)
         assert async_read_ticket is not None
         async_read_cap = bind_ticket(app_dsn, async_read_ticket, tenant_a)
         assert async_read_cap is not None
 
         async_write_ticket = issue_ticket(
-            auth_dsn, key, digest_admin, tenant_a, scope=WRITE_SCOPE
+            owner, auth_dsn, key, digest_admin, tenant_a, scope=WRITE_SCOPE
         )
         assert async_write_ticket is not None
         async_write_cap = bind_ticket(app_dsn, async_write_ticket, tenant_a)
@@ -1424,6 +1630,10 @@ def run(dsn: str) -> None:
             owner, dsn, auth_dsn, app_dsn, key, tenant_a, member_a, member_other
         )
         print("M41110_STATUS=PASS_DISPOSABLE_ROLE_BINDING_ONLY")
+        _m41120_exercise_ticket_context(
+            owner, auth_dsn, app_dsn, key, tenant_a, member_a, member_other
+        )
+        print("M41120_STATUS=PASS_DISPOSABLE_TICKET_CONTEXT_ONLY")
         print("M41080_STATUS=PASS_DISPOSABLE_ASYNCPG_RLS_ONLY")
         print("M41050_GATE=NO_GO_UNTIL_KEY_CUSTODY_AND_RUNTIME_ATTESTATION")
         print("M41060_STATUS=PASS_DISPOSABLE_WRITE_RLS_ONLY")

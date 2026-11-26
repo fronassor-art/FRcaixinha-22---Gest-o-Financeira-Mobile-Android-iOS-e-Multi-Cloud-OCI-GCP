@@ -79,7 +79,8 @@ def test_fixture_reuses_existing_proof_and_has_no_second_signer_key():
     for marker in (
         "m40700_request_proof_disposable",
         "bootstrap_m40700",
-        "issue_bound(%s,%s,%s,%s,%s,%s)",
+        "issue_bound_v2(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "REVOKE EXECUTE ON FUNCTION m40650.m40680_consume",
         "m40650.m40680_consume",
         "CREATE TABLE m41050.session_caps",
         "CREATE FUNCTION m41050.bind_ticket",
