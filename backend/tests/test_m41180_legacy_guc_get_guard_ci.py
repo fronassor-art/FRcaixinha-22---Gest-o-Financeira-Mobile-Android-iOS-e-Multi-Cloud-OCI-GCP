@@ -186,6 +186,9 @@ def test_ci_disposable_exception_rejects_missing_marker_and_unsafe_context(monke
 
     monkeypatch.delenv("CI_M40070_DISPOSABLE")
     assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.setenv("CI_M41180_DISPOSABLE", "1")
+    assert database._m41180_ci_disposable_read_exception(request) is False
+    monkeypatch.delenv("CI_M41180_DISPOSABLE")
     monkeypatch.setenv("CI_M40070_DISPOSABLE", "1")
 
     monkeypatch.setenv("ENVIRONMENT", "production")

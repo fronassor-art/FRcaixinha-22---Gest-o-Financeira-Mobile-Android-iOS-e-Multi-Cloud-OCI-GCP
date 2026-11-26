@@ -49,28 +49,27 @@ def _m41180_ci_disposable_read_exception(request: Request) -> bool:
     }
     if any(env.get(key) != value for key, value in expected.items()):
         return False
-    if not any(
-        key.startswith("CI_") and key.endswith("_DISPOSABLE") and value == "1"
-        for key, value in env.items()
-    ):
-        return False
-
     try:
         import re
         import shlex
         from urllib.parse import urlsplit
 
         options = shlex.split(env.get("PGOPTIONS", ""))
-        has_disposable_guc = any(
-            options[index] == "-c"
-            and index + 1 < len(options)
-            and re.fullmatch(
-                r"frfinance\.[a-z0-9_]*_ci=DISPOSABLE_ONLY",
-                options[index + 1],
-                flags=re.IGNORECASE,
-            )
-            for index in range(len(options))
-        )
+        has_disposable_guc = False
+        prefix = "frfinance.m"
+        suffix = "_ci=DISPOSABLE_ONLY"
+        for index, option in enumerate(options):
+            if option != "-c" or index + 1 >= len(options):
+                continue
+            guc = options[index + 1]
+            if not guc.startswith(prefix) or not guc.endswith(suffix):
+                continue
+            workflow_id = guc[len(prefix):-len(suffix)]
+            if workflow_id.isdigit() and env.get(
+                f"CI_M{workflow_id}_DISPOSABLE"
+            ) == "1":
+                has_disposable_guc = True
+                break
         if not has_disposable_guc:
             return False
 

@@ -39,6 +39,22 @@ class TestM40340(unittest.TestCase):
   self.assertLess(s.index(marker),s.index("with TestClient(app) as client:"))
   self.assertIn("not app.dependency_overrides",s)
 
+ def test_m40400_m40410_mark_only_the_preflighted_disposable_process(self):
+  for path in ("m40400_same_tenant_rls_ci.py",
+               "m40410_campaign_lifecycle_ci.py"):
+   s=(R/"backend/tests"/path).read_text()
+   ast.parse(s)
+   main=next(n for n in ast.walk(ast.parse(s))
+             if isinstance(n,ast.FunctionDef) and n.name=="main")
+   self.assertEqual(main.body[0].value.func.id,"require_ci")
+   marker="app.state.frfinance_ci_disposable_read_test = True"
+   self.assertIn(marker,s)
+   self.assertIn("current_setting('frfinance.m40380_ci',true)",s)
+   self.assertLess(s.index("current_setting('server_version_num')::int"),
+                   s.index(marker))
+   self.assertLess(s.index(marker),s.index("with TestClient(app) as client:"))
+   self.assertIn("not app.dependency_overrides",s)
+
  def test_m40350_pool_boundaries_and_no_service_loss_false_positive(self):
   s=(R/"backend/tests/m40340_bearer_credit_runtime_ci.py").read_text()
   for expected in (

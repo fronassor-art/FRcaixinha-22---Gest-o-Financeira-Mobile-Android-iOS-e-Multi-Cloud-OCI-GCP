@@ -60,6 +60,8 @@ def main():
         assert pg.execute("SELECT count(*) FROM public.loans").fetchone()[0]==0
         assert pg.execute("SELECT count(*) FROM public.ledger_transactions").fetchone()[0]==0
 
+    # Reuse the M40380 disposable fixture only after checking its PG18 identity.
+    app.state.frfinance_ci_disposable_read_test = True
     counter=0
     def expect(resp,code,label):
         nonlocal counter

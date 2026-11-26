@@ -115,6 +115,8 @@ def main():
             assert policy==(True,True),(table,policy)
         seed_same_tenant(pg,hash_password_secure("m40380-synthetic-password"))
 
+    # Reuse the M40380 disposable fixture only after checking its PG18 identity.
+    app.state.frfinance_ci_disposable_read_test = True
     @app.get("/__ci_m40400/same-tenant-rows",include_in_schema=False)
     async def probe(session=Depends(get_current_session),
                     conn=Depends(get_rls_db_connection)):
