@@ -65,7 +65,7 @@ def require_disposable() -> str:
 async def exercise(dsn: str) -> None:
     import asyncpg
     import psycopg
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Request
     from httpx import ASGITransport, AsyncClient
 
     import m41050_sql_sealed_context_pg18_disposable as fixture
@@ -270,7 +270,7 @@ async def exercise(dsn: str) -> None:
         app = FastAPI()
         app.include_router(ledger.router, prefix="/api/v1")
 
-        async def synthetic_current_session(request):
+        async def synthetic_current_session(request: Request):
             raw = request.headers.get("authorization")
             session = sessions.get(raw)
             if session is None:
