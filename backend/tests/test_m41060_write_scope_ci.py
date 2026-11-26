@@ -84,6 +84,6 @@ def test_ci_and_document_keep_the_proof_synthetic_and_no_go():
     for marker in (
         "CP26-0062", "CP26-0061", "M40710", "M40730", "M40840",
         "M40930", "MIGRATIONS=NONE", "PRODUCTION=BLOCKED",
-        "não altera", "PostgreSQL 18 descartável",
+        "nem altera", "PostgreSQL 18 descartável",
     ):
         assert marker in doc
