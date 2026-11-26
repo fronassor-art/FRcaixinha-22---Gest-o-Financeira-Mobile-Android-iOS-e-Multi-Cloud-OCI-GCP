@@ -4,7 +4,7 @@
 
 Rastreia CP26-0061 / CTM-07 e CP26-0062 / CTM-08. A matriz conserva os 330 IDs e as 2.310 etapas; nenhum item, gate ou aceite é promovido.
 
-O endpoint existente GET /api/v1/tenants/{tenant_id}/ledger/accounts/directory agora aceita uma dependência de capability opcional. Com provedor ausente, conserva a dependência anterior, ainda submetida ao M40840. Com provedor presente, a dependência valida a sessão verificada e o papel Admin, exige o tenant da rota igual ao tenant da sessão, solicita ticket de uso único e o vincula a uma capability opaca. A capability é instalada somente dentro de transação PostgreSQL READ ONLY. A RLS da tabela decide as linhas; os GUCs legados de usuário, papel e tenant não são usados nesse caminho.
+O endpoint existente GET /api/v1/tenants/{tenant_id}/ledger/accounts/directory agora aceita uma dependência de capability opcional. Com provedor ausente, M41170 responde HTTP 503 e não chama a dependência GUC legada. Com provedor presente, a dependência valida a sessão verificada e o papel Admin, exige o tenant da rota igual ao tenant da sessão, solicita ticket de uso único e o vincula a uma capability opaca. A capability é instalada somente dentro de transação PostgreSQL READ ONLY. A RLS da tabela decide as linhas; os GUCs legados de usuário, papel e tenant não são usados nesse caminho.
 
 ## Evidência executável
 
@@ -14,7 +14,7 @@ O teste substitui get_current_session por identidades sintéticas e injeta no ap
 
 ## Limites e próximos bloqueios
 
-O provedor não é configurado pelo app oficial. A função pública de emissão/ligação e seu privilégio mínimo ainda dependem de desenho, revisão de ACL, custódia externa de chaves e teste adversarial independente. O caminho legado continua em desenvolvimento quando o provedor não existe. M40840 NO-GO, M40930 HTTP 503 para mutações Master e Issue #5 permanecem. Este pacote não remove gates, não declara a autorização SQL efetiva concluída e não habilita escrita financeira.
+O provedor não é configurado pelo app oficial. A função pública de emissão/ligação e seu privilégio mínimo ainda dependem de desenho, revisão de ACL, custódia externa de chaves e teste adversarial independente. M41170 removeu o fallback legado para as seis rotas GET do ledger; elas permanecem em 503 até a custódia e a integração independente do provedor. M40840 NO-GO, M40930 HTTP 503 para mutações Master e Issue #5 permanecem. Este pacote não remove gates, não declara a autorização SQL efetiva concluída e não habilita escrita financeira.
 
 CP26-0061=PENDING_INDEPENDENT_EVIDENCE
 CP26-0062=PENDING_INDEPENDENT_EVIDENCE

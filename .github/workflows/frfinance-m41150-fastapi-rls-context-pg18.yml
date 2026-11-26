@@ -10,6 +10,7 @@ on:
       - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
       - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
       - 'docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md'
+      - 'docs/FR_FINANCE_M41170_LEDGER_PROVIDER_ABSENT_FAIL_CLOSED_NO_GO.md'
   pull_request:
     paths:
       - 'backend/app/m41150_fastapi_rls_context.py'
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
       - 'docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md'
       - 'docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md'
+      - 'docs/FR_FINANCE_M41170_LEDGER_PROVIDER_ABSENT_FAIL_CLOSED_NO_GO.md'
 permissions:
   contents: read
 jobs:
@@ -72,6 +74,7 @@ jobs:
       CI_M40560_DISPOSABLE: '1'
       CI_M41150_DISPOSABLE: '1'
       CI_M41160_DISPOSABLE: '1'
+      CI_M41170_DISPOSABLE: '1'
       CI_M41050_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M40700_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41080_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci

@@ -17,6 +17,7 @@ RUNNER = ROOT / "backend/tests/m41150_fastapi_rls_context_pg18_disposable.py"
 WORKFLOW = ROOT / ".github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml"
 DOC = ROOT / "docs/FR_FINANCE_M41150_FASTAPI_SQL_CONTEXT_NO_GO.md"
 DOC_M41160 = ROOT / "docs/FR_FINANCE_M41160_LEDGER_READ_CAPABILITY_NO_GO.md"
+DOC_M41170 = ROOT / "docs/FR_FINANCE_M41170_LEDGER_PROVIDER_ABSENT_FAIL_CLOSED_NO_GO.md"
 
 
 def test_ticket_is_opaque_fixed_length_and_never_echoed():
@@ -76,6 +77,33 @@ def test_all_read_only_ledger_routes_use_optional_capability_dependency():
     assert "Depends(get_rls_db_connection)" not in source
 
 
+def test_m41170_provider_absence_fails_closed_without_legacy_guc_fallback():
+    source = MODULE.read_text(encoding="utf-8")
+    assert "get_rls_db_connection" not in source
+    branch = source.split("if provider is None:", 1)[1].split("\n\n    try:", 1)[0]
+    assert "status_code=status.HTTP_503_SERVICE_UNAVAILABLE" in branch
+    assert "Acesso ao livro-razão indisponível." in branch
+    assert "yield" not in branch
+
+
+def test_m41170_document_records_scope_and_keeps_no_go():
+    doc = DOC_M41170.read_text(encoding="utf-8")
+    for marker in (
+        "M41170", "CP26-0061", "CP26-0062", "CTM-07", "CTM-08",
+        "seis rotas GET de leitura do ledger",
+        "M41170_PROVIDER_ABSENT=HTTP_503",
+        "M41170_LEGACY_GUC_FALLBACK=REMOVED",
+        "M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE",
+        "M40570", "M40730", "M40840", "M40930",
+        "330 IDs", "2.310 etapas", "PENDING_INDEPENDENT_EVIDENCE",
+        "ORIGINAL_DATABASE=NOT_ACCESSED", "MIGRATIONS=NONE",
+        "PIX_REAL=OFF", "PAGAMENTOS_REAIS=OFF", "ATIVACAO_REAL=OFF",
+        "PRODUCTION=BLOCKED",
+    ):
+        assert marker in doc
+    assert "PRODUCTION=GO" not in doc
+
+
 def test_m41160_document_preserves_independent_evidence_and_production_gates():
     doc = DOC_M41160.read_text(encoding="utf-8")
     for marker in (
@@ -118,6 +146,11 @@ def test_runner_preflights_exact_disposable_postgres_before_driver_imports():
         "M41160_TENANT_ROLE_NEGATIVE=PASS",
         "M41160_CONCURRENT_READS=PASS",
         "M41160_RLS_TENANT_ISOLATION=PASS",
+        "M41170_PROVIDER_ABSENT_FAIL_CLOSED=PASS",
+        "M41170_DATABASE_POOL_CALLS_WITHOUT_PROVIDER=0",
+        "M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY",
+        "M41170_LEGACY_GUC_FALLBACK=REMOVED",
+        "M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE",
     ):
         assert marker in source
     for forbidden in ("127.0.0.1:5433", "backend/migrations/", "pg_ctl",
@@ -133,7 +166,9 @@ def test_ci_workflow_uses_pg18_service_and_only_fixture_database():
         "fr_m40700_disposable_ci",
         "CI_M41150_DISPOSABLE: '1'",
         "CI_M41160_DISPOSABLE: '1'",
+        "CI_M41170_DISPOSABLE: '1'",
         "CI_M41150_DATABASE_URL:",
+        "docs/FR_FINANCE_M41170_LEDGER_PROVIDER_ABSENT_FAIL_CLOSED_NO_GO.md",
         "CI_M41160_DATABASE_URL:",
         "PIX_REAL: 'OFF'",
         "PAGAMENTOS_REAIS: 'OFF'",

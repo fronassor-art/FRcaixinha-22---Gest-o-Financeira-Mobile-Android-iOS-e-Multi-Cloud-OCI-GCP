@@ -1,9 +1,10 @@
-"""M41160: optional FastAPI-to-PostgreSQL capability path for six read-only ledger routes.
+"""M41150/M41160/M41170: FastAPI capability path for six read-only ledger routes.
 
-The capability provider is deliberately absent from the default application. The
-legacy database dependency remains the compatibility path while M40840 blocks
-production financial SQL. A provider must independently validate the server
-session, issue a one-use signed ticket, and bind it to a short-lived capability.
+The capability provider is deliberately absent from the default application.
+No legacy GUC-based database fallback is allowed. When the optional provider is
+absent, the ledger routes fail closed with HTTP 503. A provider must independently
+validate the server session, issue a one-use signed ticket, and bind it to a
+short-lived capability.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 
-from .database import get_db_pool, get_rls_db_connection
+from .database import get_db_pool
 from .dependencies import AuthenticatedSession, get_current_session
 from .m40610_verified_rls_session import (
     UnverifiedRLSSession,
@@ -190,17 +191,13 @@ async def get_ledger_readonly_db_connection(
     request: Request,
     session: AuthenticatedSession = Depends(get_current_session),
 ) -> AsyncGenerator:
-    """Capability path for read-only ledger endpoints when a provider exists.
-
-    The normal application has no provider until independent key custody,
-    schema review, and staging evidence are accepted. Without it, preserve the
-    existing M40840-gated dependency behavior.
-    """
+    """Capability path for ledger reads; absent provider fails closed (M41170)."""
     provider = getattr(request.app.state, PROVIDER_STATE_ATTRIBUTE, None)
     if provider is None:
-        async for connection in get_rls_db_connection(session):
-            yield connection
-        return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Acesso ao livro-razão indisponível.",
+        )
 
     try:
         require_verified_rls_session(session)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M41150/M41160 FastAPI ledger reads to capability/RLS proof; disposable PG18 only."""
+"""M41150/M41160/M41170 FastAPI ledger read proof; disposable PG18 only."""
 from __future__ import annotations
 
 import asyncio
@@ -26,6 +26,7 @@ def require_disposable() -> str:
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41150_DISPOSABLE": "1",
         "CI_M41160_DISPOSABLE": "1",
+        "CI_M41170_DISPOSABLE": "1",
         "PIX_REAL": "OFF",
         "PAGAMENTOS_REAIS": "OFF",
         "ATIVACAO_REAL": "OFF",
@@ -374,6 +375,52 @@ async def exercise(dsn: str) -> None:
                 path_a, integrity_path, accounts_path, transactions_path,
                 entries_path, keyset_path,
             ]
+
+            # With no approved provider, all ledger reads must stop before a pool
+            # borrow; a guarded pool makes any legacy GUC fallback fail this test.
+            import app.database as database_module
+
+            no_provider_app = FastAPI()
+            no_provider_app.include_router(ledger.router, prefix="/api/v1")
+            no_provider_app.dependency_overrides[get_current_session] = (
+                synthetic_current_session
+            )
+            database_get_pool = database_module.get_db_pool
+            gateway_get_pool = gateway.get_db_pool
+            pool_calls = 0
+
+            async def forbidden_pool():
+                nonlocal pool_calls
+                pool_calls += 1
+                raise AssertionError("M41170_DATABASE_POOL_OPENED_WITHOUT_PROVIDER")
+
+            database_module.get_db_pool = forbidden_pool
+            gateway.get_db_pool = forbidden_pool
+            try:
+                async with AsyncClient(
+                    transport=ASGITransport(app=no_provider_app),
+                    base_url="http://frfinance.test",
+                ) as no_provider_client:
+                    no_provider_responses = await asyncio.gather(*(
+                        no_provider_client.get(
+                            path, headers={"Authorization": "Bearer m41150-admin"}
+                        )
+                        for path in read_paths
+                    ))
+                if any(response.status_code != 503
+                       for response in no_provider_responses):
+                    raise AssertionError(
+                        "M41170_PROVIDER_ABSENT_ROUTE_STATUS_"
+                        + str([r.status_code for r in no_provider_responses])
+                    )
+            finally:
+                database_module.get_db_pool = database_get_pool
+                gateway.get_db_pool = gateway_get_pool
+            if pool_calls != 0:
+                raise AssertionError("M41170_DATABASE_POOL_CALLS_WITHOUT_PROVIDER")
+            print("M41170_PROVIDER_ABSENT_FAIL_CLOSED=PASS")
+            print("M41170_DATABASE_POOL_CALLS_WITHOUT_PROVIDER=0")
+
             admin_headers = {"Authorization": "Bearer m41150-admin"}
             responses = await asyncio.gather(*(
                 client.get(path, headers=admin_headers) for path in read_paths
@@ -530,6 +577,9 @@ def main() -> int:
     asyncio.run(exercise(dsn))
     print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
     print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
+    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
+    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
     print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
     print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
     print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")

@@ -15,7 +15,7 @@ The package maps to CP26-0061 / CTM-07 and CP26-0062 / CTM-08. The matrix keeps 
 
 ## Code boundary
 
-Every listed GET receives the same optional read-only database dependency. It first requires the existing verified server session, then checks that the session role is `TENANT_ADMIN` and that its canonical tenant UUID equals the route tenant. When an independently supplied capability provider is present, the dependency issues and binds a one-use `READ_ENTRIES` ticket and opens a PostgreSQL `READ ONLY` transaction. The RLS policies remain responsible for row isolation. The default application still has no provider; its existing M40840 gate remains in force. No write endpoint, SQL migration, role or database object in the authoritative database is changed.
+Every listed GET receives the same optional read-only database dependency. It first requires the existing verified server session, then checks that the session role is `TENANT_ADMIN` and that its canonical tenant UUID equals the route tenant. When an independently supplied capability provider is present, the dependency issues and binds a one-use `READ_ENTRIES` ticket and opens a PostgreSQL `READ ONLY` transaction. The RLS policies remain responsible for row isolation. The official application still lacks independent provider custody. M41170 makes these six routes return HTTP 503 when the provider is absent, with no legacy GUC dependency; M40840 remains in force. No write endpoint, SQL migration, role or database object in the authoritative database is changed.
 
 The extension does not remediate the P0 GUC trust-boundary issue M40570, establish independent issuer custody under M40730, attest the production process, replace M40840, or change the M40930 HTTP 503 containment.
 
