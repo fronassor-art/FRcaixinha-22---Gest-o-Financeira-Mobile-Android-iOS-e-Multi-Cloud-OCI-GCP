@@ -437,6 +437,15 @@ def build_context_schema(owner) -> None:
              OR v_tenant IS DISTINCT FROM p_tenant
              OR v_scope<>'WRITE_TEST_ENTRY'
           THEN RETURN false; END IF;
+          -- The signed claim is a fast rejection only; authorization is
+          -- revalidated against locked rows below after any concurrent wait.
+          IF NOT EXISTS (
+            SELECT 1 FROM m41050.current_claims() AS c
+             WHERE c.user_id=v_actor
+               AND c.role_name='TENANT_ADMIN'
+               AND c.tenant_id=p_tenant
+               AND c.scope_name='WRITE_TEST_ENTRY'
+          ) THEN RETURN false; END IF;
 
           -- Lifecycle revocation locks its user or membership before rotating
           -- the session and capability. Use the same deterministic lock order.
@@ -462,12 +471,12 @@ def build_context_schema(owner) -> None:
           SELECT m.status INTO v_admin_membership_status
             FROM m40650.memberships AS m
            WHERE m.user_id=v_actor AND m.tenant_id=p_tenant
-             AND m.role='TENANT_ADMIN';
+             AND m.role='TENANT_ADMIN' AND m.status='ATIVA';
           IF NOT FOUND THEN RETURN false; END IF;
           SELECT m.status INTO v_member_membership_status
             FROM m40650.memberships AS m
            WHERE m.user_id=p_member AND m.tenant_id=p_tenant
-             AND m.role='TENANT_MEMBER';
+             AND m.role='TENANT_MEMBER' AND m.status='ATIVA';
           IF NOT FOUND THEN RETURN false; END IF;
 
           SELECT s.user_id,s.active_role,s.active_tenant_id,
