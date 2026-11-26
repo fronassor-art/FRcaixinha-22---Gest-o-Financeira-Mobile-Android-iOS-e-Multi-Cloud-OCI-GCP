@@ -378,7 +378,7 @@ async def exercise(dsn: str) -> None:
 
             # With no approved provider, all ledger reads must stop before a pool
             # borrow; a guarded pool makes any legacy GUC fallback fail this test.
-            import app.database as database_module
+            import backend.app.database as database_module
 
             no_provider_app = FastAPI()
             no_provider_app.include_router(ledger.router, prefix="/api/v1")
