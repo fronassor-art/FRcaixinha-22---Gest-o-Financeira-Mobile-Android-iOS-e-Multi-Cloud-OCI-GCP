@@ -105,6 +105,12 @@ async def exercise(dsn: str) -> None:
                 else:
                     raise AssertionError("M41240_TARGET_KEY_VISIBLE")
         print("M41240_DISTINCT_TARGET_KEY_AND_SQL_ACL=PASS")
+        # The integrated provider must use the process-credential channel,
+        # not the historical pipe or an in-process HMAC fallback.
+        import socket
+        assert signer._channel.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED) == 1
+        assert signer._channel.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) == socket.SOCK_SEQPACKET
+        print("M41250_LEDGER_SIGNER_CREDENTIAL_CHANNEL=PASS")
 
         tenant_a, tenant_b = uuid4(), uuid4()
         admin_id, member_id, admin_b_id = uuid4(), uuid4(), uuid4()

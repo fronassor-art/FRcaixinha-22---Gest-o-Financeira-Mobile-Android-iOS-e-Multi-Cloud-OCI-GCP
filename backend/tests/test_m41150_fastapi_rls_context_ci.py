@@ -436,3 +436,57 @@ def test_m41240_worker_protocol_and_fail_closed(monkeypatch):
         signer.close()
     with pytest.raises(RuntimeError):
         signer.sign(ticket, tenant, 123, "1/2", started)
+
+
+def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
+    import importlib.util
+    import json
+    import os
+    import subprocess
+    import sys
+    from datetime import datetime, timezone
+    from hashlib import sha256
+    from uuid import uuid4
+
+    if sys.platform != "linux":
+        pytest.skip("Linux per-message credentials")
+    path = ROOT / "backend/tests/m41240_target_signer_disposable.py"
+    spec = importlib.util.spec_from_file_location("m41250_worker_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for k, v in module.GATE.items():
+        monkeypatch.setenv(k, v)
+    signer = module.TargetSigner()
+    try:
+        signer.take_bootstrap_key()
+        tenant, ticket = uuid4(), "b" * 64
+        started = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        packet = {"digest": sha256(ticket.encode()).hexdigest(), "tenant": str(tenant),
+                  "pid": 123, "vxid": "1/2", "micros": 1767225600000000}
+        fd = signer._channel.fileno()
+        # Deliberately pass the real descriptor to an unrelated same-UID child.
+        # The kernel identifies the actual writer, not the owner of the socket.
+        script = (
+            "import os,socket,sys;"
+            "assert os.getuid()==int(sys.argv[3]);"
+            "s=socket.socket(fileno=int(sys.argv[1]));s.settimeout(4);"
+            "s.sendall(sys.argv[2].encode('ascii'));"
+            "assert s.recv(64)==b'DENIED'"
+        )
+        subprocess.run(
+            [sys.executable, "-B", "-c", script, str(fd), json.dumps(packet), str(os.getuid())],
+            pass_fds=(fd,), env={"PYTHONDONTWRITEBYTECODE": "1"},
+            timeout=8, check=True,
+        )
+        expected = signer.sign(ticket, tenant, 123, "1/2", started)
+        assert len(expected) == 64
+        # A valid parent still works after malformed and oversized packets.
+        for invalid in (b"{}", b"x" * (module.MAX_FRAME + 1)):
+            signer._channel.sendall(invalid)
+            response, cred = module.receive_frame(signer._channel, 64)
+            assert response == b"DENIED"
+            assert cred == module.process_credentials(signer._proc.pid)
+        assert signer.sign(ticket, tenant, 123, "1/2", started) == expected
+        print("M41250_SAME_UID_INHERITED_DESCRIPTOR_DENIED=PASS")
+    finally:
+        signer.close()

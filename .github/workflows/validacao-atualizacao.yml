@@ -26,6 +26,7 @@ on:
       - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
       - 'backend/tests/m41150_fastapi_rls_context_pg18_disposable.py'
       - 'backend/tests/m41240_target_signer_disposable.py'
+      - 'docs/FR_FINANCE_M41250_PER_MESSAGE_PROCESS_CREDENTIAL_NO_GO.md'
       - 'docs/FR_FINANCE_M41240_SEPARATE_TARGET_SIGNER_NO_GO.md'
       - 'docs/FR_FINANCE_M41190_LEDGER_SQL_CLAIMS_TRANSACTION_NO_GO.md'
       - 'backend/tests/test_rls_isolation_ci.py'
