@@ -15,6 +15,9 @@ def main() -> None:
     import psycopg
     from app.main import app
 
+    # The exact disposable PG18 preflight above is also required by the guard.
+    app.state.frfinance_m40070_disposable_read_test = True
+
     A = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
     B = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
     ACTOR_B = UUID("33333333-3333-4333-8333-333333333333")

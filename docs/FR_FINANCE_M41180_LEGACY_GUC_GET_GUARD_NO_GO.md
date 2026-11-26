@@ -14,7 +14,7 @@ A autenticação da requisição pode consultar seu armazenamento de sessões an
 
 As seis rotas de leitura do ledger protegidas pelo M41150 continuam usando sua dependência própria. Na ausência do provider, M41170 já as fecha com HTTP 503 antes do pool.
 
-O único caminho de leitura GET liberado pelo guard fora do modo bloqueado é o teste M40070 em PostgreSQL 18 descartável. O harness valida DSNs loopback, papéis sintéticos, flags OFF e GUC de ambiente antes de importar a aplicação, e marca a instância FastAPI em memória. O guard exige simultaneamente essa marca e os mesmos limites. Isso mantém o teste de autenticação/RLS positivo; não habilita essa leitura no Termux nem em produção.
+A única exceção de leitura GET ao guard é para os harnesses M40070/M40080 na fixture PostgreSQL 18 descartável. Ambos validam os DSNs loopback, papéis sintéticos, flags OFF e GUC de ambiente antes de importar a aplicação, e marcam explicitamente a instância FastAPI em memória. O guard exige essa marca e os mesmos limites. O M40070 mantém a prova positiva de autenticação/RLS; o M40080 usa a mesma fixture para validar revogação de sessão e troca de titularidade. Nenhum deles habilita leituras no Termux nem em produção.
 
 ## Evidência automatizada
 

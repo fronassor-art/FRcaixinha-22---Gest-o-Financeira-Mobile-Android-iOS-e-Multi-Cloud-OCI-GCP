@@ -18,6 +18,7 @@ class M40080SourceGate(unittest.TestCase):
         self.assertEqual(first.value.func.id,"require_disposable_ci")
         for mark in (
             "m40070_pg18_policy_runtime_ci import require_disposable_ci",
+            "app.state.frfinance_m40070_disposable_read_test = True",
             "SELECT current_database(),session_user,",
             "current_setting('frfinance.m40070_ci',true)",
             "M40080_REVOKED_TOKEN_DENIED_AFTER_COMMIT=PASS",
