@@ -137,9 +137,9 @@ async def test_malformed_entries_fail_closed():
 def test_api_query_limits_422_without_authenticated_data():
     # FastAPI must reject invalid paging parameters before touching the DB.
     from app.dependencies import get_current_session
-    from app.database import get_rls_db_connection
+    from app.m41150_fastapi_rls_context import get_ledger_readonly_db_connection
     app.dependency_overrides[get_current_session] = actor
-    app.dependency_overrides[get_rls_db_connection] = lambda: ReadOnly()
+    app.dependency_overrides[get_ledger_readonly_db_connection] = lambda: ReadOnly()
     try:
         with TestClient(app) as client:
             for query in ("?page=0", "?page_size=51", "?page=1001"):
@@ -149,4 +149,4 @@ def test_api_query_limits_422_without_authenticated_data():
                 assert response.status_code == 422, response.text
     finally:
         app.dependency_overrides.pop(get_current_session, None)
-        app.dependency_overrides.pop(get_rls_db_connection, None)
+        app.dependency_overrides.pop(get_ledger_readonly_db_connection, None)
