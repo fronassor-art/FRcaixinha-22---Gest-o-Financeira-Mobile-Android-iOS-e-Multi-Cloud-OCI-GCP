@@ -413,12 +413,14 @@ def build_context_schema(owner) -> None:
     owner.execute("ALTER FUNCTION m41050.current_claims_v3() OWNER TO m40650_owner")
     owner.execute("""
         CREATE FUNCTION m41050.bind_read_transaction(
-          p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz
+          p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz,p_proof text
         ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
         SET search_path=pg_catalog,pg_temp AS $body$
-        DECLARE v_cap text;
+        DECLARE v_cap text; v_secret bytea; v_payload text; v_expected text;
         BEGIN
-          IF p_pid IS NULL OR p_pid<=0 OR p_pid=pg_catalog.pg_backend_pid()
+          IF p_ticket IS NULL OR p_ticket !~ '^[0-9a-f]{64}$'
+             OR p_tenant IS NULL OR p_proof IS NULL OR p_proof !~ '^[0-9a-f]{64}$'
+             OR p_pid IS NULL OR p_pid<=0 OR p_pid=pg_catalog.pg_backend_pid()
              OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+$'
              OR p_started IS NULL
              OR p_started>pg_catalog.clock_timestamp()
@@ -429,6 +431,15 @@ def build_context_schema(owner) -> None:
                     AND l.virtualxid=p_vxid AND l.virtualtransaction=p_vxid
                     AND l.mode='ExclusiveLock' AND l.granted)
           THEN RETURN NULL; END IF;
+          SELECT key INTO v_secret FROM m40700.verifier_secret WHERE singleton=true;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          v_payload:='FRF-M41230|v1|'||pg_catalog.encode(pg_catalog.sha256(
+              pg_catalog.convert_to(p_ticket,'UTF8')),'hex')||'|'||p_tenant::text||'|'||
+              p_pid::text||'|'||p_vxid||'|'||
+              (EXTRACT(EPOCH FROM p_started)*1000000)::bigint::text;
+          v_expected:=pg_catalog.encode(m40700.hmac(
+              pg_catalog.convert_to(v_payload,'UTF8'),v_secret,'sha256'),'hex');
+          IF p_proof<>v_expected THEN RETURN NULL; END IF;
           v_cap:=m41050.bind_ticket(p_ticket,p_tenant);
           IF v_cap IS NULL THEN RETURN NULL; END IF;
           UPDATE m41050.session_caps
@@ -472,7 +483,7 @@ def build_context_schema(owner) -> None:
                     AND l.virtualxid=c.bound_virtual_xid)
         $body$
     """)
-    owner.execute("ALTER FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz) OWNER TO m40650_owner")
+    owner.execute("ALTER FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text) OWNER TO m40650_owner")
     owner.execute("ALTER FUNCTION m41050.current_claims_v4() OWNER TO m40650_owner")
     owner.execute(
         "ALTER TABLE m41050.session_caps OWNER TO m40650_owner"
@@ -779,9 +790,9 @@ def build_context_schema(owner) -> None:
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v2() TO m40650_app")
     owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v3() FROM PUBLIC,m40680_auth")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v3() TO m40650_app")
-    owner.execute("REVOKE ALL ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz) FROM PUBLIC,m40680_auth")
+    owner.execute("REVOKE ALL ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text) FROM PUBLIC,m40680_auth")
     owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v4() FROM PUBLIC,m40680_auth")
-    owner.execute("GRANT EXECUTE ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz) TO m40650_app")
+    owner.execute("GRANT EXECUTE ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text) TO m40650_app")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v4() TO m40650_app")
     owner.execute("""
         GRANT EXECUTE ON FUNCTION m41050.can_write_entry(uuid,uuid)
@@ -866,6 +877,15 @@ def issue_ticket(owner, auth_dsn: str, key: bytes, session_digest: str,
             "SELECT m40700.issue_bound_v2(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (session_digest,tenant_id,nonce,expiry,scope,user,role,generation,proof),
         ).fetchone()[0]
+
+
+def sign_read_transaction(key, ticket, tenant, pid, vxid, started):
+    """Synthetic issuer proof; never install this key in the real application."""
+    delta = started - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    micros = (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds
+    digest = sha256(ticket.encode("utf-8")).hexdigest()
+    payload = f"FRF-M41230|v1|{digest}|{tenant}|{pid}|{vxid}|{micros}"
+    return hmac.new(key, payload.encode("utf-8"), sha256).hexdigest()
 
 
 def bind_ticket(app_dsn: str, ticket: str, tenant_id) -> str | None:

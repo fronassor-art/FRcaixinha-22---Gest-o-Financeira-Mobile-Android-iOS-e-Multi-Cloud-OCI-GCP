@@ -40,7 +40,11 @@ _TICKET_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class SessionCapabilityProvider(Protocol):
-    """Runtime-supplied issuer/binder; no signing key is held by this module."""
+    """Runtime-supplied issuer/binder; no signing key is held by this module.
+
+    M41230: binding requires issuer authorization of the exact target transaction.
+    Independent real issuer/process custody is pending; no provider is enabled.
+    """
 
     async def issue_ticket(
         self, session: AuthenticatedSession, *, scope: str, request_nonce: UUID

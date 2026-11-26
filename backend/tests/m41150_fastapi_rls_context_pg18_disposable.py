@@ -216,12 +216,14 @@ async def exercise(dsn: str) -> None:
             "GRANT EXECUTE ON FUNCTION m41050.current_claims() TO m40650_app"
         )
 
-        def bind_read(ticket, tenant, pid, vxid, started):
+        def bind_read(ticket, tenant, pid, vxid, started, *, proof=None):
+            if proof is None:
+                proof = fixture.sign_read_transaction(key, ticket, tenant, pid, vxid, started)
             with psycopg.connect(app_dsn, autocommit=True) as app:
                 app.execute("SET ROLE m40650_app")
                 return app.execute(
-                    "SELECT m41050.bind_read_transaction(%s,%s,%s,%s,%s)",
-                    (ticket, tenant, pid, vxid, started),
+                    "SELECT m41050.bind_read_transaction(%s,%s,%s,%s,%s,%s)",
+                    (ticket, tenant, pid, vxid, started, proof),
                 ).fetchone()[0]
 
         async def set_app_role(connection):
@@ -541,6 +543,20 @@ async def exercise(dsn: str) -> None:
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
                     assert ticket
                     assert bind_read(ticket, tenant_a, pid, "0/0", started) is None
+                    proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started)
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof="0" * 64) is None
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof="") is None
+                    assert bind_read(ticket, tenant_a, pid, vxid,
+                                     started + timedelta(microseconds=1), proof=proof) is None
+                    other_ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
+                    assert other_ticket
+                    assert bind_read(other_ticket, tenant_a, pid, vxid, started, proof=proof) is None
+                    assert bind_read(ticket, tenant_b, pid, vxid, started, proof=proof) is None
+                    async with second.transaction(readonly=True):
+                        other_pid, other_vxid, other_started = await gateway._read_transaction_identity(second)
+                        assert bind_read(ticket, tenant_a, other_pid, other_vxid,
+                                         other_started, proof=proof) is None
+                    print("M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS")
                     cap = bind_read(ticket, tenant_a, pid, vxid, started)
                     assert cap
                     await gateway.install_session_capability(first, cap)

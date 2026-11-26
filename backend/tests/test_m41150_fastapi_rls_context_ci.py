@@ -374,3 +374,12 @@ async def test_m41220_invalid_transaction_identity_fails_closed(row):
     with pytest.raises(HTTPException) as exc:
         await _read_transaction_identity(Connection())
     assert exc.value.status_code == 503
+
+
+def test_m41230_signed_transaction_target_contract():
+    fixture = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
+    binding = fixture.split("CREATE FUNCTION m41050.bind_read_transaction(", 1)[1].split("CREATE FUNCTION m41050.current_claims_v4()", 1)[0]
+    assert "FRF-M41230|v1|" in binding
+    assert binding.index("p_proof<>v_expected") < binding.index("v_cap:=m41050.bind_ticket")
+    assert "EXTRACT(EPOCH FROM p_started)*1000000" in binding
+    assert "M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")
