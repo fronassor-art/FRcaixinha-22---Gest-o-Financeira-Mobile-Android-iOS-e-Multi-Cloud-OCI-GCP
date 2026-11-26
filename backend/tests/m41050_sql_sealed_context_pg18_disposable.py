@@ -508,7 +508,10 @@ async def _m41080_asyncpg_visible_entries(
             "SELECT pg_catalog.current_setting("
             "'app.session_capability', true)"
         )
-        assert reset_value in (None, "")
+        reset_ok = reset_value in (None, "")
+        print("M41080_ASYNCPG_TRANSACTION_LOCAL_RESET="+("PASS" if reset_ok else "FAIL"))
+        assert reset_ok, "M41080_ASYNCPG_TRANSACTION_LOCAL_RESET"
+        print("M41080_ASYNCPG_VISIBLE_ROWS="+str(len(visible)))
         return visible
     finally:
         await connection.close()
@@ -539,7 +542,7 @@ async def _m41080_asyncpg_insert_entry(
                     "VALUES ($1, $2, $3, $4, $5)",
                     uuid4(), tenant_id, member_id, amount_cents, idempotency_key,
                 )
-                assert status == "INSERT 0 1"
+                assert status == "INSERT 0 1", "M41080_ASYNCPG_INSERT_STATUS"
         except asyncpg.PostgresError as exc:
             if exc.sqlstate == "42501":
                 return "DENIED"
@@ -927,7 +930,7 @@ def run(dsn: str) -> None:
             own_rows = await _m41080_asyncpg_visible_entries(
                 dsn, async_read_cap, forged=forged_master
             )
-            assert own_rows == [(tenant_a, member_a, 1250000)]
+            assert own_rows == [(tenant_a, member_a, 1250000)], "M41080_ASYNCPG_MEMBER_RLS_MISMATCH"
             print("M41080_ASYNCPG_MEMBER_RLS_FORGED_CONTEXT=PASS")
 
             read_write = await _m41080_asyncpg_insert_entry(
@@ -935,13 +938,13 @@ def run(dsn: str) -> None:
                 "m41080:read-denied:" + uuid4().hex,
                 forged=forged_master,
             )
-            assert read_write == "DENIED"
+            assert read_write == "DENIED", "M41080_ASYNCPG_READ_SCOPE_WRITE_NOT_DENIED"
             print("M41080_ASYNCPG_READ_SCOPE_CANNOT_WRITE=DENIED")
 
             write_rows = await _m41080_asyncpg_visible_entries(
                 dsn, async_write_cap
             )
-            assert write_rows == []
+            assert write_rows == [], "M41080_ASYNCPG_WRITE_SCOPE_READS_ROWS"
             print("M41080_ASYNCPG_WRITE_SCOPE_CANNOT_READ=DENIED")
 
             once_key = "m41080:admin-once:" + uuid4().hex
@@ -951,8 +954,8 @@ def run(dsn: str) -> None:
             duplicate = await _m41080_asyncpg_insert_entry(
                 dsn, async_write_cap, tenant_a, member_a, 15000, once_key
             )
-            assert first == "INSERTED"
-            assert duplicate == "DUPLICATE"
+            assert first == "INSERTED", "M41080_ASYNCPG_ADMIN_INSERT_NOT_ALLOWED"
+            assert duplicate == "DUPLICATE", "M41080_ASYNCPG_DUPLICATE_NOT_DENIED"
             print("M41080_ASYNCPG_ADMIN_INSERT=PASS")
 
             cross_tenant = await _m41080_asyncpg_insert_entry(
@@ -960,7 +963,7 @@ def run(dsn: str) -> None:
                 "m41080:cross-tenant:" + uuid4().hex,
                 forged=forged_master,
             )
-            assert cross_tenant == "DENIED"
+            assert cross_tenant == "DENIED", "M41080_ASYNCPG_CROSS_TENANT_NOT_DENIED"
             print("M41080_ASYNCPG_CROSS_TENANT_INSERT=DENIED")
 
             ready = 0
@@ -978,8 +981,8 @@ def run(dsn: str) -> None:
                 )
 
             raced = await asyncio.gather(*(race_insert() for _ in range(4)))
-            assert raced.count("INSERTED") == 1
-            assert raced.count("DUPLICATE") == 3
+            assert raced.count("INSERTED") == 1, "M41080_ASYNCPG_RACE_INSERT_COUNT"
+            assert raced.count("DUPLICATE") == 3, "M41080_ASYNCPG_RACE_DUPLICATE_COUNT"
             return once_key, async_race_key
 
         once_key, race_key = asyncio.run(exercise_m41080_asyncpg())
@@ -993,7 +996,7 @@ def run(dsn: str) -> None:
             "WHERE tenant_id=%s AND idempotency_key=%s",
             (tenant_a, race_key),
         ).fetchone()[0]
-        assert once_count == 1 and race_count == 1
+        assert once_count == 1 and race_count == 1, "M41080_ASYNCPG_IDEMPOTENCY_ROW_COUNT"
         print("M41080_ASYNCPG_IDEMPOTENCY_SINGLE_ROW=PASS")
         print("M41080_ASYNCPG_CONCURRENT_IDEMPOTENCY_SINGLE_ROW=PASS")
         print("M41080_STATUS=PASS_DISPOSABLE_ASYNCPG_RLS_ONLY")
@@ -1007,6 +1010,13 @@ def main() -> int:
         dsn=require_disposable()
         run(dsn)
     except Exception as exc:
+        diagnostic = str(exc)
+        if (
+            isinstance(exc, AssertionError)
+            and diagnostic.startswith("M41080_ASYNCPG_")
+            and diagnostic.replace("_", "").isalnum()
+        ):
+            print("M41080_DIAGNOSTIC="+diagnostic)
         print("M41050_STATUS=BLOCKED_"+type(exc).__name__)
         return 2
     finally:

@@ -36,6 +36,8 @@ def test_real_asyncpg_capability_calls_are_bound_inside_transactions():
         "pg_catalog.set_config($1, $2, true)",
         "CI_M41080_DISPOSABLE",
         "CI_M41080_DATABASE_URL",
+        "M41080_ASYNCPG_TRANSACTION_LOCAL_RESET=",
+        "M41080_DIAGNOSTIC=",
         "M41080_ASYNCPG_MEMBER_RLS_FORGED_CONTEXT=PASS",
         "M41080_ASYNCPG_READ_SCOPE_CANNOT_WRITE=DENIED",
         "M41080_ASYNCPG_WRITE_SCOPE_CANNOT_READ=DENIED",
