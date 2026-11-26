@@ -161,3 +161,30 @@ def test_asyncpg_pool_rechecks_revocation_between_borrows():
     ):
         assert marker in doc
     assert "PRODUCTION=GO" not in doc
+
+
+def test_m41110_capability_seals_subject_and_role_and_invalidates_switches():
+    for marker in (
+        "bound_user_id uuid NOT NULL",
+        "bound_role text NOT NULL",
+        "FOR SHARE OF s",
+        "s.user_id=c.bound_user_id",
+        "s.active_role=c.bound_role",
+        "OLD.active_role IS DISTINCT FROM NEW.active_role",
+        "CREATE TRIGGER m41110_invalidate_changed_session_caps",
+        "WHERE session_digest=OLD.token_digest AND revoked_at IS NULL",
+        "M41110_INVALIDATION_ACL=PASS",
+        "M41110_ASYNCPG_ROLE_SWITCH_OPEN_TRANSACTION=DENIED",
+        "M41110_ASYNCPG_ROLE_SWITCH_REBORROW=DENIED",
+        "M41110_MEMBER_OLD_WRITE_AFTER_PROMOTION=DENIED",
+        "M41110_FRESH_ADMIN_SCOPES=PASS",
+        "M41110_RETURN_TO_MEMBER_OLD_CAPS=DENIED",
+        "M41110_RETURN_TO_ADMIN_OLD_CAPS=DENIED",
+        "M41110_FRESH_MEMBER_SCOPE=PASS",
+        "M41110_STATUS=PASS_DISPOSABLE_ROLE_BINDING_ONLY",
+    ):
+        assert marker in SOURCE
+    doc = (ROOT / "docs" / "FR_FINANCE_M41110_ROLE_BOUND_CAPABILITY_NO_GO.md").read_text(encoding="utf-8")
+    for marker in ("CP26-0061", "CP26-0062", "PRODUCTION=BLOCKED",
+                   "MIGRATIONS=NONE", "PENDING_INDEPENDENT_EVIDENCE"):
+        assert marker in doc

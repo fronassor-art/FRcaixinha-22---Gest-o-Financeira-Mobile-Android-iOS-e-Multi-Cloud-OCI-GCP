@@ -94,6 +94,8 @@ def build_context_schema(owner) -> None:
           token_hash bytea PRIMARY KEY
             CHECK (pg_catalog.octet_length(token_hash)=32),
           session_digest text NOT NULL,
+          bound_user_id uuid NOT NULL,
+          bound_role text NOT NULL CHECK (bound_role IN ('TENANT_ADMIN','TENANT_MEMBER')),
           tenant_id uuid NOT NULL,
           expires_at timestamptz NOT NULL,
           scope_name text NOT NULL
@@ -170,7 +172,8 @@ def build_context_schema(owner) -> None:
              AND s.revoked_at IS NULL
              AND s.expires_at>pg_catalog.statement_timestamp()
              AND s.active_role IN ('TENANT_ADMIN','TENANT_MEMBER')
-             AND s.active_tenant_id=p_tenant;
+             AND s.active_tenant_id=p_tenant
+           FOR SHARE OF s;
           IF NOT FOUND OR v_expiry<=pg_catalog.statement_timestamp()
           THEN RETURN NULL; END IF;
 
@@ -178,13 +181,14 @@ def build_context_schema(owner) -> None:
             pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','')
             || pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
           INSERT INTO m41050.session_caps(
-            token_hash,session_digest,tenant_id,expires_at,scope_name
+            token_hash,session_digest,bound_user_id,bound_role,
+            tenant_id,expires_at,scope_name
           )
           VALUES(
             pg_catalog.sha256(
               pg_catalog.convert_to(v_capability,'UTF8')
             ),
-            v_session_digest,v_tenant,v_expiry,v_scope
+            v_session_digest,v_user_id,v_role,v_tenant,v_expiry,v_scope
           );
           RETURN v_capability;
         END
@@ -221,6 +225,8 @@ def build_context_schema(owner) -> None:
                  )
              AND c.revoked_at IS NULL
              AND c.expires_at>pg_catalog.statement_timestamp()
+             AND s.user_id=c.bound_user_id
+             AND s.active_role=c.bound_role
              AND s.active_tenant_id=c.tenant_id
              AND s.active_role IN ('TENANT_ADMIN','TENANT_MEMBER')
              AND s.revoked_at IS NULL
@@ -293,6 +299,37 @@ def build_context_schema(owner) -> None:
         WITH CHECK (
           m41050.can_write_entry(tenant_id,member_id)
         )
+    """)
+    # Fixture-only permanent invalidation: a switch back must not resurrect
+    # a previously issued capability. Binding locks the session row first.
+    owner.execute("""
+        CREATE FUNCTION m41050.invalidate_changed_session_caps()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp
+        AS $body$
+        BEGIN
+          IF OLD.user_id IS DISTINCT FROM NEW.user_id
+             OR OLD.active_role IS DISTINCT FROM NEW.active_role
+             OR OLD.active_tenant_id IS DISTINCT FROM NEW.active_tenant_id
+             OR OLD.revoked_at IS DISTINCT FROM NEW.revoked_at
+          THEN
+            UPDATE m41050.session_caps
+               SET revoked_at=pg_catalog.clock_timestamp()
+             WHERE session_digest=OLD.token_digest AND revoked_at IS NULL;
+          END IF;
+          RETURN NEW;
+        END
+        $body$
+    """)
+    owner.execute("""
+        ALTER FUNCTION m41050.invalidate_changed_session_caps()
+        OWNER TO m40650_owner
+    """)
+    owner.execute("""
+        CREATE TRIGGER m41110_invalidate_changed_session_caps
+        AFTER UPDATE OF user_id,active_role,active_tenant_id,revoked_at
+        ON m40650.sessions FOR EACH ROW
+        EXECUTE FUNCTION m41050.invalidate_changed_session_caps()
     """)
     owner.execute("REVOKE ALL ON ALL TABLES IN SCHEMA m41050 FROM PUBLIC")
     owner.execute(
@@ -775,6 +812,130 @@ async def _m41100_exercise_revoke_between_pool_borrows(
 
 
 
+async def _m41110_switch_role_with_open_transaction(
+    dsn: str, capability: str, digest: str, tenant_id, user_id
+) -> None:
+    # READ COMMITTED: each statement sees the committed role change.
+    pool = await _m41090_create_asyncpg_pool(dsn)
+    try:
+        async with pool.acquire() as connection:
+            pid = await connection.fetchval("SELECT pg_backend_pid()")
+            async with connection.transaction(isolation="read_committed"):
+                await connection.execute("SET LOCAL ROLE m40650_app")
+                await install_session_capability(connection, capability)
+                claims = await connection.fetch(
+                    "SELECT user_id,role_name,tenant_id,scope_name "
+                    "FROM m41050.current_claims()"
+                )
+                assert [tuple(row) for row in claims] == [
+                    (user_id, "TENANT_MEMBER", tenant_id, SCOPE)
+                ], "M41110_ASYNCPG_INITIAL_CLAIM"
+                before = await connection.fetch(
+                    "SELECT member_id FROM m41050.protected_entries"
+                )
+                assert before and all(row["member_id"] == user_id for row in before)
+                with connect(dsn, autocommit=True) as owner:
+                    changed = owner.execute(
+                        "UPDATE m40650.sessions SET active_role='TENANT_ADMIN' "
+                        "WHERE token_digest=%s AND active_role='TENANT_MEMBER'",
+                        (digest,),
+                    )
+                    assert changed.rowcount == 1
+                assert await connection.fetchval(
+                    "SELECT count(*) FROM m41050.current_claims()"
+                ) == 0, "M41110_ASYNCPG_ROLE_DRIFT_CLAIMS"
+                assert await connection.fetch(
+                    "SELECT member_id FROM m41050.protected_entries"
+                ) == [], "M41110_ASYNCPG_ROLE_DRIFT_ROWS"
+                print("M41110_ASYNCPG_ROLE_SWITCH_OPEN_TRANSACTION=DENIED")
+            await _m41090_assert_pool_clean(connection, pid)
+        async with pool.acquire() as connection:
+            await _m41090_assert_pool_clean(connection, pid)
+            async with connection.transaction():
+                await connection.execute("SET LOCAL ROLE m40650_app")
+                await install_session_capability(connection, capability)
+                assert await connection.fetchval(
+                    "SELECT count(*) FROM m41050.current_claims()"
+                ) == 0, "M41110_ASYNCPG_ROLE_DRIFT_REBORROW"
+            print("M41110_ASYNCPG_ROLE_SWITCH_REBORROW=DENIED")
+    finally:
+        await pool.close()
+
+
+def _m41110_exercise_role_binding(owner, dsn, auth_dsn, app_dsn, key,
+                                 tenant_id, member_id, other_member_id):
+    # A legitimately dual-role identity, not an app-supplied GUC.
+    add_membership(owner, member_id, tenant_id, "TENANT_ADMIN")
+    _, digest = create_session(owner, member_id, "TENANT_MEMBER", tenant_id)
+
+    def new_cap(scope=SCOPE):
+        ticket = issue_ticket(auth_dsn, key, digest, tenant_id, scope=scope)
+        assert ticket is not None
+        cap = bind_ticket(app_dsn, ticket, tenant_id)
+        assert cap is not None
+        return cap
+
+    def assert_revoked(cap):
+        row = owner.execute(
+            "SELECT revoked_at IS NOT NULL FROM m41050.session_caps "
+            "WHERE token_hash=pg_catalog.sha256(pg_catalog.convert_to(%s,'UTF8'))",
+            (cap,),
+        ).fetchone()
+        assert row == (True,), "M41110_CAPABILITY_NOT_PERSISTENTLY_REVOKED"
+
+    member_read = new_cap()
+    member_write = new_cap(WRITE_SCOPE)
+    asyncio.run(_m41110_switch_role_with_open_transaction(
+        dsn, member_read, digest, tenant_id, member_id
+    ))
+    assert_revoked(member_read)
+    assert_revoked(member_write)
+    expect_insert_denied(
+        app_dsn, member_write, tenant_id, other_member_id, 15000,
+        "m41110:member-old:" + uuid4().hex,
+    )
+    print("M41110_MEMBER_OLD_WRITE_AFTER_PROMOTION=DENIED")
+
+    admin_read = new_cap()
+    admin_write = new_cap(WRITE_SCOPE)
+    assert any(row[1] == other_member_id for row in visible_entries(
+        app_dsn, capability=admin_read
+    )), "M41110_FRESH_ADMIN_READ"
+    assert insert_entry(
+        app_dsn, admin_write, tenant_id, other_member_id, 15000,
+        "m41110:admin-fresh:" + uuid4().hex, verify_authorized=True,
+    ) == 1
+    print("M41110_FRESH_ADMIN_SCOPES=PASS")
+
+    changed = owner.execute(
+        "UPDATE m40650.sessions SET active_role='TENANT_MEMBER' "
+        "WHERE token_digest=%s AND active_role='TENANT_ADMIN'", (digest,),
+    )
+    assert changed.rowcount == 1
+    assert_revoked(admin_read)
+    assert_revoked(admin_write)
+    assert visible_entries(app_dsn, capability=member_read) == []
+    assert visible_entries(app_dsn, capability=admin_read) == []
+    fresh_member = new_cap()
+    own = visible_entries(app_dsn, capability=fresh_member)
+    assert own and all(row[1] == member_id for row in own)
+    print("M41110_RETURN_TO_MEMBER_OLD_CAPS=DENIED")
+    print("M41110_FRESH_MEMBER_SCOPE=PASS")
+
+    changed = owner.execute(
+        "UPDATE m40650.sessions SET active_role='TENANT_ADMIN' "
+        "WHERE token_digest=%s AND active_role='TENANT_MEMBER'", (digest,),
+    )
+    assert changed.rowcount == 1
+    assert_revoked(fresh_member)
+    expect_insert_denied(
+        app_dsn, admin_write, tenant_id, other_member_id, 15000,
+        "m41110:admin-old:" + uuid4().hex,
+    )
+    assert visible_entries(app_dsn, capability=admin_read) == []
+    print("M41110_RETURN_TO_ADMIN_OLD_CAPS=DENIED")
+
+
 def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
     import psycopg
     try:
@@ -908,6 +1069,16 @@ def assert_acl(owner) -> None:
         "SELECT has_table_privilege(%s,'m40700.ticket_scopes','SELECT')",
         (app_role,),
     ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_function_privilege(%s,"
+        "'m41050.invalidate_changed_session_caps()','EXECUTE')",
+        (app_role,),
+    ).fetchone()[0]
+    assert not owner.execute(
+        "SELECT has_table_privilege(%s,'m41050.session_caps','UPDATE')",
+        (app_role,),
+    ).fetchone()[0]
+    print("M41110_INVALIDATION_ACL=PASS")
     print("M41050_APP_CANNOT_READ_CAPABILITY_STORE_OR_ISSUER=PASS")
     print("M41050_RLS_FORCE_AND_SCOPED_EXECUTE=PASS")
     print("M41060_APPEND_ONLY_SELECT_INSERT_ACL=PASS")
@@ -1249,6 +1420,10 @@ def run(dsn: str) -> None:
         assert once_count == 1 and race_count == 1, "M41080_ASYNCPG_IDEMPOTENCY_ROW_COUNT"
         print("M41080_ASYNCPG_IDEMPOTENCY_SINGLE_ROW=PASS")
         print("M41080_ASYNCPG_CONCURRENT_IDEMPOTENCY_SINGLE_ROW=PASS")
+        _m41110_exercise_role_binding(
+            owner, dsn, auth_dsn, app_dsn, key, tenant_a, member_a, member_other
+        )
+        print("M41110_STATUS=PASS_DISPOSABLE_ROLE_BINDING_ONLY")
         print("M41080_STATUS=PASS_DISPOSABLE_ASYNCPG_RLS_ONLY")
         print("M41050_GATE=NO_GO_UNTIL_KEY_CUSTODY_AND_RUNTIME_ATTESTATION")
         print("M41060_STATUS=PASS_DISPOSABLE_WRITE_RLS_ONLY")
@@ -1263,10 +1438,12 @@ def main() -> int:
         diagnostic = str(exc)
         if (
             isinstance(exc, AssertionError)
-            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_"))
+            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_", "M41110_"))
             and diagnostic.replace("_", "").isalnum()
         ):
-            if diagnostic.startswith("M41100_"):
+            if diagnostic.startswith("M41110_"):
+                prefix = "M41110_DIAGNOSTIC="
+            elif diagnostic.startswith("M41100_"):
                 prefix = "M41100_DIAGNOSTIC="
             elif diagnostic.startswith("M41090_"):
                 prefix = "M41090_DIAGNOSTIC="

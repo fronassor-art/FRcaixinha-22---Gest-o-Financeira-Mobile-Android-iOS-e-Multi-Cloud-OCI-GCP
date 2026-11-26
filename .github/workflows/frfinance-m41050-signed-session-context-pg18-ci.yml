@@ -15,6 +15,7 @@ on:
       - 'docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md'
       - 'docs/FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md'
       - 'docs/FR_FINANCE_M41100_ASYNCPG_REVOKED_SESSION_POOL_NO_GO.md'
+      - 'docs/FR_FINANCE_M41110_ROLE_BOUND_CAPABILITY_NO_GO.md'
   pull_request:
     paths:
       - 'backend/app/m41050_session_context_seal_prototype.py'
@@ -29,6 +30,7 @@ on:
       - 'docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md'
       - 'docs/FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md'
       - 'docs/FR_FINANCE_M41100_ASYNCPG_REVOKED_SESSION_POOL_NO_GO.md'
+      - 'docs/FR_FINANCE_M41110_ROLE_BOUND_CAPABILITY_NO_GO.md'
 permissions:
   contents: read
 jobs:
