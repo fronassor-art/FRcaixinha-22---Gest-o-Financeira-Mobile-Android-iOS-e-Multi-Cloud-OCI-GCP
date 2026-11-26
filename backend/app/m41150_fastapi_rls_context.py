@@ -108,8 +108,8 @@ async def _require_bound_read_claims(connection: object, expected: tuple) -> Non
     """
     try:
         rows = await connection.fetch(
-            "SELECT user_id, role_name, tenant_id, scope_name "
-            "FROM m41050.current_claims()"
+            "SELECT user_id, role_name, tenant_id, scope_name, session_id "
+            "FROM m41050.current_claims_v2()"
         )
         if not isinstance(rows, list):
             raise TypeError("M41190_INVALID_SQL_CLAIMS")
@@ -119,7 +119,7 @@ async def _require_bound_read_claims(connection: object, expected: tuple) -> Non
             row = rows[0]
             matches = (
                 row["user_id"], row["role_name"],
-                row["tenant_id"], row["scope_name"],
+                row["tenant_id"], row["scope_name"], row["session_id"],
             ) == expected
     except Exception:
         raise HTTPException(
@@ -148,7 +148,10 @@ async def _capability_db_connection(
             detail="Sessão financeira não verificada ou expirada.",
         ) from None
 
-    expected_claims = (UUID(session.user_id), session.role, tenant, READ_SCOPE)
+    expected_claims = (
+        UUID(session.user_id), session.role, tenant, READ_SCOPE,
+        UUID(session.verified_session_id),
+    )
 
     # M40840 stays authoritative: provider presence never enables production.
     try:

@@ -4,6 +4,8 @@ on:
     branches: [atualizacao-ai-studio-9b46a63187]
     paths:
       - 'backend/app/m41150_fastapi_rls_context.py'
+      - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
+      - 'docs/FR_FINANCE_M41200_INDIVIDUAL_SESSION_SQL_BINDING_NO_GO.md'
       - 'backend/app/routers/ledger.py'
       - 'backend/tests/m41150_fastapi_rls_context_pg18_disposable.py'
       - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'
@@ -15,6 +17,8 @@ on:
   pull_request:
     paths:
       - 'backend/app/m41150_fastapi_rls_context.py'
+      - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
+      - 'docs/FR_FINANCE_M41200_INDIVIDUAL_SESSION_SQL_BINDING_NO_GO.md'
       - 'backend/app/routers/ledger.py'
       - 'backend/tests/m41150_fastapi_rls_context_pg18_disposable.py'
       - 'backend/tests/test_m41150_fastapi_rls_context_ci.py'

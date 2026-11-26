@@ -121,6 +121,20 @@ async def exercise(dsn: str) -> None:
             owner, admin_b_id, "TENANT_ADMIN", tenant_b
         )
 
+        _, admin_second_digest = fixture.create_session(
+            owner, admin_id, "TENANT_ADMIN", tenant_a
+        )
+
+        def session_id_for(digest):
+            return owner.execute(
+                "SELECT id FROM m40650.sessions WHERE token_digest=%s", (digest,)
+            ).fetchone()[0]
+
+        admin_session_id = session_id_for(admin_digest)
+        admin_second_session_id = session_id_for(admin_second_digest)
+        member_session_id = session_id_for(member_digest)
+        assert admin_session_id != admin_second_session_id
+
         account_a_id, account_offset_id = uuid4(), uuid4()
         account_b_id, account_b_offset_id = uuid4(), uuid4()
         owner.execute("""
@@ -278,7 +292,7 @@ async def exercise(dsn: str) -> None:
         print("M41150_FORGED_LEGACY_GUC_DENIED=PASS")
         print("M41160_FORGED_LEGACY_GUC_DENIED=PASS")
 
-        def make_session(user_id, role, tenant_id, *, verification_source=None):
+        def make_session(user_id, role, tenant_id, *, session_id=None, verification_source=None):
             return AuthenticatedSession(
                 user_id=str(user_id),
                 role=role,
@@ -286,7 +300,7 @@ async def exercise(dsn: str) -> None:
                 email="ci@example.invalid",
                 name="synthetic",
                 is_master=(role == "MASTER"),
-                verified_session_id=str(uuid4()),
+                verified_session_id=str(session_id or uuid4()),
                 verified_session_at=now - timedelta(seconds=1),
                 verified_session_expires_at=now + timedelta(minutes=10),
                 verification_source=(
@@ -294,8 +308,15 @@ async def exercise(dsn: str) -> None:
                 ),
             )
 
-        admin_session = make_session(admin_id, "TENANT_ADMIN", tenant_a)
-        member_session = make_session(member_id, "TENANT_MEMBER", tenant_a)
+        admin_session = make_session(
+            admin_id, "TENANT_ADMIN", tenant_a, session_id=admin_session_id
+        )
+        admin_second_session = make_session(
+            admin_id, "TENANT_ADMIN", tenant_a, session_id=admin_second_session_id
+        )
+        member_session = make_session(
+            member_id, "TENANT_MEMBER", tenant_a, session_id=member_session_id
+        )
         master_session = make_session(uuid4(), "MASTER", None)
         unverified_session = make_session(
             admin_id, "TENANT_ADMIN", tenant_a,
@@ -303,6 +324,7 @@ async def exercise(dsn: str) -> None:
         )
         sessions = {
             "Bearer m41150-admin": admin_session,
+            "Bearer m41200-admin-second": admin_second_session,
             "Bearer m41150-member": member_session,
             "Bearer m41150-master": master_session,
             "Bearer m41150-unverified": unverified_session,
@@ -311,8 +333,9 @@ async def exercise(dsn: str) -> None:
         class FixtureCapabilityProvider:
             def __init__(self):
                 self.session_digests = {
-                    (str(admin_id), "TENANT_ADMIN", str(tenant_a)): admin_digest,
-                    (str(member_id), "TENANT_MEMBER", str(tenant_a)): member_digest,
+                    (str(admin_session_id), str(admin_id), "TENANT_ADMIN", str(tenant_a)): admin_digest,
+                    (str(admin_second_session_id), str(admin_id), "TENANT_ADMIN", str(tenant_a)): admin_second_digest,
+                    (str(member_session_id), str(member_id), "TENANT_MEMBER", str(tenant_a)): member_digest,
                 }
                 self.last_ticket = None
                 self.last_capability = None
@@ -328,7 +351,7 @@ async def exercise(dsn: str) -> None:
                     self.reuse_next = False
                     return self.last_ticket
                 digest = self.session_digests.get(
-                    (session.user_id, session.role, session.tenant_id)
+                    (session.verified_session_id, session.user_id, session.role, session.tenant_id)
                 )
                 if digest is None:
                     return None
@@ -514,6 +537,29 @@ async def exercise(dsn: str) -> None:
             print("M41190_WRONG_SQL_CLAIMS_AND_UNKNOWN_CAPABILITY_DENIED=PASS")
             print("M41190_POOL_RECOVERY_AFTER_DENIAL=PASS")
 
+            # Same account, role and tenant, different database session UUID.
+            second_headers = {"Authorization": "Bearer m41200-admin-second"}
+            both = await asyncio.gather(*(
+                client.get(path, headers=headers)
+                for path in read_paths for headers in (admin_headers, second_headers)
+            ))
+            assert all(response.status_code == 200 for response in both)
+            # Second direction first, so last_capability remains bound to admin A
+            # before the existing replay and revocation checks.
+            for digest, headers in ((admin_digest, second_headers),
+                                    (admin_second_digest, admin_headers)):
+                wrong_ticket = fixture.issue_ticket(
+                    owner, auth_dsn, key, digest, tenant_a, scope="READ_ENTRIES",
+                )
+                assert wrong_ticket
+                wrong_capability = fixture.bind_ticket(app_dsn, wrong_ticket, tenant_a)
+                assert wrong_capability
+                provider.override_capability = wrong_capability
+                denied = await client.get(path_a, headers=headers)
+                assert denied.status_code == 401, denied.status_code
+            print("M41200_SAME_ACCOUNT_CROSS_SESSION_DENIED=PASS")
+            print("M41200_TWO_SESSION_CONCURRENT_READS=PASS")
+
             provider.reuse_next = True
             replay = await client.get(path_a, headers=admin_headers)
             if replay.status_code != 401:
@@ -601,6 +647,15 @@ async def exercise(dsn: str) -> None:
             if denied_after_revoke.status_code != 401:
                 raise AssertionError("M41150_REVOKED_SESSION_TICKET_ACCEPTED")
             print("M41150_REVOKED_CAPABILITY_DENIED=PASS")
+            unaffected = await client.get(path_a, headers=second_headers)
+            assert unaffected.status_code == 200
+            async with pool.acquire() as connection:
+                async with connection.transaction(readonly=True):
+                    await gateway.install_session_capability(connection, stale_capability)
+                    assert not await connection.fetch(
+                        "SELECT session_id FROM m41050.current_claims_v2()"
+                    )
+            print("M41200_INDEPENDENT_SESSION_REVOCATION=PASS")
         await pool.close()
     finally:
         owner.close()
