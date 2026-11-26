@@ -282,6 +282,12 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
             return {"backend_pid": 123, "virtual_xid": "5/42",
                     "transaction_started_at": now}
 
+        async def fetchval(self, sql, ticket, tenant_id):
+            assert sql == "SELECT m41050.read_target_challenge($1,$2)"
+            assert ticket == "a" * 64 and tenant_id == tenant
+            events.append("challenge")
+            return "c" * 64
+
         async def fetch(self, sql):
             events.append("claims")
             return [{"user_id": user, "role_name": "TENANT_ADMIN",
@@ -323,7 +329,8 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
             issued_nonces.append(request_nonce)
             return "a" * 64
         async def bind_ticket(self, ticket, *, tenant_id, backend_pid,
-                              virtual_xid, transaction_started_at):
+                              virtual_xid, transaction_started_at, target_challenge):
+            assert target_challenge == "c" * 64
             assert tenant_id == tenant
             assert (backend_pid, virtual_xid, transaction_started_at) == (123, "5/42", now)
             events.append("bind")
@@ -341,7 +348,7 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
     )
     dependency = gateway.get_ledger_readonly_db_connection(request, session)
     await anext(dependency)
-    assert events == ["acquire", "begin", "identity", "bind", "install", "claims"]
+    assert events == ["acquire", "begin", "identity", "challenge", "bind", "install", "claims"]
 
     if failure == "route":
         with pytest.raises(ValueError, match="route failure"):
@@ -490,3 +497,28 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
         print("M41250_SAME_UID_INHERITED_DESCRIPTOR_DENIED=PASS")
     finally:
         signer.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, "", "g"*64, "A"*64, 123])
+async def test_m41260_invalid_sql_target_challenge_fails_closed(value):
+    from fastapi import HTTPException
+    from uuid import uuid4
+    from backend.app.m41150_fastapi_rls_context import _read_target_challenge
+
+    class Connection:
+        async def fetchval(self, sql, ticket, tenant):
+            return value
+
+    with pytest.raises(HTTPException) as exc:
+        await _read_target_challenge(Connection(), "a"*64, uuid4())
+    assert exc.value.status_code == 503
+
+
+def test_m41260_challenge_checked_before_ticket_consumption():
+    source = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
+    binding = source.split("CREATE FUNCTION m41050.bind_read_transaction(", 1)[1].split("CREATE FUNCTION m41050.current_claims_v4()", 1)[0]
+    assert "FROM m41050.target_challenge_secret" in binding
+    assert binding.index("p_challenge<>v_challenge_expected") < binding.index("v_cap:=m41050.bind_ticket")
+    assert "FRF-M41260|v1|" in source
+    assert "M41260_SQL_CHALLENGE_TARGET_SUBSTITUTION_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")

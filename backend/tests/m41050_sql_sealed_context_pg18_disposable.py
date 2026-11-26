@@ -208,6 +208,15 @@ def build_context_schema(owner) -> None:
     owner.execute("ALTER TABLE m41050.target_verifier_secret OWNER TO m40650_owner")
     owner.execute("REVOKE ALL ON m41050.target_verifier_secret FROM PUBLIC,m40680_auth,m40650_app")
     owner.execute("""
+        CREATE TABLE m41050.target_challenge_secret (
+          singleton boolean PRIMARY KEY CHECK(singleton),
+          key bytea NOT NULL CHECK(pg_catalog.octet_length(key)=32)
+        )
+    """)
+    owner.execute("ALTER TABLE m41050.target_challenge_secret OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON m41050.target_challenge_secret FROM PUBLIC,m40680_auth,m40650_app")
+    owner.execute("INSERT INTO m41050.target_challenge_secret VALUES(true,m40700.gen_random_bytes(32))")
+    owner.execute("""
         CREATE TABLE m41050.session_caps (
           token_hash bytea PRIMARY KEY
             CHECK (pg_catalog.octet_length(token_hash)=32),
@@ -420,14 +429,45 @@ def build_context_schema(owner) -> None:
     """)
     owner.execute("ALTER FUNCTION m41050.current_claims_v3() OWNER TO m40650_owner")
     owner.execute("""
+        CREATE FUNCTION m41050.read_target_challenge(p_ticket text,p_tenant uuid)
+        RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        DECLARE v_secret bytea; v_vxid text; v_payload text;
+        BEGIN
+          IF p_ticket IS NULL OR p_ticket !~ '^[0-9a-f]{64}$'
+             OR p_tenant IS NULL
+             OR session_user <> 'm40650_ci_login'
+             OR pg_catalog.current_setting('transaction_read_only') <> 'on'
+          THEN RETURN NULL; END IF;
+          SELECT l.virtualxid INTO v_vxid FROM pg_catalog.pg_locks AS l
+           WHERE l.pid=pg_catalog.pg_backend_pid()
+             AND l.locktype='virtualxid' AND l.mode='ExclusiveLock'
+             AND l.granted AND l.virtualxid=l.virtualtransaction;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          SELECT key INTO v_secret FROM m41050.target_challenge_secret WHERE singleton=true;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          v_payload:='FRF-M41260|v1|'||pg_catalog.encode(pg_catalog.sha256(
+              pg_catalog.convert_to(p_ticket,'UTF8')),'hex')||'|'||p_tenant::text||'|'||
+              pg_catalog.pg_backend_pid()::text||'|'||v_vxid||'|'||
+              (EXTRACT(EPOCH FROM pg_catalog.transaction_timestamp())*1000000)::bigint::text;
+          RETURN pg_catalog.encode(m40700.hmac(
+              pg_catalog.convert_to(v_payload,'UTF8'),v_secret,'sha256'),'hex');
+        END
+        $body$
+    """)
+    owner.execute("ALTER FUNCTION m41050.read_target_challenge(text,uuid) OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON FUNCTION m41050.read_target_challenge(text,uuid) FROM PUBLIC,m40680_auth")
+    owner.execute("GRANT EXECUTE ON FUNCTION m41050.read_target_challenge(text,uuid) TO m40650_app")
+    owner.execute("""
         CREATE FUNCTION m41050.bind_read_transaction(
-          p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz,p_proof text
+          p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz,p_proof text,p_challenge text
         ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
         SET search_path=pg_catalog,pg_temp AS $body$
-        DECLARE v_cap text; v_secret bytea; v_payload text; v_expected text;
+        DECLARE v_cap text; v_secret bytea; v_payload text; v_expected text; v_challenge_key bytea; v_challenge_expected text;
         BEGIN
           IF p_ticket IS NULL OR p_ticket !~ '^[0-9a-f]{64}$'
              OR p_tenant IS NULL OR p_proof IS NULL OR p_proof !~ '^[0-9a-f]{64}$'
+             OR p_challenge IS NULL OR p_challenge !~ '^[0-9a-f]{64}$'
              OR p_pid IS NULL OR p_pid<=0 OR p_pid=pg_catalog.pg_backend_pid()
              OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+$'
              OR p_started IS NULL
@@ -448,6 +488,13 @@ def build_context_schema(owner) -> None:
           v_expected:=pg_catalog.encode(m40700.hmac(
               pg_catalog.convert_to(v_payload,'UTF8'),v_secret,'sha256'),'hex');
           IF p_proof<>v_expected THEN RETURN NULL; END IF;
+          SELECT key INTO v_challenge_key FROM m41050.target_challenge_secret WHERE singleton=true;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          v_challenge_expected:=pg_catalog.encode(m40700.hmac(
+              pg_catalog.convert_to('FRF-M41260|v1|'||pg_catalog.substr(v_payload,
+                  pg_catalog.length('FRF-M41230|v1|')+1),'UTF8'),
+              v_challenge_key,'sha256'),'hex');
+          IF p_challenge<>v_challenge_expected THEN RETURN NULL; END IF;
           v_cap:=m41050.bind_ticket(p_ticket,p_tenant);
           IF v_cap IS NULL THEN RETURN NULL; END IF;
           UPDATE m41050.session_caps
@@ -491,7 +538,7 @@ def build_context_schema(owner) -> None:
                     AND l.virtualxid=c.bound_virtual_xid)
         $body$
     """)
-    owner.execute("ALTER FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text) OWNER TO m40650_owner")
+    owner.execute("ALTER FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text,text) OWNER TO m40650_owner")
     owner.execute("ALTER FUNCTION m41050.current_claims_v4() OWNER TO m40650_owner")
     owner.execute(
         "ALTER TABLE m41050.session_caps OWNER TO m40650_owner"
@@ -798,9 +845,9 @@ def build_context_schema(owner) -> None:
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v2() TO m40650_app")
     owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v3() FROM PUBLIC,m40680_auth")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v3() TO m40650_app")
-    owner.execute("REVOKE ALL ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text) FROM PUBLIC,m40680_auth")
+    owner.execute("REVOKE ALL ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text,text) FROM PUBLIC,m40680_auth")
     owner.execute("REVOKE ALL ON FUNCTION m41050.current_claims_v4() FROM PUBLIC,m40680_auth")
-    owner.execute("GRANT EXECUTE ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text) TO m40650_app")
+    owner.execute("GRANT EXECUTE ON FUNCTION m41050.bind_read_transaction(text,uuid,integer,text,timestamptz,text,text) TO m40650_app")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.current_claims_v4() TO m40650_app")
     owner.execute("""
         GRANT EXECUTE ON FUNCTION m41050.can_write_entry(uuid,uuid)

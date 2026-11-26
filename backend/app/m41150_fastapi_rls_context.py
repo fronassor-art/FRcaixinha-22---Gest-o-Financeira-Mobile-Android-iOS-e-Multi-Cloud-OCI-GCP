@@ -52,7 +52,7 @@ class SessionCapabilityProvider(Protocol):
 
     async def bind_ticket(
         self, ticket: str, *, tenant_id: UUID, backend_pid: int,
-        virtual_xid: str, transaction_started_at: datetime,
+        virtual_xid: str, transaction_started_at: datetime, target_challenge: str,
     ) -> object: ...
 
 
@@ -167,6 +167,20 @@ async def _read_transaction_identity(connection: object) -> tuple[int, str, date
         ) from None
 
 
+async def _read_target_challenge(connection: object, ticket: str, tenant: UUID) -> str:
+    """Require a transaction-local SQL proof; never synthesize or fall back."""
+    try:
+        value = await connection.fetchval(
+            "SELECT m41050.read_target_challenge($1,$2)", ticket, tenant
+        )
+        return validate_signed_session_ticket(value)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Autorização financeira indisponível.",
+        ) from None
+
+
 @asynccontextmanager
 async def _capability_db_connection(
     request: Request,
@@ -238,10 +252,12 @@ async def _capability_db_connection(
             # tenant, role, or user GUC participates in this route's RLS.
             async with connection.transaction(readonly=True):
                 backend_pid, virtual_xid, transaction_started_at = await _read_transaction_identity(connection)
+                target_challenge = await _read_target_challenge(connection, ticket, tenant)
                 capability_value = await _provider_call(
                     provider, "bind_ticket", ticket, tenant_id=tenant,
                     backend_pid=backend_pid, virtual_xid=virtual_xid,
                     transaction_started_at=transaction_started_at,
+                    target_challenge=target_challenge,
                 )
                 if capability_value is None:
                     raise HTTPException(

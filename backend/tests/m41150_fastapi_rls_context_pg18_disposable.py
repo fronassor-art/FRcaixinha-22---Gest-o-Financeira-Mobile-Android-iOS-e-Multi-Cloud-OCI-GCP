@@ -111,6 +111,28 @@ async def exercise(dsn: str) -> None:
         assert signer._channel.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED) == 1
         assert signer._channel.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) == socket.SOCK_SEQPACKET
         print("M41250_LEDGER_SIGNER_CREDENTIAL_CHANNEL=PASS")
+        for dsn_, role in ((auth_dsn, "m40680_auth"), (app_dsn, "m40650_app")):
+            with psycopg.connect(dsn_, autocommit=True) as denied:
+                denied.execute("SET ROLE " + role)
+                try:
+                    denied.execute("SELECT key FROM m41050.target_challenge_secret")
+                except psycopg.errors.InsufficientPrivilege:
+                    pass
+                else:
+                    raise AssertionError("M41260_CHALLENGE_KEY_VISIBLE")
+                if role == "m40650_app":
+                    assert denied.execute(
+                        "SELECT m41050.read_target_challenge(%s,%s)",
+                        ("a"*64, uuid4()),
+                    ).fetchone()[0] is None
+                else:
+                    try:
+                        denied.execute("SELECT m41050.read_target_challenge(%s,%s)", ("a"*64, uuid4()))
+                    except psycopg.errors.InsufficientPrivilege:
+                        pass
+                    else:
+                        raise AssertionError("M41260_AUTH_CAN_MINT_CHALLENGE")
+        print("M41260_SQL_CHALLENGE_ACL_AND_READONLY=PASS")
 
         tenant_a, tenant_b = uuid4(), uuid4()
         admin_id, member_id, admin_b_id = uuid4(), uuid4(), uuid4()
@@ -243,14 +265,14 @@ async def exercise(dsn: str) -> None:
             "GRANT EXECUTE ON FUNCTION m41050.current_claims() TO m40650_app"
         )
 
-        def bind_read(ticket, tenant, pid, vxid, started, *, proof=None):
+        def bind_read(ticket, tenant, pid, vxid, started, *, challenge, proof=None):
             if proof is None:
                 proof = signer.sign(ticket, tenant, pid, vxid, started)
             with psycopg.connect(app_dsn, autocommit=True) as app:
                 app.execute("SET ROLE m40650_app")
                 return app.execute(
-                    "SELECT m41050.bind_read_transaction(%s,%s,%s,%s,%s,%s)",
-                    (ticket, tenant, pid, vxid, started, proof),
+                    "SELECT m41050.bind_read_transaction(%s,%s,%s,%s,%s,%s,%s)",
+                    (ticket, tenant, pid, vxid, started, proof, challenge),
                 ).fetchone()[0]
 
         async def set_app_role(connection):
@@ -407,9 +429,9 @@ async def exercise(dsn: str) -> None:
                 return ticket
 
             async def bind_ticket(self, ticket, *, tenant_id, backend_pid,
-                                  virtual_xid, transaction_started_at):
+                                  virtual_xid, transaction_started_at, target_challenge):
                 capability = bind_read(ticket, tenant_id, backend_pid,
-                                       virtual_xid, transaction_started_at)
+                                       virtual_xid, transaction_started_at, challenge=target_challenge)
                 if capability:
                     self.last_capability = capability
                 if self.expire_next and capability:
@@ -550,7 +572,8 @@ async def exercise(dsn: str) -> None:
                     pid, vxid, started = await gateway._read_transaction_identity(connection)
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
                     assert ticket
-                    direct_cap = bind_read(ticket, tenant_a, pid, vxid, started)
+                    challenge = await gateway._read_target_challenge(connection, ticket, tenant_a)
+                    direct_cap = bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge)
                     assert direct_cap
                     await gateway.install_session_capability(connection, direct_cap)
                     for table_name, expected_count in expected_tenant_rows.items():
@@ -569,25 +592,44 @@ async def exercise(dsn: str) -> None:
                     pid, vxid, started = await gateway._read_transaction_identity(first)
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
                     assert ticket
-                    assert bind_read(ticket, tenant_a, pid, "0/0", started) is None
+                    challenge = await gateway._read_target_challenge(first, ticket, tenant_a)
+                    assert bind_read(ticket, tenant_a, pid, "0/0", started, challenge=challenge) is None
                     proof = signer.sign(ticket, tenant_a, pid, vxid, started)
                     issuer_proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started)
-                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof=issuer_proof) is None
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=issuer_proof) is None
                     print("M41240_ISSUER_KEY_CANNOT_BIND_TARGET=PASS")
-                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof="0" * 64) is None
-                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof="") is None
+                    for invalid_challenge in (None, "", "0" * 64, proof):
+                        assert bind_read(ticket, tenant_a, pid, vxid, started,
+                                         challenge=invalid_challenge, proof=proof) is None
+                    # Even the authorized signer cannot invent a different SQL
+                    # transaction timestamp without a matching SQL challenge.
+                    changed = started + timedelta(microseconds=1)
+                    assert bind_read(ticket, tenant_a, pid, vxid, changed,
+                                     challenge=challenge) is None
+                    assert bind_read(ticket, tenant_b, pid, vxid, started,
+                                     challenge=challenge) is None
+                    assert await first.fetchval(
+                        "SELECT m41050.read_target_challenge($1,$2)", ticket, tenant_a
+                    ) == challenge
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof="0" * 64) is None
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof="") is None
                     assert bind_read(ticket, tenant_a, pid, vxid,
-                                     started + timedelta(microseconds=1), proof=proof) is None
+                                     started + timedelta(microseconds=1), challenge=challenge, proof=proof) is None
                     other_ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
                     assert other_ticket
-                    assert bind_read(other_ticket, tenant_a, pid, vxid, started, proof=proof) is None
-                    assert bind_read(ticket, tenant_b, pid, vxid, started, proof=proof) is None
+                    assert bind_read(other_ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=proof) is None
+                    assert bind_read(ticket, tenant_b, pid, vxid, started, challenge=challenge, proof=proof) is None
                     async with second.transaction(readonly=True):
                         other_pid, other_vxid, other_started = await gateway._read_transaction_identity(second)
                         assert bind_read(ticket, tenant_a, other_pid, other_vxid,
-                                         other_started, proof=proof) is None
+                                         other_started, challenge=challenge, proof=proof) is None
+                        # Correct signature for another live target is not enough.
+                        assert bind_read(ticket, tenant_a, other_pid, other_vxid,
+                                         other_started, challenge=challenge) is None
+                        assert await gateway._read_target_challenge(second, ticket, tenant_a) != challenge
+                    print("M41260_SQL_CHALLENGE_TARGET_SUBSTITUTION_DENIED=PASS")
                     print("M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS")
-                    cap = bind_read(ticket, tenant_a, pid, vxid, started)
+                    cap = bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge)
                     assert cap
                     await gateway.install_session_capability(first, cap)
                     assert len(await first.fetch("SELECT id FROM public.ledger_accounts")) == 2
@@ -608,7 +650,8 @@ async def exercise(dsn: str) -> None:
                     pid, vxid, started = await gateway._read_transaction_identity(first)
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
                     assert ticket
-                    rolled_cap = bind_read(ticket, tenant_a, pid, vxid, started)
+                    challenge = await gateway._read_target_challenge(first, ticket, tenant_a)
+                    rolled_cap = bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge)
                     assert rolled_cap
                     await gateway.install_session_capability(first, rolled_cap)
                     assert len(await first.fetch("SELECT id FROM public.ledger_accounts")) == 2
@@ -616,7 +659,8 @@ async def exercise(dsn: str) -> None:
                     await tx.rollback()
                 async with first.transaction(readonly=True):
                     pid, vxid, started = await gateway._read_transaction_identity(first)
-                    assert bind_read(ticket, tenant_a, pid, vxid, started) is None
+                    challenge = await gateway._read_target_challenge(first, ticket, tenant_a)
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge) is None
                     await gateway.install_session_capability(first, rolled_cap)
                     assert not await first.fetch("SELECT id FROM public.ledger_accounts")
                 # Old unbound issuance cannot access any ledger table.
@@ -833,8 +877,9 @@ async def exercise(dsn: str) -> None:
                     ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_second_digest, tenant_a)
                     assert ticket
                     proof = signer.sign(ticket, tenant_a, pid, vxid, started)
+                    challenge = await gateway._read_target_challenge(connection, ticket, tenant_a)
                     owner.execute("DELETE FROM m41050.target_verifier_secret")
-                    assert bind_read(ticket, tenant_a, pid, vxid, started, proof=proof) is None
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=proof) is None
                     assert not await connection.fetch("SELECT id FROM public.ledger_accounts")
             print("M41240_MISSING_TARGET_KEY_FAILS_CLOSED=PASS")
             signer.close()
