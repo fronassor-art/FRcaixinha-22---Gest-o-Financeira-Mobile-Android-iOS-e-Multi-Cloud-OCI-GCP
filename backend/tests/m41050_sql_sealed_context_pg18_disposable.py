@@ -2,6 +2,7 @@
 """M41050: bind consumed M40700 tickets to a disposable RLS capability."""
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -15,6 +16,7 @@ from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = ROOT / "backend" / "tests"
+sys.path.insert(0, str(ROOT / "backend" / "app"))
 sys.path.insert(0, str(TESTS))
 from m40700_request_proof_disposable import (
     SCOPE,
@@ -22,6 +24,7 @@ from m40700_request_proof_disposable import (
     bootstrap as bootstrap_m40700,
     sign as sign_m40700,
 )
+from m41050_session_context_seal_prototype import install_session_capability
 
 DATABASE = "fr_m40700_disposable_ci"
 PORT = 55439
@@ -36,6 +39,7 @@ def require_disposable() -> str:
         "FRCAIXINHA_CI_ISOLATED": "1",
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41060_DISPOSABLE": "1",
+        "CI_M41080_DISPOSABLE": "1",
         "CI_M40700_DISPOSABLE": "1",
         "CI_M40680_DISPOSABLE": "1",
         "CI_M40560_DISPOSABLE": "1",
@@ -58,6 +62,7 @@ def require_disposable() -> str:
             and not parsed.query
             and not parsed.fragment
             and os.environ.get("CI_M40700_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41080_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -420,6 +425,132 @@ def insert_entry(app_dsn: str, capability: str, tenant_id, member_id,
         return row_count
 
 
+
+def _m41080_validate_disposable_dsn(dsn: str):
+    expected = {
+        "GITHUB_ACTIONS": "true",
+        "FRCAIXINHA_CI_ISOLATED": "1",
+        "CI_M41080_DISPOSABLE": "1",
+        "CI_M41050_DISPOSABLE": "1",
+        "CI_M41060_DISPOSABLE": "1",
+        "PIX_REAL": "OFF",
+        "PAGAMENTOS_REAIS": "OFF",
+        "ATIVACAO_REAL": "OFF",
+    }
+    if any(os.environ.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("M41080_DISPOSABLE_ONLY")
+    try:
+        parsed = urlsplit(dsn)
+        valid = (
+            parsed.scheme == "postgresql"
+            and parsed.hostname == "127.0.0.1"
+            and parsed.port == PORT
+            and parsed.path == "/" + DATABASE
+            and parsed.username == "postgres"
+            and parsed.password == DATABASE_PASSWORD
+            and not parsed.query
+            and not parsed.fragment
+            and os.environ.get("CI_M41050_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41080_DATABASE_URL") == dsn
+        )
+    except (ValueError, AttributeError, TypeError):
+        valid = False
+    if not valid:
+        raise RuntimeError("M41080_DISPOSABLE_DATABASE_IDENTITY_DENIED")
+    return parsed
+
+
+async def _m41080_asyncpg_connect(dsn: str):
+    parsed = _m41080_validate_disposable_dsn(dsn)
+    import asyncpg
+    return await asyncpg.connect(
+        host=parsed.hostname,
+        port=parsed.port,
+        database=DATABASE,
+        user="m40650_ci_login",
+        password=APP_PASSWORD,
+        timeout=5,
+        command_timeout=5,
+    )
+
+
+async def _m41080_set_forged_gucs(connection, forged) -> None:
+    role, user_id, tenant_id = forged
+    for key, value in (
+        ("app.current_role", role),
+        ("app.current_user_id", user_id),
+        ("app.current_tenant_id", tenant_id),
+    ):
+        await connection.fetchval(
+            "SELECT pg_catalog.set_config($1, $2, true)", key, value
+        )
+
+
+async def _m41080_asyncpg_visible_entries(
+    dsn: str, capability: str, *, forged=None
+) -> list[tuple]:
+    connection = await _m41080_asyncpg_connect(dsn)
+    try:
+        async with connection.transaction():
+            await connection.execute("SET LOCAL ROLE m40650_app")
+            await install_session_capability(connection, capability)
+            if forged is not None:
+                await _m41080_set_forged_gucs(connection, forged)
+            rows = await connection.fetch(
+                "SELECT tenant_id, member_id, amount_cents "
+                "FROM m41050.protected_entries ORDER BY tenant_id, member_id"
+            )
+            visible = [
+                (row["tenant_id"], row["member_id"], row["amount_cents"])
+                for row in rows
+            ]
+        reset_value = await connection.fetchval(
+            "SELECT pg_catalog.current_setting("
+            "'app.session_capability', true)"
+        )
+        assert reset_value in (None, "")
+        return visible
+    finally:
+        await connection.close()
+
+
+async def _m41080_asyncpg_insert_entry(
+    dsn: str,
+    capability: str,
+    tenant_id,
+    member_id,
+    amount_cents: int,
+    idempotency_key: str,
+    *,
+    forged=None,
+) -> str:
+    connection = await _m41080_asyncpg_connect(dsn)
+    import asyncpg
+    try:
+        try:
+            async with connection.transaction():
+                await connection.execute("SET LOCAL ROLE m40650_app")
+                await install_session_capability(connection, capability)
+                if forged is not None:
+                    await _m41080_set_forged_gucs(connection, forged)
+                status = await connection.execute(
+                    "INSERT INTO m41050.protected_entries "
+                    "(entry_id, tenant_id, member_id, amount_cents, idempotency_key) "
+                    "VALUES ($1, $2, $3, $4, $5)",
+                    uuid4(), tenant_id, member_id, amount_cents, idempotency_key,
+                )
+                assert status == "INSERT 0 1"
+        except asyncpg.PostgresError as exc:
+            if exc.sqlstate == "42501":
+                return "DENIED"
+            if exc.sqlstate == "23505":
+                return "DUPLICATE"
+            raise
+        return "INSERTED"
+    finally:
+        await connection.close()
+
+
 def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
     import psycopg
     try:
@@ -775,6 +906,97 @@ def run(dsn: str) -> None:
             forged=("TENANT_MEMBER",str(member_b),str(tenant_b)),
         )==[]
         print("M41050_REVOKED_SESSION_CAPABILITY=DENIED")
+
+        # M41080 passes the SQL-issued capability through the real asyncpg
+        # helper while each RLS query/write runs in the same transaction.
+        async_read_ticket = issue_ticket(auth_dsn, key, digest_a, tenant_a)
+        assert async_read_ticket is not None
+        async_read_cap = bind_ticket(app_dsn, async_read_ticket, tenant_a)
+        assert async_read_cap is not None
+
+        async_write_ticket = issue_ticket(
+            auth_dsn, key, digest_admin, tenant_a, scope=WRITE_SCOPE
+        )
+        assert async_write_ticket is not None
+        async_write_cap = bind_ticket(app_dsn, async_write_ticket, tenant_a)
+        assert async_write_cap is not None
+
+        async_race_key = "m41080:asyncpg-race:" + uuid4().hex
+
+        async def exercise_m41080_asyncpg():
+            own_rows = await _m41080_asyncpg_visible_entries(
+                dsn, async_read_cap, forged=forged_master
+            )
+            assert own_rows == [(tenant_a, member_a, 1250000)]
+            print("M41080_ASYNCPG_MEMBER_RLS_FORGED_CONTEXT=PASS")
+
+            read_write = await _m41080_asyncpg_insert_entry(
+                dsn, async_read_cap, tenant_a, member_a, 15000,
+                "m41080:read-denied:" + uuid4().hex,
+                forged=forged_master,
+            )
+            assert read_write == "DENIED"
+            print("M41080_ASYNCPG_READ_SCOPE_CANNOT_WRITE=DENIED")
+
+            write_rows = await _m41080_asyncpg_visible_entries(
+                dsn, async_write_cap
+            )
+            assert write_rows == []
+            print("M41080_ASYNCPG_WRITE_SCOPE_CANNOT_READ=DENIED")
+
+            once_key = "m41080:admin-once:" + uuid4().hex
+            first = await _m41080_asyncpg_insert_entry(
+                dsn, async_write_cap, tenant_a, member_a, 15000, once_key
+            )
+            duplicate = await _m41080_asyncpg_insert_entry(
+                dsn, async_write_cap, tenant_a, member_a, 15000, once_key
+            )
+            assert first == "INSERTED"
+            assert duplicate == "DUPLICATE"
+            print("M41080_ASYNCPG_ADMIN_INSERT=PASS")
+
+            cross_tenant = await _m41080_asyncpg_insert_entry(
+                dsn, async_write_cap, tenant_b, member_b, 15000,
+                "m41080:cross-tenant:" + uuid4().hex,
+                forged=forged_master,
+            )
+            assert cross_tenant == "DENIED"
+            print("M41080_ASYNCPG_CROSS_TENANT_INSERT=DENIED")
+
+            ready = 0
+            start = asyncio.Event()
+
+            async def race_insert():
+                nonlocal ready
+                ready += 1
+                if ready == 4:
+                    start.set()
+                await start.wait()
+                return await _m41080_asyncpg_insert_entry(
+                    dsn, async_write_cap, tenant_a, member_other, 15000,
+                    async_race_key,
+                )
+
+            raced = await asyncio.gather(*(race_insert() for _ in range(4)))
+            assert raced.count("INSERTED") == 1
+            assert raced.count("DUPLICATE") == 3
+            return once_key, async_race_key
+
+        once_key, race_key = asyncio.run(exercise_m41080_asyncpg())
+        once_count = owner.execute(
+            "SELECT count(*) FROM m41050.protected_entries "
+            "WHERE tenant_id=%s AND idempotency_key=%s",
+            (tenant_a, once_key),
+        ).fetchone()[0]
+        race_count = owner.execute(
+            "SELECT count(*) FROM m41050.protected_entries "
+            "WHERE tenant_id=%s AND idempotency_key=%s",
+            (tenant_a, race_key),
+        ).fetchone()[0]
+        assert once_count == 1 and race_count == 1
+        print("M41080_ASYNCPG_IDEMPOTENCY_SINGLE_ROW=PASS")
+        print("M41080_ASYNCPG_CONCURRENT_IDEMPOTENCY_SINGLE_ROW=PASS")
+        print("M41080_STATUS=PASS_DISPOSABLE_ASYNCPG_RLS_ONLY")
         print("M41050_GATE=NO_GO_UNTIL_KEY_CUSTODY_AND_RUNTIME_ATTESTATION")
         print("M41060_STATUS=PASS_DISPOSABLE_WRITE_RLS_ONLY")
 

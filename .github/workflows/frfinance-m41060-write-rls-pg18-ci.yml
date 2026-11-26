@@ -12,6 +12,8 @@ on:
       - 'backend/tests/m40650_token_bound_gateway_disposable.py'
       - '.github/workflows/frfinance-m41060-write-rls-pg18-ci.yml'
       - 'docs/FR_FINANCE_M41060_WRITE_RLS_IDEMPOTENCY_NO_GO.md'
+      - 'backend/tests/test_m41080_asyncpg_rls_ci.py'
+      - 'docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md'
   pull_request:
     paths:
       - 'backend/tests/m40700_request_proof_disposable.py'
@@ -23,6 +25,8 @@ on:
       - 'backend/tests/m40650_token_bound_gateway_disposable.py'
       - '.github/workflows/frfinance-m41060-write-rls-pg18-ci.yml'
       - 'docs/FR_FINANCE_M41060_WRITE_RLS_IDEMPOTENCY_NO_GO.md'
+      - 'backend/tests/test_m41080_asyncpg_rls_ci.py'
+      - 'docs/FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md'
 permissions:
   contents: read
 jobs:
@@ -45,6 +49,7 @@ jobs:
           backend/tests/test_m40700_request_proof_ci.py
           backend/tests/test_m41050_session_context_seal_ci.py
           backend/tests/test_m41060_write_scope_ci.py
+          backend/tests/test_m41080_asyncpg_rls_ci.py
 
   pg18-disposable-write-boundary:
     needs: offline-fail-closed
@@ -68,6 +73,8 @@ jobs:
       GITHUB_ACTIONS: 'true'
       FRCAIXINHA_CI_ISOLATED: '1'
       CI_M41050_DISPOSABLE: '1'
+      CI_M41080_DISPOSABLE: '1'
+      CI_M41080_DATABASE_URL: postgresql://postgres:only_m41050_disposable_ci@127.0.0.1:55439/fr_m40700_disposable_ci
       CI_M41060_DISPOSABLE: '1'
       CI_M40700_DISPOSABLE: '1'
       CI_M40680_DISPOSABLE: '1'
@@ -83,6 +90,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install 'psycopg[binary]==3.2.4'
+      - run: python -m pip install 'psycopg[binary]==3.2.4' asyncpg==0.30.0
       - name: Exercise synthetic scoped read/write RLS
         run: python -B backend/tests/m41050_sql_sealed_context_pg18_disposable.py
