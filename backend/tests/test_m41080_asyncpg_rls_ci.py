@@ -10,6 +10,7 @@ M41050_WORKFLOW = ROOT / ".github" / "workflows" / "frfinance-m41050-signed-sess
 M41060_WORKFLOW = ROOT / ".github" / "workflows" / "frfinance-m41060-write-rls-pg18-ci.yml"
 DOC = ROOT / "docs" / "FR_FINANCE_M41080_ASYNCPG_RLS_INTEGRATION_NO_GO.md"
 DOC90 = ROOT / "docs" / "FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md"
+DOC100 = ROOT / "docs" / "FR_FINANCE_M41100_ASYNCPG_REVOKED_SESSION_POOL_NO_GO.md"
 SOURCE = RUNNER.read_text(encoding="utf-8")
 
 
@@ -66,6 +67,9 @@ def test_both_existing_disposable_workflows_include_m41080_without_real_flags():
             "docs/FR_FINANCE_M41090_ASYNCPG_POOL_REUSE_NO_GO.md",
             "CI_M41090_DISPOSABLE",
             "CI_M41090_DATABASE_URL",
+            "docs/FR_FINANCE_M41100_ASYNCPG_REVOKED_SESSION_POOL_NO_GO.md",
+            "CI_M41100_DISPOSABLE",
+            "CI_M41100_DATABASE_URL",
             "PIX_REAL: 'OFF'",
             "PAGAMENTOS_REAIS: 'OFF'",
             "ATIVACAO_REAL: 'OFF'",
@@ -125,6 +129,35 @@ def test_asyncpg_pool_reuse_resets_capability_role_and_legacy_context():
         "ORIGINAL_DATABASE=NOT_ACCESSED", "MIGRATIONS=NONE",
         "PIX_REAL=OFF", "PAGAMENTOS_REAIS=OFF", "ATIVACAO_REAL=OFF",
         "PRODUCTION=BLOCKED", "PENDING_INDEPENDENT_EVIDENCE",
+    ):
+        assert marker in doc
+    assert "PRODUCTION=GO" not in doc
+
+
+def test_asyncpg_pool_rechecks_revocation_between_borrows():
+    for marker in (
+        "async def _m41100_exercise_revoke_between_pool_borrows",
+        "_m41100_exercise_revoke_between_pool_borrows(",
+        "M41100_ASYNCPG_ACTIVE_BEFORE_REVOKE=PASS",
+        "M41100_ASYNCPG_FIXTURE_SESSION_REVOKED=PASS",
+        "M41100_ASYNCPG_REVOKED_REBORROW=DENIED",
+        "M41100_ASYNCPG_REVOKED_SAME_BACKEND=PASS",
+        "M41100_ASYNCPG_REVOKED_CLAIMS_REMAIN",
+        "M41100_ASYNCPG_REVOKED_RLS_ROWS_REMAIN",
+        "M41100_DIAGNOSTIC=",
+        "CI_M41100_DISPOSABLE",
+        "CI_M41100_DATABASE_URL",
+    ):
+        assert marker in SOURCE
+
+    doc = DOC100.read_text(encoding="utf-8")
+    for marker in (
+        "CP26-0061", "CP26-0062", "CTM-07", "CTM-08",
+        "ACTIVE_BEFORE_REVOKE", "REVOKED_REBORROW",
+        "SAME_BACKEND", "ORIGINAL_DATABASE=NOT_ACCESSED",
+        "MIGRATIONS=NONE", "PIX_REAL=OFF", "PAGAMENTOS_REAIS=OFF",
+        "ATIVACAO_REAL=OFF", "PRODUCTION=BLOCKED",
+        "PENDING_INDEPENDENT_EVIDENCE",
     ):
         assert marker in doc
     assert "PRODUCTION=GO" not in doc

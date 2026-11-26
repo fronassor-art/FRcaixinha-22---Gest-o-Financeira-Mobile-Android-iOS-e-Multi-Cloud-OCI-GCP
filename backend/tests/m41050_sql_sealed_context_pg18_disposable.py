@@ -41,6 +41,7 @@ def require_disposable() -> str:
         "CI_M41060_DISPOSABLE": "1",
         "CI_M41080_DISPOSABLE": "1",
         "CI_M41090_DISPOSABLE": "1",
+        "CI_M41100_DISPOSABLE": "1",
         "CI_M40700_DISPOSABLE": "1",
         "CI_M40680_DISPOSABLE": "1",
         "CI_M40560_DISPOSABLE": "1",
@@ -65,6 +66,7 @@ def require_disposable() -> str:
             and os.environ.get("CI_M40700_DATABASE_URL") == dsn
             and os.environ.get("CI_M41080_DATABASE_URL") == dsn
             and os.environ.get("CI_M41090_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41100_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -434,6 +436,7 @@ def _m41080_validate_disposable_dsn(dsn: str):
         "FRCAIXINHA_CI_ISOLATED": "1",
         "CI_M41080_DISPOSABLE": "1",
         "CI_M41090_DISPOSABLE": "1",
+        "CI_M41100_DISPOSABLE": "1",
         "CI_M41050_DISPOSABLE": "1",
         "CI_M41060_DISPOSABLE": "1",
         "PIX_REAL": "OFF",
@@ -456,6 +459,7 @@ def _m41080_validate_disposable_dsn(dsn: str):
             and os.environ.get("CI_M41050_DATABASE_URL") == dsn
             and os.environ.get("CI_M41080_DATABASE_URL") == dsn
             and os.environ.get("CI_M41090_DATABASE_URL") == dsn
+            and os.environ.get("CI_M41100_DATABASE_URL") == dsn
         )
     except (ValueError, AttributeError, TypeError):
         valid = False
@@ -689,6 +693,86 @@ async def _m41090_exercise_asyncpg_pool(
         print("M41090_ASYNCPG_POOL_REUSED_SAME_BACKEND=PASS")
     finally:
         await pool.close()
+
+
+
+async def _m41100_exercise_revoke_between_pool_borrows(
+    dsn: str,
+    capability: str,
+    token_digest: str,
+    tenant_id,
+    member_id,
+    forged: tuple[str, str, str],
+) -> None:
+    pool = await _m41090_create_asyncpg_pool(dsn)
+    backend_pid = None
+    try:
+        async with pool.acquire() as connection:
+            backend_pid = await connection.fetchval("SELECT pg_backend_pid()")
+            async with connection.transaction():
+                await connection.execute("SET LOCAL ROLE m40650_app")
+                await install_session_capability(connection, capability)
+                await _m41080_set_forged_gucs(connection, forged)
+                claims = await connection.fetch(
+                    "SELECT user_id, role_name, tenant_id, scope_name "
+                    "FROM m41050.current_claims()"
+                )
+                claim_values = [
+                    (row["user_id"], row["role_name"], row["tenant_id"], row["scope_name"])
+                    for row in claims
+                ]
+                assert claim_values == [
+                    (member_id, "TENANT_MEMBER", tenant_id, "READ_ENTRIES")
+                ], "M41100_ASYNCPG_ACTIVE_SESSION_CLAIM"
+                rows = await connection.fetch(
+                    "SELECT tenant_id, member_id, amount_cents "
+                    "FROM m41050.protected_entries "
+                    "ORDER BY tenant_id, member_id, amount_cents, entry_id"
+                )
+                visible = [
+                    (row["tenant_id"], row["member_id"], row["amount_cents"])
+                    for row in rows
+                ]
+                assert visible == [(tenant_id, member_id, 300000)], (
+                    "M41100_ASYNCPG_ACTIVE_SESSION_RLS"
+                )
+            await _m41090_assert_pool_clean(connection, backend_pid)
+            print("M41100_ASYNCPG_ACTIVE_BEFORE_REVOKE=PASS")
+
+        with connect(dsn, autocommit=True) as owner:
+            updated = owner.execute(
+                "UPDATE m40650.sessions "
+                "SET revoked_at=pg_catalog.clock_timestamp() "
+                "WHERE token_digest=%s AND revoked_at IS NULL",
+                (token_digest,),
+            )
+            assert updated.rowcount == 1, "M41100_ASYNCPG_FIXTURE_REVOKE"
+        print("M41100_ASYNCPG_FIXTURE_SESSION_REVOKED=PASS")
+
+        async with pool.acquire() as connection:
+            assert await connection.fetchval("SELECT pg_backend_pid()") == backend_pid, (
+                "M41100_ASYNCPG_REBORROW_CHANGED_BACKEND"
+            )
+            async with connection.transaction():
+                await connection.execute("SET LOCAL ROLE m40650_app")
+                await install_session_capability(connection, capability)
+                await _m41080_set_forged_gucs(connection, forged)
+                claim_count = await connection.fetchval(
+                    "SELECT count(*) FROM m41050.current_claims()"
+                )
+                rows = await connection.fetch(
+                    "SELECT tenant_id, member_id, amount_cents "
+                    "FROM m41050.protected_entries "
+                    "ORDER BY tenant_id, member_id, amount_cents, entry_id"
+                )
+            assert claim_count == 0, "M41100_ASYNCPG_REVOKED_CLAIMS_REMAIN"
+            assert rows == [], "M41100_ASYNCPG_REVOKED_RLS_ROWS_REMAIN"
+            await _m41090_assert_pool_clean(connection, backend_pid)
+            print("M41100_ASYNCPG_REVOKED_REBORROW=DENIED")
+        print("M41100_ASYNCPG_REVOKED_SAME_BACKEND=PASS")
+    finally:
+        await pool.close()
+
 
 
 def expect_insert_denied(app_dsn: str, *args, **kwargs) -> None:
@@ -1047,6 +1131,25 @@ def run(dsn: str) -> None:
         )==[]
         print("M41050_REVOKED_SESSION_CAPABILITY=DENIED")
 
+        # M41100 revokes a freshly validated synthetic member session
+        # between two borrows of one asyncpg physical connection.
+        raw_pool_member, digest_pool_member = create_session(
+            owner, member_b, "TENANT_MEMBER", tenant_b
+        )
+        del raw_pool_member
+        pool_ticket = issue_ticket(
+            auth_dsn, key, digest_pool_member, tenant_b
+        )
+        assert pool_ticket is not None
+        pool_capability = bind_ticket(app_dsn, pool_ticket, tenant_b)
+        assert pool_capability is not None
+        asyncio.run(
+            _m41100_exercise_revoke_between_pool_borrows(
+                dsn, pool_capability, digest_pool_member, tenant_b, member_b,
+                forged_master,
+            )
+        )
+
         # M41080 passes the SQL-issued capability through the real asyncpg
         # helper while each RLS query/write runs in the same transaction.
         async_read_ticket = issue_ticket(auth_dsn, key, digest_a, tenant_a)
@@ -1160,10 +1263,15 @@ def main() -> int:
         diagnostic = str(exc)
         if (
             isinstance(exc, AssertionError)
-            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_"))
+            and diagnostic.startswith(("M41080_ASYNCPG_", "M41090_ASYNCPG_", "M41100_ASYNCPG_"))
             and diagnostic.replace("_", "").isalnum()
         ):
-            prefix = "M41090_DIAGNOSTIC=" if diagnostic.startswith("M41090_") else "M41080_DIAGNOSTIC="
+            if diagnostic.startswith("M41100_"):
+                prefix = "M41100_DIAGNOSTIC="
+            elif diagnostic.startswith("M41090_"):
+                prefix = "M41090_DIAGNOSTIC="
+            else:
+                prefix = "M41080_DIAGNOSTIC="
             print(prefix+diagnostic)
         print("M41050_STATUS=BLOCKED_"+type(exc).__name__)
         return 2
