@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_rls_db_connection
 from app.dependencies import AuthenticatedSession, get_current_session
-from app.m41150_fastapi_rls_context import get_ledger_directory_db_connection
+from app.m41150_fastapi_rls_context import get_ledger_readonly_db_connection
 from app.main import app
 
 T=str(uuid4())
@@ -41,13 +41,13 @@ def clean_overrides():
     yield
     app.dependency_overrides.pop(get_current_session,None)
     app.dependency_overrides.pop(get_rls_db_connection,None)
-    app.dependency_overrides.pop(get_ledger_directory_db_connection,None)
+    app.dependency_overrides.pop(get_ledger_readonly_db_connection,None)
 
 
 def test_http_directory_only_admin_receives_no_balance():
     db=Fake()
     app.dependency_overrides[get_current_session]=lambda:identity("TENANT_ADMIN")
-    app.dependency_overrides[get_ledger_directory_db_connection]=lambda:db
+    app.dependency_overrides[get_ledger_readonly_db_connection]=lambda:db
     with TestClient(app) as client:
         response=client.get(URL)
     assert response.status_code==200,response.text
@@ -71,7 +71,7 @@ def test_http_roles_master_member_and_other_tenant_forbidden_before_sql():
                         ("TENANT_ADMIN",OTHER)):
         db=Fake()
         app.dependency_overrides[get_current_session]=lambda r=role,t=tenant:identity(r,t)
-        app.dependency_overrides[get_ledger_directory_db_connection]=lambda:db
+        app.dependency_overrides[get_ledger_readonly_db_connection]=lambda:db
         with TestClient(app) as client:
             response=client.get(URL)
         assert response.status_code==403,response.text
@@ -80,7 +80,7 @@ def test_http_roles_master_member_and_other_tenant_forbidden_before_sql():
 
 def test_http_no_auth_stays_blocked_without_db_connection():
     db=Fake()
-    app.dependency_overrides[get_ledger_directory_db_connection]=lambda:db
+    app.dependency_overrides[get_ledger_readonly_db_connection]=lambda:db
     with TestClient(app) as client:
         response=client.get(URL)
     assert response.status_code==401
