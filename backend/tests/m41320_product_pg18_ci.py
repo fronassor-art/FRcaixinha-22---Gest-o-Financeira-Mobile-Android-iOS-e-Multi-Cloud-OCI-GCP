@@ -1,5 +1,6 @@
 """Real FastAPI route and SQL transactions; canonical schema in disposable PG18."""
 import asyncio,os
+from datetime import datetime,timedelta,timezone
 from uuid import UUID,uuid4
 import asyncpg
 import httpx
@@ -86,6 +87,36 @@ async def main():
                 await owner.execute("UPDATE public.cycles SET settlement_date=settlement_date+1 WHERE id=$1",UUID(c))
             except asyncpg.CheckViolationError: pass
             else: raise AssertionError("accepted dates editable")
+            # M41390: no policy discovery without a scoped cycle invitation.
+            assert (await client.get(prefix+f"/cycles/{c}/policy",headers=ha)).status_code==403
+            assert (await client.get(prefix+"/cycles",headers=ha)).json()["items"]==[]
+            expires=(datetime.now(timezone.utc)+timedelta(hours=12)).isoformat()
+            async def bind_invite(cid,quotas=2,member_id=ma,headers=h,status=200,expiry=expires):
+                return await post(f"/cycles/{cid}/invitations",dict(membership_id=str(member_id),joined="2027-01-10",quotas=quotas,expires_at=expiry),headers,status)
+            await bind_invite(c,status=403)
+            await owner.execute("UPDATE public.users SET email_verified_at=now() WHERE id=$1",member_a)
+            await bind_invite(c,headers=ha,status=403)
+            await bind_invite(c,headers=ho,status=403)
+            await bind_invite(c,member_id=mb,status=403)
+            await bind_invite(c,expiry=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat(),status=422)
+            i1,i2=await asyncio.gather(bind_invite(c),bind_invite(c))
+            assert i1==i2
+            await bind_invite(c,quotas=3,status=409)
+            await bind_invite(c2)
+            await owner.execute("UPDATE public.users SET email_verified_at=now() WHERE id=$1",member_b)
+            ib=(await bind_invite(c2,member_id=mb))["invitation_id"]
+            await post(f"/cycles/{c}/invitations/{ib}/revoke",{},h,403)
+            await post(f"/cycles/{c2}/invitations/{ib}/revoke",{},hb,403)
+            assert (await post(f"/cycles/{c2}/invitations/{ib}/revoke",{}))["state"]=="REVOKED"
+            assert (await post(f"/cycles/{c2}/invitations/{ib}/revoke",{}))["state"]=="REVOKED"
+            assert (await client.get(prefix+f"/cycles/{c2}/workspace",headers=hb)).status_code==403
+            discovered=(await client.get(prefix+"/cycles",headers=ha)).json()
+            assert {x["cycle_id"] for x in discovered["items"]}=={c,c2}
+            assert all(x["membership_state"]=="INVITED" for x in discovered["items"])
+            pending=(await client.get(prefix+f"/cycles/{c}/workspace",headers=ha)).json()
+            assert pending["invitation"]["id"]==i1["invitation_id"] and pending["invitation"]["quotas"]==2
+            assert pending["summary"] is None and pending["reserves"] is None and pending["items"]==[]
+            assert (await client.get(prefix+f"/cycles/{c}/my-contributions",headers=ha)).status_code==403
             policy=await client.get(prefix+f"/cycles/{c}/policy",headers=ha)
             assert policy.status_code==200 and policy.json()["policy_hash"]==payload["policy_hash"] and policy.json()["quota_cents"]==5000
             assert (await client.get(prefix+f"/cycles/{c}/policy",headers=ho)).status_code==403
@@ -96,7 +127,9 @@ async def main():
             await post(f"/cycles/{c}/policy-acceptance",consent,hb,403)
             await post(f"/cycles/{c}/policy-acceptance",consent,ho,403)
             await post(f"/cycles/{c2}/policy-acceptance",consent,ha,409)
+            await post(f"/cycles/{c}/policy-acceptance",{**consent,"quotas":3},ha,409)
             consent_id=(await post(f"/cycles/{c}/policy-acceptance",consent,ha))["consent_id"]
+            await post(f"/cycles/{c}/invitations/{i1['invitation_id']}/revoke",{},h,409)
             assert (await post(f"/cycles/{c}/policy-acceptance",consent,ha))["consent_id"]==consent_id
             await post(f"/cycles/{c}/policy-acceptance",{**consent,"quotas":3},ha,409)
             assert (await post(f"/cycles/{c}/admissions",admission))["obligations"]==11
@@ -110,6 +143,7 @@ async def main():
             for _ in range(2):
                 ex=await accepted({**cycle,"request_id":str(uuid4())})
                 ec=(await post("/cycles",ex))["cycle_id"]
+                await bind_invite(ec,quotas=36)
                 await post(f"/cycles/{ec}/policy-acceptance",{**consent,"policy_hash":ex["policy_hash"],"quotas":36},ha)
                 extras.append(ec)
             await owner.execute("UPDATE public.saas_license_entitlements SET status='SUSPENDED' WHERE id=$1",ent)
@@ -341,6 +375,7 @@ async def main():
         print("M41350_CYCLE_RESERVES_DEFICIT_CANONICAL_PIX_EXCLUSION=PASS")
         print("M41360_CANONICAL_MOBILE_DIRECTORY_WORKSPACE_SCOPE=PASS")
         print("M41380_SCOPED_FORM_OPTIONS_READBACK=PASS")
+        print("M41390_NOMINAL_CYCLE_INVITE_PRECONSENT_REVOCATION_SCOPE_RACE=PASS")
     finally:
         await pool.close()
         await owner.close()

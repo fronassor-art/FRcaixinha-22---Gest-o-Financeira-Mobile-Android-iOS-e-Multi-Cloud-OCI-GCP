@@ -18,6 +18,8 @@ export function ProductTransactionalFormsV23({scope,cycle,workspace}:{scope:Scop
  function edit(k:string,v:string){setDraft(old=>({...old,[k]:v}));setPrepared(null);setAccepted(false);setMsg('');}
  const ok=optionKind(kind),selected=options?.items.find(x=>x.id===draft[optionField(kind)]);
  function value(k:string){
+  if(kind==='CONSENT'&&k==='joined')return workspace?.invitation?.joined??'';
+  if(kind==='CONSENT'&&k==='quotas')return workspace?.invitation?String(workspace.invitation.quotas):'';
   if(kind==='ADMIT'&&k==='joined')return selected?.date??'';
   if(kind==='ADMIT'&&k==='quotas')return selected?.quotas===undefined?'':String(selected.quotas);
   if(kind==='RELEASE'&&k==='amount')return selected?.cents===undefined?'':(selected.cents/100).toFixed(2);if(k==='cycle_id')return cycle;if(k==='policy_hash')return workspace?.policy.policy_hash??'';return draft[k]??'';}
@@ -55,10 +57,10 @@ export function ProductTransactionalFormsV23({scope,cycle,workspace}:{scope:Scop
    {ok&&k===optionField(kind)?<select className={field} disabled={busy||!options} value={value(k)} onChange={e=>edit(k,e.target.value)}><option value="">Selecione</option>{options?.items.map(o=><option key={o.id} value={o.id}>{o.date??''} {o.cents===undefined?'':(o.cents/100).toFixed(2)+' BRL'} {o.quotas===undefined?'':o.quotas+' cotas'} {o.id}</option>)}</select>:
    k==='mode'||k==='method'?<select className={field} value={value(k)} onChange={e=>edit(k,e.target.value)}><option value="">Selecione</option>{(k==='mode'?['MANUAL','MERCADO_PAGO','HYBRID']:['DINHEIRO','PIX_EXTERNO','TRANSFERENCIA','DEPOSITO']).map(o=><option key={o}>{o}</option>)}</select>:
    k==='contribution_id'?<select className={field} value={value(k)} onChange={e=>edit(k,e.target.value)}><option value="">Selecione a competência</option>{workspace?.items.filter(o=>o.due_cents>o.paid_cents+o.pending_manual_cents).map(o=><option key={o.contribution_id} value={o.contribution_id}>{o.due_date} · {o.contribution_id}</option>)}</select>:
-   <input className={field} type={dateFields.has(k)?'date':'text'} maxLength={160} readOnly={k==='cycle_id'||k==='policy_hash'||(kind==='ADMIT'&&(k==='joined'||k==='quotas'))||(kind==='RELEASE'&&k==='amount')} value={value(k)} onChange={e=>edit(k,e.target.value)}/>}
+   <input className={field} type={dateFields.has(k)?'date':'text'} maxLength={160} readOnly={k==='cycle_id'||k==='policy_hash'||((kind==='ADMIT'||kind==='CONSENT')&&(k==='joined'||k==='quotas'))||(kind==='RELEASE'&&k==='amount')} value={value(k)} onChange={e=>edit(k,e.target.value)}/>}
   </label>)}
   <label className="flex gap-2 text-sm"><input type="checkbox" checked={accepted} onChange={e=>{setAccepted(e.target.checked);setPrepared(null);setMsg('');}}/> Conferi os campos para preparação local, sem aceite ou gravação real.</label>
-  <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={!accepted||busy||(kind!=='POLICY'&&(!workspace||!cycle))||(!!ok&&!selected)} onClick={prepare}>Conferir dados</button><button type="button" className={button} disabled={!prepared||busy} onClick={()=>void check()}>Verificar disponibilidade no servidor</button></div>
+  <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={!accepted||busy||(kind!=='POLICY'&&(!workspace||!cycle))||(kind==='CONSENT'&&!workspace?.invitation)||(!!ok&&!selected)} onClick={prepare}>Conferir dados</button><button type="button" className={button} disabled={!prepared||busy} onClick={()=>void check()}>Verificar disponibilidade no servidor</button></div>
   {prepared&&<p className="text-xs">Formulário preparado; pendente de autorização do servidor. A prévia contratual definitiva depende de hash retornado pela API.</p>}
   {msg&&<p role="status" className="text-sm">{msg}</p>}
  </section>;

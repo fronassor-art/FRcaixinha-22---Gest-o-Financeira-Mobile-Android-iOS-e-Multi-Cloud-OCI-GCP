@@ -27,12 +27,13 @@ export function parseCapabilities(v:unknown){const x=exact(v,'contract available
 export function parseDirectory(v:unknown,s:Scope,offset:number){
  const x=exact(v,'tenant_id user_id role offset has_more items');sameScope(x,s);const p=page(x,offset);const seen=new Set<string>();
  const items=p.items.map(v=>{const y=exact(v,'cycle_id start_date first_due last_due closing quota_cents mode status membership_state');const id=uuid(y.cycle_id);if(seen.has(id))fail();seen.add(id);
- const membership_state=s.role==='TENANT_ADMIN'?(y.membership_state===null?null:fail()):one(y.membership_state,['ADMITTED','CONSENTED'] as const);
+ const membership_state=s.role==='TENANT_ADMIN'?(y.membership_state===null?null:fail()):one(y.membership_state,['ADMITTED','CONSENTED','INVITED'] as const);
  return {cycle_id:id,...dates(y),quota_cents:num(y.quota_cents,1,100000000),mode:one(y.mode,modes),status:one(y.status,['ABERTO','CONGELADO','EM_APURACAO','LIQUIDADO'] as const),membership_state};});
  return {items,has_more:p.has_more};
 }
 export function parseWorkspace(v:unknown,s:Scope,cycle:string,offset:number){
- const x=exact(v,'tenant_id user_id role cycle_id membership_id policy summary reserves offset has_more items');sameScope(x,s);if(uuid(x.cycle_id)!==uuid(cycle))fail();const p=page(x,offset);
+ const raw=rec(v);const hasInvitation=Object.hasOwn(raw,'invitation');
+ const x=exact(v,'tenant_id user_id role cycle_id membership_id policy summary reserves offset has_more items'+(hasInvitation?' invitation':''));sameScope(x,s);if(uuid(x.cycle_id)!==uuid(cycle))fail();const p=page(x,offset);
  const m=s.role==='TENANT_ADMIN'?(x.membership_id===null?null:fail()):uuid(x.membership_id);
  const y=exact(x.policy,'policy_hash document_id document_hash start_date first_due last_due closing quota_cents admin_bps late_days late_competences mode');
  const policy={...dates(y),policy_hash:hash(y.policy_hash),document_id:uuid(y.document_id),document_hash:hash(y.document_hash),quota_cents:num(y.quota_cents,1,100000000),admin_bps:num(y.admin_bps,0,10000),late_days:num(y.late_days,1,3650),late_competences:num(y.late_competences,1,120),mode:one(y.mode,modes)};
@@ -53,7 +54,13 @@ export function parseWorkspace(v:unknown,s:Scope,cycle:string,offset:number){
  const seen=new Set<string>();const items=p.items.map(v=>{const z=exact(v,'contribution_id membership_id competence due_date due_cents paid_cents payment_status pending_manual_cents');const id=uuid(z.contribution_id),member=uuid(z.membership_id),due=date(z.due_date),a=num(z.due_cents,1),b=num(z.paid_cents),pending=num(z.pending_manual_cents),status=one(z.payment_status,['PENDENTE','PARCIAL','QUITADA'] as const);
  if(seen.has(id)||(!admin&&member!==m)||due<policy.first_due||due>policy.last_due||z.competence!==due.slice(0,7)||b>a||pending>a-b||(status==='QUITADA'?b!==a:status==='PENDENTE'?b!==0:b<=0||b>=a))fail();seen.add(id);
  return {contribution_id:id,membership_id:member,due_date:due,due_cents:a,paid_cents:b,pending_manual_cents:pending,payment_status:status};});
- return {cycle_id:uuid(cycle),scope:{userId:uuid(s.userId),tenantId:uuid(s.tenantId),role:s.role},policy,summary,reserves,items,has_more:p.has_more};
+ let invitation:null|{id:string;joined:string;quotas:number;policy_hash:string}=null;
+ if(hasInvitation){const z=exact(x.invitation,'id joined quotas policy_hash');
+  if(admin||summary!==null||reserves!==null||items.length||p.has_more)fail();
+  invitation={id:uuid(z.id),joined:date(z.joined),quotas:num(z.quotas,1,400),policy_hash:hash(z.policy_hash)};
+  if(invitation.policy_hash!==policy.policy_hash||invitation.joined<policy.start_date||invitation.joined>policy.last_due||invitation.quotas*policy.quota_cents>100000000)fail();
+ }
+ return {cycle_id:uuid(cycle),scope:{userId:uuid(s.userId),tenantId:uuid(s.tenantId),role:s.role},policy,summary,reserves,items,has_more:p.has_more,invitation};
 }
 export type Directory=ReturnType<typeof parseDirectory>;
 export type Workspace=ReturnType<typeof parseWorkspace>;

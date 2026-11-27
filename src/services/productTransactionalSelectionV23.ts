@@ -29,6 +29,9 @@ export function prepareSelectedV23(s:Scope,k:Kind,f:Fields,request:string,accept
   require(row&&ws!.policy.mode!=='MERCADO_PAGO'&&cents(fields.amount)<=row.due_cents-row.paid_cents-row.pending_manual_cents&&fields.occurred>=ws!.policy.start_date&&fields.occurred<=ws!.policy.closing);
  }
  if(k==='HOLD')require(ws!.reserves&&cents(fields.amount,100000000000)<=ws!.reserves.unreserved_documented_cents);
- if(k==='CONSENT')require(fields.joined>=ws!.policy.start_date&&fields.joined<=ws!.policy.last_due);
+ if(k==='CONSENT'){
+  const invite=ws!.invitation;require(invite&&invite.policy_hash===ws!.policy.policy_hash);
+  fields.joined=invite!.joined;fields.quotas=String(invite!.quotas);
+ }
  return prepareV23(s,k,fields,request,accepted);
 }

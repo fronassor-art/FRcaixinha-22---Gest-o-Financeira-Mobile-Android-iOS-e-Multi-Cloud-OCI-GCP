@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field
 from ..dependencies import bearer_token
 
 router=APIRouter(prefix="/tenants/{tenant_id}/v23",tags=["FR Finance V2.3"])
@@ -47,6 +47,12 @@ class ConsentInput(Strict):
     joined: date
     quotas: int=Field(strict=True,ge=1,le=400)
     accepted: Accepted
+
+class CycleInvitationInput(Strict):
+    membership_id: UUID
+    joined: date
+    quotas: int=Field(strict=True,ge=1,le=400)
+    expires_at: AwareDatetime
 
 class AdmissionInput(Strict):
     membership_id: UUID
@@ -164,3 +170,12 @@ async def document_options(tenant_id:UUID,request:Request,offset:int=Query(0,ge=
 async def cycle_form_options(tenant_id:UUID,cycle_id:UUID,kind:Literal["ADMIT","CONFIRM","REVERSE","CONTEST","RELEASE"],request:Request,offset:int=Query(0,ge=0,le=10000),conn=Depends(unreleased_transaction)):
     row=await call(conn.fetchrow("SELECT public.fr_v23_form_options($1,$2,$3,$4,$5)::text AS payload",bearer_token(request),tenant_id,cycle_id,kind,offset))
     return json.loads(row["payload"])
+@router.post("/cycles/{cycle_id}/invitations")
+async def invite_cycle(tenant_id:UUID,cycle_id:UUID,p:CycleInvitationInput,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT public.fr_v23_invite($1,$2,$3,$4,$5,$6,$7) AS invitation_id",
+        bearer_token(request),tenant_id,cycle_id,p.membership_id,p.joined,p.quotas,p.expires_at))
+
+@router.post("/cycles/{cycle_id}/invitations/{invitation_id}/revoke")
+async def revoke_cycle_invite(tenant_id:UUID,cycle_id:UUID,invitation_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT public.fr_v23_revoke_invite($1,$2,$3,$4) AS state",
+        bearer_token(request),tenant_id,cycle_id,invitation_id))

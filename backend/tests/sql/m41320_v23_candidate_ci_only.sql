@@ -71,6 +71,20 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER fr_v23_cycle_dates BEFORE UPDATE ON public.cycles FOR EACH ROW EXECUTE FUNCTION public.fr_v23_cycle_dates_immutable();
+-- M41390: invitation for a previously registered, verified identity. No communication or role grant.
+CREATE TABLE public.fr_v23_cycle_invites(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, cycle_id uuid NOT NULL,
+ membership_id uuid NOT NULL REFERENCES public.memberships(id), actor uuid NOT NULL REFERENCES public.users(id),
+ policy_hash text NOT NULL CHECK(policy_hash ~ '^[0-9a-f]{64}$'),
+ joined date NOT NULL, quotas int NOT NULL CHECK(quotas BETWEEN 1 AND 400),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(), expires_at timestamptz NOT NULL,
+ UNIQUE(cycle_id,membership_id), FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id),
+ CHECK(expires_at>created_at)
+);
+CREATE TABLE public.fr_v23_cycle_invite_revocations(
+ invite_id uuid PRIMARY KEY REFERENCES public.fr_v23_cycle_invites(id),
+ actor uuid NOT NULL REFERENCES public.users(id), revoked_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 CREATE TABLE public.fr_v23_member_consent(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),cycle_id uuid NOT NULL REFERENCES public.fr_v23_policy(cycle_id),
  membership_id uuid NOT NULL REFERENCES public.memberships(id),acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),
@@ -118,7 +132,7 @@ CREATE TABLE public.fr_v23_reservation_events(
 CREATE FUNCTION public.fr_v23_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 BEGIN RAISE EXCEPTION 'immutable V23'; END $$;
 DO $$ DECLARE t regclass; BEGIN
- FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass]) LOOP
+ FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass,'public.fr_v23_cycle_invites'::regclass,'public.fr_v23_cycle_invite_revocations'::regclass]) LOOP
  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY',t);
  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY',t);
  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',t);
@@ -214,12 +228,77 @@ BEGIN
  VALUES(c,p_tenant,p_request,a,p_doc,acc,p_hash,p_first,p_last,p_quota,p_bps,p_late,p_comp,p_mode);
  RETURN c;
 END $$;
+CREATE FUNCTION public.fr_v23_live_invite(p_tenant uuid,p_cycle uuid,p_member uuid)
+RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+ SELECT i.id FROM public.fr_v23_cycle_invites i
+ JOIN public.fr_v23_policy p ON p.cycle_id=i.cycle_id AND p.tenant_id=i.tenant_id AND p.policy_hash=i.policy_hash
+ JOIN public.cycles c ON c.id=i.cycle_id AND c.tenant_id=i.tenant_id
+ JOIN public.tenants t ON t.id=i.tenant_id AND t.admin_user_id=i.actor AND t.status='ATIVO'
+ JOIN public.memberships me ON me.id=i.membership_id AND me.tenant_id=i.tenant_id AND me.role='TENANT_MEMBER' AND me.status='ATIVA'
+ JOIN public.users u ON u.id=me.user_id AND u.status='ACTIVE' AND u.email_verified_at IS NOT NULL
+ JOIN public.memberships adm ON adm.tenant_id=t.id AND adm.user_id=i.actor AND adm.role='TENANT_ADMIN' AND adm.status='ATIVA'
+ JOIN public.users au ON au.id=i.actor AND au.status='ACTIVE'
+ WHERE i.tenant_id=p_tenant AND i.cycle_id=p_cycle AND i.membership_id=p_member
+ AND c.status='ABERTO' AND i.expires_at>clock_timestamp()
+ AND NOT EXISTS(SELECT 1 FROM public.fr_v23_cycle_invite_revocations r WHERE r.invite_id=i.id)
+$$;
+CREATE FUNCTION public.fr_v23_invite(p_token text,p_tenant uuid,p_cycle uuid,p_member uuid,p_joined date,p_quotas int,p_expires timestamptz)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;p record;i record;m record;result_id uuid;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,true);
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
+ SELECT pol.*,c.start_date INTO p FROM public.fr_v23_policy pol JOIN public.cycles c ON c.id=pol.cycle_id
+ WHERE pol.tenant_id=p_tenant AND pol.cycle_id=p_cycle AND c.status='ABERTO';
+ IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ SELECT me.id,me.joined_at INTO m FROM public.memberships me JOIN public.users u ON u.id=me.user_id
+ WHERE me.id=p_member AND me.tenant_id=p_tenant AND me.role='TENANT_MEMBER' AND me.status='ATIVA'
+ AND u.status='ACTIVE' AND u.email_verified_at IS NOT NULL FOR SHARE OF me,u;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity not verified or outside scope' USING ERRCODE='42501'; END IF;
+ IF p_joined IS NULL OR p_joined<p.start_date OR p_joined>p.last_due OR p_joined<m.joined_at
+ OR p_quotas IS NULL OR p_quotas NOT BETWEEN 1 AND 400 OR p.quota_cents*p_quotas>100000000
+ OR p_expires IS NULL OR NOT isfinite(p_expires) THEN RAISE EXCEPTION 'invalid invitation' USING ERRCODE='22023'; END IF;
+ SELECT * INTO i FROM public.fr_v23_cycle_invites WHERE cycle_id=p_cycle AND membership_id=p_member;
+ IF FOUND THEN
+ IF (i.actor,i.policy_hash,i.joined,i.quotas,i.expires_at) IS DISTINCT FROM (a,p.policy_hash,p_joined,p_quotas,p_expires)
+ THEN RAISE EXCEPTION 'invitation conflict' USING ERRCODE='23505'; END IF;
+ RETURN i.id; END IF;
+ IF p_expires<=clock_timestamp() THEN RAISE EXCEPTION 'expired invitation' USING ERRCODE='22023'; END IF;
+ PERFORM * FROM public.fr_v23_license(p_tenant,a);
+ INSERT INTO public.fr_v23_cycle_invites(tenant_id,cycle_id,membership_id,actor,policy_hash,joined,quotas,expires_at)
+ VALUES(p_tenant,p_cycle,p_member,a,p.policy_hash,p_joined,p_quotas,p_expires) RETURNING id INTO result_id;
+ RETURN result_id;
+END $$;
+CREATE FUNCTION public.fr_v23_revoke_invite(p_token text,p_tenant uuid,p_cycle uuid,p_invite uuid)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;i record;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,true);
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
+ SELECT * INTO i FROM public.fr_v23_cycle_invites WHERE id=p_invite AND tenant_id=p_tenant AND cycle_id=p_cycle;
+ IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ IF EXISTS(SELECT 1 FROM public.fr_v23_member_consent c WHERE c.cycle_id=p_cycle AND c.membership_id=i.membership_id)
+ THEN RAISE EXCEPTION 'consent already registered' USING ERRCODE='23514'; END IF;
+ INSERT INTO public.fr_v23_cycle_invite_revocations(invite_id,actor) VALUES(p_invite,a) ON CONFLICT(invite_id) DO NOTHING;
+ RETURN 'REVOKED';
+END $$;
+CREATE FUNCTION public.fr_v23_member_policy_allowed(p_actor uuid,p_tenant uuid,p_cycle uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+ SELECT EXISTS(SELECT 1 FROM public.memberships m WHERE m.tenant_id=p_tenant AND m.user_id=p_actor
+ AND m.role='TENANT_MEMBER' AND m.status='ATIVA' AND
+ (EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p_cycle AND co.membership_id=m.id)
+ OR public.fr_v23_live_invite(p_tenant,p_cycle,m.id) IS NOT NULL))
+$$;
 CREATE FUNCTION public.fr_v23_read_policy(p_token text,p_tenant uuid,p_cycle uuid)
 RETURNS TABLE(policy_hash text,document_id uuid,document_hash text,start_date date,first_due date,last_due date,closing date,
  quota_cents bigint,admin_bps int,late_days int,late_competences int,mode text)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;
 BEGIN
- PERFORM public.fr_v23_actor(p_token,p_tenant,false);
+ a:=public.fr_v23_actor(p_token,p_tenant,false);
+ IF EXISTS(SELECT 1 FROM public.sessions s WHERE s.token_hash=encode(public.digest(p_token,'sha256'),'hex') AND s.active_role='TENANT_MEMBER')
+ AND NOT public.fr_v23_member_policy_allowed(a,p_tenant,p_cycle)
+ THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
  RETURN QUERY SELECT p.policy_hash,p.document_id,d.sha256::text,c.start_date,p.first_due,p.last_due,c.settlement_date,
  p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode
  FROM public.fr_v23_policy p JOIN public.cycles c ON c.id=p.cycle_id JOIN public.contract_documents d ON d.id=p.document_id
@@ -228,7 +307,7 @@ BEGIN
 END $$;
 CREATE FUNCTION public.fr_v23_accept_policy(p_token text,p_tenant uuid,p_cycle uuid,p_hash text,p_joined date,p_quotas int)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE a uuid;m uuid;acc uuid;p record;prior record;cid uuid;
+DECLARE a uuid;m uuid;acc uuid;p record;prior record;cid uuid;i record;
 BEGIN
  a:=public.fr_v23_actor(p_token,p_tenant,false);
  PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
@@ -249,6 +328,11 @@ BEGIN
  IF FOUND THEN
  IF (prior.actor,prior.acceptance_id,prior.policy_hash,prior.joined,prior.quotas) IS DISTINCT FROM (a,acc,p_hash,p_joined,p_quotas)
  THEN RAISE EXCEPTION 'consent conflict' USING ERRCODE='23505'; END IF; RETURN prior.id; END IF;
+ SELECT * INTO i FROM public.fr_v23_cycle_invites WHERE id=public.fr_v23_live_invite(p_tenant,p_cycle,m);
+ IF NOT FOUND THEN RAISE EXCEPTION 'cycle invitation missing' USING ERRCODE='42501'; END IF;
+ IF (i.joined,i.quotas) IS DISTINCT FROM (p_joined,p_quotas)
+ THEN RAISE EXCEPTION 'invitation terms mismatch' USING ERRCODE='23514'; END IF;
+ PERFORM * FROM public.fr_v23_license(p_tenant,i.actor);
  INSERT INTO public.fr_v23_member_consent(cycle_id,membership_id,acceptance_id,actor,policy_hash,joined,quotas)
  VALUES(p_cycle,m,acc,a,p_hash,p_joined,p_quotas) RETURNING id INTO cid;RETURN cid;
 END $$;
@@ -521,18 +605,19 @@ BEGIN
  END IF;
  SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.start_date DESC,q.cycle_id),'[]'::jsonb) INTO items
  FROM (SELECT p.cycle_id,c.start_date,p.first_due,p.last_due,c.settlement_date AS closing,p.quota_cents,p.mode,c.status,
- CASE WHEN r='TENANT_ADMIN' THEN NULL WHEN EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p.cycle_id AND ad.membership_id=m) THEN 'ADMITTED' ELSE 'CONSENTED' END AS membership_state
+ CASE WHEN r='TENANT_ADMIN' THEN NULL WHEN EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p.cycle_id AND ad.membership_id=m) THEN 'ADMITTED' WHEN EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p.cycle_id AND co.membership_id=m) THEN 'CONSENTED' ELSE 'INVITED' END AS membership_state
  FROM public.fr_v23_policy p JOIN public.cycles c ON c.id=p.cycle_id AND c.tenant_id=p.tenant_id
  WHERE p.tenant_id=p_tenant AND (r='TENANT_ADMIN'
  OR EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p.cycle_id AND ad.membership_id=m)
- OR EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p.cycle_id AND co.membership_id=m))
+ OR EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p.cycle_id AND co.membership_id=m)
+ OR public.fr_v23_live_invite(p_tenant,p.cycle_id,m) IS NOT NULL)
  ORDER BY c.start_date DESC,p.cycle_id OFFSET p_offset LIMIT 51) q;
  RETURN jsonb_build_object('tenant_id',p_tenant,'user_id',a,'role',r,'offset',p_offset,
  'has_more',jsonb_array_length(items)>50,'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
 END $$;
 CREATE FUNCTION public.fr_v23_workspace(p_token text,p_tenant uuid,p_cycle uuid,p_offset int)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE a uuid;r text;m uuid;admitted boolean;pol jsonb;summary jsonb;reserves jsonb;items jsonb;
+DECLARE a uuid;r text;m uuid;admitted boolean;pol jsonb;summary jsonb;reserves jsonb;items jsonb;inv jsonb;
 BEGIN
  a:=public.fr_v23_actor(p_token,p_tenant,false);
  PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
@@ -541,8 +626,11 @@ BEGIN
  IF r='TENANT_MEMBER' THEN
  SELECT me.id INTO m FROM public.memberships me WHERE me.user_id=a AND me.tenant_id=p_tenant AND me.role=r AND me.status='ATIVA';
  admitted:=EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p_cycle AND ad.membership_id=m);
- IF NOT admitted AND NOT EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p_cycle AND co.membership_id=m)
- THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ IF NOT admitted AND NOT EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p_cycle AND co.membership_id=m) THEN
+ SELECT jsonb_build_object('id',i.id,'joined',i.joined,'quotas',i.quotas,'policy_hash',i.policy_hash) INTO inv
+ FROM public.fr_v23_cycle_invites i WHERE i.id=public.fr_v23_live_invite(p_tenant,p_cycle,m);
+ IF inv IS NULL THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ END IF;
  END IF;
  SELECT to_jsonb(q) INTO pol FROM public.fr_v23_read_policy(p_token,p_tenant,p_cycle) q;
  IF r='TENANT_ADMIN' THEN
@@ -559,7 +647,8 @@ BEGIN
  ORDER BY co.due_date,co.id OFFSET p_offset LIMIT 51) q;
  RETURN jsonb_build_object('tenant_id',p_tenant,'user_id',a,'role',r,'cycle_id',p_cycle,'membership_id',m,
  'policy',pol,'summary',summary,'reserves',reserves,'offset',p_offset,
- 'has_more',jsonb_array_length(items)>50,'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
+ 'has_more',jsonb_array_length(items)>50,'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END)
+ || CASE WHEN inv IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('invitation',inv) END;
 END $$;
 
 -- M41380: minimal, paginated selection references, candidate CI only.
@@ -627,5 +716,6 @@ GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date
  public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid),
  public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid),
  public.fr_v23_reserves(text,uuid,uuid),public.fr_v23_reserve_event(text,uuid,uuid,uuid,text,bigint,uuid,text),
- public.fr_v23_cycle_directory(text,uuid,int),public.fr_v23_workspace(text,uuid,uuid,int),public.fr_v23_form_options(text,uuid,uuid,text,int) TO frcaixinha_pg18_app;
+ public.fr_v23_cycle_directory(text,uuid,int),public.fr_v23_workspace(text,uuid,uuid,int),public.fr_v23_form_options(text,uuid,uuid,text,int),
+ public.fr_v23_invite(text,uuid,uuid,uuid,date,int,timestamptz),public.fr_v23_revoke_invite(text,uuid,uuid,uuid) TO frcaixinha_pg18_app;
 COMMIT;

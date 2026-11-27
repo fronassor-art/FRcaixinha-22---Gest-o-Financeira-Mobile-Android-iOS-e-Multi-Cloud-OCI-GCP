@@ -34,3 +34,7 @@ def test_routes_fail_closed_without_provider():
     assert client.get(prefix+f"/cycles/{c}/workspace").status_code==503
     assert client.get(prefix+"/form-options").status_code==503
     assert client.get(prefix+f"/cycles/{c}/form-options?kind=ADMIT").status_code==503
+    assert client.post(prefix+f"/cycles/{c}/invitations",json=dict(membership_id=str(r),joined="2026-12-10",quotas=1,expires_at="2027-01-01T00:00:00Z")).status_code==503
+    assert client.post(prefix+f"/cycles/{c}/invitations/{r}/revoke",json={}).status_code==503
+    with pytest.raises(ValidationError):
+        product_v23.CycleInvitationInput(membership_id=r,joined="2026-12-10",quotas=1,expires_at="2027-01-01T00:00:00")

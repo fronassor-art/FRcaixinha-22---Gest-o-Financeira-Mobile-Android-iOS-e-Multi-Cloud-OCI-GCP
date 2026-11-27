@@ -45,4 +45,13 @@ await assert.rejects(readV23(transport,s,{kind:'options',optionKind:'CONTEST',cy
 assert.equal(sends,1);
 transport.send=async()=>{current=false;return Response.json(raw);};
 await assert.rejects(readV23(transport,s,{kind:'options',optionKind:'ADMIT',cycleId:cycle,offset:0}),/alterada/);
+const pendingRaw={...common,role:ms.role,cycle_id:cycle,membership_id:member,policy,summary:null,reserves:null,items:[],invitation:{id:id(21),joined:'2027-01-10',quotas:2,policy_hash:policy.policy_hash}};
+const invited=parseWorkspace(pendingRaw,ms,cycle,0);
+const consent=prepareSelectedV23(ms,'CONSENT',{joined:'2027-02-10',quotas:'9'},id(22),true,cycle,invited,null);
+assert.equal(consent.body.joined,'2027-01-10');assert.equal(consent.body.quotas,2);
+assert.throws(()=>parseWorkspace({...pendingRaw,invitation:{...pendingRaw.invitation,policy_hash:'c'.repeat(64)}},ms,cycle,0));
+assert.throws(()=>parseWorkspace({...pendingRaw,items:[item]},ms,cycle,0));
+assert.throws(()=>parseWorkspace({...pendingRaw,role:s.role,membership_id:null},s,cycle,0));
+assert.throws(()=>prepareSelectedV23(ms,'CONSENT',{},id(22),true,cycle,{...invited,invitation:null},null));
 console.log('M41380_SELECTED_REFERENCES_SCOPE_AMOUNT_ROLE_STALE=PASS');
+console.log('M41390_INVITE_PRECONSENT_CLIENT_BOUND_TERMS=PASS');
