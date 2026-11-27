@@ -297,6 +297,8 @@ jobs:
         run: npx tsx src/tests/m41440_onboarding_forms_ci.test.ts
       - name: M41450 — sessão preliminar mobile e retomada sem acesso operacional
         run: npx tsx src/tests/m41450_preliminary_journey_ci.test.ts
+      - name: M41460 — autenticação administrativa e aceite B por escopo
+        run: npx tsx src/tests/m41460_administrator_readiness_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
@@ -1375,7 +1377,7 @@ jobs:
           cache: npm
       - name: Dependências TypeScript fixadas para ponte de formulários CI
         run: npm ci
-      - name: M41320–M41450 — V2.3 transacional, identidade, SaaS e sessão preliminar no PG18 descartável
+      - name: M41320–M41460 — V2.3 transacional, identidade, SaaS e reautenticação segregada no PG18 descartável
         env:
           GITHUB_ACTIONS: 'true'
           FRCAIXINHA_CI_ISOLATED: '1'

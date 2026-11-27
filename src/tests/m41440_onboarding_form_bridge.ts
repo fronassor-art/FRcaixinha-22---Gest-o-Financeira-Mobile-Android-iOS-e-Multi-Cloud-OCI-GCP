@@ -1,5 +1,6 @@
 /** Only CI subprocess stdin/stdout, no network or logging of fixture credentials. */
 import {readFileSync} from 'node:fs';
+import {parseAdminReauthentication,parseAdministratorReadiness} from '../services/administratorReadinessV23';
 import {preliminaryContext,parsePreliminaryJourney} from '../services/preliminaryJourneyV23';
 import {webcrypto} from 'node:crypto';
 import {masterInviteForm,adminBForm,memberInviteForm,invitationProofForm,registrationForm,checkoutForm} from '../services/onboardingFormsV23';
@@ -17,6 +18,8 @@ try{
   case 'CHECKOUT':request=checkoutForm(x.scope,x.raw,x.id,x.period,x.accepted);break;
   case 'PRELIMINARY_LOGIN_VIEW':{const c=preliminaryContext(x.raw);request=c.initial;c.discard();break;}
   case 'PRELIMINARY_JOURNEY_VIEW':request=parsePreliminaryJourney(x.raw,x.scope);break;
+  case 'ADMIN_REAUTH_VIEW':{const c=parseAdminReauthentication(x.raw,x.scope);request=c.identity;c.discard();break;}
+  case 'ADMIN_READINESS_VIEW':request=await parseAdministratorReadiness(x.raw,x.scope,x.id);break;
   default:throw Error();
  }
  process.stdout.write(JSON.stringify(request));

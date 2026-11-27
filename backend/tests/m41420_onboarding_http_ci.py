@@ -12,12 +12,17 @@ from app.onboarding_readback_ci import master_document_ci,admin_document_ci,invi
 
 from app.preliminary_onboarding_ci import login_preliminary_ci,journey_ci,logout_preliminary_ci
 
+from app.administrator_reauthentication_ci import reauthenticate_admin_ci,administrator_readiness_ci,administrator_logout_ci
+
 def client_for(reviewer_token=None, reviewer_tenant=None):
     # Opaque delivery token is captured only inside this fixture, never in HTTP.
     delivery={}
     def execute(op,token,p):
         try:
             with connection() as conn:
+                if op=="ADMIN_REAUTHENTICATE": return reauthenticate_admin_ci(conn,**p)
+                if op=="ADMIN_READINESS": return administrator_readiness_ci(conn,token,**p)
+                if op=="ADMIN_LOGOUT": return administrator_logout_ci(conn,token,**p)
                 if op=="PRELIMINARY_LOGIN": return login_preliminary_ci(conn,**p)
                 if op=="PRELIMINARY_JOURNEY": return journey_ci(conn,token,**p)
                 if op=="PRELIMINARY_LOGOUT": return logout_preliminary_ci(conn,token,**p)

@@ -21,6 +21,8 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
       ("/admin/registration",dict(**register,tenant_name="CI")),
       ("/admin/preliminary-login",dict(email="ci@example.invalid",password="secret-CI-test-only")),
       (f"/tenants/{tenant}/preliminary-logout",{}),
+      ("/admin/reauthenticate",dict(email="ci@example.invalid",password="secret-CI-test-only",tenant=tenant)),
+      (f"/tenants/{tenant}/administrator-logout",{}),
       (f"/tenants/{tenant}/checkout",dict(price_version=doc,period="MONTHLY",accepted_cents=100,accepted=True)),
       (f"/tenants/{tenant}/contract-b",dict(**document,accepted=True)),
       (f"/tenants/{tenant}/cycles/{cycle}/member-invitations",dict(email="ci@example.invalid",joined="2027-01-10",quotas=2)),
@@ -31,7 +33,7 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
         assert response.status_code==503
         assert response.headers["cache-control"]=="no-store"
         assert "secret-CI-test-only" not in response.text
-    for path in (f'/master/documents/{doc}',f'/tenants/{tenant}/documents/{doc}',f'/tenants/{tenant}/offers',f'/tenants/{tenant}/checkout/{doc}',f'/tenants/{tenant}/preliminary-journey'):
+    for path in (f'/master/documents/{doc}',f'/tenants/{tenant}/documents/{doc}',f'/tenants/{tenant}/offers',f'/tenants/{tenant}/checkout/{doc}',f'/tenants/{tenant}/preliminary-journey',f'/tenants/{tenant}/administrator-readiness/{doc}'):
         assert client.get(prefix+path).status_code==503
     assert client.post(prefix+'/invitation-terms',json=dict(invitation_token='x'*32,verification_token='y'*32)).status_code==503
     # Test schema and redaction with a fixture that cannot execute a write.

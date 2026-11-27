@@ -14,6 +14,7 @@ from m41440_onboarding_form_bridge_ci import form_request,scope_of
 from uuid import UUID
 from m41450_preliminary_session_ci import begin,login,journey
 from app.preliminary_token_ci import preliminary_digest
+from m41460_administrator_reauthentication_ci import reauthenticate,readiness,exercise as exercise_reauthentication
 
 def _cpf():
     ds=[int(x) for x in str(uuid4().int)[:9]]
@@ -88,6 +89,7 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             assert conn.execute("SELECT status FROM public.tenants WHERE id=%s",(tenant,)).fetchone()[0]=="RASCUNHO_INATIVO"
             assert conn.execute("SELECT count(*) FROM public.contract_acceptances WHERE user_id=%s AND document_kind='TENANT_MEMBERSHIP'",(actor,)).fetchone()[0]==0
             reject(conn.execute,"UPDATE public.tenants SET status='ATIVO' WHERE id=%s",(tenant,))
+            reauthenticate(client,email,args["password"],tenant,status=403)
             admin_token=begin(conn,client,tenant,actor,email,args["password"],reviewer_token)
             reject(conn.execute,"SELECT public.fr_v23_actor(%s,%s,true)",(admin_token,tenant))
             reject(accept_admin_b_ci,conn,admin_token=admin_token,tenant=tenant,document_id=contract_b,document_hash=b_hash,accepted=True)
@@ -110,6 +112,7 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             status_path=path+'/'+str(intent)
             assert get(client,status_path,admin_token)['state']=='PENDING'
             journey(client,tenant,actor,admin_token,"PAYMENT_PENDING",intent)
+            reauthenticate(client,email,args["password"],tenant,status=403)
             # Reopen the journey after an interruption without creating a new intent.
             former=admin_token
             resumed=login(client,email,args["password"])
@@ -152,10 +155,8 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             fresh=login(client,email,updated_password)["preliminary_token"]
             journey(client,tenant,actor,fresh,"REAUTH_REQUIRED",intent)
             assert post(client,f"/tenants/{tenant}/preliminary-logout",{},fresh)["revoked"] is True
-            # Standard login remains a distinct production-gated system. Use the
-            # existing isolated ordinary-session fixture only after entitlement.
-            admin_token=uuid4().hex+uuid4().hex
-            conn.execute("INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) VALUES(%s,%s,'TENANT_ADMIN',%s,now()+interval '30 minutes')",(hash_token(admin_token),actor,tenant))
+            # Reauthenticate via independent verifier/issuer instead of fixture INSERT.
+            admin_token=exercise_reauthentication(conn,client,actor,tenant,email,updated_password,ent,contract_b,b_hash,reviewer_token)
             status=get(client,status_path,admin_token)
             assert status['state']=='CI_RECONCILED' and status['cents']==cents and status['period']==period
             assert status['real_payment_authorized'] is False
@@ -171,6 +172,7 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             results.append((actor,tenant,admin_token))
         print('M41420_ONBOARDING_HTTP_MASTER_ADMIN_CHECKOUT_RACE=PASS')
         print('M41450_PRELIMINARY_LOGIN_RATE_RESUME_REVOKE_NO_ESCALATION=PASS')
+        print('M41460_SEGREGATED_VERIFIER_ISSUER_LICENSE_EXPIRY_REPLAY=PASS')
         return results
 
 def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, digest=None):
@@ -192,6 +194,9 @@ def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, diges
             assert prepared==dict(path=f'/tenants/{tenant}/contract-b',body={**body,"document_id":str(doc)})
             accepted=UUID(post(client,prepared["path"],prepared["body"],admin_raw)['acceptance_id'])
             assert accept_admin_b_ci(conn,**args)==accepted
+            actor=conn.execute("SELECT admin_user_id FROM public.tenants WHERE id=%s",(tenant,)).fetchone()[0]
+            assert readiness(client,tenant,actor,doc,admin_raw,"CYCLE_CONFIGURATION")["acceptance_id"]==str(accepted)
+            print("M41460_ADMIN_REAUTH_CONTRACT_B_CYCLE_GATE=PASS")
             return accepted
         assert phase=="MEMBER"
         joined=date(2027,1,10)

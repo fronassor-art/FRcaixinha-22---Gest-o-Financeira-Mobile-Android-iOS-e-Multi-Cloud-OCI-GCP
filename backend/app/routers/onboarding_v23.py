@@ -143,3 +143,18 @@ def preliminary_journey(tenant:UUID,request:Request,execute=Depends(unreleased_o
 @router.post("/tenants/{tenant}/preliminary-logout")
 def preliminary_logout(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
     return execute("PRELIMINARY_LOGOUT",bearer_token(request),dict(tenant=tenant))
+
+class AdministratorReauthenticationInput(PreliminaryLoginInput):
+    tenant: UUID
+
+@router.post("/admin/reauthenticate")
+def administrator_reauthenticate(p:AdministratorReauthenticationInput,execute=Depends(unreleased_onboarding)):
+    return execute("ADMIN_REAUTHENTICATE",None,p.model_dump())
+
+@router.get("/tenants/{tenant}/administrator-readiness/{document_id}")
+def administrator_readiness(tenant:UUID,document_id:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("ADMIN_READINESS",bearer_token(request),dict(tenant=tenant,document_id=document_id))
+
+@router.post("/tenants/{tenant}/administrator-logout")
+def administrator_logout(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("ADMIN_LOGOUT",bearer_token(request),dict(tenant=tenant))

@@ -28,5 +28,11 @@ def preliminary_view(op,**kw):
     assert result["operational_access"] is False and result["ci_only"] is True
     return result
 
+def administrator_view(op,**kw):
+    assert op in ("ADMIN_REAUTH_VIEW","ADMIN_READINESS_VIEW")
+    result=_invoke(op,**kw)
+    assert result["ci_only"] is True and result["production_authorized"] is False
+    return result
+
 def scope_of(row):
     return dict(userId=row["user_id"],tenantId=row["tenant_id"],role=row["role"])
