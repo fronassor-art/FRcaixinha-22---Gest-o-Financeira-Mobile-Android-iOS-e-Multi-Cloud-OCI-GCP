@@ -1,7 +1,9 @@
 import React,{useRef,useState} from 'react';
-import {addCycle,confirmManual,contest,emptyDemo,firstDemoCycle,memberObligations,paid,parseDemoMoney,recordManual,reconcileMockProvider,reverseManual,risk,
+import {confirmManual,contest,firstDemoCycle,memberObligations,paid,parseDemoMoney,recordManual,reconcileMockProvider,reverseManual,risk,
   type Cycle,type Demo,type Method,type Mode,type Role} from '../services/productHomologationV23';
 import {formatBRL} from '../services/financialEngine';
+import {newFlow,openFlowCycle,mergeFinance,type Flow} from '../services/integratedProductFlowV23';
+import {IntegratedProductWorkspaceV23} from './IntegratedProductWorkspaceV23';
 const money=(n:number)=>formatBRL(n/100);
 const field='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm';
 const btn='rounded-lg bg-emerald-900 px-3 py-2 text-sm font-semibold text-white';
@@ -17,7 +19,8 @@ export function ProductHomologationPanel({role}:{role:Role}){
 }
 function Workspace({role}:{role:Role}){
  const admin=role==='TENANT_ADMIN';
- const [d,setD]=useState<Demo>(()=>addCycle(emptyDemo(),'TENANT_ADMIN',firstDemoCycle));
+ const [d,setD]=useState<Flow>(()=>newFlow(true));
+ const [policyAccepted,setPolicyAccepted]=useState(false);
  const ref=useRef(d);
  const [selected,setSelected]=useState(firstDemoCycle.id+'/demo-member-a/'+firstDemoCycle.first);
  const [cycle,setCycle]=useState<Cycle>({...firstDemoCycle,id:'demo-cycle-2',mode:'HYBRID'});
@@ -36,12 +39,15 @@ function Workspace({role}:{role:Role}){
  const visible=memberObligations(d,effectiveRole,'demo-member-a');
  const o=visible.find(x=>x.id===selected)??visible[0];
  const receipts=d.receipts.filter(x=>x.obligationId===o?.id);
- function apply(fn:(current:Demo)=>Demo){try{const next=fn(ref.current);ref.current=next;setD(next);setMessage('Operação fictícia processada. Nenhum dinheiro movimentado.');}catch(e){setMessage(e instanceof Error?e.message:'Operação recusada.');}}
+ function applyFlow(fn:(current:Flow)=>Flow){try{const next=fn(ref.current);ref.current=next;setD(next);setMessage('Operação fictícia processada. Nenhum dinheiro movimentado.');}catch(e){setMessage(e instanceof Error?e.message:'Operação recusada.');}}
+ function apply(fn:(current:Demo)=>Demo){applyFlow(v=>mergeFinance(v,fn(v)));}
+ function reset(){const next=newFlow();ref.current=next;setD(next);setPolicyAccepted(false);setChecked(false);setMessage('Ensaio reiniciado, sem dados persistidos.');}
  function changeCycle<K extends keyof Cycle>(key:K,value:Cycle[K]){setCycle(c=>({...c,[key]:value}));}
  return <div className="space-y-4 text-slate-900">
    <p className="rounded-lg bg-white p-2 text-xs font-semibold">AMBIENTE FICTÍCIO · NÃO É SALDO REAL · NÃO É COMPROVANTE BANCÁRIO</p>
    {admin&&<label className="flex gap-2 text-sm"><input type="checkbox" checked={memberView} onChange={e=>{setMemberView(e.target.checked);setMessage('');setChecked(false);}}/> Ensaiar visão do membro fictício A</label>}
-   {!memberView&&admin&&<form className="space-y-2 rounded-lg bg-white p-3" onSubmit={e=>{e.preventDefault();apply(v=>addCycle(v,'TENANT_ADMIN',{...cycle,id:'demo-cycle-'+(v.cycles.length+1),cents:parseDemoMoney(quotaValue)}));}}>
+   <IntegratedProductWorkspaceV23 flow={d} role={effectiveRole} canAdmin={admin} apply={applyFlow} reset={reset}/>
+   {!memberView&&admin&&d.step===5&&<form className="space-y-2 rounded-lg bg-white p-3" onSubmit={e=>{e.preventDefault();applyFlow(v=>openFlowCycle(v,'TENANT_ADMIN',{...cycle,id:'demo-cycle-'+(v.cycles.length+1),cents:parseDemoMoney(quotaValue)},policyAccepted));setPolicyAccepted(false);}}>
      <h4 className="font-semibold">Configurar outro ciclo simultâneo (fictício)</h4>
      <div className="grid gap-2 sm:grid-cols-2">
        {(['start','first','last','closing'] as const).map((k,i)=><label key={k} className="text-sm">{['Início','Primeira contribuição','Última contribuição','Encerramento'][i]}<input required type="date" className={field} value={cycle[k]} onChange={e=>changeCycle(k,e.target.value)}/></label>)}
@@ -51,7 +57,7 @@ function Workspace({role}:{role:Role}){
        <label className="text-sm">Inadimplência — dias<input required className={field} type="number" min="1" max="3650" value={cycle.lateDays} onChange={e=>changeCycle('lateDays',Number(e.target.value))}/></label>
        <label className="text-sm">Competências distintas<input required className={field} type="number" min="1" max="120" value={cycle.lateCompetences} onChange={e=>changeCycle('lateCompetences',Number(e.target.value))}/></label>
        <label className="text-sm">Modo<select className={field} value={cycle.mode} onChange={e=>changeCycle('mode',e.target.value as Mode)}><option value="MANUAL">Manual</option><option value="HYBRID">Híbrido</option><option value="MERCADO_PAGO">Mercado Pago (simulado)</option></select></label>
-     </div><button className={btn} type="submit">Criar ciclo fictício</button>
+     </div><label className="flex gap-2 text-sm"><input type="checkbox" checked={policyAccepted} onChange={e=>setPolicyAccepted(e.target.checked)}/> Aceitar política fictícia do ciclo</label><button className={btn} disabled={!policyAccepted} type="submit">Criar ciclo fictício</button>
      <p className="text-xs">Valores e duração configuráveis somente neste demonstrador. A configuração aceita fica congelada.</p>
    </form>}
    <label className="block text-sm">Competência fictícia<select className={field} value={o?.id??''} onChange={e=>{setSelected(e.target.value);setChecked(false);setMessage('');}}>{visible.map(x=><option key={x.id} value={x.id}>{x.cycleId} · {x.member.endsWith('a')?'Membro A':'Membro B'} · {x.due}</option>)}</select></label>
@@ -83,7 +89,7 @@ function Workspace({role}:{role:Role}){
        {r.reason&&<p>Justificativa: {r.reason}</p>}
        {!memberView&&admin&&r.state==='PENDING'&&<button className={btn} type="button" disabled={!checked} onClick={()=>{apply(v=>confirmManual(v,'TENANT_ADMIN',r.id,checked));setChecked(false);}}>Confirmar recebimento fictício</button>}
        {memberView&&r.state==='CONFIRMED'&&<button className={btn} type="button" onClick={()=>apply(v=>contest(v,'demo-member-a',r.id,reason.trim()))}>Contestar recibo</button>}
-       {!memberView&&admin&&r.origin==='MANUAL'&&!r.reconciled&&(r.state==='CONFIRMED'||r.state==='CONTESTED')&&<button className="rounded border px-3 py-2" type="button" onClick={()=>apply(v=>reverseManual(v,'TENANT_ADMIN',r.id,reason.trim()))}>Estornar com compensação</button>}
+       {!memberView&&admin&&r.origin==='MANUAL'&&!r.reconciled&&(r.state==='CONFIRMED'||r.state==='CONTESTED')&&<button className="rounded border px-3 py-2" type="button" onClick={()=>apply(v=>reverseManual(v,'TENANT_ADMIN',r.id,reason.trim(),when))}>Estornar com compensação</button>}
      </article>)}
      <h4 className="font-semibold">Partidas contábeis fictícias desta competência</h4>
      {d.journal.filter(j=>receipts.some(r=>r.id===j.receiptId)).map((j,i)=><p key={i} className="text-xs">{j.debit} → {j.credit} · {money(j.cents)} (débito/crédito equilibrados)</p>)}

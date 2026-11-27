@@ -9,7 +9,7 @@ export type Cycle = Readonly<{id:string;start:string;first:string;last:string;cl
 export type Obligation = Readonly<{id:string;cycleId:string;member:string;due:string;cents:number}>;
 export type Receipt = Readonly<{id:string;obligationId:string;reference:string;cents:number;
   method:Method|'PSP_DEMO';date:string;evidence:string;state:'PENDING'|'CONFIRMED'|'CONTESTED'|'REVERSED';
-  origin:'MANUAL'|'PSP_DEMO';reconciled:boolean;reason?:string}>;
+  origin:'MANUAL'|'PSP_DEMO';reconciled:boolean;reason?:string;reversalDate?:string}>;
 export type Journal = Readonly<{receiptId:string;cycleId:string;member:string;debit:string;credit:string;cents:number}>;
 export type Demo = Readonly<{cycles:readonly Cycle[];obligations:readonly Obligation[];
   receipts:readonly Receipt[];journal:readonly Journal[]}>;
@@ -112,12 +112,14 @@ export function contest(d:Demo,member:string,id:string,reason:string):Demo {
   const r=getReceipt(d,id);demand(getObligation(d,r.obligationId).member===member&&r.state==='CONFIRMED'&&text(reason),'Contestação inválida ou fora da própria competência.');
   return replaceReceipt(d,{...r,state:'CONTESTED',reason});
 }
-export function reverseManual(d:Demo,role:Role,id:string,reason:string):Demo {
+export function reverseManual(d:Demo,role:Role,id:string,reason:string,reversalDate?:string):Demo {
   demand(role==='TENANT_ADMIN'&&text(reason),'Justificativa de estorno obrigatória.');
   const r=getReceipt(d,id);demand(r.origin==='MANUAL'&&!r.reconciled,'Evento PSP ou reconciliado exige revisão do provedor.');
   if(r.state==='REVERSED'){demand(r.reason===reason,'Estorno já registrado.');return d;}
   demand(r.state==='CONFIRMED'||r.state==='CONTESTED','Registro não estornável.');
-  return entry(replaceReceipt(d,{...r,state:'REVERSED',reason}),r,true);
+  const when=reversalDate??r.date, o=getObligation(d,r.obligationId), c=d.cycles.find(x=>x.id===o.cycleId)!;
+  demand(date(when)>=date(r.date)&&date(when)<=date(c.closing),'Data de estorno fora do ciclo ou anterior ao recebimento.');
+  return entry(replaceReceipt(d,{...r,state:'REVERSED',reason,reversalDate:when}),r,true);
 }
 export function memberObligations(d:Demo,role:Role,member:string):readonly Obligation[]{
   demand(role==='TENANT_ADMIN'||role==='TENANT_MEMBER','Perfil fictício inválido.');
