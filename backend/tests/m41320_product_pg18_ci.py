@@ -366,6 +366,16 @@ async def main():
                 try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_member_consent")
                 except asyncpg.InsufficientPrivilegeError: pass
                 else: raise AssertionError("direct consent table access")
+            # M41400: compose canonical identity proof with cycle consent; no financial admission.
+            from m41400_cycle_identity_ci import exercise
+            person,new_member=await asyncio.to_thread(exercise,t,UUID(c),UUID(c2),h["Authorization"].split()[1],ha["Authorization"].split()[1],doc,payload["policy_hash"])
+            new_headers=await token(t,person,"TENANT_MEMBER")
+            new_directory=await get("/cycles",new_headers)
+            assert [(x["cycle_id"],x["membership_state"]) for x in new_directory["items"]]==[(c,"CONSENTED")]
+            new_ws=await get(f"/cycles/{c}/workspace",new_headers)
+            assert new_ws["membership_id"]==str(new_member) and new_ws["summary"] is None and new_ws["items"]==[]
+            await get(f"/cycles/{c2}/workspace",new_headers,403)
+            await post(f"/cycles/{c}/admissions",dict(membership_id=str(new_member),joined="2027-01-10",quotas=2),h,409)
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
             await get("/form-options",h,403)
@@ -376,6 +386,7 @@ async def main():
         print("M41360_CANONICAL_MOBILE_DIRECTORY_WORKSPACE_SCOPE=PASS")
         print("M41380_SCOPED_FORM_OPTIONS_READBACK=PASS")
         print("M41390_NOMINAL_CYCLE_INVITE_PRECONSENT_REVOCATION_SCOPE_RACE=PASS")
+        print("M41400_NEW_IDENTITY_REISSUE_DUAL_PROOF_ATOMIC_CONSENT_RACE=PASS")
     finally:
         await pool.close()
         await owner.close()

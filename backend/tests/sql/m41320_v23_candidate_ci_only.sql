@@ -85,6 +85,17 @@ CREATE TABLE public.fr_v23_cycle_invite_revocations(
  invite_id uuid PRIMARY KEY REFERENCES public.fr_v23_cycle_invites(id),
  actor uuid NOT NULL REFERENCES public.users(id), revoked_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
+-- M41400: immutable binding of a canonical identity invitation to one cycle and exact policy.
+CREATE TABLE public.fr_v23_identity_invite_bindings(
+ invitation_id uuid PRIMARY KEY REFERENCES public.invitations(id),
+ tenant_id uuid NOT NULL, cycle_id uuid NOT NULL,
+ document_id uuid NOT NULL REFERENCES public.contract_documents(id),
+ policy_hash text NOT NULL CHECK(policy_hash ~ '^[0-9a-f]{64}$'),
+ joined date NOT NULL, quotas int NOT NULL CHECK(quotas BETWEEN 1 AND 400),
+ previous_id uuid UNIQUE REFERENCES public.fr_v23_identity_invite_bindings(invitation_id),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id)
+);
 CREATE TABLE public.fr_v23_member_consent(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),cycle_id uuid NOT NULL REFERENCES public.fr_v23_policy(cycle_id),
  membership_id uuid NOT NULL REFERENCES public.memberships(id),acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),
@@ -132,7 +143,7 @@ CREATE TABLE public.fr_v23_reservation_events(
 CREATE FUNCTION public.fr_v23_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 BEGIN RAISE EXCEPTION 'immutable V23'; END $$;
 DO $$ DECLARE t regclass; BEGIN
- FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass,'public.fr_v23_cycle_invites'::regclass,'public.fr_v23_cycle_invite_revocations'::regclass]) LOOP
+ FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass,'public.fr_v23_cycle_invites'::regclass,'public.fr_v23_cycle_invite_revocations'::regclass,'public.fr_v23_identity_invite_bindings'::regclass]) LOOP
  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY',t);
  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY',t);
  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',t);
@@ -703,6 +714,40 @@ BEGIN
  'offset',p_offset,'has_more',jsonb_array_length(items)>50,
  'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
 END $$;
+
+-- Legacy invitation acceptance cannot commit without matching V2.3 consent for a bound invitation.
+-- Deferred because the existing identity registrar consumes the invitation before returning.
+CREATE FUNCTION public.fr_v23_identity_binding_check() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE b record;
+BEGIN
+ SELECT * INTO b FROM public.fr_v23_identity_invite_bindings WHERE invitation_id=NEW.id;
+ IF NOT FOUND THEN RETURN NEW; END IF;
+ IF (NEW.tenant_id,NEW.target_role,NEW.required_document_id) IS DISTINCT FROM
+ (b.tenant_id,'TENANT_MEMBER'::varchar,b.document_id)
+ OR NOT EXISTS(
+ SELECT 1 FROM public.fr_v23_member_consent co
+ JOIN public.memberships m ON m.id=co.membership_id AND m.tenant_id=b.tenant_id AND m.user_id=co.actor
+ JOIN public.users u ON u.id=m.user_id
+ JOIN public.contract_acceptances ca ON ca.id=co.acceptance_id AND ca.document_id=b.document_id
+ AND ca.tenant_id=b.tenant_id AND ca.user_id=m.user_id
+ JOIN public.fr_v23_cycle_invites ci ON ci.cycle_id=co.cycle_id AND ci.membership_id=co.membership_id
+ AND ci.tenant_id=b.tenant_id AND ci.actor=NEW.inviter_user_id AND ci.policy_hash=b.policy_hash
+ AND ci.joined=b.joined AND ci.quotas=b.quotas
+ WHERE co.cycle_id=b.cycle_id AND co.membership_id=NEW.accepted_membership_id
+ AND co.actor=NEW.accepted_user_id AND co.policy_hash=b.policy_hash AND co.joined=b.joined AND co.quotas=b.quotas
+ AND m.role='TENANT_MEMBER' AND m.status='ATIVA' AND u.email_verified_at IS NOT NULL
+ AND lower(u.email)=lower(NEW.target_email)
+ ) OR NOT EXISTS(SELECT 1 FROM public.invite_email_verification v
+ WHERE v.invitation_id=NEW.id AND v.consumed_at IS NOT NULL AND v.revoked_at IS NULL
+ AND lower(v.recipient_email)=lower(NEW.target_email))
+ THEN RAISE EXCEPTION 'bound identity requires exact cycle consent' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+CREATE CONSTRAINT TRIGGER fr_v23_identity_binding_acceptance AFTER UPDATE ON public.invitations
+ DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+ WHEN (OLD.accepted_at IS NULL AND NEW.accepted_at IS NOT NULL)
+ EXECUTE FUNCTION public.fr_v23_identity_binding_check();
 
 DO $$ DECLARE f regprocedure; BEGIN
  FOR f IN SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'fr_v23_%' LOOP

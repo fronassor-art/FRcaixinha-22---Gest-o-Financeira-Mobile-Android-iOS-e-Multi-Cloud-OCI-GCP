@@ -1361,7 +1361,7 @@ jobs:
           PGDATABASE: frcaixinha_ci
         run: bash backend/scripts/aistudio_staging_chain_ci.sh
 
-      - name: M41320/M41330/M41340/M41350/M41360 — V2.3 transacional e readback mobile no PG18 descartável
+      - name: M41320–M41400 — V2.3 transacional, identidade e readback mobile no PG18 descartável
         env:
           GITHUB_ACTIONS: 'true'
           FRCAIXINHA_CI_ISOLATED: '1'
