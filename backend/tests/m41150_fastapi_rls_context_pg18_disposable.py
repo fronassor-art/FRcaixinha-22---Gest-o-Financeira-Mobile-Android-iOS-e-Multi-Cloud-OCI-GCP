@@ -72,7 +72,7 @@ async def exercise(dsn: str) -> None:
     from httpx import ASGITransport, AsyncClient
 
     import m41050_sql_sealed_context_pg18_disposable as fixture
-    from m41240_target_signer_disposable import TargetSigner
+    from m41240_target_signer_disposable import TargetSigner, TargetProofDenied
     from backend.app.dependencies import AuthenticatedSession, get_current_session
     from backend.app.routers import ledger
     import backend.app.m41150_fastapi_rls_context as gateway
@@ -87,7 +87,11 @@ async def exercise(dsn: str) -> None:
         if not key:
             raise AssertionError("M41150_FIXTURE_SIGNER_KEY_MISSING")
 
-        signer = TargetSigner()
+        challenge_key = bytes(owner.execute(
+            "SELECT key FROM m41050.target_challenge_secret WHERE singleton=true"
+        ).fetchone()[0])
+        signer = TargetSigner(challenge_key=challenge_key)
+        del challenge_key
         target_key = signer.take_bootstrap_key()
         assert target_key != key
         owner.execute(
@@ -267,7 +271,10 @@ async def exercise(dsn: str) -> None:
 
         def bind_read(ticket, tenant, pid, vxid, started, *, challenge, proof=None):
             if proof is None:
-                proof = signer.sign(ticket, tenant, pid, vxid, started, challenge=challenge)
+                try:
+                    proof = signer.sign(ticket, tenant, pid, vxid, started, challenge=challenge)
+                except TargetProofDenied:
+                    return None
             with psycopg.connect(app_dsn, autocommit=True) as app:
                 app.execute("SET ROLE m40650_app")
                 return app.execute(
@@ -599,10 +606,18 @@ async def exercise(dsn: str) -> None:
                     # Disposable owner constructs a negative legacy-domain proof only.
                     legacy_key = owner.execute('SELECT key FROM m41050.target_verifier_secret WHERE singleton=true').fetchone()[0]
                     legacy_proof = fixture.sign_read_transaction(legacy_key, ticket, tenant_a, pid, vxid, started)
-                    del legacy_key
                     assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=legacy_proof) is None
                     wrong_challenge = '0' * 64 if challenge != '0' * 64 else '1' * 64
-                    wrong_proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=wrong_challenge)
+                    try:
+                        signer.sign(ticket, tenant_a, pid, vxid, started, challenge=wrong_challenge)
+                    except TargetProofDenied:
+                        pass
+                    else:
+                        raise AssertionError("M41280_INVALID_CHALLENGE_SIGNED")
+                    # Keep the SQL negative test independent of the worker denial.
+                    wrong_proof = fixture.sign_read_transaction(legacy_key, ticket, tenant_a, pid, vxid, started, challenge=wrong_challenge)
+                    del legacy_key
+                    print("M41280_WORKER_AUTHENTICATES_SQL_CHALLENGE=PASS")
                     assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=wrong_proof) is None
                     assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=wrong_challenge, proof=wrong_proof) is None
                     print('M41270_LEGACY_AND_MIXED_PROOFS_DENIED=PASS')
@@ -636,7 +651,12 @@ async def exercise(dsn: str) -> None:
                         # Correct signature for another live target is not enough.
                         assert bind_read(ticket, tenant_a, other_pid, other_vxid,
                                          other_started, challenge=challenge) is None
-                        assert await gateway._read_target_challenge(second, ticket, tenant_a) != challenge
+                        other_challenge = await gateway._read_target_challenge(second, ticket, tenant_a)
+                        assert other_challenge != challenge
+                        assert bind_read(ticket, tenant_a, other_pid, other_vxid,
+                                         other_started, challenge=other_challenge) is None
+                        assert not await second.fetch("SELECT id FROM public.ledger_accounts")
+                        print("M41280_SECOND_AUTHENTIC_TARGET_DENIED=PASS")
                     print("M41260_SQL_CHALLENGE_TARGET_SUBSTITUTION_DENIED=PASS")
                     print("M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS")
                     cap = bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge)

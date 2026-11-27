@@ -422,10 +422,10 @@ def test_m41240_worker_protocol_and_fail_closed(monkeypatch):
     spec.loader.exec_module(module)
     monkeypatch.delenv("CI_M41150_DISPOSABLE", raising=False)
     with pytest.raises(RuntimeError):
-        module.TargetSigner()
+        module.TargetSigner(challenge_key=b"c" * 32)
     for k, v in module.GATE.items():
         monkeypatch.setenv(k, v)
-    signer = module.TargetSigner()
+    signer = module.TargetSigner(challenge_key=b"c" * 32)
     try:
         key = signer.take_bootstrap_key()
         with pytest.raises(RuntimeError):
@@ -433,9 +433,10 @@ def test_m41240_worker_protocol_and_fail_closed(monkeypatch):
         tenant = uuid4()
         started = datetime(2026, 1, 1, tzinfo=timezone.utc)
         ticket = "a" * 64
-        challenge = "c" * 64
-        message = f"FRF-M41270|v1|{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000|{challenge}"
-        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64) == hmac.new(
+        base = f"{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000"
+        challenge = hmac.new(b"c" * 32, ("FRF-M41260|v1|" + base).encode(), sha256).hexdigest()
+        message = f"FRF-M41270|v1|{base}|{challenge}"
+        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge=challenge) == hmac.new(
             key, message.encode(), sha256
         ).hexdigest()
         with pytest.raises(ValueError):
@@ -449,6 +450,7 @@ def test_m41240_worker_protocol_and_fail_closed(monkeypatch):
 def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
     import importlib.util
     import json
+    import hmac
     import os
     import subprocess
     import sys
@@ -464,13 +466,15 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
     spec.loader.exec_module(module)
     for k, v in module.GATE.items():
         monkeypatch.setenv(k, v)
-    signer = module.TargetSigner()
+    signer = module.TargetSigner(challenge_key=b"c" * 32)
     try:
         signer.take_bootstrap_key()
         tenant, ticket = uuid4(), "b" * 64
         started = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        base = f"{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000"
+        challenge = hmac.new(b"c" * 32, ("FRF-M41260|v1|" + base).encode(), sha256).hexdigest()
         packet = {"digest": sha256(ticket.encode()).hexdigest(), "tenant": str(tenant),
-                  "pid": 123, "vxid": "1/2", "micros": 1767225600000000, "challenge": "c" * 64}
+                  "pid": 123, "vxid": "1/2", "micros": 1767225600000000, "challenge": challenge}
         fd = signer._channel.fileno()
         # Deliberately pass the real descriptor to an unrelated same-UID child.
         # The kernel identifies the actual writer, not the owner of the socket.
@@ -486,7 +490,7 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
             pass_fds=(fd,), env={"PYTHONDONTWRITEBYTECODE": "1"},
             timeout=8, check=True,
         )
-        expected = signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64)
+        expected = signer.sign(ticket, tenant, 123, "1/2", started, challenge=challenge)
         assert len(expected) == 64
         # A valid parent still works after malformed and oversized packets.
         for invalid in (b"{}", b"x" * (module.MAX_FRAME + 1)):
@@ -494,7 +498,7 @@ def test_m41250_same_uid_inherited_descriptor_denied(monkeypatch):
             response, cred = module.receive_frame(signer._channel, 64)
             assert response == b"DENIED"
             assert cred == module.process_credentials(signer._proc.pid)
-        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64) == expected
+        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge=challenge) == expected
         print("M41250_SAME_UID_INHERITED_DESCRIPTOR_DENIED=PASS")
     finally:
         signer.close()
@@ -541,21 +545,23 @@ def test_m41270_challenge_is_signed_and_legacy_domain_rejected(monkeypatch):
     spec.loader.exec_module(module)
     for k, v in module.GATE.items():
         monkeypatch.setenv(k, v)
-    signer = module.TargetSigner()
+    signer = module.TargetSigner(challenge_key=b"c" * 32)
     try:
         key = signer.take_bootstrap_key()
         tenant, ticket = uuid4(), "a" * 64
         started = datetime(2026, 1, 1, tzinfo=timezone.utc)
         base = f"{sha256(ticket.encode()).hexdigest()}|{tenant}|123|1/2|1767225600000000"
-        a = signer.sign(ticket, tenant, 123, "1/2", started, challenge="b" * 64)
-        b = signer.sign(ticket, tenant, 123, "1/2", started, challenge="c" * 64)
-        assert a != b
-        assert a == hmac.new(key, ("FRF-M41270|v1|" + base + "|" + "b" * 64).encode(), sha256).hexdigest()
+        challenge = hmac.new(b"c" * 32, ("FRF-M41260|v1|" + base).encode(), sha256).hexdigest()
+        a = signer.sign(ticket, tenant, 123, "1/2", started, challenge=challenge)
+        wrong = "0" * 64 if challenge != "0" * 64 else "1" * 64
+        with pytest.raises(module.TargetProofDenied):
+            signer.sign(ticket, tenant, 123, "1/2", started, challenge=wrong)
+        assert a == hmac.new(key, ("FRF-M41270|v1|" + base + "|" + challenge).encode(), sha256).hexdigest()
         assert a != hmac.new(key, ("FRF-M41230|v1|" + base).encode(), sha256).hexdigest()
         for invalid in (None, "", "A" * 64, "g" * 64, 123):
             with pytest.raises(ValueError):
                 signer.sign(ticket, tenant, 123, "1/2", started, challenge=invalid)
-        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge="b" * 64) == a
+        assert signer.sign(ticket, tenant, 123, "1/2", started, challenge=challenge) == a
     finally:
         signer.close()
     source = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
@@ -563,3 +569,73 @@ def test_m41270_challenge_is_signed_and_legacy_domain_rejected(monkeypatch):
     assert "'FRF-M41270|v1|'||v_payload||'|'||p_challenge" in binding
     assert "FRF-M41230|v1|" not in binding
     assert "M41270_LEGACY_AND_MIXED_PROOFS_DENIED=PASS" in RUNNER.read_text(encoding="utf-8")
+
+
+
+def test_m41280_worker_target_pin_concurrent_and_bounded(monkeypatch):
+    import importlib.util
+    import hmac
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime, timezone
+    from hashlib import sha256
+    from uuid import uuid4
+
+    if sys.platform != "linux":
+        pytest.skip("Linux CI process boundary")
+    path = ROOT / "backend/tests/m41240_target_signer_disposable.py"
+    spec = importlib.util.spec_from_file_location("m41280_worker_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for k, v in module.GATE.items():
+        monkeypatch.setenv(k, v)
+    key = b"q" * 32
+    tenant, ticket = uuid4(), "a" * 64
+    started = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def packet(ticket, tenant, pid):
+        digest = sha256(ticket.encode()).hexdigest()
+        base = f"{digest}|{tenant}|{pid}|1/2|1767225600000000"
+        challenge = hmac.new(key, ("FRF-M41260|v1|" + base).encode(), sha256).hexdigest()
+        return dict(digest=digest, tenant=str(tenant), pid=pid, vxid="1/2",
+                    micros=1767225600000000, challenge=challenge)
+
+    policy = module.TargetPolicy(key, limit=1)
+    first = packet(ticket, tenant, 123)
+    bad = dict(first, challenge="0" * 64)
+    with pytest.raises(module.TargetProofDenied):
+        policy.authorize(bad)
+    expected = policy.authorize(first)
+    assert policy.authorize(first) == expected
+    for denied in (packet(ticket, tenant, 124), packet(ticket, uuid4(), 123),
+                   packet("b" * 64, tenant, 123)):
+        with pytest.raises(module.TargetProofDenied):
+            policy.authorize(denied)
+    assert policy.authorize(first) == expected
+    signer = module.TargetSigner(challenge_key=key)
+    try:
+        signer.take_bootstrap_key()
+        def attempt(pid):
+            p = packet(ticket, tenant, pid)
+            try:
+                return pid, signer.sign(ticket, tenant, pid, "1/2", started, challenge=p["challenge"])
+            except module.TargetProofDenied:
+                return pid, None
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            result = list(executor.map(attempt, (123, 124)))
+        approved = [(pid, proof) for pid, proof in result if proof is not None]
+        assert len(approved) == 1
+        pid, proof = approved[0]
+        assert attempt(pid) == (pid, proof)
+        assert attempt(247 - pid) == (247 - pid, None)
+        assert signer.sign("b" * 64, tenant, 123, "1/2", started,
+                           challenge=packet("b" * 64, tenant, 123)["challenge"])
+    finally:
+        signer.close()
+
+
+def test_m41280_integrated_worker_regression_contract():
+    runner = RUNNER.read_text(encoding="utf-8")
+    assert "M41280_WORKER_AUTHENTICATES_SQL_CHALLENGE=PASS" in runner
+    assert "M41280_SECOND_AUTHENTIC_TARGET_DENIED=PASS" in runner
+    assert "other_challenge = await gateway._read_target_challenge(second, ticket, tenant_a)" in runner
