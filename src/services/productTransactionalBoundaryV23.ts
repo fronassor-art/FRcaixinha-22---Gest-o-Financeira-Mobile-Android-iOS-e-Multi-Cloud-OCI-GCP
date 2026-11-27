@@ -53,16 +53,40 @@ export function parseWorkspace(v:unknown,s:Scope,cycle:string,offset:number){
  const seen=new Set<string>();const items=p.items.map(v=>{const z=exact(v,'contribution_id membership_id competence due_date due_cents paid_cents payment_status pending_manual_cents');const id=uuid(z.contribution_id),member=uuid(z.membership_id),due=date(z.due_date),a=num(z.due_cents,1),b=num(z.paid_cents),pending=num(z.pending_manual_cents),status=one(z.payment_status,['PENDENTE','PARCIAL','QUITADA'] as const);
  if(seen.has(id)||(!admin&&member!==m)||due<policy.first_due||due>policy.last_due||z.competence!==due.slice(0,7)||b>a||pending>a-b||(status==='QUITADA'?b!==a:status==='PENDENTE'?b!==0:b<=0||b>=a))fail();seen.add(id);
  return {contribution_id:id,membership_id:member,due_date:due,due_cents:a,paid_cents:b,pending_manual_cents:pending,payment_status:status};});
- return {policy,summary,reserves,items,has_more:p.has_more};
+ return {cycle_id:uuid(cycle),scope:{userId:uuid(s.userId),tenantId:uuid(s.tenantId),role:s.role},policy,summary,reserves,items,has_more:p.has_more};
 }
 export type Directory=ReturnType<typeof parseDirectory>;
 export type Workspace=ReturnType<typeof parseWorkspace>;
-type Read={kind:'capabilities'}|{kind:'directory';offset:number}|{kind:'workspace';cycleId:string;offset:number};
+export type OptionKind='DOCUMENT'|'ADMIT'|'CONFIRM'|'REVERSE'|'CONTEST'|'RELEASE';
+export function parseFormOptions(v:unknown,s:Scope,kind:OptionKind,cycle:string|null,offset:number){
+ const x=exact(v,'tenant_id user_id role cycle_id kind offset has_more items');sameScope(x,s);
+ if(x.kind!==kind||(kind==='DOCUMENT')!==(cycle===null)||(cycle===null?x.cycle_id!==null:uuid(x.cycle_id)!==uuid(cycle)))fail();
+ if(kind==='CONTEST'?s.role!=='TENANT_MEMBER':s.role!=='TENANT_ADMIN')fail();
+ const p=page(x,offset),seen=new Set<string>();
+ const items=p.items.map(v=>{
+  const z=exact(v,'id date cents quotas state document_hash related_id'),id=uuid(z.id);
+  if(seen.has(id))fail();seen.add(id);
+  if(kind==='DOCUMENT'){if([z.date,z.cents,z.quotas,z.state,z.related_id].some(y=>y!==null))fail();return {id,document_hash:hash(z.document_hash)};}
+  if(z.document_hash!==null)fail();
+  if(kind==='ADMIT'){if([z.cents,z.state,z.related_id].some(y=>y!==null))fail();return {id,date:date(z.date),quotas:num(z.quotas,1,400)};}
+  if(z.quotas!==null)fail();
+  if(kind==='RELEASE'){if([z.date,z.state,z.related_id].some(y=>y!==null))fail();return {id,cents:num(z.cents,1,100000000000)};}
+  return {id,date:date(z.date),cents:num(z.cents,1,100000000),state:one(z.state,kind==='CONFIRM'?['PENDING']:kind==='CONTEST'?['CONFIRMED']:['CONFIRMED','CONTESTED']),related_id:uuid(z.related_id)};
+ });
+ return {kind,cycle_id:cycle===null?null:uuid(cycle),scope:{userId:uuid(s.userId),tenantId:uuid(s.tenantId),role:s.role},items,has_more:p.has_more,offset};
+}
+export type FormOptions=ReturnType<typeof parseFormOptions>;
+type Read={kind:'options';optionKind:OptionKind;cycleId:string|null;offset:number}|{kind:'capabilities'}|{kind:'directory';offset:number}|{kind:'workspace';cycleId:string;offset:number};
 export async function readV23(t:Transport,s:Scope,q:Read){
  const tenant=uuid(s.tenantId),userId=uuid(s.userId);if(s.role!=='TENANT_ADMIN'&&s.role!=='TENANT_MEMBER')fail();
  const snapshot=t.captureSession(),u=t.getUser();if(!snapshot.token||!u||!t.isCurrent(snapshot)||uuid(u.id)!==userId||!u.tenantId||uuid(u.tenantId)!==tenant||u.role!==s.role)throw Error('Sessão ou caixinha alterada.');
  const origin=classifyApiOrigin(t.origin());if(origin.kind==='BLOCKED')throw Error('Servidor FR Finance não configurado.');
  let path='/capabilities';if(q.kind==='directory')path='/cycles?offset='+num(q.offset,0,10000);if(q.kind==='workspace')path='/cycles/'+uuid(q.cycleId)+'/workspace?offset='+num(q.offset,0,10000);
+ if(q.kind==='options'){
+  if((q.optionKind==='DOCUMENT')!==(q.cycleId===null)||(q.optionKind==='CONTEST'?s.role!=='TENANT_MEMBER':s.role!=='TENANT_ADMIN'))fail();
+  const pageOffset=num(q.offset,0,10000);
+  path=q.cycleId===null?'/form-options?offset='+pageOffset:'/cycles/'+uuid(q.cycleId)+'/form-options?kind='+q.optionKind+'&offset='+pageOffset;
+ }
  let res:Response;try{res=await t.send(origin.origin+'/api/v1/tenants/'+tenant+'/v23'+path,{method:'GET',headers:{Authorization:'Bearer '+snapshot.token,Accept:'application/json'},cache:'no-store',credentials:'omit',redirect:'error'});}
  catch{throw Error('Conexão V2.3 indisponível. Nenhum dado confirmado.');}
  if(!t.isCurrent(snapshot))throw Error('Sessão alterada durante consulta.');
@@ -71,5 +95,5 @@ export async function readV23(t:Transport,s:Scope,q:Read){
  if(res.status===404)throw Error('Rota V2.3 ausente (HTTP 404). Verifique a versão do servidor.');
  if(!res.ok)throw Error('Consulta V2.3 recusada (HTTP '+res.status+').');
  const v:unknown=await res.json();if(!t.isCurrent(snapshot))throw Error('Sessão alterada durante consulta.');
- return q.kind==='capabilities'?parseCapabilities(v):q.kind==='directory'?parseDirectory(v,s,q.offset):parseWorkspace(v,s,q.cycleId,q.offset);
+ return q.kind==='options'?parseFormOptions(v,s,q.optionKind,q.cycleId,q.offset):q.kind==='capabilities'?parseCapabilities(v):q.kind==='directory'?parseDirectory(v,s,q.offset):parseWorkspace(v,s,q.cycleId,q.offset);
 }

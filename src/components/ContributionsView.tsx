@@ -197,7 +197,7 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
       </div>
       {state.currentUserId && state.currentTenantId && (state.currentRole==='TENANT_ADMIN'||state.currentRole==='TENANT_MEMBER') &&
         <React.Fragment key={key}>
-          <ProductTransactionalPanelV23 userId={state.currentUserId} tenantId={state.currentTenantId} role={state.currentRole}/>
+          <ProductTransactionalPanelV23 key={JSON.stringify([state.currentUserId,state.currentTenantId,state.currentRole])} userId={state.currentUserId} tenantId={state.currentTenantId} role={state.currentRole}/>
           <ProductHomologationPanel role={state.currentRole}/>
           <p className="text-xs text-slate-600">As consultas e políticas históricas abaixo são distintas da V2.3 prospectiva; não alteram contratos aceitos.</p>
         </React.Fragment>}

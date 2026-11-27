@@ -32,3 +32,5 @@ def test_routes_fail_closed_without_provider():
     assert client.post(prefix+f"/cycles/{c}/reserves",json=dict(request_id=str(r),action="HOLD",cents=100,reason="CI reserva gerencial")).status_code==503
     assert client.get(prefix+"/cycles").status_code==503
     assert client.get(prefix+f"/cycles/{c}/workspace").status_code==503
+    assert client.get(prefix+"/form-options").status_code==503
+    assert client.get(prefix+f"/cycles/{c}/form-options?kind=ADMIT").status_code==503

@@ -561,6 +561,60 @@ BEGIN
  'policy',pol,'summary',summary,'reserves',reserves,'offset',p_offset,
  'has_more',jsonb_array_length(items)>50,'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
 END $$;
+
+-- M41380: minimal, paginated selection references, candidate CI only.
+CREATE FUNCTION public.fr_v23_form_options(p_token text,p_tenant uuid,p_cycle uuid,p_kind text,p_offset int)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;r text;m uuid;items jsonb;
+BEGIN
+ IF p_kind IS NULL OR p_kind NOT IN ('DOCUMENT','ADMIT','CONFIRM','REVERSE','CONTEST','RELEASE')
+ OR p_offset IS NULL OR p_offset NOT BETWEEN 0 AND 10000
+ OR (p_kind='DOCUMENT')<>(p_cycle IS NULL)
+ THEN RAISE EXCEPTION 'invalid options' USING ERRCODE='22023'; END IF;
+ a:=public.fr_v23_actor(p_token,p_tenant,p_kind<>'CONTEST');
+ SELECT s.active_role INTO r FROM public.sessions s WHERE s.token_hash=encode(public.digest(p_token,'sha256'),'hex');
+ IF (p_kind='CONTEST' AND r<>'TENANT_MEMBER') OR (p_kind<>'CONTEST' AND r<>'TENANT_ADMIN')
+ THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
+ IF p_cycle IS NOT NULL AND NOT EXISTS(
+ SELECT 1 FROM public.fr_v23_policy p JOIN public.cycles c ON c.id=p.cycle_id AND c.tenant_id=p.tenant_id
+ WHERE p.tenant_id=p_tenant AND p.cycle_id=p_cycle AND (p_kind='RELEASE' OR c.status='ABERTO'))
+ THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ IF r='TENANT_MEMBER' THEN
+ SELECT me.id INTO m FROM public.memberships me JOIN public.fr_v23_admission ad ON ad.membership_id=me.id
+ WHERE me.user_id=a AND me.tenant_id=p_tenant AND me.role=r AND me.status='ATIVA' AND ad.cycle_id=p_cycle;
+ IF m IS NULL THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ END IF;
+ SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.id),'[]'::jsonb) INTO items FROM (
+ SELECT d.id,NULL::date AS date,NULL::bigint AS cents,NULL::int AS quotas,NULL::text AS state,d.sha256::text AS document_hash,NULL::uuid AS related_id
+ FROM public.contract_documents d WHERE p_kind='DOCUMENT' AND d.document_kind='TENANT_MEMBERSHIP' AND d.published_at IS NOT NULL
+ AND EXISTS(SELECT 1 FROM public.contract_acceptances x WHERE x.document_id=d.id AND x.user_id=a AND x.tenant_id=p_tenant AND x.accepted_at>=d.published_at)
+ UNION ALL
+ SELECT co.membership_id,co.joined,NULL::bigint,co.quotas,NULL::text,NULL::text,NULL::uuid
+ FROM public.fr_v23_member_consent co JOIN public.fr_v23_policy p ON p.cycle_id=co.cycle_id
+ JOIN public.memberships me ON me.id=co.membership_id AND me.tenant_id=p.tenant_id AND me.user_id=co.actor
+ JOIN public.contract_acceptances ca ON ca.id=co.acceptance_id AND ca.user_id=me.user_id AND ca.tenant_id=p_tenant AND ca.document_id=p.document_id
+ WHERE p_kind='ADMIT' AND p.tenant_id=p_tenant AND p.cycle_id=p_cycle AND co.policy_hash=p.policy_hash
+ AND me.role='TENANT_MEMBER' AND me.status='ATIVA' AND me.joined_at<=co.joined
+ AND NOT EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p_cycle AND ad.membership_id=co.membership_id)
+ UNION ALL
+ SELECT re.id,re.occurred,re.cents,NULL::int,public.fr_v23_state(re.id),NULL::text,re.contribution_id
+ FROM public.fr_v23_receipts re JOIN public.contributions c ON c.id=re.contribution_id AND c.tenant_id=re.tenant_id AND c.cycle_id=re.cycle_id
+ WHERE re.tenant_id=p_tenant AND re.cycle_id=p_cycle AND
+ ((p_kind='CONFIRM' AND public.fr_v23_state(re.id)='PENDING')
+ OR (p_kind='REVERSE' AND public.fr_v23_state(re.id) IN ('CONFIRMED','CONTESTED'))
+ OR (p_kind='CONTEST' AND c.membership_id=m AND public.fr_v23_state(re.id)='CONFIRMED'))
+ UNION ALL
+ SELECT h.id,NULL::date,h.cents,NULL::int,NULL::text,NULL::text,NULL::uuid
+ FROM public.fr_v23_reservation_events h WHERE p_kind='RELEASE' AND h.tenant_id=p_tenant AND h.cycle_id=p_cycle AND h.action='HOLD'
+ AND NOT EXISTS(SELECT 1 FROM public.fr_v23_reservation_events e WHERE e.related_hold=h.id AND e.action='RELEASE')
+ ORDER BY id OFFSET p_offset LIMIT 51
+ ) q;
+ RETURN jsonb_build_object('tenant_id',p_tenant,'user_id',a,'role',r,'cycle_id',p_cycle,'kind',p_kind,
+ 'offset',p_offset,'has_more',jsonb_array_length(items)>50,
+ 'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
+END $$;
+
 DO $$ DECLARE f regprocedure; BEGIN
  FOR f IN SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'fr_v23_%' LOOP
  EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',f);
@@ -573,5 +627,5 @@ GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date
  public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid),
  public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid),
  public.fr_v23_reserves(text,uuid,uuid),public.fr_v23_reserve_event(text,uuid,uuid,uuid,text,bigint,uuid,text),
- public.fr_v23_cycle_directory(text,uuid,int),public.fr_v23_workspace(text,uuid,uuid,int) TO frcaixinha_pg18_app;
+ public.fr_v23_cycle_directory(text,uuid,int),public.fr_v23_workspace(text,uuid,uuid,int),public.fr_v23_form_options(text,uuid,uuid,text,int) TO frcaixinha_pg18_app;
 COMMIT;

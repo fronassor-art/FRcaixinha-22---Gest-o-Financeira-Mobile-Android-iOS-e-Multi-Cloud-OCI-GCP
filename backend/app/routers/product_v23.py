@@ -154,3 +154,13 @@ async def cycle_directory(tenant_id:UUID,request:Request,offset:int=Query(0,ge=0
 async def workspace(tenant_id:UUID,cycle_id:UUID,request:Request,offset:int=Query(0,ge=0,le=10000),conn=Depends(unreleased_transaction)):
     row=await call(conn.fetchrow("SELECT public.fr_v23_workspace($1,$2,$3,$4)::text AS payload",bearer_token(request),tenant_id,cycle_id,offset))
     return json.loads(row["payload"])
+
+@router.get("/form-options")
+async def document_options(tenant_id:UUID,request:Request,offset:int=Query(0,ge=0,le=10000),conn=Depends(unreleased_transaction)):
+    row=await call(conn.fetchrow("SELECT public.fr_v23_form_options($1,$2,NULL::uuid,'DOCUMENT',$3)::text AS payload",bearer_token(request),tenant_id,offset))
+    return json.loads(row["payload"])
+
+@router.get("/cycles/{cycle_id}/form-options")
+async def cycle_form_options(tenant_id:UUID,cycle_id:UUID,kind:Literal["ADMIT","CONFIRM","REVERSE","CONTEST","RELEASE"],request:Request,offset:int=Query(0,ge=0,le=10000),conn=Depends(unreleased_transaction)):
+    row=await call(conn.fetchrow("SELECT public.fr_v23_form_options($1,$2,$3,$4,$5)::text AS payload",bearer_token(request),tenant_id,cycle_id,kind,offset))
+    return json.loads(row["payload"])

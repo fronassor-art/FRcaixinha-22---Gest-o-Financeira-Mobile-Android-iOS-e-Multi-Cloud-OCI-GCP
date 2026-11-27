@@ -234,10 +234,19 @@ async def main():
             release={**hold,"request_id":str(uuid4()),"action":"RELEASE","related_hold":held}
             await post(res1,release,h,403)
             await post(res2,{**release,"cents":3999},h,409)
+            opts=lambda cycle,kind:f"/cycles/{cycle}/form-options?kind={kind}"
+            before=await get(opts(c2,"RELEASE"))
+            assert before["cycle_id"]==c2 and before["kind"]=="RELEASE"
+            assert [x["id"] for x in before["items"]]==[held] and before["items"][0]["cents"]==4000
+            assert (await get(opts(c,"RELEASE")))["items"]==[]
+            await get(opts(c2,"RELEASE"),ha,403)
+            await get(opts(c2,"RELEASE"),ho,403)
+            await get(opts(c2,"CONTEST"),h,403)
             released=(await post(res2,release))["event_id"]
             assert (await post(res2,release))["event_id"]==released
             await post(res2,{**release,"request_id":str(uuid4())},h,409)
             assert (await get(res2))["reserved_cents"]==0 and (await get(res2))["reserve_deficit_cents"]==0
+            assert (await get(opts(c2,"RELEASE")))["items"]==[]
             # Synthetic canonical intent only: no provider call, no settlement.
             async def pix(ob,tenant_id=t,payer=member_a):
                 return await owner.fetchval("INSERT INTO public.pix_payment_intents(tenant_id,contribution_id,payer_user_id,amount_cents,idempotency_key,pix_copy_paste,expires_at) VALUES($1,$2,$3,1000,$4,'CI_NOT_A_PIX_CODE',now()+interval '10 minutes') RETURNING id",tenant_id,ob,payer,uuid4().hex)
@@ -257,7 +266,17 @@ async def main():
             await rejected(owner.execute("UPDATE public.pix_payment_intents SET status='PENDENTE' WHERE id=$1",intent))
             new=(await post("/manual-receipts",new_receipt(obligation2,1000)))["receipt_id"]
             await rejected(pix(obligation2))
+            pending_options=await get(opts(c2,"CONFIRM"))
+            assert [x["id"] for x in pending_options["items"]]==[new]
+            assert pending_options["items"][0]["related_id"]==str(obligation2)
+            assert (await get(opts(c,"CONFIRM")))["items"]==[]
+            await get(opts(c2,"CONFIRM"),ha,403)
             await post(f"/manual-receipts/{new}/CONFIRM",{**review,"request_id":str(uuid4())})
+            assert (await get(opts(c2,"CONFIRM")))["items"]==[]
+            assert [x["id"] for x in (await get(opts(c2,"CONTEST"),ha))["items"]]==[new]
+            assert [x["id"] for x in (await get(opts(c2,"REVERSE")))["items"]]==[new]
+            await get(opts(c2,"CONTEST"),hb,403)
+            await get(opts(c2,"CONTEST"),ho,403)
             await rejected(pix(obligation2))
             # Race on another contribution: only one channel can claim it.
             ob3=await owner.fetchval("SELECT id FROM public.contributions WHERE cycle_id=$1 AND membership_id=$2 AND id<>$3 ORDER BY due_date LIMIT 1",UUID(c2),ma,obligation2)
@@ -291,6 +310,16 @@ async def main():
             await get(f"/cycles/{c2}/workspace",ho,403)
             await get(f"/cycles/{uuid4()}/workspace",h,403)
             pending_cycle=extras[1] if (await owner.fetchval("SELECT count(*) FROM public.fr_v23_admission WHERE cycle_id=$1",UUID(extras[0]))) else extras[0]
+            docs=await get("/form-options")
+            assert docs["kind"]=="DOCUMENT" and docs["cycle_id"] is None and docs["items"]
+            assert all(len(x["document_hash"])==64 for x in docs["items"])
+            await get("/form-options",ha,403)
+            await get("/form-options",ho,403)
+            assert (await get(opts(c2,"ADMIT")))["items"]==[]
+            pending_options=await get(opts(pending_cycle,"ADMIT"))
+            assert any(x["id"]==str(ma) and x["quotas"]>0 for x in pending_options["items"])
+            await get(opts(pending_cycle,"ADMIT"),ha,403)
+            assert (await get(opts(pending_cycle,"ADMIT")+"&offset=50"))["items"]==[]
             pending_workspace=await get(f"/cycles/{pending_cycle}/workspace",ha)
             assert pending_workspace["summary"] is None and pending_workspace["items"]==[] and pending_workspace["reserves"] is None
             async with pool.acquire() as conn:
@@ -305,11 +334,13 @@ async def main():
                 else: raise AssertionError("direct consent table access")
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
+            await get("/form-options",h,403)
         print("M41320_CANONICAL_PG18_API_CYCLE_ADMISSION_MANUAL_CONCURRENCY=PASS")
         print("M41330_CANONICAL_LEDGER_CYCLE_SCOPE_SUMMARIES_REVERSAL=PASS")
         print("M41340_CANONICAL_POLICY_CONSENT_LICENSE_CAPACITY_RACE=PASS")
         print("M41350_CYCLE_RESERVES_DEFICIT_CANONICAL_PIX_EXCLUSION=PASS")
         print("M41360_CANONICAL_MOBILE_DIRECTORY_WORKSPACE_SCOPE=PASS")
+        print("M41380_SCOPED_FORM_OPTIONS_READBACK=PASS")
     finally:
         await pool.close()
         await owner.close()

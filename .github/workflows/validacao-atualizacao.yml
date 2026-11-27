@@ -93,6 +93,9 @@ on:
       - 'src/services/productTransactionalFormsV23.ts'
       - 'src/components/ProductTransactionalFormsV23.tsx'
       - 'src/tests/m41370_product_transactional_forms_ci.test.ts'
+      - 'src/services/productTransactionalSelectionV23.ts'
+      - 'src/tests/m41380_product_selection_ci.test.ts'
+      - 'docs/FR_FINANCE_M41380_FORM_OPTIONS_CI_NO_GO.md'
       - 'docs/FR_FINANCE_M41310_SUPERPACOTE_FUNCIONAL_V23.md'
       - 'backend/app/routers/product_v23.py'
       - 'backend/app/main.py'
@@ -284,6 +287,8 @@ jobs:
         run: npx tsx src/tests/m41360_product_transactional_mobile_ci.test.ts
       - name: M41370 — formulários V2.3, payloads, aceite, tentativa idempotente e bloqueio real
         run: npx tsx src/tests/m41370_product_transactional_forms_ci.test.ts
+      - name: M41380 — referências V2.3 por sessão, ciclo, perfil e limites
+        run: npx tsx src/tests/m41380_product_selection_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
