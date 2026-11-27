@@ -19,6 +19,11 @@ const required={...identity,state:'CONTRACT_B_REQUIRED',document:doc,acceptance_
 assert.equal((await parseAdministratorReadiness(required,scope,id(3))).state,'CONTRACT_B_REQUIRED');
 const accepted={...required,state:'CYCLE_CONFIGURATION',acceptance_id:id(4)};
 assert.equal((await parseAdministratorReadiness(accepted,scope,id(3))).acceptance_id,id(4));
+const continuity={...accepted,state:'CONTINUITY_ONLY'};
+assert.equal((await parseAdministratorReadiness(continuity,scope,id(3))).state,'CONTINUITY_ONLY');
+await assert.rejects(parseAdministratorReadiness({...continuity,acceptance_id:null},scope,id(3)));
+await assert.rejects(parseAdministratorReadiness({...continuity,production_authorized:true},scope,id(3)));
+console.log('M41470_MOBILE_CONTINUITY_ACCEPTED_DOCUMENT_ONLY=PASS');
 for(const patch of [{acceptance_id:null},{state:'ACTIVE'},{role:'TENANT_MEMBER'},{production_authorized:true},{document:{...doc,text:'adulterado'}},{document:{...doc,kind:'PLATFORM_LICENSE'}}])await assert.rejects(parseAdministratorReadiness({...accepted,...patch},scope,id(3)));
 await assert.rejects(parseAdministratorReadiness(required,scope,id(9)));
 await assert.rejects(parseAdministratorReadiness({...required,acceptance_id:id(4)},scope,id(3)));

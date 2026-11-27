@@ -21,7 +21,7 @@ export function parseAdminReauthentication(raw:unknown,expected:AdminIdentity,cl
 export async function parseAdministratorReadiness(raw:unknown,expected:AdminIdentity,documentId:string){
  const x=exact(raw,'user_id tenant_id role state document acceptance_id ci_only production_authorized'),identity=scope(x,expected);
  const state=x.state;
- if(state!=='CONTRACT_B_REQUIRED'&&state!=='CYCLE_CONFIGURATION')return deny();
+ if(state!=='CONTRACT_B_REQUIRED'&&state!=='CYCLE_CONFIGURATION'&&state!=='CONTINUITY_ONLY')return deny();
  const acceptance_id=state==='CONTRACT_B_REQUIRED'?(x.acceptance_id===null?null:deny()):uuid(x.acceptance_id);
  const document=await parseDocument(x.document,'TENANT_MEMBERSHIP',documentId);
  return Object.freeze({...identity,state,document,acceptance_id});

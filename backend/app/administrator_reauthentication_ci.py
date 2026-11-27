@@ -9,7 +9,7 @@ from hashlib import sha256
 import psycopg
 from .account_lifecycle import LifecycleDenied,_email
 from .cycle_identity_registration_ci import _guard
-from .preliminary_onboarding_ci import _journey,_rate_key
+from .preliminary_onboarding_ci import _binding,_rate_key
 from .admin_license_onboarding_ci import _session
 from .onboarding_readback_ci import _document
 from .preliminary_token_ci import is_preliminary
@@ -58,6 +58,46 @@ def _issue(issuer,actor,tenant,proof,key):
             raise LifecycleDenied("Emissão indisponível.")
     return raw,expiry
 
+def _license_access(owner,actor,tenant):
+    """CI-only continuity login: exact historical paid A, never a new entitlement.
+
+    The savepoint is necessary because the existing SQL function deliberately
+    raises 42501 for missing/ambiguous entitlement. Never suppress other errors.
+    A current but inconsistent entitlement does not fall back to continuity.
+    """
+    acceptance,status=_binding(owner,actor,tenant)
+    if status!="ATIVO":
+        raise LifecycleDenied("Licença inicial não conciliada.")
+    try:
+        with owner.transaction():
+            owner.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()
+        return "CURRENT"
+    except psycopg.errors.InsufficientPrivilege:
+        pass
+    current=owner.execute(
+        "SELECT e.id FROM public.saas_license_entitlements e WHERE e.tenant_id=%s "
+        "AND e.status='ACTIVE' AND e.valid_from<=clock_timestamp() AND e.valid_until>clock_timestamp() FOR SHARE",
+        (tenant,)).fetchall()
+    if current:
+        raise LifecycleDenied("Licença atual inconsistente.")
+    history=owner.execute(
+        "SELECT e.id FROM public.saas_license_entitlements e "
+        "JOIN public.saas_subscription_preparations s ON s.id=e.preparation_id "
+        "JOIN public.saas_payment_intents p ON p.id=e.payment_intent_id AND p.preparation_id=s.id "
+        "JOIN public.platform_license_price_versions v ON v.id=s.price_version_id AND v.plan_tier=s.plan_tier "
+        "WHERE e.tenant_id=%s AND s.tenant_id=e.tenant_id AND p.tenant_id=e.tenant_id "
+        "AND s.admin_user_id=%s AND p.admin_user_id=s.admin_user_id AND s.contract_acceptance_id=%s "
+        "AND e.plan_tier=s.plan_tier AND p.price_version_id=v.id "
+        "AND p.provider='MERCADO_PAGO' AND p.currency='BRL' AND p.live_mode=false "
+        "AND p.status='APPROVED' AND p.provider_payment_id IS NOT NULL AND p.paid_at IS NOT NULL "
+        "AND p.reconciled_at>=p.paid_at AND p.reconciled_at<=clock_timestamp() "
+        "AND p.expected_amount_cents=(CASE s.billing_period WHEN 'MONTHLY' THEN v.monthly_price ELSE v.annual_price END)*100 "
+        "AND e.valid_from<=clock_timestamp() AND (e.status='SUSPENDED' OR (e.status='ACTIVE' AND e.valid_until<=clock_timestamp())) "
+        "FOR SHARE OF e,s,p,v",(tenant,actor,acceptance)).fetchall()
+    if not history:
+        raise LifecycleDenied("Histórico conciliado indisponível.")
+    return "CONTINUITY_ONLY"
+
 def reauthenticate_admin_ci(owner,*,email,password,tenant):
     _guard(owner)
     email=_email(email)
@@ -81,9 +121,7 @@ def reauthenticate_admin_ci(owner,*,email,password,tenant):
                 raise LifecycleDenied("Credenciais indisponíveis.")
             # Exact invitation, A, payer, preparation, reconciled entitlement and
             # current tenant/membership. SHARE locks held through issuance.
-            journey=_journey(owner,actor,tenant)
-            if journey["state"]!="REAUTH_REQUIRED":
-                raise LifecycleDenied("Licença não conciliada.")
+            _license_access(owner,actor,tenant)
             proof=_proof(verifier,actor,fingerprint)
             raw,expiry=_issue(issuer,actor,tenant,proof,key)
             return dict(session_token=raw,expires_at=expiry,user_id=actor,tenant_id=tenant,
@@ -95,16 +133,18 @@ def administrator_readiness_ci(owner,token,tenant,document_id):
         raise LifecycleDenied("Nova autenticação necessária.")
     with owner.transaction():
         actor,_=_session(owner,token,"TENANT_ADMIN",tenant)
-        if _journey(owner,actor,tenant)["state"]!="REAUTH_REQUIRED":
-            raise LifecycleDenied("Licença indisponível.")
+        access=_license_access(owner,actor,tenant)
         doc=_document(owner,document_id,"TENANT_MEMBERSHIP")
         accepted=owner.execute("SELECT a.id FROM public.contract_acceptances a JOIN public.contract_documents d "
                                "ON d.id=a.document_id WHERE a.user_id=%s AND a.tenant_id=%s AND a.document_id=%s "
                                "AND a.document_kind='TENANT_MEMBERSHIP' AND a.accepted_at>=d.published_at FOR SHARE OF a,d",
                                (actor,tenant,document_id)).fetchall()
         if len(accepted)>1:raise LifecycleDenied("Aceite ambíguo.")
+        if access=="CONTINUITY_ONLY" and not accepted:
+            raise LifecycleDenied("Novo aceite B exige licença vigente.")
+        state="CONTINUITY_ONLY" if access=="CONTINUITY_ONLY" else ("CYCLE_CONFIGURATION" if accepted else "CONTRACT_B_REQUIRED")
         return dict(user_id=actor,tenant_id=tenant,role="TENANT_ADMIN",
-                    state="CYCLE_CONFIGURATION" if accepted else "CONTRACT_B_REQUIRED",
+                    state=state,
                     document=doc,acceptance_id=accepted[0][0] if accepted else None,
                     ci_only=True,production_authorized=False)
 

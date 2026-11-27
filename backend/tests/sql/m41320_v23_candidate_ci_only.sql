@@ -179,7 +179,7 @@ CREATE FUNCTION public.fr_v23_license(p_tenant uuid,p_admin uuid)
 RETURNS TABLE(members_limit int,quotas_limit int) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE row_data record;n int:=0;
 BEGIN
- FOR row_data IN SELECT pl.members_limit ml,pl.quotas_limit ql
+ FOR row_data IN SELECT pl.members_limit ml,pl.quotas_limit ql,e.valid_from vf,e.valid_until vu
  FROM public.saas_license_entitlements e
  JOIN public.saas_subscription_preparations sp ON sp.id=e.preparation_id
  JOIN public.saas_payment_intents pi ON pi.id=e.payment_intent_id AND pi.preparation_id=sp.id
@@ -192,7 +192,7 @@ BEGIN
  AND ca.document_kind='PLATFORM_LICENSE' AND ca.tenant_id IS NULL AND d.document_kind='PLATFORM_LICENSE'
  AND d.published_at IS NOT NULL AND ca.accepted_at>=d.published_at
  AND e.plan_tier=sp.plan_tier AND pi.price_version_id=pv.id
- AND e.status='ACTIVE' AND e.valid_from<=now() AND e.valid_until>now()
+ AND e.status='ACTIVE' AND e.valid_from<=clock_timestamp() AND e.valid_until>clock_timestamp()
  AND sp.status NOT IN ('CANCELED','PAUSED_NO_PAYMENT') AND pi.status='APPROVED'
  AND pi.provider='MERCADO_PAGO' AND pi.currency='BRL' AND pi.live_mode=false
  AND pi.provider_payment_id IS NOT NULL AND pi.paid_at IS NOT NULL AND pi.reconciled_at>=pi.paid_at
@@ -201,7 +201,9 @@ BEGIN
  AND pl.status='ACTIVE' AND pl.tier<>'AMPLIADO' AND pl.members_limit IS NOT NULL AND pl.quotas_limit IS NOT NULL
  FOR SHARE OF e,sp,pi,pl,pv,ca,d
  LOOP
+ IF row_data.vf<=clock_timestamp() AND row_data.vu>clock_timestamp() THEN
  n:=n+1;members_limit:=row_data.ml;quotas_limit:=row_data.ql;
+ END IF;
  END LOOP;
  IF n<>1 THEN RAISE EXCEPTION 'license missing or ambiguous' USING ERRCODE='42501'; END IF;
  RETURN NEXT;
@@ -578,6 +580,7 @@ BEGIN
  IF (prior.actor,prior.cycle_id,prior.action,prior.cents,prior.related_hold,prior.reason) IS DISTINCT FROM (a,p_cycle,p_action,p_cents,p_hold,p_reason)
  THEN RAISE EXCEPTION 'reservation conflict' USING ERRCODE='23505'; END IF; RETURN prior.id; END IF;
  IF p_action='HOLD' THEN
+ PERFORM * FROM public.fr_v23_license(p_tenant,a);
  IF cycle_status<>'ABERTO' THEN RAISE EXCEPTION 'cycle not open' USING ERRCODE='23514'; END IF;
  SELECT * INTO s FROM public.fr_v23_reserve_snapshot(p_tenant,p_cycle);
  IF p_cents>s.unreserved_documented_cents THEN RAISE EXCEPTION 'insufficient documented capacity' USING ERRCODE='23514'; END IF;

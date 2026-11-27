@@ -75,7 +75,10 @@ def exercise(owner,client,actor,tenant,email,password,ent,doc,b_hash,reviewer_to
         else:
             owner.execute("UPDATE public.saas_license_entitlements SET valid_from=now()-interval '2 days',valid_until=now()-interval '1 day' WHERE id=%s",(ent,))
         try:
-            reauthenticate(client,email,password,tenant,status=403)
+            # Continuity login requires the same verified identity and historical paid A.
+            continuity=reauthenticate(client,email,password,tenant,actor)
+            get(client,f"/tenants/{tenant}/administrator-readiness/{doc}",continuity,403)
+            assert post(client,f"/tenants/{tenant}/administrator-logout",{},continuity)["revoked"] is True
             get(client,f"/tenants/{tenant}/administrator-readiness/{doc}",raw,403)
             post(client,f"/tenants/{tenant}/contract-b",dict(document_id=doc,document_hash=b_hash,accepted=True),raw,403)
         finally:

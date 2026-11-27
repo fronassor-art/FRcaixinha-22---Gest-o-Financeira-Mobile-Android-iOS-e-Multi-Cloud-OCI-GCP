@@ -196,6 +196,16 @@ def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, diges
             assert accept_admin_b_ci(conn,**args)==accepted
             actor=conn.execute("SELECT admin_user_id FROM public.tenants WHERE id=%s",(tenant,)).fetchone()[0]
             assert readiness(client,tenant,actor,doc,admin_raw,"CYCLE_CONFIGURATION")["acceptance_id"]==str(accepted)
+            ent=conn.execute("SELECT id FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]
+            conn.execute("UPDATE public.saas_license_entitlements SET status='SUSPENDED' WHERE id=%s",(ent,))
+            try:
+                assert readiness(client,tenant,actor,doc,admin_raw,"CONTINUITY_ONLY")["acceptance_id"]==str(accepted)
+                post(client,prepared["path"],prepared["body"],admin_raw,403)
+                get(client,f"/tenants/{tenant}/administrator-readiness/{uuid4()}",admin_raw,403)
+            finally:
+                conn.execute("UPDATE public.saas_license_entitlements SET status='ACTIVE' WHERE id=%s",(ent,))
+            assert readiness(client,tenant,actor,doc,admin_raw,"CYCLE_CONFIGURATION")["acceptance_id"]==str(accepted)
+            print("M41470_CONTINUITY_ACCEPTED_B_AND_RESUME=PASS")
             print("M41460_ADMIN_REAUTH_CONTRACT_B_CYCLE_GATE=PASS")
             return accepted
         assert phase=="MEMBER"
@@ -222,7 +232,16 @@ def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, diges
                               form={**form,"confirm_password":body["password"]})
         from fastapi.encoders import jsonable_encoder
         assert prepared==dict(path="/member/registration",body=jsonable_encoder(body))
+        ent=conn.execute("SELECT id FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]
+        conn.execute("UPDATE public.saas_license_entitlements SET status='SUSPENDED' WHERE id=%s",(ent,))
+        try:
+            post(client,prepared["path"],prepared["body"],status=403)
+            assert conn.execute("SELECT consumed_at IS NULL FROM public.invite_email_verification WHERE invitation_id=%s",(inv,)).fetchone()[0]
+            assert conn.execute("SELECT accepted_at IS NULL FROM public.invitations WHERE id=%s",(inv,)).fetchone()[0]
+        finally:
+            conn.execute("UPDATE public.saas_license_entitlements SET status='ACTIVE' WHERE id=%s",(ent,))
         registered=post(client,prepared["path"],prepared["body"])
+        print("M41470_MEMBER_REGISTRATION_REVALIDATED_NO_PROOF_LOSS=PASS")
         person,member,consent=map(UUID,(registered['user_id'],registered['membership_id'],registered['consent_id']))
         post(client,'/member/registration',body,status=403)
         print('M41420_ONBOARDING_HTTP_MEMBER_B_AND_REPLAY=PASS')

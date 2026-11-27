@@ -148,6 +148,11 @@ async def main():
                 extras.append(ec)
             await owner.execute("UPDATE public.saas_license_entitlements SET status='SUSPENDED' WHERE id=$1",ent)
             await post(f"/cycles/{extras[0]}/admissions",{**admission,"quotas":36},h,403)
+            assert (await post(f"/cycles/{c}/admissions",admission))["obligations"]==11
+            blocked_cycle=await accepted({**cycle,"request_id":str(uuid4())})
+            await post("/cycles",blocked_cycle,h,403)
+            await bind_invite(extras[0],member_id=mb,status=403)
+            assert (await post("/cycles",payload))["cycle_id"]==c
             await owner.execute("UPDATE public.saas_license_entitlements SET status='ACTIVE' WHERE id=$1",ent)
             outcomes=await asyncio.gather(*[client.post(prefix+f"/cycles/{ec}/admissions",json={**admission,"quotas":36},headers=h) for ec in extras])
             assert sorted(x.status_code for x in outcomes)==[200,409],[(x.status_code,x.text) for x in outcomes]
@@ -259,9 +264,16 @@ async def main():
             assert snap["bank_available_cents"]==0 and snap["payout_authorized"] is False and snap["bank_reconciled"] is False
             assert (await get(res1))["reserved_cents"]==0
             assert await owner.fetchval("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=$1",t)==base_tx
+            # Suspension does not erase existing commitments or permit new holds.
+            await owner.execute("UPDATE public.saas_license_entitlements SET status='SUSPENDED' WHERE id=$1",ent)
+            await post(res2,{**hold,"request_id":str(uuid4()),"cents":1},h,403)
+            assert (await post(res2,holds[winner]))["event_id"]==held
+            assert (await get(first))["paid_cents"]==0
+            assert (await get(f"/cycles/{c2}/my-contributions",ha))["paid_cents"]==7000
+            await get(f"/cycles/{c2}/my-contributions",hb,403)
             await post(f"/manual-receipts/{rid2}/CONTEST",{**review,"request_id":str(uuid4())},ha)
             assert (await get(res2))["reserve_deficit_cents"]==4000
-            await post(res2,{**hold,"request_id":str(uuid4()),"cents":1},h,409)
+            await post(res2,{**hold,"request_id":str(uuid4()),"cents":1},h,403)
             # Compensation remains possible even when it exposes a reservation deficit.
             await post(f"/manual-receipts/{rid2}/REVERSE",{**rev,"request_id":str(uuid4())})
             assert (await get(res2))["documented_cents"]==0 and (await get(res2))["reserve_deficit_cents"]==4000
@@ -281,6 +293,13 @@ async def main():
             await post(res2,{**release,"request_id":str(uuid4())},h,409)
             assert (await get(res2))["reserved_cents"]==0 and (await get(res2))["reserve_deficit_cents"]==0
             assert (await get(opts(c2,"RELEASE")))["items"]==[]
+            # Existing obligation can still be documented and corrected in suspension.
+            continuation_receipt=(await post("/manual-receipts",new_receipt(obligation,100)))["receipt_id"]
+            assert (await post(f"/manual-receipts/{continuation_receipt}/CONFIRM",{**review,"request_id":str(uuid4())}))["state"]=="CONFIRMED"
+            assert (await post(f"/manual-receipts/{continuation_receipt}/REVERSE",{**rev,"request_id":str(uuid4())}))["state"]=="REVERSED"
+            assert (await get(first))["paid_cents"]==0
+            await owner.execute("UPDATE public.saas_license_entitlements SET status='ACTIVE' WHERE id=$1",ent)
+            print("M41470_SUSPENSION_NEW_COMMITMENTS_DENIED_CONTINUITY_PRESERVED=PASS")
             # Synthetic canonical intent only: no provider call, no settlement.
             async def pix(ob,tenant_id=t,payer=member_a):
                 return await owner.fetchval("INSERT INTO public.pix_payment_intents(tenant_id,contribution_id,payer_user_id,amount_cents,idempotency_key,pix_copy_paste,expires_at) VALUES($1,$2,$3,1000,$4,'CI_NOT_A_PIX_CODE',now()+interval '10 minutes') RETURNING id",tenant_id,ob,payer,uuid4().hex)
