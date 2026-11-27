@@ -37,6 +37,7 @@ import { MasterAdminRegistryView } from './components/MasterAdminRegistryView';
 import { MasterOnboardingView } from './components/MasterOnboardingView';
 import { MembersView } from './components/MembersView';
 import { ContributionsView } from './components/ContributionsView';
+import { ProductSaasHomologationPanel } from './components/ProductSaasHomologationPanel';
 import { MemberAnnualPreviewView } from './components/MemberAnnualPreviewView';
 import { ServerLoansView } from './components/ServerLoansView';
 import { SpecialCreditView } from './components/SpecialCreditView';
@@ -506,7 +507,10 @@ export default function App() {
           <MasterOnboardingView state={state} />
         )}
         {visibleTab === 'LICENCAS' && (
-          <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
+          <>
+            {state.currentRole==='MASTER'&&<ProductSaasHomologationPanel key={state.currentUserId} role="MASTER"/>}
+            <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
+          </>
         )}
         {visibleTab === 'SUPORTE' && <SupportSessionView state={state} />}
         {(visibleTab === 'BOLOES' || visibleTab === 'MEUS_BOLOES') && (
@@ -543,7 +547,10 @@ export default function App() {
           <MemberAnnualPreviewView state={state}/>
         )}
         {visibleTab === 'LICENCA' && (
-          <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
+          <>
+            {state.currentRole==='TENANT_ADMIN'&&<ProductSaasHomologationPanel key={state.currentUserId+':'+state.currentTenantId} role="TENANT_ADMIN"/>}
+            <MasterLicensingView state={state} onOpenPixModal={openPixModal} />
+          </>
         )}
         {(visibleTab === 'RIFAS' || visibleTab === 'MINHAS_RIFAS') && (
           <RaffleModuleView state={state} onOpenPixModal={openPixModal} />

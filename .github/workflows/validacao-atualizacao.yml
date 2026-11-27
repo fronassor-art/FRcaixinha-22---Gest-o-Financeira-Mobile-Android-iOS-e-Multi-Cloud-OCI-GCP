@@ -78,6 +78,11 @@ on:
       - 'docs/FR_FINANCE_M41040_FIRST_CAIXINHA_ONBOARDING_SEQUENCE.md'
       - 'src/services/firstCaixinhaOnboardingSequenceV1.ts'
       - 'src/tests/m41040_first_caixinha_onboarding_sequence_ci.test.ts'
+      - 'src/services/productHomologationV23.ts'
+      - 'src/components/ProductHomologationPanel.tsx'
+      - 'src/components/ProductSaasHomologationPanel.tsx'
+      - 'src/tests/m41300_product_homologation_ci.test.ts'
+      - 'docs/FR_FINANCE_M41300_CHECKPOINT_PRODUCT_V23.md'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
       - 'src/services/firstCaixinhaCloseIntervalV22.ts'
       - 'src/tests/m41030_first_caixinha_closing_interval_ci.test.ts'
@@ -247,6 +252,8 @@ jobs:
           bash -n backend/scripts/aistudio_360_checkpoint_readonly.sh
       - name: Validar contrato financeiro de contribuições, datas e centavos
         run: npx tsx src/tests/contributions_integrity_ci.test.ts
+      - name: M41300 — gestão manual, híbrida, ciclos simultâneos e SaaS em memória
+        run: npx tsx src/tests/m41300_product_homologation_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
