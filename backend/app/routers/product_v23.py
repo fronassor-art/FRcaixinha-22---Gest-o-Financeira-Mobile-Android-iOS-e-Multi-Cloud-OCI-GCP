@@ -2,11 +2,11 @@
 CI overrides only in its isolated test application, never in production.
 """
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from ..dependencies import bearer_token
 
 router=APIRouter(prefix="/tenants/{tenant_id}/v23",tags=["FR Finance V2.3"])
@@ -17,7 +17,7 @@ async def unreleased_transaction():
 class Strict(BaseModel):
     model_config=ConfigDict(extra="forbid")
 
-class CycleInput(Strict):
+class PolicyInput(Strict):
     request_id: UUID
     start: date
     first_due: date
@@ -29,6 +29,23 @@ class CycleInput(Strict):
     late_competences: int=Field(strict=True,ge=1,le=120)
     mode: Literal["MANUAL","MERCADO_PAGO","HYBRID"]
     document_id: UUID
+
+def explicit_acceptance(value):
+    if value is not True:
+        raise ValueError("Aceite exige confirmação booleana explícita.")
+    return value
+
+Accepted=Annotated[Literal[True],BeforeValidator(explicit_acceptance)]
+
+class CycleInput(PolicyInput):
+    policy_hash: str=Field(pattern=r"^[0-9a-f]{64}$")
+    accepted: Accepted
+
+class ConsentInput(Strict):
+    policy_hash: str=Field(pattern=r"^[0-9a-f]{64}$")
+    joined: date
+    quotas: int=Field(strict=True,ge=1,le=400)
+    accepted: Accepted
 
 class AdmissionInput(Strict):
     membership_id: UUID
@@ -65,10 +82,24 @@ async def capabilities(tenant_id:UUID):
     return {"contract":"FR_FINANCE_V23_TRANSACTION_V1","available":False,"manual_receipts_enabled":False,
             "cycle_writes_enabled":False,"real_payments_enabled":False,"production_authorized":False}
 
+@router.post("/policies/preview")
+async def preview_policy(tenant_id:UUID,p:PolicyInput,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT public.fr_v23_preview($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) AS policy_hash",
+        bearer_token(request),tenant_id,p.request_id,p.start,p.first_due,p.last_due,p.closing,p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode,p.document_id))
+
+@router.get("/cycles/{cycle_id}/policy")
+async def read_policy(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT * FROM public.fr_v23_read_policy($1,$2,$3)",bearer_token(request),tenant_id,cycle_id))
+
+@router.post("/cycles/{cycle_id}/policy-acceptance")
+async def accept_policy(tenant_id:UUID,cycle_id:UUID,p:ConsentInput,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT public.fr_v23_accept_policy($1,$2,$3,$4,$5,$6) AS consent_id",
+        bearer_token(request),tenant_id,cycle_id,p.policy_hash,p.joined,p.quotas))
+
 @router.post("/cycles")
 async def create_cycle(tenant_id:UUID,p:CycleInput,request:Request,conn=Depends(unreleased_transaction)):
-    return await call(conn.fetchrow("SELECT public.fr_v23_cycle($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) AS cycle_id",
-        bearer_token(request),tenant_id,p.request_id,p.start,p.first_due,p.last_due,p.closing,p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode,p.document_id))
+    return await call(conn.fetchrow("SELECT public.fr_v23_cycle($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) AS cycle_id",
+        bearer_token(request),tenant_id,p.request_id,p.start,p.first_due,p.last_due,p.closing,p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode,p.document_id,p.policy_hash))
 
 @router.post("/cycles/{cycle_id}/admissions")
 async def admit(tenant_id:UUID,cycle_id:UUID,p:AdmissionInput,request:Request,conn=Depends(unreleased_transaction)):

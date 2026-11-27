@@ -43,18 +43,46 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER fr_v23_entry_scope BEFORE INSERT OR UPDATE ON public.ledger_entries FOR EACH ROW EXECUTE FUNCTION public.fr_v23_entry_scope();
+-- M41340: independent prospective prices in this guarded CI fixture only.
+ALTER TABLE public.platform_license_price_versions ALTER COLUMN annual_price DROP EXPRESSION IF EXISTS;
+ALTER TABLE public.platform_license_price_versions ALTER COLUMN annual_price SET NOT NULL;
+ALTER TABLE public.platform_license_price_versions ADD CHECK(annual_price>0);
+UPDATE public.platform_license_plans SET members_limit=200,quotas_limit=400
+ WHERE tier='AMPLIADO' AND status='BLOCKED_PENDING_CEILING';
 CREATE TABLE public.fr_v23_policy(
  cycle_id uuid PRIMARY KEY,tenant_id uuid NOT NULL,request_id uuid NOT NULL,
  actor uuid NOT NULL REFERENCES public.users(id),document_id uuid NOT NULL REFERENCES public.contract_documents(id),
+ admin_acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),
+ policy_hash text NOT NULL CHECK(policy_hash ~ '^[0-9a-f]{64}$'),
+ accepted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  first_due date NOT NULL,last_due date NOT NULL,quota_cents bigint NOT NULL CHECK(quota_cents BETWEEN 1 AND 100000000),
  admin_bps int NOT NULL CHECK(admin_bps BETWEEN 0 AND 10000),late_days int NOT NULL CHECK(late_days BETWEEN 1 AND 3650),
  late_competences int NOT NULL CHECK(late_competences BETWEEN 1 AND 120),
  mode text NOT NULL CHECK(mode IN ('MANUAL','MERCADO_PAGO','HYBRID')),
  UNIQUE(tenant_id,request_id),FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id)
 );
+-- Dates covered by the accepted hash cannot be edited in place.
+CREATE FUNCTION public.fr_v23_cycle_dates_immutable() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ IF (OLD.tenant_id,OLD.year,OLD.start_date,OLD.end_date,OLD.settlement_date) IS DISTINCT FROM
+ (NEW.tenant_id,NEW.year,NEW.start_date,NEW.end_date,NEW.settlement_date)
+ AND EXISTS(SELECT 1 FROM public.fr_v23_policy p WHERE p.cycle_id=OLD.id)
+ THEN RAISE EXCEPTION 'accepted dates immutable' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER fr_v23_cycle_dates BEFORE UPDATE ON public.cycles FOR EACH ROW EXECUTE FUNCTION public.fr_v23_cycle_dates_immutable();
+CREATE TABLE public.fr_v23_member_consent(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),cycle_id uuid NOT NULL REFERENCES public.fr_v23_policy(cycle_id),
+ membership_id uuid NOT NULL REFERENCES public.memberships(id),acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),
+ actor uuid NOT NULL REFERENCES public.users(id),policy_hash text NOT NULL CHECK(policy_hash ~ '^[0-9a-f]{64}$'),
+ joined date NOT NULL,quotas int NOT NULL CHECK(quotas BETWEEN 1 AND 400),accepted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ UNIQUE(cycle_id,membership_id),UNIQUE(id,cycle_id,membership_id)
+);
 CREATE TABLE public.fr_v23_admission(
  cycle_id uuid NOT NULL REFERENCES public.fr_v23_policy(cycle_id),membership_id uuid NOT NULL REFERENCES public.memberships(id),
- acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),joined date NOT NULL,
+ acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),consent_id uuid NOT NULL,
+ FOREIGN KEY(consent_id,cycle_id,membership_id) REFERENCES public.fr_v23_member_consent(id,cycle_id,membership_id),
+ joined date NOT NULL,
  quotas int NOT NULL CHECK(quotas BETWEEN 1 AND 400),PRIMARY KEY(cycle_id,membership_id)
 );
 CREATE TABLE public.fr_v23_receipts(
@@ -78,7 +106,7 @@ CREATE TABLE public.fr_v23_events(
 CREATE FUNCTION public.fr_v23_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 BEGIN RAISE EXCEPTION 'immutable V23'; END $$;
 DO $$ DECLARE t regclass; BEGIN
- FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass]) LOOP
+ FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass]) LOOP
  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY',t);
  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY',t);
  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',t);
@@ -99,9 +127,55 @@ BEGIN
  FOR SHARE OF s,u,t,m;
  IF a IS NULL THEN RAISE EXCEPTION 'denied' USING ERRCODE='42501'; END IF; RETURN a;
 END $$;
-CREATE FUNCTION public.fr_v23_cycle(p_token text,p_tenant uuid,p_request uuid,p_start date,p_first date,p_last date,p_close date,p_quota bigint,p_bps int,p_late int,p_comp int,p_mode text,p_doc uuid)
+-- Canonical license: a reconciled, in-term synthetic entitlement linked to its exact
+-- preparation, price version, Contract A and payer. Never treats a pending payment as a license.
+CREATE FUNCTION public.fr_v23_license(p_tenant uuid,p_admin uuid)
+RETURNS TABLE(members_limit int,quotas_limit int) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE row_data record;n int:=0;
+BEGIN
+ FOR row_data IN SELECT pl.members_limit ml,pl.quotas_limit ql
+ FROM public.saas_license_entitlements e
+ JOIN public.saas_subscription_preparations sp ON sp.id=e.preparation_id
+ JOIN public.saas_payment_intents pi ON pi.id=e.payment_intent_id AND pi.preparation_id=sp.id
+ JOIN public.platform_license_plans pl ON pl.tier=e.plan_tier
+ JOIN public.platform_license_price_versions pv ON pv.id=sp.price_version_id AND pv.plan_tier=pl.tier
+ JOIN public.contract_acceptances ca ON ca.id=sp.contract_acceptance_id
+ JOIN public.contract_documents d ON d.id=ca.document_id
+ WHERE e.tenant_id=p_tenant AND sp.tenant_id=p_tenant AND pi.tenant_id=p_tenant
+ AND sp.admin_user_id=p_admin AND pi.admin_user_id=p_admin AND ca.user_id=p_admin
+ AND ca.document_kind='PLATFORM_LICENSE' AND ca.tenant_id IS NULL AND d.document_kind='PLATFORM_LICENSE'
+ AND d.published_at IS NOT NULL AND ca.accepted_at>=d.published_at
+ AND e.plan_tier=sp.plan_tier AND pi.price_version_id=pv.id
+ AND e.status='ACTIVE' AND e.valid_from<=now() AND e.valid_until>now()
+ AND sp.status NOT IN ('CANCELED','PAUSED_NO_PAYMENT') AND pi.status='APPROVED'
+ AND pi.provider='MERCADO_PAGO' AND pi.currency='BRL' AND pi.live_mode=false
+ AND pi.provider_payment_id IS NOT NULL AND pi.paid_at IS NOT NULL AND pi.reconciled_at>=pi.paid_at
+ AND pi.reconciled_at<=now() AND ca.accepted_at<=pi.paid_at
+ AND pi.expected_amount_cents=(CASE sp.billing_period WHEN 'MONTHLY' THEN pv.monthly_price ELSE pv.annual_price END)*100
+ AND pl.status='ACTIVE' AND pl.tier<>'AMPLIADO' AND pl.members_limit IS NOT NULL AND pl.quotas_limit IS NOT NULL
+ FOR SHARE OF e,sp,pi,pl,pv,ca,d
+ LOOP
+ n:=n+1;members_limit:=row_data.ml;quotas_limit:=row_data.ql;
+ END LOOP;
+ IF n<>1 THEN RAISE EXCEPTION 'license missing or ambiguous' USING ERRCODE='42501'; END IF;
+ RETURN NEXT;
+END $$;
+CREATE FUNCTION public.fr_v23_preview(p_token text,p_tenant uuid,p_request uuid,p_start date,p_first date,p_last date,p_close date,p_quota bigint,p_bps int,p_late int,p_comp int,p_mode text,p_doc uuid)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;doc_hash text;acc uuid;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,true);
+ SELECT d.sha256,x.id INTO doc_hash,acc FROM public.contract_documents d JOIN public.contract_acceptances x ON x.document_id=d.id
+ WHERE d.id=p_doc AND d.document_kind='TENANT_MEMBERSHIP' AND d.published_at IS NOT NULL
+ AND x.user_id=a AND x.tenant_id=p_tenant AND x.accepted_at>=d.published_at;
+ IF acc IS NULL THEN RAISE EXCEPTION 'contract missing' USING ERRCODE='42501'; END IF;
+ RETURN encode(public.digest(jsonb_build_array('FR_V23_POLICY_V1',p_tenant,a,p_request,p_doc,doc_hash,acc,
+ to_char(p_start,'YYYY-MM-DD'),to_char(p_first,'YYYY-MM-DD'),to_char(p_last,'YYYY-MM-DD'),to_char(p_close,'YYYY-MM-DD'),
+ p_quota,p_bps,p_late,p_comp,p_mode)::text,'sha256'),'hex');
+END $$;
+CREATE FUNCTION public.fr_v23_cycle(p_token text,p_tenant uuid,p_request uuid,p_start date,p_first date,p_last date,p_close date,p_quota bigint,p_bps int,p_late int,p_comp int,p_mode text,p_doc uuid,p_hash text)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE a uuid;c uuid;prior record;n int;
+DECLARE a uuid;c uuid;prior record;n int;acc uuid;expected_hash text;
 BEGIN
  a:=public.fr_v23_actor(p_token,p_tenant,true);
  PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
@@ -112,21 +186,63 @@ BEGIN
  OR p_mode IS NULL OR p_mode NOT IN ('MANUAL','MERCADO_PAGO','HYBRID') THEN RAISE EXCEPTION 'invalid policy' USING ERRCODE='22023'; END IF;
  n:=(extract(year FROM p_last)::int-extract(year FROM p_first)::int)*12+extract(month FROM p_last)::int-extract(month FROM p_first)::int;
  IF n NOT BETWEEN 0 AND 119 OR (p_first+make_interval(months=>n))::date<>p_last THEN RAISE EXCEPTION 'anchor' USING ERRCODE='22023'; END IF;
+ expected_hash:=public.fr_v23_preview(p_token,p_tenant,p_request,p_start,p_first,p_last,p_close,p_quota,p_bps,p_late,p_comp,p_mode,p_doc);
+ IF p_hash IS DISTINCT FROM expected_hash THEN RAISE EXCEPTION 'policy hash mismatch' USING ERRCODE='23514'; END IF;
  SELECT p.*,cy.start_date,cy.settlement_date INTO prior FROM public.fr_v23_policy p JOIN public.cycles cy ON cy.id=p.cycle_id WHERE p.tenant_id=p_tenant AND p.request_id=p_request;
  IF FOUND THEN
  IF (prior.actor,prior.start_date,prior.first_due,prior.last_due,prior.settlement_date,prior.quota_cents,prior.admin_bps,prior.late_days,prior.late_competences,prior.mode,prior.document_id)
  IS DISTINCT FROM (a,p_start,p_first,p_last,p_close,p_quota,p_bps,p_late,p_comp,p_mode,p_doc)
  THEN RAISE EXCEPTION 'idempotency conflict' USING ERRCODE='23505'; END IF; RETURN prior.cycle_id; END IF;
- IF NOT EXISTS(SELECT 1 FROM public.contract_acceptances x JOIN public.contract_documents d ON d.id=x.document_id
- WHERE x.user_id=a AND x.tenant_id=p_tenant AND d.id=p_doc AND d.document_kind='TENANT_MEMBERSHIP' AND d.published_at IS NOT NULL)
- THEN RAISE EXCEPTION 'contract missing' USING ERRCODE='42501'; END IF;
+ PERFORM * FROM public.fr_v23_license(p_tenant,a);
+ SELECT x.id INTO acc FROM public.contract_acceptances x WHERE x.user_id=a AND x.tenant_id=p_tenant AND x.document_id=p_doc;
+ IF acc IS NULL THEN RAISE EXCEPTION 'contract missing' USING ERRCODE='42501'; END IF;
  INSERT INTO public.cycles(tenant_id,year,start_date,end_date,settlement_date,status) VALUES(p_tenant,extract(year FROM p_start)::int,p_start,p_close,p_close,'ABERTO') RETURNING id INTO c;
- INSERT INTO public.fr_v23_policy VALUES(c,p_tenant,p_request,a,p_doc,p_first,p_last,p_quota,p_bps,p_late,p_comp,p_mode);
+ INSERT INTO public.fr_v23_policy(cycle_id,tenant_id,request_id,actor,document_id,admin_acceptance_id,policy_hash,
+ first_due,last_due,quota_cents,admin_bps,late_days,late_competences,mode)
+ VALUES(c,p_tenant,p_request,a,p_doc,acc,p_hash,p_first,p_last,p_quota,p_bps,p_late,p_comp,p_mode);
  RETURN c;
+END $$;
+CREATE FUNCTION public.fr_v23_read_policy(p_token text,p_tenant uuid,p_cycle uuid)
+RETURNS TABLE(policy_hash text,document_id uuid,document_hash text,start_date date,first_due date,last_due date,closing date,
+ quota_cents bigint,admin_bps int,late_days int,late_competences int,mode text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ PERFORM public.fr_v23_actor(p_token,p_tenant,false);
+ RETURN QUERY SELECT p.policy_hash,p.document_id,d.sha256::text,c.start_date,p.first_due,p.last_due,c.settlement_date,
+ p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode
+ FROM public.fr_v23_policy p JOIN public.cycles c ON c.id=p.cycle_id JOIN public.contract_documents d ON d.id=p.document_id
+ WHERE p.tenant_id=p_tenant AND p.cycle_id=p_cycle;
+ IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+END $$;
+CREATE FUNCTION public.fr_v23_accept_policy(p_token text,p_tenant uuid,p_cycle uuid,p_hash text,p_joined date,p_quotas int)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;m uuid;acc uuid;p record;prior record;cid uuid;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,false);
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
+ SELECT pol.*,c.start_date INTO p FROM public.fr_v23_policy pol JOIN public.cycles c ON c.id=pol.cycle_id
+ WHERE pol.tenant_id=p_tenant AND pol.cycle_id=p_cycle AND c.status='ABERTO';
+ IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ IF p_hash IS DISTINCT FROM p.policy_hash THEN RAISE EXCEPTION 'policy hash mismatch' USING ERRCODE='23514'; END IF;
+ IF p_joined IS NULL OR p_joined<p.start_date OR p_joined>p.last_due OR p_quotas IS NULL OR p_quotas NOT BETWEEN 1 AND 400
+ OR p.quota_cents*p_quotas>100000000 THEN RAISE EXCEPTION 'invalid admission' USING ERRCODE='22023'; END IF;
+ SELECT me.id,x.id INTO m,acc FROM public.memberships me JOIN public.contract_acceptances x ON x.user_id=me.user_id AND x.tenant_id=me.tenant_id
+ JOIN public.contract_documents d ON d.id=x.document_id
+ JOIN public.sessions se ON se.user_id=me.user_id AND se.active_tenant_id=me.tenant_id
+ WHERE me.tenant_id=p_tenant AND me.user_id=a AND me.role='TENANT_MEMBER' AND me.status='ATIVA' AND me.joined_at<=p_joined
+ AND se.token_hash=encode(public.digest(p_token,'sha256'),'hex') AND se.active_role='TENANT_MEMBER'
+ AND x.document_id=p.document_id AND x.accepted_at>=d.published_at;
+ IF m IS NULL OR acc IS NULL THEN RAISE EXCEPTION 'member acceptance missing' USING ERRCODE='42501'; END IF;
+ SELECT * INTO prior FROM public.fr_v23_member_consent WHERE cycle_id=p_cycle AND membership_id=m;
+ IF FOUND THEN
+ IF (prior.actor,prior.acceptance_id,prior.policy_hash,prior.joined,prior.quotas) IS DISTINCT FROM (a,acc,p_hash,p_joined,p_quotas)
+ THEN RAISE EXCEPTION 'consent conflict' USING ERRCODE='23505'; END IF; RETURN prior.id; END IF;
+ INSERT INTO public.fr_v23_member_consent(cycle_id,membership_id,acceptance_id,actor,policy_hash,joined,quotas)
+ VALUES(p_cycle,m,acc,a,p_hash,p_joined,p_quotas) RETURNING id INTO cid;RETURN cid;
 END $$;
 CREATE FUNCTION public.fr_v23_admit(p_token text,p_tenant uuid,p_cycle uuid,p_member uuid,p_joined date,p_quotas int)
 RETURNS int LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE a uuid;p record;acc uuid;prior record;n int;
+DECLARE a uuid;p record;acc uuid;consent uuid;prior record;n int;lim record;
 BEGIN
  a:=public.fr_v23_actor(p_token,p_tenant,true);PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
  SELECT pol.*,c.start_date INTO p FROM public.fr_v23_policy pol JOIN public.cycles c ON c.id=pol.cycle_id WHERE pol.tenant_id=p_tenant AND pol.cycle_id=p_cycle AND c.status='ABERTO';
@@ -136,14 +252,24 @@ BEGIN
  SELECT x.id INTO acc FROM public.memberships m JOIN public.contract_acceptances x ON x.user_id=m.user_id AND x.tenant_id=m.tenant_id
  WHERE m.id=p_member AND m.tenant_id=p_tenant AND m.role='TENANT_MEMBER' AND m.status='ATIVA' AND x.document_id=p.document_id AND m.joined_at<=p_joined;
  IF acc IS NULL THEN RAISE EXCEPTION 'member acceptance missing' USING ERRCODE='42501'; END IF;
+ SELECT c.id INTO consent FROM public.fr_v23_member_consent c JOIN public.memberships m ON m.id=c.membership_id
+ WHERE c.cycle_id=p_cycle AND c.membership_id=p_member AND c.actor=m.user_id AND c.acceptance_id=acc
+ AND c.policy_hash=p.policy_hash AND c.joined=p_joined AND c.quotas=p_quotas;
  SELECT * INTO prior FROM public.fr_v23_admission WHERE cycle_id=p_cycle AND membership_id=p_member;
- IF FOUND THEN IF (prior.joined,prior.quotas,prior.acceptance_id) IS DISTINCT FROM (p_joined,p_quotas,acc) THEN RAISE EXCEPTION 'admission conflict' USING ERRCODE='23505'; END IF;
+ IF FOUND THEN IF (prior.joined,prior.quotas,prior.acceptance_id,prior.consent_id) IS DISTINCT FROM (p_joined,p_quotas,acc,consent) THEN RAISE EXCEPTION 'admission conflict' USING ERRCODE='23505'; END IF;
  RETURN (SELECT count(*)::int FROM public.contributions WHERE cycle_id=p_cycle AND membership_id=p_member); END IF;
- -- Ampliado capability demonstration only: no license activation.
- IF (SELECT count(DISTINCT ad.membership_id) FROM public.fr_v23_admission ad JOIN public.cycles c ON c.id=ad.cycle_id WHERE c.tenant_id=p_tenant AND c.status<>'LIQUIDADO' AND ad.membership_id<>p_member)>=200
- OR (SELECT coalesce(sum(ad.quotas),0) FROM public.fr_v23_admission ad JOIN public.cycles c ON c.id=ad.cycle_id WHERE c.tenant_id=p_tenant AND c.status<>'LIQUIDADO')+p_quotas>400
+ IF consent IS NULL THEN RAISE EXCEPTION 'specific cycle consent missing' USING ERRCODE='42501'; END IF;
+ SELECT * INTO lim FROM public.fr_v23_license(p_tenant,a);
+ -- Count legacy active seats/quotas conservatively as well as V2.3 admissions;
+ -- do not infer released capacity from suspension or cancellation of a member with an open admission.
+ IF (SELECT count(*) FROM (
+  SELECT m.id FROM public.memberships m WHERE m.tenant_id=p_tenant AND m.role='TENANT_MEMBER' AND m.status='ATIVA'
+  UNION SELECT ad.membership_id FROM public.fr_v23_admission ad JOIN public.cycles c ON c.id=ad.cycle_id WHERE c.tenant_id=p_tenant AND c.status<>'LIQUIDADO'
+ ) used)>lim.members_limit
+ OR (SELECT count(*) FROM public.quotas q WHERE q.tenant_id=p_tenant AND q.status='ATIVA')
+ + (SELECT coalesce(sum(ad.quotas),0) FROM public.fr_v23_admission ad JOIN public.cycles c ON c.id=ad.cycle_id WHERE c.tenant_id=p_tenant AND c.status<>'LIQUIDADO')+p_quotas>lim.quotas_limit
  THEN RAISE EXCEPTION 'capacity' USING ERRCODE='23514'; END IF;
- INSERT INTO public.fr_v23_admission VALUES(p_cycle,p_member,acc,p_joined,p_quotas);
+ INSERT INTO public.fr_v23_admission(cycle_id,membership_id,acceptance_id,consent_id,joined,quotas) VALUES(p_cycle,p_member,acc,consent,p_joined,p_quotas);
  INSERT INTO public.contributions(tenant_id,cycle_id,membership_id,competence,due_date,amount_due)
  SELECT p_tenant,p_cycle,p_member,to_char(d,'YYYY-MM'),d,p.quota_cents*p_quotas::numeric/100
  FROM (SELECT (p.first_due+make_interval(months=>i))::date d FROM generate_series(0,119) i) q WHERE d>=p_joined AND d<=p.last_due;
@@ -281,7 +407,9 @@ DO $$ DECLARE f regprocedure; BEGIN
  EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',f);
  END LOOP;
 END $$;
-GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date,bigint,int,int,int,text,uuid),
+GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date,bigint,int,int,int,text,uuid,text),
+ public.fr_v23_preview(text,uuid,uuid,date,date,date,date,bigint,int,int,int,text,uuid),
+ public.fr_v23_read_policy(text,uuid,uuid),public.fr_v23_accept_policy(text,uuid,uuid,text,date,int),
  public.fr_v23_admit(text,uuid,uuid,uuid,date,int),public.fr_v23_record(text,uuid,uuid,uuid,bigint,text,date,text,text),
  public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid),
  public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid) TO frcaixinha_pg18_app;

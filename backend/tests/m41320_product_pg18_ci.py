@@ -41,6 +41,15 @@ async def main():
         doc=await owner.fetchval("INSERT INTO public.contract_documents(document_kind,version_label,sha256,source_reference,published_at) VALUES('TENANT_MEMBERSHIP',$1,$2,'CI_ONLY_V23',now()) RETURNING id","CI-"+uuid4().hex,"a"*64)
         for u in (admin,member_a):
             await owner.execute("INSERT INTO public.contract_acceptances(document_id,document_kind,user_id,tenant_id,evidence_hash,evidence_method) VALUES($1,'TENANT_MEMBERSHIP',$2,$3,$4,'CI_VERIFIED_IDENTITY')",doc,u,t,"b"*64)
+        # Synthetic Contract A, price and payment in the SAME disposable canonical schema.
+        contract_a=await owner.fetchval("INSERT INTO public.contract_documents(document_kind,version_label,sha256,source_reference,published_at) VALUES('PLATFORM_LICENSE',$1,$2,'CI_ONLY_V23_A',now()) RETURNING id","CI-"+uuid4().hex,"c"*64)
+        price=await owner.fetchval("INSERT INTO public.platform_license_price_versions(plan_tier,monthly_price,annual_price,reason) VALUES('ESSENCIAL',89.90,700.33,'CI independent pricing only') RETURNING id")
+        async def seed_license(tenant_id,actor,period,amount):
+            acc=await owner.fetchval("INSERT INTO public.contract_acceptances(document_id,document_kind,user_id,tenant_id,evidence_hash,evidence_method) VALUES($1,'PLATFORM_LICENSE',$2,NULL,$3,'CI_VERIFIED_IDENTITY') RETURNING id",contract_a,actor,"d"*64)
+            prep=await owner.fetchval("INSERT INTO public.saas_subscription_preparations(tenant_id,admin_user_id,plan_tier,price_version_id,billing_period,contract_acceptance_id) VALUES($1,$2,'ESSENCIAL',$3,$4,$5) RETURNING id",tenant_id,actor,price,period,acc)
+            pay=await owner.fetchval("INSERT INTO public.saas_payment_intents(preparation_id,tenant_id,admin_user_id,price_version_id,expected_amount_cents,external_reference,idempotency_key,provider_payment_id,platform_collector_id,live_mode,status,paid_at,reconciled_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'123',false,'APPROVED',now(),now()) RETURNING id",prep,tenant_id,actor,price,amount,"CI-"+uuid4().hex,uuid4().hex,str(uuid4().int)[:38])
+            ent=await owner.fetchval("INSERT INTO public.saas_license_entitlements(preparation_id,payment_intent_id,tenant_id,plan_tier,valid_from,valid_until) VALUES($1,$2,$3,'ESSENCIAL',now()-interval '1 day',now()+interval '30 days') RETURNING id",prep,pay,tenant_id)
+            return ent,pay
         prefix=f"/tenants/{t}/v23"
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url="http://ci.invalid") as client:
             cycle=dict(request_id=str(uuid4()),start="2026-12-10",first_due="2026-12-10",last_due="2027-11-10",closing="2027-12-20",quota_cents=5000,admin_bps=1300,late_days=75,late_competences=2,mode="MANUAL",document_id=str(doc))
@@ -48,18 +57,69 @@ async def main():
                 res=await client.post(prefix+path,json=body,headers=headers)
                 assert res.status_code==status,(path,status,res.status_code,res.text)
                 return res.json()
-            await post("/cycles",cycle,ha,403)
-            await post("/cycles",cycle,ho,403)
-            c=(await post("/cycles",cycle))["cycle_id"]
-            assert (await post("/cycles",cycle))["cycle_id"]==c
-            await post("/cycles",{**cycle,"quota_cents":5001},h,409)
-            c2=(await post("/cycles",{**cycle,"request_id":str(uuid4()),"mode":"HYBRID"}))["cycle_id"]
-            assert c!=c2
+            async def accepted(policy):
+                digest=(await post("/policies/preview",policy))["policy_hash"]
+                return {**policy,"policy_hash":digest,"accepted":True}
+            await post("/policies/preview",cycle,ha,403)
+            await post("/policies/preview",cycle,ho,403)
+            payload=await accepted(cycle)
+            await post("/cycles",payload,h,403)
+            ent,pay=await seed_license(t,admin,"MONTHLY",8990)
+            other_ent,other_pay=await seed_license(other,other_admin,"ANNUAL",70033)
+            assert await owner.fetchval("SELECT quotas_limit FROM public.fr_v23_license($1,$2)",other,other_admin)==40
+            await owner.execute("UPDATE public.saas_payment_intents SET expected_amount_cents=70034 WHERE id=$1",other_pay)
+            try:
+                await owner.fetchval("SELECT quotas_limit FROM public.fr_v23_license($1,$2)",other,other_admin)
+            except asyncpg.InsufficientPrivilegeError: pass
+            else: raise AssertionError("incorrect annual price accepted")
+            await owner.execute("UPDATE public.saas_payment_intents SET expected_amount_cents=70033 WHERE id=$1",other_pay)
+            await post("/cycles",{**payload,"policy_hash":"0"*64},h,409)
+            await post("/cycles",payload,ha,403)
+            await post("/cycles",payload,ho,403)
+            c=(await post("/cycles",payload))["cycle_id"]
+            assert (await post("/cycles",payload))["cycle_id"]==c
+            await post("/cycles",{**payload,"quota_cents":5001},h,409)
+            payload2=await accepted({**cycle,"request_id":str(uuid4()),"mode":"HYBRID"})
+            c2=(await post("/cycles",payload2))["cycle_id"]
+            assert c!=c2 and payload["policy_hash"]!=payload2["policy_hash"]
+            try:
+                await owner.execute("UPDATE public.cycles SET settlement_date=settlement_date+1 WHERE id=$1",UUID(c))
+            except asyncpg.CheckViolationError: pass
+            else: raise AssertionError("accepted dates editable")
+            policy=await client.get(prefix+f"/cycles/{c}/policy",headers=ha)
+            assert policy.status_code==200 and policy.json()["policy_hash"]==payload["policy_hash"] and policy.json()["quota_cents"]==5000
+            assert (await client.get(prefix+f"/cycles/{c}/policy",headers=ho)).status_code==403
             admission=dict(membership_id=str(ma),joined="2027-01-10",quotas=2)
+            consent=dict(policy_hash=payload["policy_hash"],joined=admission["joined"],quotas=2,accepted=True)
+            await post(f"/cycles/{c}/admissions",admission,h,403)
+            await post(f"/cycles/{c}/policy-acceptance",consent,h,403)
+            await post(f"/cycles/{c}/policy-acceptance",consent,hb,403)
+            await post(f"/cycles/{c}/policy-acceptance",consent,ho,403)
+            await post(f"/cycles/{c2}/policy-acceptance",consent,ha,409)
+            consent_id=(await post(f"/cycles/{c}/policy-acceptance",consent,ha))["consent_id"]
+            assert (await post(f"/cycles/{c}/policy-acceptance",consent,ha))["consent_id"]==consent_id
+            await post(f"/cycles/{c}/policy-acceptance",{**consent,"quotas":3},ha,409)
             assert (await post(f"/cycles/{c}/admissions",admission))["obligations"]==11
+            await post(f"/cycles/{c2}/admissions",admission,h,403)
+            await post(f"/cycles/{c2}/policy-acceptance",{**consent,"policy_hash":payload2["policy_hash"]},ha)
             assert (await post(f"/cycles/{c2}/admissions",admission))["obligations"]==11
             await post(f"/cycles/{c}/admissions",{**admission,"membership_id":str(mb)},h,403)
             await post(f"/cycles/{c}/admissions",{**admission,"quotas":3},h,409)
+            # Capacity race: 4 existing quotas; two separate 36-quota admissions compete.
+            extras=[]
+            for _ in range(2):
+                ex=await accepted({**cycle,"request_id":str(uuid4())})
+                ec=(await post("/cycles",ex))["cycle_id"]
+                await post(f"/cycles/{ec}/policy-acceptance",{**consent,"policy_hash":ex["policy_hash"],"quotas":36},ha)
+                extras.append(ec)
+            await owner.execute("UPDATE public.saas_license_entitlements SET status='SUSPENDED' WHERE id=$1",ent)
+            await post(f"/cycles/{extras[0]}/admissions",{**admission,"quotas":36},h,403)
+            await owner.execute("UPDATE public.saas_license_entitlements SET status='ACTIVE' WHERE id=$1",ent)
+            outcomes=await asyncio.gather(*[client.post(prefix+f"/cycles/{ec}/admissions",json={**admission,"quotas":36},headers=h) for ec in extras])
+            assert sorted(x.status_code for x in outcomes)==[200,409],[(x.status_code,x.text) for x in outcomes]
+            assert await owner.fetchval("SELECT sum(ad.quotas) FROM public.fr_v23_admission ad JOIN public.cycles c ON c.id=ad.cycle_id WHERE c.tenant_id=$1",t)==40
+            assert await owner.fetchval("SELECT count(*) FROM public.platform_license_plans WHERE tier='AMPLIADO' AND members_limit=200 AND quotas_limit=400 AND status='BLOCKED_PENDING_CEILING'")==1
+            assert await owner.fetchval("SELECT count(*) FROM public.fr_v23_member_consent WHERE cycle_id=$1 AND id=$2",UUID(c),UUID(consent_id))==1
             obligation=await owner.fetchval("SELECT id FROM public.contributions WHERE cycle_id=$1 AND membership_id=$2 ORDER BY due_date LIMIT 1",UUID(c),ma)
             row=dict(request_id=str(uuid4()),contribution_id=str(obligation),cents=6000,method="DINHEIRO",occurred="2027-01-10",reference="CI-"+uuid4().hex,evidence_ref="CI-RECIBO-001")
             await post("/manual-receipts",row,ha,403)
@@ -147,10 +207,14 @@ async def main():
                 try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_receipts")
                 except asyncpg.InsufficientPrivilegeError: pass
                 else: raise AssertionError("direct table access")
+                try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_member_consent")
+                except asyncpg.InsufficientPrivilegeError: pass
+                else: raise AssertionError("direct consent table access")
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
         print("M41320_CANONICAL_PG18_API_CYCLE_ADMISSION_MANUAL_CONCURRENCY=PASS")
         print("M41330_CANONICAL_LEDGER_CYCLE_SCOPE_SUMMARIES_REVERSAL=PASS")
+        print("M41340_CANONICAL_POLICY_CONSENT_LICENSE_CAPACITY_RACE=PASS")
     finally:
         await pool.close()
         await owner.close()
