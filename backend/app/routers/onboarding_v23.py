@@ -127,3 +127,19 @@ def offers(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
 @router.get("/tenants/{tenant}/checkout/{intent}")
 def checkout_status(tenant:UUID,intent:UUID,request:Request,execute=Depends(unreleased_onboarding)):
     return execute("CHECKOUT_STATUS",bearer_token(request),dict(tenant=tenant,intent=intent))
+
+class PreliminaryLoginInput(Strict):
+    email: str=Field(min_length=3,max_length=254)
+    password: str=Field(min_length=12,max_length=256)
+
+@router.post("/admin/preliminary-login")
+def preliminary_login(p:PreliminaryLoginInput,execute=Depends(unreleased_onboarding)):
+    return execute("PRELIMINARY_LOGIN",None,p.model_dump())
+
+@router.get("/tenants/{tenant}/preliminary-journey")
+def preliminary_journey(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("PRELIMINARY_JOURNEY",bearer_token(request),dict(tenant=tenant))
+
+@router.post("/tenants/{tenant}/preliminary-logout")
+def preliminary_logout(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("PRELIMINARY_LOGOUT",bearer_token(request),dict(tenant=tenant))

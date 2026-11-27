@@ -10,12 +10,17 @@ from app.cycle_identity_registration_ci import stage_cycle_identity_invite_ci,re
 from m41400_cycle_identity_ci import connection
 from app.onboarding_readback_ci import master_document_ci,admin_document_ci,invitation_terms_ci,offers_ci,checkout_status_ci
 
+from app.preliminary_onboarding_ci import login_preliminary_ci,journey_ci,logout_preliminary_ci
+
 def client_for(reviewer_token=None, reviewer_tenant=None):
     # Opaque delivery token is captured only inside this fixture, never in HTTP.
     delivery={}
     def execute(op,token,p):
         try:
             with connection() as conn:
+                if op=="PRELIMINARY_LOGIN": return login_preliminary_ci(conn,**p)
+                if op=="PRELIMINARY_JOURNEY": return journey_ci(conn,token,**p)
+                if op=="PRELIMINARY_LOGOUT": return logout_preliminary_ci(conn,token,**p)
                 if op=="MASTER_DOCUMENT": return master_document_ci(conn,token,**p)
                 if op=="ADMIN_DOCUMENT": return admin_document_ci(conn,token,**p)
                 if op=="INVITATION_TERMS": return invitation_terms_ci(conn,**p)

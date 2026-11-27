@@ -13,24 +13,34 @@ from .saas_billing_ci import (stage_saas_payment_ci, attach_mp_payment_identifie
                              reconcile_approved_saas_payment_ci, _cents)
 from .mercado_pago_safety import ExpectedPayment, matches_approved_payment
 
+from .preliminary_token_ci import MARKER,is_preliminary,preliminary_digest
+
 COLLECTOR_CI="12345"
 
-def _session(conn, token, role, tenant=None, draft=False):
+def _session(conn, token, role, tenant=None, draft=False, preliminary_reconciled=False):
     if type(token) is not str or not 32<=len(token)<=512:
         raise LifecycleDenied("Sessão inválida.")
+    preliminary=is_preliminary(token)
+    if preliminary and (not draft or role!="TENANT_ADMIN" or tenant is None):
+        raise LifecycleDenied("Sessão preliminar fora do escopo.")
+    try:
+        digest=preliminary_digest(token) if preliminary else hash_token(token)
+    except ValueError:
+        raise LifecycleDenied("Sessão inválida.") from None
     row=conn.execute(
         "SELECT u.id,u.email FROM public.sessions s JOIN public.users u ON u.id=s.user_id "
         "WHERE s.token_hash=%s AND s.active_role=%s AND s.active_tenant_id IS NOT DISTINCT FROM %s::uuid "
         "AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp() AND u.status='ACTIVE' "
-        "AND u.email_verified_at IS NOT NULL AND (u.is_master OR %s<>'MASTER') FOR SHARE OF s,u",
-        (hash_token(token),role,tenant,role)).fetchone()
+        "AND u.email_verified_at IS NOT NULL AND (u.is_master OR %s<>'MASTER') "
+        "AND (NOT %s OR (s.user_agent=%s AND NOT u.is_master)) FOR SHARE OF s,u",
+        (digest,role,tenant,role,preliminary,MARKER)).fetchone()
     if not row or not row[1].endswith("@example.invalid"):
         raise LifecycleDenied("Sessão sintética indisponível.")
     if role=="TENANT_ADMIN" and not conn.execute(
         "SELECT 1 FROM public.tenants t JOIN public.memberships m ON m.tenant_id=t.id "
         "WHERE t.id=%s AND t.admin_user_id=%s AND m.user_id=%s AND m.role='TENANT_ADMIN' "
         "AND m.status='ATIVA' AND t.status=ANY(%s) FOR SHARE OF t,m",
-        (tenant,row[0],row[0],["RASCUNHO_INATIVO","ATIVO"] if draft else ["ATIVO"])).fetchone():
+        (tenant,row[0],row[0],(["RASCUNHO_INATIVO","ATIVO"] if preliminary_reconciled else ["RASCUNHO_INATIVO"]) if preliminary else (["RASCUNHO_INATIVO","ATIVO"] if draft else ["ATIVO"]))).fetchone():
         raise LifecycleDenied("Vínculo administrativo indisponível.")
     return row
 

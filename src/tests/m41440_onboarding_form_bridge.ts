@@ -1,5 +1,6 @@
 /** Only CI subprocess stdin/stdout, no network or logging of fixture credentials. */
 import {readFileSync} from 'node:fs';
+import {preliminaryContext,parsePreliminaryJourney} from '../services/preliminaryJourneyV23';
 import {webcrypto} from 'node:crypto';
 import {masterInviteForm,adminBForm,memberInviteForm,invitationProofForm,registrationForm,checkoutForm} from '../services/onboardingFormsV23';
 if(!globalThis.crypto)Object.defineProperty(globalThis,'crypto',{value:webcrypto});
@@ -14,6 +15,8 @@ try{
   case 'PROOFS':request={path:'/invitation-terms',body:invitationProofForm(x.proofs)};break;
   case 'REGISTER':request=(await registrationForm(x.raw,x.proofs)).prepare(x.form);break;
   case 'CHECKOUT':request=checkoutForm(x.scope,x.raw,x.id,x.period,x.accepted);break;
+  case 'PRELIMINARY_LOGIN_VIEW':{const c=preliminaryContext(x.raw);request=c.initial;c.discard();break;}
+  case 'PRELIMINARY_JOURNEY_VIEW':request=parsePreliminaryJourney(x.raw,x.scope);break;
   default:throw Error();
  }
  process.stdout.write(JSON.stringify(request));

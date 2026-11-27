@@ -12,6 +12,8 @@ from m41420_onboarding_http_ci import client_for,post,get
 from hashlib import sha256
 from m41440_onboarding_form_bridge_ci import form_request,scope_of
 from uuid import UUID
+from m41450_preliminary_session_ci import begin,login,journey
+from app.preliminary_token_ci import preliminary_digest
 
 def _cpf():
     ds=[int(x) for x in str(uuid4().int)[:9]]
@@ -86,8 +88,7 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             assert conn.execute("SELECT status FROM public.tenants WHERE id=%s",(tenant,)).fetchone()[0]=="RASCUNHO_INATIVO"
             assert conn.execute("SELECT count(*) FROM public.contract_acceptances WHERE user_id=%s AND document_kind='TENANT_MEMBERSHIP'",(actor,)).fetchone()[0]==0
             reject(conn.execute,"UPDATE public.tenants SET status='ATIVO' WHERE id=%s",(tenant,))
-            admin_token=uuid4().hex+uuid4().hex
-            conn.execute("INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) VALUES(%s,%s,'TENANT_ADMIN',%s,now()+interval '30 minutes')",(hash_token(admin_token),actor,tenant))
+            admin_token=begin(conn,client,tenant,actor,email,args["password"],reviewer_token)
             reject(conn.execute,"SELECT public.fr_v23_actor(%s,%s,true)",(admin_token,tenant))
             reject(accept_admin_b_ci,conn,admin_token=admin_token,tenant=tenant,document_id=contract_b,document_hash=b_hash,accepted=True)
             offers=get(client,f'/tenants/{tenant}/offers',admin_token)
@@ -108,6 +109,15 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             prep,intent=UUID(checkout['preparation_id']),UUID(checkout['intent_id'])
             status_path=path+'/'+str(intent)
             assert get(client,status_path,admin_token)['state']=='PENDING'
+            journey(client,tenant,actor,admin_token,"PAYMENT_PENDING",intent)
+            # Reopen the journey after an interruption without creating a new intent.
+            former=admin_token
+            resumed=login(client,email,args["password"])
+            admin_token=resumed["preliminary_token"]
+            assert resumed["journey"]["intent_id"]==str(intent)
+            assert resumed["journey"]["state"]=="PAYMENT_PENDING"
+            get(client,status_path,former,403)
+            offer["admin_token"]=admin_token
             get(client,status_path,reviewer_token,403)
             get(client,path+'/'+str(uuid4()),admin_token,403)
             assert get(client,f'/tenants/{tenant}/offers',admin_token)['offers']==[]
@@ -127,6 +137,25 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
                 reject(reconcile_admin_checkout_ci,conn,**{**review,**changes})
             assert conn.execute("SELECT provider_payment_id FROM public.saas_payment_intents WHERE id=%s",(intent,)).fetchone()[0] is None
             ent=reconcile_admin_checkout_ci(conn,**review)
+            journey(client,tenant,actor,admin_token,"REAUTH_REQUIRED",intent)
+            # The same preliminary bearer is still not an ordinary financial/admin session.
+            reject(conn.execute,"SELECT public.fr_v23_actor(%s,%s,true)",(admin_token,tenant))
+            reject(accept_admin_b_ci,conn,admin_token=admin_token,tenant=tenant,document_id=contract_b,document_hash=b_hash,accepted=True)
+            get(client,f'/tenants/{tenant}/documents/{contract_b}',admin_token,403)
+            get(client,status_path,admin_token,403)
+            post(client,path,checkout_body,admin_token,403)
+            # Existing credential-change trigger invalidates the preliminary digest too.
+            updated_password="M41450-CI-Only-New-Password!"
+            conn.execute("UPDATE public.credentials SET password_hash=%s WHERE user_id=%s",(hash_password_secure(updated_password),actor))
+            get(client,f"/tenants/{tenant}/preliminary-journey",admin_token,403)
+            login(client,email,args["password"],403)
+            fresh=login(client,email,updated_password)["preliminary_token"]
+            journey(client,tenant,actor,fresh,"REAUTH_REQUIRED",intent)
+            assert post(client,f"/tenants/{tenant}/preliminary-logout",{},fresh)["revoked"] is True
+            # Standard login remains a distinct production-gated system. Use the
+            # existing isolated ordinary-session fixture only after entitlement.
+            admin_token=uuid4().hex+uuid4().hex
+            conn.execute("INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) VALUES(%s,%s,'TENANT_ADMIN',%s,now()+interval '30 minutes')",(hash_token(admin_token),actor,tenant))
             status=get(client,status_path,admin_token)
             assert status['state']=='CI_RECONCILED' and status['cents']==cents and status['period']==period
             assert status['real_payment_authorized'] is False
@@ -141,6 +170,7 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             assert conn.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]==1
             results.append((actor,tenant,admin_token))
         print('M41420_ONBOARDING_HTTP_MASTER_ADMIN_CHECKOUT_RACE=PASS')
+        print('M41450_PRELIMINARY_LOGIN_RATE_RESUME_REVOKE_NO_ESCALATION=PASS')
         return results
 
 def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, digest=None):
