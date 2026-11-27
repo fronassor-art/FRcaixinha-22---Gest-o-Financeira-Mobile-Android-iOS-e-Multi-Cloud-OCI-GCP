@@ -95,6 +95,7 @@ on:
       - 'docs/FR_FINANCE_M41320_TRANSACTIONAL_V23_NO_GO.md'
       - 'docs/FR_FINANCE_M41330_CYCLE_LEDGER_CI_NO_GO.md'
       - 'docs/FR_FINANCE_M41340_POLICY_LICENSE_CI_NO_GO.md'
+      - 'docs/FR_FINANCE_M41350_RESERVES_PIX_EXCLUSION_CI_NO_GO.md'
       - 'docs/FR_Finance_Caderno_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_Finance_Contrato_Tecnico_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
@@ -1342,7 +1343,7 @@ jobs:
           PGDATABASE: frcaixinha_ci
         run: bash backend/scripts/aistudio_staging_chain_ci.sh
 
-      - name: M41320/M41330/M41340 — V2.3 transacional, ledger, aceite e licença no PG18 descartável
+      - name: M41320/M41330/M41340/M41350 — V2.3 transacional, ledger, aceite, licença e reservas no PG18 descartável
         env:
           GITHUB_ACTIONS: 'true'
           FRCAIXINHA_CI_ISOLATED: '1'

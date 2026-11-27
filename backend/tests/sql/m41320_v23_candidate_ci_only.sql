@@ -103,10 +103,22 @@ CREATE TABLE public.fr_v23_events(
  FOREIGN KEY(receipt_id,tenant_id) REFERENCES public.fr_v23_receipts(id,tenant_id),
  CHECK((action='CONTEST')=(ledger_id IS NULL))
 );
+-- M41350: append-only managerial reservation; never a payout authorization.
+CREATE TABLE public.fr_v23_reservation_events(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL,cycle_id uuid NOT NULL,
+ request_id uuid NOT NULL,actor uuid NOT NULL REFERENCES public.users(id),
+ action text NOT NULL CHECK(action IN ('HOLD','RELEASE')),cents bigint NOT NULL CHECK(cents>0),
+ related_hold uuid,reason text NOT NULL CHECK(length(btrim(reason)) BETWEEN 8 AND 160 AND reason=btrim(reason)),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ UNIQUE(tenant_id,request_id),UNIQUE(id,tenant_id,cycle_id),UNIQUE(related_hold),
+ FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id),
+ FOREIGN KEY(related_hold,tenant_id,cycle_id) REFERENCES public.fr_v23_reservation_events(id,tenant_id,cycle_id),
+ CHECK((action='HOLD')=(related_hold IS NULL))
+);
 CREATE FUNCTION public.fr_v23_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 BEGIN RAISE EXCEPTION 'immutable V23'; END $$;
 DO $$ DECLARE t regclass; BEGIN
- FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass]) LOOP
+ FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass]) LOOP
  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY',t);
  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY',t);
  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',t);
@@ -280,6 +292,47 @@ CREATE FUNCTION public.fr_v23_state(p_id uuid) RETURNS text LANGUAGE sql STABLE 
  WHEN EXISTS(SELECT 1 FROM public.fr_v23_events WHERE receipt_id=p_id AND action='CONTEST') THEN 'CONTESTED'
  WHEN EXISTS(SELECT 1 FROM public.fr_v23_events WHERE receipt_id=p_id AND action='CONFIRM') THEN 'CONFIRMED' ELSE 'PENDING' END
 $$;
+-- Both channels acquire the same tenant lock. Canonical Pix intent only;
+-- no PSP settlement is accepted for V2.3 until a trusted worker is reviewed.
+CREATE FUNCTION public.fr_v23_pix_exclusion() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE c record;
+BEGIN
+ IF TG_OP='UPDATE' THEN
+ IF EXISTS(SELECT 1 FROM public.contributions co JOIN public.fr_v23_policy p ON p.cycle_id=co.cycle_id WHERE co.id=OLD.contribution_id)
+ AND (OLD.tenant_id,OLD.contribution_id,OLD.loan_installment_id,OLD.payer_user_id,OLD.amount_cents,OLD.idempotency_key)
+ IS DISTINCT FROM (NEW.tenant_id,NEW.contribution_id,NEW.loan_installment_id,NEW.payer_user_id,NEW.amount_cents,NEW.idempotency_key)
+ THEN RAISE EXCEPTION 'intent scope immutable' USING ERRCODE='23514'; END IF;
+ IF OLD.status IN ('EXPIRADO','REJEITADO') AND NEW.status NOT IN ('EXPIRADO','REJEITADO')
+ AND EXISTS(SELECT 1 FROM public.contributions co JOIN public.fr_v23_policy p ON p.cycle_id=co.cycle_id WHERE co.id=OLD.contribution_id)
+ THEN RAISE EXCEPTION 'terminal intent' USING ERRCODE='23514'; END IF;
+ END IF;
+ SELECT co.tenant_id,co.id,co.cycle_id,p.mode,cy.status,m.user_id INTO c
+ FROM public.contributions co JOIN public.fr_v23_policy p ON p.cycle_id=co.cycle_id
+ JOIN public.cycles cy ON cy.id=co.cycle_id JOIN public.memberships m ON m.id=co.membership_id
+ WHERE co.id=NEW.contribution_id;
+ IF NOT FOUND THEN RETURN NEW; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text,41320));
+ IF NEW.tenant_id IS DISTINCT FROM c.tenant_id OR NEW.payer_user_id IS DISTINCT FROM c.user_id
+ OR NEW.loan_installment_id IS NOT NULL OR c.mode='MANUAL' OR c.status<>'ABERTO'
+ THEN RAISE EXCEPTION 'intent scope/mode' USING ERRCODE='23514'; END IF;
+ IF NEW.status='LIQUIDADO_CONFIRMADO' THEN RAISE EXCEPTION 'trusted PSP settlement unavailable' USING ERRCODE='23514'; END IF;
+ IF NEW.status NOT IN ('EXPIRADO','REJEITADO') THEN
+ IF EXISTS(SELECT 1 FROM public.fr_v23_receipts r WHERE r.contribution_id=c.id AND public.fr_v23_state(r.id)<>'REVERSED')
+ OR EXISTS(SELECT 1 FROM public.pix_payment_intents i WHERE i.contribution_id=c.id AND i.id<>NEW.id AND i.status NOT IN ('EXPIRADO','REJEITADO'))
+ OR NEW.amount_cents>(SELECT (co.amount_due-co.amount_paid)*100 FROM public.contributions co WHERE co.id=c.id)
+ THEN RAISE EXCEPTION 'exclusive channel or amount' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER fr_v23_pix_channel BEFORE INSERT OR UPDATE ON public.pix_payment_intents
+ FOR EACH ROW EXECUTE FUNCTION public.fr_v23_pix_exclusion();
+CREATE FUNCTION public.fr_v23_pix_no_delete() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM public.contributions co JOIN public.fr_v23_policy p ON p.cycle_id=co.cycle_id WHERE co.id=OLD.contribution_id)
+ THEN RAISE EXCEPTION 'intent history immutable' USING ERRCODE='23514'; END IF;
+ RETURN OLD;
+END $$;
+CREATE TRIGGER fr_v23_pix_history BEFORE DELETE ON public.pix_payment_intents FOR EACH ROW EXECUTE FUNCTION public.fr_v23_pix_no_delete();
 CREATE FUNCTION public.fr_v23_record(p_token text,p_tenant uuid,p_request uuid,p_contribution uuid,p_cents bigint,p_method text,p_date date,p_ref text,p_evidence text)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE a uuid;c record;prior record;rid uuid;pending bigint;
@@ -381,6 +434,58 @@ BEGIN
  (SELECT count(*) FROM public.fr_v23_receipts r WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND public.fr_v23_state(r.id)='CONTESTED'),
  false;
 END $$;
+-- No extra ledger. Read managerial reserves and documented cash from the same cycle.
+CREATE FUNCTION public.fr_v23_reserve_snapshot(p_tenant uuid,p_cycle uuid)
+RETURNS TABLE(documented_cents bigint,contested_cents bigint,reserved_cents bigint,unreserved_documented_cents bigint,
+ reserve_deficit_cents bigint,bank_available_cents bigint,bank_reconciled boolean,payout_authorized boolean)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+ WITH amounts AS (
+ SELECT
+ (SELECT coalesce(sum(a.balance_cents),0)::bigint FROM public.ledger_accounts a WHERE a.tenant_id=p_tenant AND a.cycle_id=p_cycle AND a.cycle_account_kind='MANUAL_DOCUMENTED') d,
+ (SELECT coalesce(sum(r.cents),0)::bigint FROM public.fr_v23_receipts r WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND public.fr_v23_state(r.id)='CONTESTED') c,
+ (SELECT coalesce(sum(h.cents),0)::bigint FROM public.fr_v23_reservation_events h WHERE h.tenant_id=p_tenant AND h.cycle_id=p_cycle AND h.action='HOLD'
+ AND NOT EXISTS(SELECT 1 FROM public.fr_v23_reservation_events e WHERE e.related_hold=h.id AND e.action='RELEASE')) r
+ )
+ SELECT d,c,r,greatest(d-c-r,0),greatest(r-(d-c),0),0::bigint,false,false FROM amounts
+$$;
+CREATE FUNCTION public.fr_v23_reserves(p_token text,p_tenant uuid,p_cycle uuid)
+RETURNS TABLE(documented_cents bigint,contested_cents bigint,reserved_cents bigint,unreserved_documented_cents bigint,
+ reserve_deficit_cents bigint,bank_available_cents bigint,bank_reconciled boolean,payout_authorized boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ PERFORM public.fr_v23_actor(p_token,p_tenant,true);
+ IF NOT EXISTS(SELECT 1 FROM public.fr_v23_policy p WHERE p.tenant_id=p_tenant AND p.cycle_id=p_cycle)
+ THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ RETURN QUERY SELECT * FROM public.fr_v23_reserve_snapshot(p_tenant,p_cycle);
+END $$;
+CREATE FUNCTION public.fr_v23_reserve_event(p_token text,p_tenant uuid,p_cycle uuid,p_request uuid,p_action text,p_cents bigint,p_hold uuid,p_reason text)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;prior record;h record;s record;eid uuid;cycle_status text;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,true);
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
+ SELECT c.status INTO cycle_status FROM public.cycles c JOIN public.fr_v23_policy p ON p.cycle_id=c.id WHERE c.tenant_id=p_tenant AND c.id=p_cycle;
+ IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ IF p_request IS NULL OR p_action IS NULL OR p_action NOT IN ('HOLD','RELEASE') OR p_cents IS NULL OR p_cents NOT BETWEEN 1 AND 100000000000
+ OR p_reason IS NULL OR btrim(p_reason)<>p_reason OR length(p_reason) NOT BETWEEN 8 AND 160
+ OR (p_action='HOLD')<>(p_hold IS NULL) THEN RAISE EXCEPTION 'invalid reserve' USING ERRCODE='22023'; END IF;
+ SELECT * INTO prior FROM public.fr_v23_reservation_events WHERE tenant_id=p_tenant AND request_id=p_request;
+ IF FOUND THEN
+ IF (prior.actor,prior.cycle_id,prior.action,prior.cents,prior.related_hold,prior.reason) IS DISTINCT FROM (a,p_cycle,p_action,p_cents,p_hold,p_reason)
+ THEN RAISE EXCEPTION 'reservation conflict' USING ERRCODE='23505'; END IF; RETURN prior.id; END IF;
+ IF p_action='HOLD' THEN
+ IF cycle_status<>'ABERTO' THEN RAISE EXCEPTION 'cycle not open' USING ERRCODE='23514'; END IF;
+ SELECT * INTO s FROM public.fr_v23_reserve_snapshot(p_tenant,p_cycle);
+ IF p_cents>s.unreserved_documented_cents THEN RAISE EXCEPTION 'insufficient documented capacity' USING ERRCODE='23514'; END IF;
+ ELSE
+ SELECT * INTO h FROM public.fr_v23_reservation_events WHERE id=p_hold AND tenant_id=p_tenant AND cycle_id=p_cycle AND action='HOLD';
+ IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ IF h.cents<>p_cents OR EXISTS(SELECT 1 FROM public.fr_v23_reservation_events WHERE related_hold=p_hold)
+ THEN RAISE EXCEPTION 'release conflict' USING ERRCODE='23514'; END IF;
+ END IF;
+ INSERT INTO public.fr_v23_reservation_events(tenant_id,cycle_id,request_id,actor,action,cents,related_hold,reason)
+ VALUES(p_tenant,p_cycle,p_request,a,p_action,p_cents,p_hold,p_reason) RETURNING id INTO eid; RETURN eid;
+END $$;
 CREATE FUNCTION public.fr_v23_member_summary(p_token text,p_tenant uuid,p_cycle uuid)
 RETURNS TABLE(cycle_id uuid,membership_id uuid,obligation_cents bigint,paid_cents bigint,
  manual_pending_cents bigint,contested_receipts bigint,bank_reconciled boolean)
@@ -412,5 +517,6 @@ GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date
  public.fr_v23_read_policy(text,uuid,uuid),public.fr_v23_accept_policy(text,uuid,uuid,text,date,int),
  public.fr_v23_admit(text,uuid,uuid,uuid,date,int),public.fr_v23_record(text,uuid,uuid,uuid,bigint,text,date,text,text),
  public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid),
- public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid) TO frcaixinha_pg18_app;
+ public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid),
+ public.fr_v23_reserves(text,uuid,uuid),public.fr_v23_reserve_event(text,uuid,uuid,uuid,text,bigint,uuid,text) TO frcaixinha_pg18_app;
 COMMIT;

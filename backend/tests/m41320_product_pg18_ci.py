@@ -203,7 +203,76 @@ async def main():
             assert (await get(mine,ha))["paid_cents"]==0
             assert await owner.fetchval("SELECT count(*) FROM public.ledger_entries e JOIN public.ledger_transactions x ON x.id=e.transaction_id JOIN public.ledger_accounts a ON a.id=e.account_id WHERE e.tenant_id=$1 AND x.cycle_id IS DISTINCT FROM a.cycle_id",t)==0
             assert await owner.fetchval("SELECT count(*) FROM (SELECT x.cycle_id,sum(CASE WHEN e.entry_type='DR' THEN e.amount_cents ELSE -e.amount_cents END) n FROM public.ledger_entries e JOIN public.ledger_transactions x ON x.id=e.transaction_id WHERE e.tenant_id=$1 GROUP BY x.cycle_id HAVING sum(CASE WHEN e.entry_type='DR' THEN e.amount_cents ELSE -e.amount_cents END)<>0) q",t)==0
+            # M41350: managerial holds are not bank liquidity or journal postings.
+            res1=f"/cycles/{c}/reserves"
+            res2=f"/cycles/{c2}/reserves"
+            await get(res2,ha,403)
+            await get(res2,ho,403)
+            hold=dict(request_id=str(uuid4()),action="HOLD",cents=4000,reason="CI reserva gerencial")
+            await post(res1,hold,h,409)
+            await post(res2,hold,ha,403)
+            await post(res2,hold,ho,403)
+            base_tx=await owner.fetchval("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=$1",t)
+            holds=[hold,{**hold,"request_id":str(uuid4())}]
+            hold_results=await asyncio.gather(*[client.post(prefix+res2,json=p,headers=h) for p in holds])
+            assert sorted(x.status_code for x in hold_results)==[200,409],[(x.status_code,x.text) for x in hold_results]
+            winner=next(i for i,x in enumerate(hold_results) if x.status_code==200)
+            held=hold_results[winner].json()["event_id"]
+            assert (await post(res2,holds[winner]))["event_id"]==held
+            await post(res2,{**holds[winner],"cents":1},h,409)
+            snap=await get(res2)
+            assert snap["documented_cents"]==7000 and snap["reserved_cents"]==4000 and snap["unreserved_documented_cents"]==3000
+            assert snap["bank_available_cents"]==0 and snap["payout_authorized"] is False and snap["bank_reconciled"] is False
+            assert (await get(res1))["reserved_cents"]==0
+            assert await owner.fetchval("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=$1",t)==base_tx
+            await post(f"/manual-receipts/{rid2}/CONTEST",{**review,"request_id":str(uuid4())},ha)
+            assert (await get(res2))["reserve_deficit_cents"]==4000
+            await post(res2,{**hold,"request_id":str(uuid4()),"cents":1},h,409)
+            # Compensation remains possible even when it exposes a reservation deficit.
+            await post(f"/manual-receipts/{rid2}/REVERSE",{**rev,"request_id":str(uuid4())})
+            assert (await get(res2))["documented_cents"]==0 and (await get(res2))["reserve_deficit_cents"]==4000
+            release={**hold,"request_id":str(uuid4()),"action":"RELEASE","related_hold":held}
+            await post(res1,release,h,403)
+            await post(res2,{**release,"cents":3999},h,409)
+            released=(await post(res2,release))["event_id"]
+            assert (await post(res2,release))["event_id"]==released
+            await post(res2,{**release,"request_id":str(uuid4())},h,409)
+            assert (await get(res2))["reserved_cents"]==0 and (await get(res2))["reserve_deficit_cents"]==0
+            # Synthetic canonical intent only: no provider call, no settlement.
+            async def pix(ob,tenant_id=t,payer=member_a):
+                return await owner.fetchval("INSERT INTO public.pix_payment_intents(tenant_id,contribution_id,payer_user_id,amount_cents,idempotency_key,pix_copy_paste,expires_at) VALUES($1,$2,$3,1000,$4,'CI_NOT_A_PIX_CODE',now()+interval '10 minutes') RETURNING id",tenant_id,ob,payer,uuid4().hex)
+            async def rejected(operation):
+                try: await operation
+                except asyncpg.CheckViolationError: pass
+                else: raise AssertionError("unsafe canonical intent accepted")
+            await rejected(pix(obligation))
+            await rejected(pix(obligation2,other))
+            await rejected(pix(obligation2,t,member_b))
+            intent=await pix(obligation2)
+            await rejected(pix(obligation2))
+            await post("/manual-receipts",new_receipt(obligation2,1000),h,409)
+            await rejected(owner.execute("UPDATE public.pix_payment_intents SET status='LIQUIDADO_CONFIRMADO' WHERE id=$1",intent))
+            await rejected(owner.execute("DELETE FROM public.pix_payment_intents WHERE id=$1",intent))
+            await owner.execute("UPDATE public.pix_payment_intents SET status='EXPIRADO' WHERE id=$1",intent)
+            await rejected(owner.execute("UPDATE public.pix_payment_intents SET status='PENDENTE' WHERE id=$1",intent))
+            new=(await post("/manual-receipts",new_receipt(obligation2,1000)))["receipt_id"]
+            await rejected(pix(obligation2))
+            await post(f"/manual-receipts/{new}/CONFIRM",{**review,"request_id":str(uuid4())})
+            await rejected(pix(obligation2))
+            # Race on another contribution: only one channel can claim it.
+            ob3=await owner.fetchval("SELECT id FROM public.contributions WHERE cycle_id=$1 AND membership_id=$2 AND id<>$3 ORDER BY due_date LIMIT 1",UUID(c2),ma,obligation2)
+            async def pix_attempt():
+                try: await pix(ob3)
+                except asyncpg.CheckViolationError: return 409
+                return 200
+            async def manual_attempt():
+                return (await client.post(prefix+"/manual-receipts",json=new_receipt(ob3,1000),headers=h)).status_code
+            assert sorted(await asyncio.gather(pix_attempt(),manual_attempt()))==[200,409]
+            assert await owner.fetchval("SELECT amount_paid FROM public.contributions WHERE id=$1",ob3)==0
             async with pool.acquire() as conn:
+                try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_reservation_events")
+                except asyncpg.InsufficientPrivilegeError: pass
+                else: raise AssertionError("direct reserve access")
                 try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_receipts")
                 except asyncpg.InsufficientPrivilegeError: pass
                 else: raise AssertionError("direct table access")
@@ -215,6 +284,7 @@ async def main():
         print("M41320_CANONICAL_PG18_API_CYCLE_ADMISSION_MANUAL_CONCURRENCY=PASS")
         print("M41330_CANONICAL_LEDGER_CYCLE_SCOPE_SUMMARIES_REVERSAL=PASS")
         print("M41340_CANONICAL_POLICY_CONSENT_LICENSE_CAPACITY_RACE=PASS")
+        print("M41350_CYCLE_RESERVES_DEFICIT_CANONICAL_PIX_EXCLUSION=PASS")
     finally:
         await pool.close()
         await owner.close()

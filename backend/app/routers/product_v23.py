@@ -61,6 +61,13 @@ class ReceiptInput(Strict):
     reference: str=Field(min_length=3,max_length=100)
     evidence_ref: str=Field(min_length=3,max_length=160)
 
+class ReservationInput(Strict):
+    request_id: UUID
+    action: Literal["HOLD","RELEASE"]
+    cents: int=Field(strict=True,gt=0,le=100000000000)
+    related_hold: UUID|None=None
+    reason: str=Field(min_length=8,max_length=160)
+
 class ReviewInput(Strict):
     request_id: UUID
     occurred: date
@@ -127,3 +134,12 @@ async def cycle_summary(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depend
 @router.get("/cycles/{cycle_id}/my-contributions")
 async def member_summary(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
     return await call(conn.fetchrow("SELECT * FROM public.fr_v23_member_summary($1,$2,$3)",bearer_token(request),tenant_id,cycle_id))
+
+@router.get("/cycles/{cycle_id}/reserves")
+async def read_reserves(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT * FROM public.fr_v23_reserves($1,$2,$3)",bearer_token(request),tenant_id,cycle_id))
+
+@router.post("/cycles/{cycle_id}/reserves")
+async def reserve_event(tenant_id:UUID,cycle_id:UUID,p:ReservationInput,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT public.fr_v23_reserve_event($1,$2,$3,$4,$5,$6,$7,$8) AS event_id",
+        bearer_token(request),tenant_id,cycle_id,p.request_id,p.action,p.cents,p.related_hold,p.reason))

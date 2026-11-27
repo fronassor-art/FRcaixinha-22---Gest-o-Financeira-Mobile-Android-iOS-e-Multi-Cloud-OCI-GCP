@@ -28,3 +28,5 @@ def test_routes_fail_closed_without_provider():
         with pytest.raises(ValidationError):
             product_v23.ConsentInput(policy_hash="a"*64,joined="2026-12-10",quotas=1,accepted=rejected)
     assert client.post(prefix+"/policies/preview",json=dict(request_id=str(r),start="2026-12-10",first_due="2026-12-10",last_due="2027-11-10",closing="2027-12-20",quota_cents=100,admin_bps=1300,late_days=90,late_competences=3,mode="MANUAL",document_id=str(c))).status_code==503
+    assert client.get(prefix+f"/cycles/{c}/reserves").status_code==503
+    assert client.post(prefix+f"/cycles/{c}/reserves",json=dict(request_id=str(r),action="HOLD",cents=100,reason="CI reserva gerencial")).status_code==503
