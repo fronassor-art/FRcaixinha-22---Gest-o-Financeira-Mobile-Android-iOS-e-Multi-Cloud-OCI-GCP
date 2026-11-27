@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {newFlow,onboarding,demoOffer,integratedJournal,openFlowCycle,inviteMember,acceptMember,mergeFinance,balances,expense,importBatch,offerCredit,respondCredit,requestCredit,decideCredit,disburseCredit,repayCredit,price,previewClosing,settleClosing,requestExit} from '../services/integratedProductFlowV23';
 import {firstDemoCycle,recordManual,confirmManual,paid} from '../services/productHomologationV23';
@@ -53,3 +54,8 @@ const c2={...c,id:'demo-cycle-2',mode:'HYBRID' as const,cents:50};
 const next=openFlowCycle(closed,'TENANT_ADMIN',c2,true);assert.equal(balances(next,c2.id).cash,0);
 assert.equal(next.settled.length,1);
 console.log('M41310_INTEGRATED_PRODUCT_FLOW=PASS');
+
+for(const path of ['docs/FR_Finance_Caderno_Mestre_V2_3_2026-11-26.md','docs/FR_Finance_Contrato_Tecnico_Mestre_V2_3_2026-11-26.md']){
+ const doc=readFileSync(path,'utf8');assert(doc.includes('Adendo de decisões aprovadas V2.3'));assert(doc.includes('200 membros e 400 cotas'));assert(doc.includes('sem piso financeiro fixo de R$150'));assert(doc.includes('PRODUCTION=BLOCKED'));
+}
+console.log('M41310_V23_VERSIONED_DOCUMENTS=PASS');

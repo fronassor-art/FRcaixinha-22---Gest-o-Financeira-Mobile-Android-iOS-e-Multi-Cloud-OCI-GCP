@@ -839,17 +839,3 @@ A retificação PI-01 a PI-05 complementa as cláusulas 1.9, 1.10, 1.11 e 13.11 
 
 **Referências oficiais para futura formalização:** [INPI — registro de programa de computador](https://www.gov.br/inpi/pt-br/servicos/programas-de-computador/guia-basico); [INPI — propriedade industrial e depósito de patentes](https://www.gov.br/inpi/pt-br/servicos/patentes). Consultar os procedimentos vigentes antes de protocolar.
 
-
-
----
-
-## Adendo de decisões aprovadas V2.3 — continuidade de 26/11/2026
-
-**Escopo:** especificação prospectiva aprovada pelo proprietário em 25/11/2026, reafirmada na continuidade de 26/11/2026. Preservar histórico V2.2, os Contratos A/B versionados e os 330 IDs/2.310 etapas. Para desenvolvimento V2.3, as decisões abaixo prevalecem sobre referências anteriores conflitantes; não reescrever instrumentos já aceitos ou liberar operação real.
-
-- Motor por caixinha e ciclo: valor de cota definido pelo administrador, positivo e preciso em centavos, sem piso financeiro fixo de R$150 para a nova especificação; duração, início, vencimentos e encerramento configuráveis, ciclos simultâneos segregados, remuneração e política de inadimplência definidas e aceitas por ciclo. Sem confisco de capital ou alteração retroativa. Calendário excepcional inicial: 10/12/2026 primeira contribuição, 10/11/2027 última, 20/12/2027 encerramento-alvo; corte Capital-Dias exige decisão explícita, sem default oculto.
-- Gestão MANUAL, MERCADO_PAGO e HYBRID: recebimento manual de mensalidade do membro em espécie/Pix externo/transferência/depósito com competência, parcial, referência, evidência, confirmação separada e recibo gerencial; integração facultativa para o tenant; evitar dupla baixa, distinguir origem e não executar pagamento a partir de registro manual. Correções por compensação; saldo e reserva por ciclo; Capital-Dias e resultado líquido elegível, nunca principal como lucro.
-- SaaS: receita da plataforma exclusivamente de assinaturas, preços mensal/anual independentes, pagamento da assinatura por Pix Mercado Pago; Ampliado aprovado com capacidade simultânea de 200 membros e 400 cotas. Diferenciar capacidade definida de disponibilidade comercial, que permanece bloqueada. Jornada Master → administrador → membros: convites, cadastro, aceite Contrato A, pagamento conferido, configuração e aceite da política/Contrato B, convites e adesões, contribuições, fechamento. Não cobrar participação nos lucros dos tenants.
-- Homologação fictícia em memória, sem dados fictícios persistidos no PostgreSQL original; nenhuma nova base, serviço, role, repositório ou diretório de projeto. Código e teste no GitHub, CI integral no SHA exato, compilação APK debug e sincronização source-only autorizada no Termux nativo. Versões futuras dos instrumentos, integração autoritativa, migração, lançamento comercial, jurídico e provas independentes exigem controle próprio.
-
-Rastreabilidade inicial: docs/FR_FINANCE_M41300_CHECKPOINT_PRODUCT_V23.md e docs/FR_FINANCE_M41310_SUPERPACOTE_FUNCIONAL_V23.md. Estados reais preservados: PIX_REAL=OFF, PAGAMENTOS_REAIS=OFF, ATIVACAO_REAL=OFF, comunicações reais OFF, PRODUCTION=BLOCKED. Nenhum aceite, pagamento, criação de ciclo real ou alteração de schema é autorizado pelo adendo.

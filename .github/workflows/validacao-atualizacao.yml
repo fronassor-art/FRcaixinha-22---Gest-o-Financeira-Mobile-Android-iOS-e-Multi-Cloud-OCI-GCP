@@ -87,6 +87,8 @@ on:
       - 'src/components/IntegratedProductWorkspaceV23.tsx'
       - 'src/tests/m41310_integrated_product_flow_ci.test.ts'
       - 'docs/FR_FINANCE_M41310_SUPERPACOTE_FUNCIONAL_V23.md'
+      - 'docs/FR_Finance_Caderno_Mestre_V2_3_2026-11-26.md'
+      - 'docs/FR_Finance_Contrato_Tecnico_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
       - 'src/services/firstCaixinhaCloseIntervalV22.ts'
       - 'src/tests/m41030_first_caixinha_closing_interval_ci.test.ts'
