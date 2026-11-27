@@ -8,6 +8,7 @@ from app.admin_license_onboarding_ci import (stage_admin_invite_ci,register_admi
     prepare_admin_checkout_ci,accept_admin_b_ci)
 from app.cycle_identity_registration_ci import stage_cycle_identity_invite_ci,register_cycle_identity_ci
 from m41400_cycle_identity_ci import connection
+from app.onboarding_readback_ci import master_document_ci,admin_document_ci,invitation_terms_ci,offers_ci,checkout_status_ci
 
 def client_for(reviewer_token=None, reviewer_tenant=None):
     # Opaque delivery token is captured only inside this fixture, never in HTTP.
@@ -15,6 +16,11 @@ def client_for(reviewer_token=None, reviewer_tenant=None):
     def execute(op,token,p):
         try:
             with connection() as conn:
+                if op=="MASTER_DOCUMENT": return master_document_ci(conn,token,**p)
+                if op=="ADMIN_DOCUMENT": return admin_document_ci(conn,token,**p)
+                if op=="INVITATION_TERMS": return invitation_terms_ci(conn,**p)
+                if op=="OFFERS": return offers_ci(conn,token,**p)
+                if op=="CHECKOUT_STATUS": return checkout_status_ci(conn,token,**p)
                 if op=="INVITE_ADMIN":
                     inv,raw=stage_admin_invite_ci(conn,master_token=token,
                         reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,**p)
@@ -54,3 +60,9 @@ def post(client,path,body,token=None,status=200):
     result=response.json()
     assert not any("token" in k or "password" in k for k in result)
     return result
+
+def get(client,path,token,status=200):
+    response=client.get("/v23/onboarding"+path,headers={"Authorization":"Bearer "+token})
+    assert response.status_code==status,(path,response.status_code,status)
+    assert response.headers.get("cache-control")=="no-store"
+    return response.json()

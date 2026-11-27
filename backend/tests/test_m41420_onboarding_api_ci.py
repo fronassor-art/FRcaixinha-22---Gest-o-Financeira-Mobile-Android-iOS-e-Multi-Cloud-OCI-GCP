@@ -29,6 +29,9 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
         assert response.status_code==503
         assert response.headers["cache-control"]=="no-store"
         assert "secret-CI-test-only" not in response.text
+    for path in (f'/master/documents/{doc}',f'/tenants/{tenant}/documents/{doc}',f'/tenants/{tenant}/offers',f'/tenants/{tenant}/checkout/{doc}'):
+        assert client.get(prefix+path).status_code==503
+    assert client.post(prefix+'/invitation-terms',json=dict(invitation_token='x'*32,verification_token='y'*32)).status_code==503
     # Test schema and redaction with a fixture that cannot execute a write.
     def never(*args):
         raise AssertionError("invalid payload reached executor")

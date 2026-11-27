@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Literal
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from pydantic import Field
@@ -98,3 +98,28 @@ def invite_member(tenant:UUID,cycle:UUID,p:MemberInviteInput,request:Request,exe
 @router.post("/member/registration")
 def register_member(p:MemberRegistrationInput,execute=Depends(unreleased_onboarding)):
     return execute("REGISTER_MEMBER",None,p.model_dump())
+
+class InvitationProofInput(Strict):
+    invitation_token: str=Field(min_length=32,max_length=512)
+    verification_token: str=Field(min_length=32,max_length=512)
+
+@router.get("/master/documents/{document_id}")
+def master_document(document_id:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("MASTER_DOCUMENT",bearer_token(request),dict(doc=document_id))
+
+@router.post("/invitation-terms")
+def invitation_terms(p:InvitationProofInput,execute=Depends(unreleased_onboarding)):
+    # Both opaque proofs in the body, never URL or response.
+    return execute("INVITATION_TERMS",None,p.model_dump())
+
+@router.get("/tenants/{tenant}/documents/{document_id}")
+def admin_document(tenant:UUID,document_id:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("ADMIN_DOCUMENT",bearer_token(request),dict(tenant=tenant,doc=document_id))
+
+@router.get("/tenants/{tenant}/offers")
+def offers(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("OFFERS",bearer_token(request),dict(tenant=tenant))
+
+@router.get("/tenants/{tenant}/checkout/{intent}")
+def checkout_status(tenant:UUID,intent:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("CHECKOUT_STATUS",bearer_token(request),dict(tenant=tenant,intent=intent))

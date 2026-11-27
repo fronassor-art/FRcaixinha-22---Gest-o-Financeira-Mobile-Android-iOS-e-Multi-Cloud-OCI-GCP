@@ -146,6 +146,12 @@ def prepare_admin_checkout_ci(conn, *, admin_token, tenant, price_version, perio
             if tuple(saved[1:3])!=(price_version,period) or saved[4]!=accepted_cents or saved[5] not in ("PENDING","APPROVED"):
                 raise LifecycleDenied("Oferta já vinculada; alteração exige fluxo próprio.")
             return saved[0],saved[3]
+        # First checkout uses the latest immutable catalog version; retries above keep their pinned version.
+        latest=conn.execute("SELECT v.id FROM public.platform_license_price_versions v WHERE v.plan_tier="
+                            "(SELECT plan_tier FROM public.platform_license_price_versions WHERE id=%s) "
+                            "ORDER BY v.created_at DESC,v.id DESC LIMIT 1",(price_version,)).fetchone()
+        if not latest or latest[0]!=price_version:
+            raise LifecycleDenied("Oferta substituída; consulte novamente.")
         if not conn.execute("SELECT 1 FROM public.tenants WHERE id=%s AND status='RASCUNHO_INATIVO'",(tenant,)).fetchone():
             raise LifecycleDenied("Cadastro inicial já encerrado.")
         prep=prepare_saas_license_ci(conn,tenant_id=tenant,admin_id=actor,price_version_id=price_version,

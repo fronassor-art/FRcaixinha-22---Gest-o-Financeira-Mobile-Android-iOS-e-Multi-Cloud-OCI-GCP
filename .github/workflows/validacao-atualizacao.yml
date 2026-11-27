@@ -291,6 +291,8 @@ jobs:
         run: npx tsx src/tests/m41380_product_selection_ci.test.ts
       - name: M41420 — fronteira mobile de contratação bloqueada
         run: npx tsx src/tests/m41420_onboarding_boundary_ci.test.ts
+      - name: M41430 — hash documental, ofertas versionadas e conciliação por escopo
+        run: npx tsx src/tests/m41430_onboarding_readback_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso

@@ -8,7 +8,8 @@ from app.security import hash_password_secure,hash_token
 from app.admin_license_onboarding_ci import (stage_admin_invite_ci,register_admin_ci,
     prepare_admin_checkout_ci,reconcile_admin_checkout_ci,accept_admin_b_ci)
 from m41400_cycle_identity_ci import connection,reject
-from m41420_onboarding_http_ci import client_for,post
+from m41420_onboarding_http_ci import client_for,post,get
+from hashlib import sha256
 from uuid import UUID
 
 def _cpf():
@@ -18,7 +19,7 @@ def _cpf():
         ds.append(0 if v==10 else v)
     return "".join(map(str,ds))
 
-def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
+def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash,b_hash):
     with connection() as conn:
         master=uuid4()
         pwd="M41410-CI-Only-Master-Password!"
@@ -30,11 +31,16 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
         conn.execute("INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) VALUES(%s,%s,'MASTER',NULL,now()+interval '30 minutes')",(hash_token(master_token),master))
         conn.execute("UPDATE public.users SET email_verified_at=now() WHERE id=%s",(reviewer,))
         client,delivery=client_for(reviewer_token,reviewer_tenant)
+        full=get(client,f'/master/documents/{doc}',master_token)
+        assert full['user_id']==str(master) and full['tenant_id'] is None
+        assert sha256(full['document']['text'].encode()).hexdigest()==a_hash
+        get(client,f'/master/documents/{doc}',reviewer_token,403)
+        get(client,f'/master/documents/{contract_b}',master_token,403)
         results=[]
         for period,cents in (("MONTHLY",8990),("ANNUAL",70033)):
             email=f"m41410-{uuid4()}@example.invalid"
             stage=dict(master_token=master_token,master_password=pwd,reviewer_token=reviewer_token,
-                       reviewer_tenant=reviewer_tenant,email=email,document_id=doc,document_hash="c"*64)
+                       reviewer_tenant=reviewer_tenant,email=email,document_id=doc,document_hash=a_hash)
             reject(stage_admin_invite_ci,conn,**{**stage,"master_token":reviewer_token})
             reject(stage_admin_invite_ci,conn,**{**stage,"master_password":"wrong"})
             reject(stage_admin_invite_ci,conn,**{**stage,"document_id":contract_b})
@@ -45,7 +51,11 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
             reject(stage_admin_invite_ci,conn,**stage)
             assert simulate_invitation_delivery_ci(conn,inv)
             proof=prepare_invite_email_verification_ci(conn,invitation_id=inv)
-            args=dict(invitation_token=raw,verification_token=proof,document_id=doc,document_hash="c"*64,
+            proof_body=dict(invitation_token=raw,verification_token=proof)
+            terms=post(client,'/invitation-terms',proof_body)
+            assert terms['document']==full['document'] and terms['terms'] is None and terms['role']=='TENANT_ADMIN'
+            post(client,'/invitation-terms',{**proof_body,'verification_token':raw},status=403)
+            args=dict(invitation_token=raw,verification_token=proof,document_id=doc,document_hash=a_hash,
                       accepted=True,name="Admin sintético",cpf=_cpf(),phone="11999990000",
                       password="M41410-CI-Only-Admin-Password!",tenant_name="Caixinha sintética")
             for changes in ({"accepted":False},{"accepted":1},{"document_id":contract_b},{"document_hash":"f"*64},{"invitation_token":proof}):
@@ -70,7 +80,13 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
             admin_token=uuid4().hex+uuid4().hex
             conn.execute("INSERT INTO public.sessions(token_hash,user_id,active_role,active_tenant_id,expires_at) VALUES(%s,%s,'TENANT_ADMIN',%s,now()+interval '30 minutes')",(hash_token(admin_token),actor,tenant))
             reject(conn.execute,"SELECT public.fr_v23_actor(%s,%s,true)",(admin_token,tenant))
-            reject(accept_admin_b_ci,conn,admin_token=admin_token,tenant=tenant,document_id=contract_b,document_hash="a"*64,accepted=True)
+            reject(accept_admin_b_ci,conn,admin_token=admin_token,tenant=tenant,document_id=contract_b,document_hash=b_hash,accepted=True)
+            offers=get(client,f'/tenants/{tenant}/offers',admin_token)
+            get(client,f'/tenants/{tenant}/offers',reviewer_token,403)
+            get(client,f'/tenants/{tenant}/documents/{contract_b}',admin_token,403)
+            selected=next(x for x in offers['offers'] if x['price_version']==str(price))
+            assert selected['monthly_cents']==8990 and selected['annual_cents']==70033
+            assert all(x['tier']!='AMPLIADO' for x in offers['offers'])
             offer=dict(admin_token=admin_token,tenant=tenant,price_version=price,period=period,accepted_cents=cents,accepted=True)
             reject(prepare_admin_checkout_ci,conn,**{**offer,"accepted_cents":cents+1})
             reject(prepare_admin_checkout_ci,conn,**{**offer,"admin_token":reviewer_token})
@@ -79,6 +95,12 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
             post(client,path,checkout_body,reviewer_token,403)
             checkout=post(client,path,checkout_body,admin_token)
             prep,intent=UUID(checkout['preparation_id']),UUID(checkout['intent_id'])
+            status_path=path+'/'+str(intent)
+            assert get(client,status_path,admin_token)['state']=='PENDING'
+            get(client,status_path,reviewer_token,403)
+            get(client,path+'/'+str(uuid4()),admin_token,403)
+            assert get(client,f'/tenants/{tenant}/offers',admin_token)['offers']==[]
+            post(client,'/invitation-terms',proof_body,status=403)
             assert prepare_admin_checkout_ci(conn,**offer)==(prep,intent)
             assert post(client,path,checkout_body,admin_token)==checkout
             reject(prepare_admin_checkout_ci,conn,**{**offer,"period":"ANNUAL" if period=="MONTHLY" else "MONTHLY","accepted_cents":70033 if period=="MONTHLY" else 8990})
@@ -94,6 +116,10 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
                 reject(reconcile_admin_checkout_ci,conn,**{**review,**changes})
             assert conn.execute("SELECT provider_payment_id FROM public.saas_payment_intents WHERE id=%s",(intent,)).fetchone()[0] is None
             ent=reconcile_admin_checkout_ci(conn,**review)
+            status=get(client,status_path,admin_token)
+            assert status['state']=='CI_RECONCILED' and status['cents']==cents and status['period']==period
+            assert status['real_payment_authorized'] is False
+            get(client,f'/tenants/{tenant}/offers',admin_token,403)
             assert reconcile_admin_checkout_ci(conn,**review)==ent
             assert conn.execute("SELECT status FROM public.tenants WHERE id=%s",(tenant,)).fetchone()[0]=="ATIVO"
             assert conn.execute("SELECT public.fr_v23_actor(%s,%s,true)",(admin_token,tenant)).fetchone()[0]==actor
@@ -106,17 +132,19 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b):
         print('M41420_ONBOARDING_HTTP_MASTER_ADMIN_CHECKOUT_RACE=PASS')
         return results
 
-def accept_b_and_member(phase, tenant, admin_raw, doc, cycle=None, digest=None):
+def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, digest=None):
     """Compose the existing M41400 path after the new administrator's exact B."""
     from datetime import date
     from app.cycle_identity_registration_ci import stage_cycle_identity_invite_ci, register_cycle_identity_ci
     with connection() as conn:
         if phase=="B":
-            args=dict(admin_token=admin_raw,tenant=tenant,document_id=doc,document_hash="a"*64,accepted=True)
+            args=dict(admin_token=admin_raw,tenant=tenant,document_id=doc,document_hash=b_hash,accepted=True)
             reject(accept_admin_b_ci,conn,**{**args,"accepted":False})
             reject(accept_admin_b_ci,conn,**{**args,"document_hash":"f"*64})
             reject(accept_admin_b_ci,conn,**{**args,"document_id":uuid4()})
             client,_=client_for()
+            document=get(client,f'/tenants/{tenant}/documents/{doc}',admin_raw)['document']
+            assert sha256(document['text'].encode()).hexdigest()==b_hash
             body={k:v for k,v in args.items() if k not in ('admin_token','tenant')}
             accepted=UUID(post(client,f'/tenants/{tenant}/contract-b',body,admin_raw)['acceptance_id'])
             assert accept_admin_b_ci(conn,**args)==accepted
@@ -129,13 +157,17 @@ def accept_b_and_member(phase, tenant, admin_raw, doc, cycle=None, digest=None):
         inv=UUID(invite['invitation_id']);raw=delivery.pop(str(inv))
         assert simulate_invitation_delivery_ci(conn,inv)
         proof=prepare_invite_email_verification_ci(conn,invitation_id=inv)
+        terms=post(client,'/invitation-terms',dict(invitation_token=raw,verification_token=proof))
+        assert terms['role']=='TENANT_MEMBER' and terms['document']['document_hash']==b_hash
+        assert terms['terms']==dict(cycle=str(cycle),policy_hash=digest,joined=joined.isoformat(),quotas=2)
         body=dict(invitation_token=raw,verification_token=proof,cycle=cycle,policy_hash=digest,document_id=doc,
-                  document_hash='a'*64,joined=joined,quotas=2,accepted=True,name='Membro sintético',cpf=_cpf(),
+                  document_hash=b_hash,joined=joined,quotas=2,accepted=True,name='Membro sintético',cpf=_cpf(),
                   phone='11999990000',password='M41410-CI-Only-Member!')
         post(client,'/member/registration',{**body,'policy_hash':'f'*64},status=403)
         registered=post(client,'/member/registration',body)
         person,member,consent=map(UUID,(registered['user_id'],registered['membership_id'],registered['consent_id']))
         post(client,'/member/registration',body,status=403)
         print('M41420_ONBOARDING_HTTP_MEMBER_B_AND_REPLAY=PASS')
+        print('M41430_SCOPED_DOCUMENT_TERMS_OFFERS_STATUS=PASS')
         assert conn.execute("SELECT count(*) FROM public.contributions WHERE membership_id=%s",(member,)).fetchone()[0]==0
         return person,member

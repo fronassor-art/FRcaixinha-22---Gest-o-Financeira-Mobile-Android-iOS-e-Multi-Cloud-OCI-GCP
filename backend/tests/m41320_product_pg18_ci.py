@@ -378,14 +378,20 @@ async def main():
             await post(f"/cycles/{c}/admissions",dict(membership_id=str(new_member),joined="2027-01-10",quotas=2),h,409)
             # M41410: initial administrator, exact A, checkout and independent B.
             from m41410_admin_license_ci import exercise as exercise_admin, accept_b_and_member
-            admin_results=await asyncio.to_thread(exercise_admin,other_admin,other,ho["Authorization"].split()[1],contract_a,price,doc)
+            from hashlib import sha256
+            from app.onboarding_readback_ci import TEXTS
+            a_hash=sha256(TEXTS["CI_M41430_A"].encode()).hexdigest()
+            b_hash=sha256(TEXTS["CI_M41430_B"].encode()).hexdigest()
+            doc_a=await owner.fetchval("INSERT INTO public.contract_documents(document_kind,version_label,sha256,source_reference,published_at) VALUES('PLATFORM_LICENSE',$1,$2,'CI_M41430_A',now()) RETURNING id","CI-"+uuid4().hex,a_hash)
+            doc_b=await owner.fetchval("INSERT INTO public.contract_documents(document_kind,version_label,sha256,source_reference,published_at) VALUES('TENANT_MEMBERSHIP',$1,$2,'CI_M41430_B',now()) RETURNING id","CI-"+uuid4().hex,b_hash)
+            admin_results=await asyncio.to_thread(exercise_admin,other_admin,other,ho["Authorization"].split()[1],doc_a,price,doc_b,a_hash,b_hash)
             for new_admin,new_tenant,admin_raw in admin_results:
                 ap=f"/tenants/{new_tenant}/v23"
                 ah={"Authorization":"Bearer "+admin_raw}
-                form={**cycle,"request_id":str(uuid4())}
+                form={**cycle,"request_id":str(uuid4()),"document_id":str(doc_b)}
                 denied=await client.post(ap+"/policies/preview",json=form,headers=ah)
                 assert denied.status_code==403
-                await asyncio.to_thread(accept_b_and_member,"B",new_tenant,admin_raw,doc)
+                await asyncio.to_thread(accept_b_and_member,"B",new_tenant,admin_raw,doc_b,b_hash)
                 preview=await client.post(ap+"/policies/preview",json=form,headers=ah)
                 assert preview.status_code==200,preview.text
                 digest=preview.json()["policy_hash"]
@@ -394,7 +400,7 @@ async def main():
                 nc=opened.json()["cycle_id"]
                 assert (await client.get(ap+f"/cycles/{nc}/workspace",headers=ho)).status_code==403
                 assert (await client.get(ap+"/cycles",headers=ah)).json()["items"][0]["cycle_id"]==nc
-                person,mid=await asyncio.to_thread(accept_b_and_member,"MEMBER",new_tenant,admin_raw,doc,UUID(nc),digest)
+                person,mid=await asyncio.to_thread(accept_b_and_member,"MEMBER",new_tenant,admin_raw,doc_b,b_hash,UUID(nc),digest)
                 mh=await token(new_tenant,person,"TENANT_MEMBER")
                 assert (await client.get(ap+"/cycles",headers=mh)).json()["items"][0]["membership_state"]=="CONSENTED"
                 admitted=await client.post(ap+f"/cycles/{nc}/admissions",json=dict(membership_id=str(mid),joined="2027-01-10",quotas=2),headers=ah)
