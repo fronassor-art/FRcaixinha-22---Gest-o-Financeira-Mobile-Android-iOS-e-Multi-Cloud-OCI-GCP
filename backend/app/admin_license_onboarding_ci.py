@@ -150,7 +150,7 @@ def prepare_admin_checkout_ci(conn, *, admin_token, tenant, price_version, perio
             raise LifecycleDenied("Preço ou aceite A incompatível.")
         saved=conn.execute("SELECT s.id,s.price_version_id,s.billing_period,p.id,p.expected_amount_cents,p.status "
                            "FROM public.saas_subscription_preparations s JOIN public.saas_payment_intents p ON p.preparation_id=s.id "
-                           "WHERE s.tenant_id=%s AND s.admin_user_id=%s AND s.contract_acceptance_id=%s FOR UPDATE OF s,p",
+                           "WHERE s.tenant_id=%s AND s.admin_user_id=%s AND s.contract_acceptance_id=%s AND s.renewal_request_id IS NULL FOR UPDATE OF s,p",
                            (tenant,actor,bound[0])).fetchone()
         if saved:
             if tuple(saved[1:3])!=(price_version,period) or saved[4]!=accepted_cents or saved[5] not in ("PENDING","APPROVED"):
@@ -189,7 +189,7 @@ def reconcile_admin_checkout_ci(conn, *, reviewer_token, reviewer_tenant, tenant
                          "JOIN public.fr_v23_admin_invite_bindings b ON b.invitation_id=i.id "
                          "JOIN public.contract_acceptances a ON a.id=s.contract_acceptance_id AND a.document_id=b.document_id AND a.user_id=p.admin_user_id "
                          "WHERE p.id=%s AND p.tenant_id=%s AND s.tenant_id=p.tenant_id AND s.admin_user_id=p.admin_user_id "
-                         "AND p.platform_collector_id=%s AND p.live_mode=false FOR UPDATE OF p,t",
+                         "AND p.platform_collector_id=%s AND p.live_mode=false AND s.renewal_request_id IS NULL FOR UPDATE OF p,t",
                          (intent,tenant,COLLECTOR_CI)).fetchone()
         if (not row or reviewer!=row[6] or reviewer==row[0] or row[3]!=statement_gross_cents
             or row[4] not in ("PENDING","APPROVED") or row[5] not in ("RASCUNHO_INATIVO","ATIVO")):

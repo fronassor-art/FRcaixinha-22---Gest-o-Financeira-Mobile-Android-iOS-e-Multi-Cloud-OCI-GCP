@@ -404,7 +404,7 @@ async def main():
             doc_a=await owner.fetchval("INSERT INTO public.contract_documents(document_kind,version_label,sha256,source_reference,published_at) VALUES('PLATFORM_LICENSE',$1,$2,'CI_M41430_A',now()) RETURNING id","CI-"+uuid4().hex,a_hash)
             doc_b=await owner.fetchval("INSERT INTO public.contract_documents(document_kind,version_label,sha256,source_reference,published_at) VALUES('TENANT_MEMBERSHIP',$1,$2,'CI_M41430_B',now()) RETURNING id","CI-"+uuid4().hex,b_hash)
             admin_results=await asyncio.to_thread(exercise_admin,other_admin,other,ho["Authorization"].split()[1],doc_a,price,doc_b,a_hash,b_hash)
-            for new_admin,new_tenant,admin_raw in admin_results:
+            for index,(new_admin,new_tenant,admin_raw) in enumerate(admin_results):
                 ap=f"/tenants/{new_tenant}/v23"
                 ah={"Authorization":"Bearer "+admin_raw}
                 form={**cycle,"request_id":str(uuid4()),"document_id":str(doc_b)}
@@ -425,6 +425,8 @@ async def main():
                 admitted=await client.post(ap+f"/cycles/{nc}/admissions",json=dict(membership_id=str(mid),joined="2027-01-10",quotas=2),headers=ah)
                 assert admitted.status_code==200,admitted.text
                 assert admitted.json()["obligations"]==11
+                from m41480_saas_renewal_ci import exercise as exercise_renewal
+                await asyncio.to_thread(exercise_renewal,new_tenant,new_admin,admin_raw,other,ho["Authorization"].split()[1],price,doc_a,a_hash,bool(index))
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
             await get("/form-options",h,403)

@@ -39,7 +39,7 @@ def _journey(conn,actor,tenant):
     rows=conn.execute(
         "SELECT p.id,p.status,p.live_mode,p.expected_amount_cents,s.billing_period "
         "FROM public.saas_subscription_preparations s JOIN public.saas_payment_intents p ON p.preparation_id=s.id "
-        "WHERE s.tenant_id=%s AND s.admin_user_id=%s AND s.contract_acceptance_id=%s "
+        "WHERE s.tenant_id=%s AND s.admin_user_id=%s AND s.contract_acceptance_id=%s AND s.renewal_request_id IS NULL "
         "AND p.tenant_id=s.tenant_id AND p.admin_user_id=s.admin_user_id AND p.price_version_id=s.price_version_id "
         "FOR SHARE OF s,p",(tenant,actor,acceptance)).fetchall()
     if len(rows)>1:raise LifecycleDenied("Jornada ambígua.")

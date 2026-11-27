@@ -89,10 +89,14 @@ def _license_access(owner,actor,tenant):
         "AND s.admin_user_id=%s AND p.admin_user_id=s.admin_user_id AND s.contract_acceptance_id=%s "
         "AND e.plan_tier=s.plan_tier AND p.price_version_id=v.id "
         "AND p.provider='MERCADO_PAGO' AND p.currency='BRL' AND p.live_mode=false "
-        "AND p.status='APPROVED' AND p.provider_payment_id IS NOT NULL AND p.paid_at IS NOT NULL "
+        "AND (p.status='APPROVED' OR (p.status='REFUNDED' AND e.status='REVOKED' AND EXISTS("
+        "SELECT 1 FROM public.audit_events au WHERE au.tenant_id=e.tenant_id AND au.object_id=p.id::text "
+        "AND au.action='CI_SAAS_REFUND_REVOKED' AND au.evidence_ref=p.provider_payment_id))) "
+        "AND p.provider_payment_id IS NOT NULL AND p.paid_at IS NOT NULL "
         "AND p.reconciled_at>=p.paid_at AND p.reconciled_at<=clock_timestamp() "
         "AND p.expected_amount_cents=(CASE s.billing_period WHEN 'MONTHLY' THEN v.monthly_price ELSE v.annual_price END)*100 "
-        "AND e.valid_from<=clock_timestamp() AND (e.status='SUSPENDED' OR (e.status='ACTIVE' AND e.valid_until<=clock_timestamp())) "
+        "AND e.valid_from<=clock_timestamp() AND (e.status='SUSPENDED' OR e.status='REVOKED' "
+        "OR (e.status IN ('ACTIVE','EXPIRED') AND e.valid_until<=clock_timestamp())) "
         "FOR SHARE OF e,s,p,v",(tenant,actor,acceptance)).fetchall()
     if not history:
         raise LifecycleDenied("Histórico conciliado indisponível.")
