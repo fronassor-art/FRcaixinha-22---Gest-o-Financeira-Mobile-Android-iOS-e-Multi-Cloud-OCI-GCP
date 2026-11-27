@@ -33,6 +33,21 @@ const duplicateActive={...pending,request_id:id(10),intent_id:id(11)};
 await assert.rejects(parseRenewalOverview({...raw,offer:null,renewals:[pending,duplicateActive]},s));
 const withReplacement=await parseRenewalOverview({...raw,offer:null,renewals:[canceled,{...pending,request_id:id(10),intent_id:id(11)}]},s);
 assert.equal(withReplacement.renewals.length,2);
+const review={...pending,state:'PAYMENT_REVIEW'};
+for(const expires_at of ['2026-11-27T19:00:00Z','2026-11-27T21:00:00Z']){
+ const reviewed=await parseRenewalOverview({...raw,offer:null,renewals:[{...review,expires_at}]},s);
+ assert.equal(reviewed.renewals[0].state,'PAYMENT_REVIEW');
+ assert.throws(()=>prepareRenewal(s,reviewed,id(7),'ANNUAL',true));
+ await assert.rejects(parseRenewalOverview({...raw,renewals:[{...review,expires_at}]},s));
+}
+const future={...segment,entitlement_id:id(12),intent_id:id(13),valid_from:'2026-12-01T00:00:00Z',valid_until:'2027-01-01T00:00:00Z',state:'SCHEDULED'};
+const edge={...pending,intent_id:id(13),period:'MONTHLY',cents:8990,entitlement_id:id(12),state:'CI_RECONCILED'};
+const gap={...refundedRaw,segments:[refundedSegment,future],renewals:[edge],offer:{...offer,predecessor:id(12)}};
+assert.equal((await parseRenewalOverview(gap,s)).access,'CONTINUITY_ONLY');
+await assert.rejects(parseRenewalOverview({...gap,renewals:[]},s));
+await assert.rejects(parseRenewalOverview({...gap,renewals:[edge,{...edge,request_id:id(14),predecessor:id(12),intent_id:id(5),entitlement_id:id(4),state:'REFUNDED'}]},s));
+await assert.rejects(parseRenewalOverview({...raw,segments:[segment,{...future,valid_from:'2026-11-29T00:00:00Z'}],renewals:[edge],offer:{...offer,predecessor:id(12)}},s));
+console.log('M41510_MOBILE_REVIEW_CHAIN_NO_POST=PASS');
 console.log('M41500_MOBILE_RECOVERY_NO_POST=PASS');
 let current=true,invalidated=0,status=200,sendCount=0;
 const transport={origin:()=> 'https://frfinance.com.br',captureSession:()=>({token:'ci-fixture-token'}),isCurrent:()=>current,getUser:()=>({id:s.userId,tenantId:s.tenantId,role:s.role}),invalidateIfCurrent:()=>{invalidated++;return true;},send:async(u:string,o:RequestInit)=>{sendCount++;assert.match(u,/\/v23\/onboarding\/tenants\/.*\/renewal$/);assert.equal(o.method,'GET');assert.equal(o.cache,'no-store');return new Response(JSON.stringify(raw),{status,headers:{'Cache-Control':'no-store'}});}} as unknown as Transport;

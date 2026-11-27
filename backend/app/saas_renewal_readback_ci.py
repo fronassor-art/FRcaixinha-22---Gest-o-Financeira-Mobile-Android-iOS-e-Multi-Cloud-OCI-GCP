@@ -4,7 +4,7 @@ from .cycle_identity_registration_ci import _guard
 from .admin_license_onboarding_ci import _session,COLLECTOR_CI
 from .preliminary_onboarding_ci import _binding
 from .administrator_reauthentication_ci import _license_access
-from .saas_renewal_v23_ci import _lock,_previous,_term_base,prepare_renewal_ci
+from .saas_renewal_v23_ci import _lock,_previous,_term_base,_review_exists,_assert_lineage,prepare_renewal_ci
 from .onboarding_readback_ci import _document
 from .saas_billing_ci import _cents
 
@@ -15,6 +15,7 @@ def renewal_overview_ci(conn,*,token,tenant):
         actor,_=_session(conn,token,"TENANT_ADMIN",tenant)
         acceptance,status=_binding(conn,actor,tenant)
         if status!="ATIVO":raise LifecycleDenied("Vínculo indisponível.")
+        _assert_lineage(conn,tenant)
         access=_license_access(conn,actor,tenant)
         docid=conn.execute("SELECT document_id FROM public.contract_acceptances WHERE id=%s",(acceptance,)).fetchone()[0]
         doc=_document(conn,docid,"PLATFORM_LICENSE")
@@ -70,7 +71,11 @@ def renewal_overview_ci(conn,*,token,tenant):
                                     "AND object_id=%s AND evidence_ref=%s",(tenant,str(req),provider_id)).fetchone():
                     raise LifecycleDenied("Cancelamento sem prova.")
                 label="CANCELED"
-            elif pay=="PENDING" and ent is None and canceled is None:label="PENDING" if now<expiry else "REVIEW_REQUIRED"
+            elif pay=="PENDING" and ent is None and canceled is None and paid is None and reconciled is None:
+                if _review_exists(conn,tenant,intent):
+                    if not provider_id:raise LifecycleDenied("Revisão sem vínculo de pagamento.")
+                    label="PAYMENT_REVIEW"
+                else:label="PENDING" if now<expiry else "REVIEW_REQUIRED"
             elif pay in ("APPROVED","REFUNDED") and canceled is None and ent in by_id and by_id[ent]["intent_id"]==intent and by_id[ent]["cents"]==cents and by_id[ent]["period"]==period:
                 label="REFUNDED" if pay=="REFUNDED" else "CI_RECONCILED"
                 if (label=="REFUNDED")!=(by_id[ent]["state"]=="REFUNDED"):raise LifecycleDenied("Estorno inconsistente.")

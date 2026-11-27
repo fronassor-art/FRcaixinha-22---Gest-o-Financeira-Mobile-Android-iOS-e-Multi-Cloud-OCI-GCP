@@ -3,8 +3,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from uuid import UUID,uuid4
-from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci
+from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci
 from app.administrator_reauthentication_ci import _license_access
+from app.saas_billing_ci import reconcile_approved_saas_payment_ci
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
 from m41400_cycle_identity_ci import connection,reject
 from m41420_onboarding_http_ci import client_for,post,get
@@ -136,6 +137,52 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         restored=get(client,path,token)
         assert restored["access"]=="CURRENT" and restored["offer"]["predecessor"]==str(new)
         assert {x["request_id"]:x["state"] for x in restored["renewals"]}=={str(args["request_id"]):"REFUNDED",str(recover["request_id"]):"CANCELED",str(again["request_id"]):"CI_RECONCILED"}
+        # Pay a future segment, then refund the non-terminal predecessor.
+        future_args={**args,"request_id":uuid4(),"predecessor":new}
+        _,fi=prepare_renewal_ci(db,**future_args)
+        fp={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{fi}"}
+        future=reconcile_renewal_ci(db,**{**review,"intent":fi,"payment":fp})
+        future_before=db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()
+        assert reconcile_full_refund_ci(db,**{**rev,"intent":a[1],"payment":{**replacement,"status":"refunded","transaction_amount_refunded":replacement["transaction_amount"]}})
+        gap=get(client,path,token)
+        assert gap["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
+        assert next(x for x in gap["segments"] if x["entitlement_id"]==str(future))["state"]=="SCHEDULED"
+        assert gap["offer"]["predecessor"]==str(future)
+        assert db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()==future_before
+        # A late or divergent received amount is evidence, not a license.
+        review_args={**args,"request_id":uuid4(),"predecessor":future}
+        _,qi=prepare_renewal_ci(db,**review_args)
+        amount=cents if late else cents+100
+        qp={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{qi}","transaction_amount":str(Decimal(amount)/100)}
+        qr={**review,"intent":qi,"payment":qp,"gross":amount,"fee":10,"net":amount-10}
+        exact={**qr,"gross":cents,"net":cents-10,"payment":{**qp,"transaction_amount":payment["transaction_amount"]}}
+        reject(record_renewal_payment_review_ci,db,**exact)
+        if late:db.execute("UPDATE public.fr_v23_renewals SET accepted_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' WHERE request_id=%s",(review_args["request_id"],))
+        for change in (dict(payment={**qp,"collector_id":"999"}),dict(payment={**qp,"live_mode":True}),
+                       dict(payment={**qp,"external_reference":"other"}),dict(payment={**qp,"transaction_amount_refunded":"0.01"}),
+                       dict(net=amount),dict(tenant=uuid4()),dict(reviewer_token=token,reviewer_tenant=tenant)):
+            reject(record_renewal_payment_review_ci,db,**{**qr,**change})
+        def quarantine(_):
+            with connection() as c:return record_renewal_payment_review_ci(c,**qr)
+        action="CI_RENEWAL_LATE_PAYMENT_REVIEW" if late else "CI_RENEWAL_AMOUNT_REVIEW"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assert list(pool.map(quarantine,range(2)))==[action,action]
+        assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action=%s",(tenant,str(qi),action)).fetchone()[0]==1
+        assert db.execute("SELECT status,paid_at,reconciled_at FROM public.saas_payment_intents WHERE id=%s",(qi,)).fetchone()==("PENDING",None,None)
+        reject(record_renewal_payment_review_ci,db,**{**qr,"fee":11,"net":amount-11})
+        reject(reconcile_renewal_ci,db,**exact)
+        assert reconcile_approved_saas_payment_ci(db,intent_id=qi,authoritative_payment=exact["payment"]) is None
+        reject(prepare_renewal_ci,db,**{**review_args,"request_id":uuid4()})
+        if not late:db.execute("UPDATE public.fr_v23_renewals SET accepted_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' WHERE request_id=%s",(review_args["request_id"],))
+        reject(cancel_expired_renewal_ci,db,**{**proof,"intent":qi,"payment":{**exact["payment"],"status":"cancelled"}})
+        quarantined=get(client,path,token)
+        assert quarantined["offer"] is None and next(x for x in quarantined["renewals"] if x["intent_id"]==str(qi))["state"]=="PAYMENT_REVIEW"
+        assert quarantined["access"]==gap["access"]
+        assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE payment_intent_id=%s",(qi,)).fetchone()[0]==0
+        assert db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()==future_before
+        assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
+        assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        print("M41510_PAYMENT_REVIEW_GAP_"+("LATE" if late else "DIVERGENT")+"=PASS")
         print("M41500_RECOVERY_EXPIRED_REFUND_"+("LATE" if late else "EARLY")+"=PASS")
         assert refunded["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
         print("M41490_SCOPED_RENEWAL_HTTP_"+("LATE" if late else "EARLY")+"=PASS")

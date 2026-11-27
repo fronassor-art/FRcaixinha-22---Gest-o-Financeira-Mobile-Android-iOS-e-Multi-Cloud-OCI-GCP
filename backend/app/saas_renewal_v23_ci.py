@@ -32,6 +32,38 @@ def _lock(conn,tenant):
     _guard(conn)
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text,41320))",(str(tenant),))
 
+def _review_exists(conn,tenant,intent):
+    return bool(conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND object_id=%s "
+                             "AND object_type='SAAS_PAYMENT' AND action IN ('CI_RENEWAL_LATE_PAYMENT_REVIEW','CI_RENEWAL_AMOUNT_REVIEW')",
+                             (tenant,str(intent))).fetchone())
+
+
+def _assert_lineage(conn,tenant):
+    """One connected chain; refunded intervals are historical, not paid coverage."""
+    rows=conn.execute("SELECT id,status,valid_from,valid_until FROM public.saas_license_entitlements "
+                      "WHERE tenant_id=%s FOR SHARE",(tenant,)).fetchall()
+    edges=conn.execute("SELECT predecessor,entitlement_id FROM public.fr_v23_renewals WHERE tenant_id=%s "
+                       "AND entitlement_id IS NOT NULL AND canceled_at IS NULL FOR SHARE",(tenant,)).fetchall()
+    ids={r[0] for r in rows}
+    parent={child:prev for prev,child in edges}
+    roots=ids-parent.keys()
+    if not ids or len(ids)>50 or len(edges)!=len(ids)-1 or len(parent)!=len(edges) or len(set(parent.values()))!=len(edges) or len(roots)!=1:
+        raise LifecycleDenied("Cadeia de vigência incompatível.")
+    if any(child not in ids or prev not in ids for child,prev in parent.items()):
+        raise LifecycleDenied("Cadeia fora do escopo.")
+    root=next(iter(roots))
+    for eid in ids:
+        seen=set()
+        while eid in parent:
+            if eid in seen:raise LifecycleDenied("Cadeia circular.")
+            seen.add(eid)
+            eid=parent[eid]
+        if eid!=root:raise LifecycleDenied("Cadeia desconectada.")
+    paid=sorted((start,end) for _,state,start,end in rows if state!="REVOKED")
+    if any(start>=end for start,end in paid) or any(left[1]>right[0] for left,right in zip(paid,paid[1:])):
+        raise LifecycleDenied("Períodos pagos sobrepostos.")
+
+
 def _previous(conn,tenant,actor,predecessor,acceptance,*,ancestor=False):
     row=conn.execute(
         "SELECT e.id,e.plan_tier,e.status,e.valid_from,e.valid_until,s.contract_acceptance_id,p.status,"
@@ -58,6 +90,7 @@ def _previous(conn,tenant,actor,predecessor,acceptance,*,ancestor=False):
     elif row[2] not in ("ACTIVE","EXPIRED") or row[6]!="APPROVED":
         raise LifecycleDenied("Período anterior indisponível para renovação.")
     if not ancestor:
+        _assert_lineage(conn,tenant)
         leaves=conn.execute("SELECT e.id FROM public.saas_license_entitlements e WHERE e.tenant_id=%s "
                             "AND NOT EXISTS(SELECT 1 FROM public.fr_v23_renewals r WHERE r.tenant_id=e.tenant_id "
                             "AND r.predecessor=e.id AND r.entitlement_id IS NOT NULL AND r.canceled_at IS NULL)",(tenant,)).fetchall()
@@ -186,6 +219,7 @@ def reconcile_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,pay
         if state=="APPROVED":
             if not ent:raise LifecycleDenied("Conciliação incompleta.")
             return ent
+        if _review_exists(conn,tenant,intent):raise LifecycleDenied("Pagamento em revisão independente.")
         now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
         if now>=expiry:raise LifecycleDenied("Oferta expirada; conciliação em revisão.")
         prev=_previous(conn,tenant,actor,previous,acceptance)
@@ -259,10 +293,71 @@ def cancel_expired_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,inten
             if conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND action='CI_RENEWAL_EXPIRED_CANCELED' "
                             "AND object_id=%s AND evidence_ref=%s",(tenant,str(request),provider_id)).fetchone():return request
             raise LifecycleDenied("Cancelamento sem trilha.")
-        if state!="PENDING" or canceled:raise LifecycleDenied("Estado incompatível.")
+        if state!="PENDING" or canceled or _review_exists(conn,tenant,intent):raise LifecycleDenied("Estado incompatível ou pagamento em revisão.")
         if stored is None and not attach_mp_payment_identifier_ci(conn,intent_id=intent,provider_payment_id=provider_id):
             raise LifecycleDenied("Vínculo de pagamento indisponível.")
         conn.execute("UPDATE public.saas_payment_intents SET status='CANCELED' WHERE id=%s",(intent,))
         conn.execute("UPDATE public.fr_v23_renewals SET canceled_at=%s WHERE request_id=%s",(now,request))
         _audit(conn,reviewer,"SYSTEM",tenant,"CI_RENEWAL_EXPIRED_CANCELED",request,provider_id)
         return request
+
+
+
+def record_renewal_payment_review_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,payment,gross,fee,net):
+    """Persist verified synthetic receipt anomalies without granting or moving money.
+
+    Only a pending, scoped offer may enter this review. Exact replays return the
+    same classification. A contradictory later observation cannot clear it.
+    """
+    _guard(conn)
+    if (type(payment) is not dict or any(type(x) is not int for x in (gross,fee,net))
+        or not 0<=fee<gross<=100000000 or net!=gross-fee
+        or type(payment.get("transaction_amount_refunded")) not in (str,int)
+        or payment["transaction_amount_refunded"] not in ("0","0.00",0)):
+        raise LifecycleDenied("Extrato de revisão incompatível.")
+    with conn.transaction():
+        _lock(conn,tenant)
+        row=conn.execute(
+            "SELECT r.actor,r.request_id,r.cents,r.expires_at,r.entitlement_id,r.canceled_at,"
+            "p.status,p.provider_payment_id,p.external_reference,p.paid_at,p.reconciled_at,s.contract_acceptance_id "
+            "FROM public.fr_v23_renewals r JOIN public.saas_payment_intents p ON p.id=r.intent_id AND p.preparation_id=r.preparation_id "
+            "JOIN public.saas_subscription_preparations s ON s.id=r.preparation_id AND s.renewal_request_id=r.request_id "
+            "JOIN public.platform_license_price_versions v ON v.id=r.price_version AND v.plan_tier=s.plan_tier "
+            "WHERE r.tenant_id=%s AND r.intent_id=%s AND p.tenant_id=r.tenant_id AND s.tenant_id=r.tenant_id "
+            "AND p.admin_user_id=r.actor AND s.admin_user_id=r.actor AND p.price_version_id=r.price_version "
+            "AND s.price_version_id=r.price_version AND s.billing_period=r.period AND p.expected_amount_cents=r.cents "
+            "AND r.cents=(CASE r.period WHEN 'MONTHLY' THEN v.monthly_price ELSE v.annual_price END)*100 "
+            "AND p.live_mode=false AND p.platform_collector_id=%s AND p.provider='MERCADO_PAGO' AND p.currency='BRL' "
+            "AND s.status='PENDING_PAYMENT' FOR UPDATE OF r,p,s FOR SHARE OF v",(tenant,intent,COLLECTOR_CI)).fetchone()
+        if not row:raise LifecycleDenied("Pagamento fora do escopo.")
+        actor,request,cents,expiry,ent,canceled,state,stored,ref,paid,reconciled,acceptance=row
+        reviewer=_reviewer(conn,reviewer_token,reviewer_tenant,tenant,actor)
+        if (_binding(conn,actor,tenant)!=(acceptance,"ATIVO") or state!="PENDING"
+            or any(x is not None for x in (ent,canceled,paid,reconciled))):
+            raise LifecycleDenied("Pagamento já decidido ou vínculo inválido.")
+        provider_id=str(payment.get("id",""))
+        if (not provider_id.isascii() or not provider_id.isdecimal() or len(provider_id)>40
+            or not matches_approved_payment(ExpectedPayment(stored or provider_id,COLLECTOR_CI,ref,gross,False),payment)):
+            raise LifecycleDenied("Recebimento sem prova independente compatível.")
+        # No raw PSP payload, personal data, credentials or client-supplied audit.
+        evidence=f"{provider_id}:{gross}:{fee}:{net}:{cents}"
+        saved=conn.execute("SELECT action,evidence_ref FROM public.audit_events WHERE tenant_id=%s AND object_id=%s "
+                           "AND object_type='SAAS_PAYMENT' AND action IN ('CI_RENEWAL_LATE_PAYMENT_REVIEW','CI_RENEWAL_AMOUNT_REVIEW')",
+                           (tenant,str(intent))).fetchall()
+        if saved:
+            if len(saved)==1 and stored==provider_id and saved[0][1]==evidence:return saved[0][0]
+            raise LifecycleDenied("Evidência divergente da revisão registrada.")
+        now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
+        if gross!=cents:action="CI_RENEWAL_AMOUNT_REVIEW"
+        elif now>=expiry:action="CI_RENEWAL_LATE_PAYMENT_REVIEW"
+        else:raise LifecycleDenied("Recebimento regular deve seguir conciliação própria.")
+        conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text,41510))",(provider_id,))
+        if conn.execute("SELECT 1 FROM public.saas_payment_intents WHERE provider_payment_id=%s AND id<>%s",
+                        (provider_id,intent)).fetchone():
+            raise LifecycleDenied("Identificador de pagamento já vinculado.")
+        if stored is None and not attach_mp_payment_identifier_ci(conn,intent_id=intent,provider_payment_id=provider_id):
+            raise LifecycleDenied("Vínculo de pagamento indisponível.")
+        conn.execute("INSERT INTO public.audit_events(actor_id,actor_role,tenant_id,action,object_type,object_id,reason,evidence_ref) "
+                     "VALUES(%s,'SYSTEM',%s,%s,'SAAS_PAYMENT',%s,'Recebimento sintético M41510; revisão sem licença ou cobrança',%s)",
+                     (reviewer,tenant,action,str(intent),evidence))
+        return action

@@ -107,6 +107,11 @@ def reconcile_approved_saas_payment_ci(conn, *, intent_id: UUID,
         ).fetchone()
         if not row or not row[3]:
             return None
+        # The pre-V2.3 schema has no renewal_request_id; to_jsonb permits
+        # the same explicit initial-only boundary in both disposable schemas.
+        if not conn.execute("SELECT 1 FROM public.saas_subscription_preparations s WHERE s.id=%s "
+                            "AND to_jsonb(s)->>'renewal_request_id' IS NULL FOR SHARE",(row[1],)).fetchone():
+            return None
         if row[8] not in ('PENDING','APPROVED'):
             return None
         # Mesmo chamadas repetidas devem trazer resposta autoritativa válida.
