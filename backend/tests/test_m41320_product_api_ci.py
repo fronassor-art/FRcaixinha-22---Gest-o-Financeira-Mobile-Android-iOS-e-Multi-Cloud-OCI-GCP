@@ -18,3 +18,5 @@ def test_routes_fail_closed_without_provider():
     ]:
         assert client.post(prefix+path,json=body).status_code==503
     assert client.get(prefix+f"/manual-receipts/{r}").status_code==503
+    assert client.get(prefix+f"/cycles/{c}/financial-summary").status_code==503
+    assert client.get(prefix+f"/cycles/{c}/my-contributions").status_code==503

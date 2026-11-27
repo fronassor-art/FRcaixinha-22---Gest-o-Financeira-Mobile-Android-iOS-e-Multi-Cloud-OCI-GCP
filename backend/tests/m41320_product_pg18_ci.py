@@ -87,8 +87,62 @@ async def main():
             assert await owner.fetchval("SELECT amount_paid FROM public.contributions WHERE id=$1",obligation)==0
             assert await owner.fetchval("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=$1",t)==2
             assert await owner.fetchval("SELECT count(*) FROM public.ledger_entries WHERE tenant_id=$1",t)==4
-            assert await owner.fetchval("SELECT balance_cents FROM public.ledger_accounts WHERE tenant_id=$1 AND account_code='1.1.2'",t)==0
+            assert await owner.fetchval("SELECT balance_cents FROM public.ledger_accounts WHERE tenant_id=$1 AND cycle_id=$2 AND cycle_account_kind='MANUAL_DOCUMENTED'",t,UUID(c))==0
+            assert await owner.fetchval("SELECT count(*) FROM public.ledger_accounts WHERE tenant_id=$1 AND cycle_id IS NULL AND balance_cents<>0",t)==0
             assert await owner.fetchval("SELECT coalesce(sum(CASE WHEN entry_type='DR' THEN amount_cents ELSE -amount_cents END),0) FROM public.ledger_entries WHERE tenant_id=$1",t)==0
+            # M41330: two active cycles; another member and tenant cannot read.
+            async def get(path,headers=h,status=200):
+                res=await client.get(prefix+path,headers=headers)
+                assert res.status_code==status,(path,status,res.status_code,res.text)
+                return res.json()
+            first=f"/cycles/{c}/financial-summary"
+            second=f"/cycles/{c2}/financial-summary"
+            assert (await get(first))["manual_documented_cents"]==0
+            assert (await get(second))["manual_documented_cents"]==0
+            await get(first,ha,403)
+            await get(first,ho,403)
+            await get(f"/cycles/{uuid4()}/financial-summary",h,403)
+            mine=f"/cycles/{c}/my-contributions"
+            await get(mine,h,403)
+            await get(mine,hb,403)
+            await get(mine,ho,403)
+            assert (await get(mine,ha))["membership_id"]==str(ma)
+            obligation2=await owner.fetchval("SELECT id FROM public.contributions WHERE cycle_id=$1 AND membership_id=$2 ORDER BY due_date LIMIT 1",UUID(c2),ma)
+            def new_receipt(ob,cents):
+                return {**row,"request_id":str(uuid4()),"reference":"CI-"+uuid4().hex,"contribution_id":str(ob),"cents":cents}
+            rid1=(await post("/manual-receipts",new_receipt(obligation,3000)))["receipt_id"]
+            rid2=(await post("/manual-receipts",new_receipt(obligation2,7000)))["receipt_id"]
+            assert (await get(first))["manual_pending_cents"]==3000
+            assert (await get(second))["manual_pending_cents"]==7000
+            assert (await get(mine,ha))["manual_pending_cents"]==3000
+            reviews=await asyncio.gather(*[client.post(prefix+f"/manual-receipts/{receipt_id}/CONFIRM",json={**review,"request_id":str(uuid4())},headers=h) for receipt_id in (rid1,rid2)])
+            assert all(x.status_code==200 for x in reviews),[(x.status_code,x.text) for x in reviews]
+            a1,a2=await get(first),await get(second)
+            assert a1["manual_documented_cents"]==a1["member_capital_documented_cents"]==a1["paid_cents"]==3000
+            assert a2["manual_documented_cents"]==a2["member_capital_documented_cents"]==a2["paid_cents"]==7000
+            assert a1["bank_reconciled"] is False and a2["bank_reconciled"] is False
+            own=await get(mine,ha)
+            assert own["paid_cents"]==3000 and "manual_documented_cents" not in own
+            assert (await get(f"/cycles/{c2}/my-contributions",ha))["paid_cents"]==7000
+            tx=await owner.fetchval("SELECT id FROM public.ledger_transactions WHERE tenant_id=$1 AND cycle_id=$2 LIMIT 1",t,UUID(c))
+            wrong_account=await owner.fetchval("SELECT id FROM public.ledger_accounts WHERE tenant_id=$1 AND cycle_id=$2 AND cycle_account_kind='MANUAL_DOCUMENTED'",t,UUID(c2))
+            try:
+                await owner.execute("INSERT INTO public.ledger_entries(tenant_id,transaction_id,account_id,entry_type,amount_cents) VALUES($1,$2,$3,'DR',1)",t,tx,wrong_account)
+            except asyncpg.CheckViolationError: pass
+            else: raise AssertionError("cross-cycle entry accepted")
+            try:
+                await owner.execute("UPDATE public.ledger_transactions SET cycle_id=$2 WHERE id=$1",tx,UUID(c2))
+            except asyncpg.CheckViolationError: pass
+            else: raise AssertionError("cycle reassignment accepted")
+            await post(f"/manual-receipts/{rid1}/CONTEST",{**review,"request_id":str(uuid4())},ha)
+            assert (await get(first))["contested_receipts"]==1
+            assert (await get(second))["contested_receipts"]==0
+            await post(f"/manual-receipts/{rid1}/REVERSE",{**rev,"request_id":str(uuid4())})
+            assert (await get(first))["manual_documented_cents"]==0
+            assert (await get(second))["manual_documented_cents"]==7000
+            assert (await get(mine,ha))["paid_cents"]==0
+            assert await owner.fetchval("SELECT count(*) FROM public.ledger_entries e JOIN public.ledger_transactions x ON x.id=e.transaction_id JOIN public.ledger_accounts a ON a.id=e.account_id WHERE e.tenant_id=$1 AND x.cycle_id IS DISTINCT FROM a.cycle_id",t)==0
+            assert await owner.fetchval("SELECT count(*) FROM (SELECT x.cycle_id,sum(CASE WHEN e.entry_type='DR' THEN e.amount_cents ELSE -e.amount_cents END) n FROM public.ledger_entries e JOIN public.ledger_transactions x ON x.id=e.transaction_id WHERE e.tenant_id=$1 GROUP BY x.cycle_id HAVING sum(CASE WHEN e.entry_type='DR' THEN e.amount_cents ELSE -e.amount_cents END)<>0) q",t)==0
             async with pool.acquire() as conn:
                 try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_receipts")
                 except asyncpg.InsufficientPrivilegeError: pass
@@ -96,6 +150,7 @@ async def main():
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
         print("M41320_CANONICAL_PG18_API_CYCLE_ADMISSION_MANUAL_CONCURRENCY=PASS")
+        print("M41330_CANONICAL_LEDGER_CYCLE_SCOPE_SUMMARIES_REVERSAL=PASS")
     finally:
         await pool.close()
         await owner.close()

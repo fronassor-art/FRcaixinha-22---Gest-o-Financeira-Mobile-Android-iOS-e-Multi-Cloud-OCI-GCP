@@ -88,3 +88,11 @@ async def review(tenant_id:UUID,receipt_id:UUID,action:Literal["CONFIRM","REVERS
 @router.get("/manual-receipts/{receipt_id}")
 async def read_receipt(tenant_id:UUID,receipt_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
     return await call(conn.fetchrow("SELECT * FROM public.fr_v23_receipt($1,$2,$3)",bearer_token(request),tenant_id,receipt_id))
+
+@router.get("/cycles/{cycle_id}/financial-summary")
+async def cycle_summary(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT * FROM public.fr_v23_cycle_summary($1,$2,$3)",bearer_token(request),tenant_id,cycle_id))
+
+@router.get("/cycles/{cycle_id}/my-contributions")
+async def member_summary(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
+    return await call(conn.fetchrow("SELECT * FROM public.fr_v23_member_summary($1,$2,$3)",bearer_token(request),tenant_id,cycle_id))

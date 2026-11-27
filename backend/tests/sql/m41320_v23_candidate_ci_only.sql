@@ -11,6 +11,38 @@ ALTER TABLE public.contributions DROP CONSTRAINT uq_membership_competence;
 ALTER TABLE public.contributions ADD UNIQUE(tenant_id,cycle_id,membership_id,competence);
 ALTER TABLE public.cycles ADD UNIQUE(id,tenant_id);
 ALTER TABLE public.contributions ADD UNIQUE(id,tenant_id,cycle_id);
+-- M41330: canonical ledger, explicit cycle scope; legacy rows remain unscoped.
+ALTER TABLE public.ledger_accounts ADD COLUMN cycle_id uuid, ADD COLUMN cycle_account_kind text;
+ALTER TABLE public.ledger_accounts ADD FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id);
+ALTER TABLE public.ledger_accounts ADD UNIQUE(tenant_id,cycle_id,cycle_account_kind);
+ALTER TABLE public.ledger_accounts ADD CHECK(
+ (cycle_id IS NULL AND cycle_account_kind IS NULL) OR
+ (cycle_id IS NOT NULL AND cycle_account_kind IS NOT NULL AND
+  ((cycle_account_kind='MANUAL_DOCUMENTED' AND account_type='ASSET') OR
+   (cycle_account_kind='MEMBER_CAPITAL' AND account_type='EQUITY'))));
+ALTER TABLE public.ledger_transactions ADD COLUMN cycle_id uuid;
+ALTER TABLE public.ledger_transactions ADD FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id);
+CREATE FUNCTION public.fr_v23_ledger_scope_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ IF (OLD.tenant_id,OLD.cycle_id) IS DISTINCT FROM (NEW.tenant_id,NEW.cycle_id)
+ THEN RAISE EXCEPTION 'ledger scope immutable' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='ledger_accounts' THEN
+  IF OLD.cycle_account_kind IS DISTINCT FROM NEW.cycle_account_kind THEN RAISE EXCEPTION 'ledger kind immutable' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER fr_v23_account_scope BEFORE UPDATE ON public.ledger_accounts FOR EACH ROW EXECUTE FUNCTION public.fr_v23_ledger_scope_immutable();
+CREATE TRIGGER fr_v23_transaction_scope BEFORE UPDATE ON public.ledger_transactions FOR EACH ROW EXECUTE FUNCTION public.fr_v23_ledger_scope_immutable();
+CREATE FUNCTION public.fr_v23_entry_scope() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE ta uuid;tc uuid;aa uuid;ac uuid;
+BEGIN
+ SELECT tenant_id,cycle_id INTO ta,tc FROM public.ledger_transactions WHERE id=NEW.transaction_id;
+ SELECT tenant_id,cycle_id INTO aa,ac FROM public.ledger_accounts WHERE id=NEW.account_id;
+ IF ta IS NULL OR aa IS NULL OR ta<>NEW.tenant_id OR aa<>NEW.tenant_id OR tc IS DISTINCT FROM ac
+ THEN RAISE EXCEPTION 'cross-cycle ledger entry' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER fr_v23_entry_scope BEFORE INSERT OR UPDATE ON public.ledger_entries FOR EACH ROW EXECUTE FUNCTION public.fr_v23_entry_scope();
 CREATE TABLE public.fr_v23_policy(
  cycle_id uuid PRIMARY KEY,tenant_id uuid NOT NULL,request_id uuid NOT NULL,
  actor uuid NOT NULL REFERENCES public.users(id),document_id uuid NOT NULL REFERENCES public.contract_documents(id),
@@ -171,14 +203,18 @@ BEGIN
  THEN RAISE EXCEPTION 'PSP review' USING ERRCODE='23514'; END IF;
  delta:=CASE WHEN p_action='CONFIRM' THEN r.cents ELSE -r.cents END;
  IF c.amount_paid*100+delta NOT BETWEEN 0 AND c.amount_due*100 THEN RAISE EXCEPTION 'balance' USING ERRCODE='23514'; END IF;
- INSERT INTO public.ledger_accounts(tenant_id,account_code,account_name,account_type,balance_cents)
- VALUES(p_tenant,'1.1.2','Caixa manual documentado (não bancário)','ASSET',0) ON CONFLICT(tenant_id,account_code) DO NOTHING;
- SELECT id INTO cash FROM public.ledger_accounts WHERE tenant_id=p_tenant AND account_code='1.1.2' AND account_type='ASSET' FOR UPDATE;
- SELECT id INTO capital FROM public.ledger_accounts WHERE tenant_id=p_tenant AND account_code='2.1.1' AND account_type='EQUITY' FOR UPDATE;
+ -- Preserve the legacy 20-character account code. A truncated UUID collision
+ -- raises a unique violation; it never selects or credits a different cycle.
+ INSERT INTO public.ledger_accounts(tenant_id,cycle_id,cycle_account_kind,account_code,account_name,account_type,balance_cents)
+ VALUES(p_tenant,r.cycle_id,'MANUAL_DOCUMENTED','V23M'||left(replace(r.cycle_id::text,'-',''),16),'Recebimentos manuais documentados (não bancário)','ASSET',0),
+       (p_tenant,r.cycle_id,'MEMBER_CAPITAL','V23C'||left(replace(r.cycle_id::text,'-',''),16),'Capital de membros documentado','EQUITY',0)
+ ON CONFLICT(tenant_id,cycle_id,cycle_account_kind) DO NOTHING;
+ SELECT id INTO cash FROM public.ledger_accounts WHERE tenant_id=p_tenant AND cycle_id=r.cycle_id AND cycle_account_kind='MANUAL_DOCUMENTED' AND account_type='ASSET' FOR UPDATE;
+ SELECT id INTO capital FROM public.ledger_accounts WHERE tenant_id=p_tenant AND cycle_id=r.cycle_id AND cycle_account_kind='MEMBER_CAPITAL' AND account_type='EQUITY' FOR UPDATE;
  IF cash IS NULL OR capital IS NULL THEN RAISE EXCEPTION 'canonical accounts absent'; END IF;
  IF delta<0 AND EXISTS(SELECT 1 FROM public.ledger_accounts WHERE id=cash AND balance_cents< -delta) THEN RAISE EXCEPTION 'cash' USING ERRCODE='23514'; END IF;
- INSERT INTO public.ledger_transactions(tenant_id,transaction_date,description,reference_id)
- VALUES(p_tenant,(CASE WHEN delta>0 THEN r.occurred ELSE p_date END)::timestamp AT TIME ZONE 'America/Belem','V2.3 manual documentado sem prova bancária','V23:'||p_receipt||':'||p_action) RETURNING id INTO tx;
+ INSERT INTO public.ledger_transactions(tenant_id,cycle_id,transaction_date,description,reference_id)
+ VALUES(p_tenant,r.cycle_id,(CASE WHEN delta>0 THEN r.occurred ELSE p_date END)::timestamp AT TIME ZONE 'America/Belem','V2.3 manual documentado sem prova bancária','V23:'||p_receipt||':'||p_action) RETURNING id INTO tx;
  INSERT INTO public.ledger_entries(tenant_id,transaction_id,account_id,entry_type,amount_cents) VALUES
  (p_tenant,tx,cash,CASE WHEN delta>0 THEN 'DR' ELSE 'CR' END,abs(delta)),(p_tenant,tx,capital,CASE WHEN delta>0 THEN 'CR' ELSE 'DR' END,abs(delta));
  UPDATE public.ledger_accounts SET balance_cents=balance_cents+delta WHERE id IN (cash,capital);
@@ -201,6 +237,45 @@ BEGIN
  WHERE r.id=p_id AND r.tenant_id=p_tenant AND (m.user_id=a OR EXISTS(SELECT 1 FROM public.sessions s WHERE s.token_hash=encode(public.digest(p_token,'sha256'),'hex') AND s.active_role='TENANT_ADMIN'));
  IF NOT FOUND THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
 END $$;
+-- M41330: summaries deliberately distinguish accounting from bank proof.
+CREATE FUNCTION public.fr_v23_cycle_summary(p_token text,p_tenant uuid,p_cycle uuid)
+RETURNS TABLE(cycle_id uuid,obligation_cents bigint,paid_cents bigint,manual_documented_cents bigint,
+ member_capital_documented_cents bigint,manual_pending_cents bigint,contested_receipts bigint,bank_reconciled boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ PERFORM public.fr_v23_actor(p_token,p_tenant,true);
+ IF NOT EXISTS(SELECT 1 FROM public.fr_v23_policy p WHERE p.tenant_id=p_tenant AND p.cycle_id=p_cycle)
+ THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ RETURN QUERY SELECT p_cycle,
+ (SELECT coalesce(sum(c.amount_due)*100,0)::bigint FROM public.contributions c WHERE c.tenant_id=p_tenant AND c.cycle_id=p_cycle),
+ (SELECT coalesce(sum(c.amount_paid)*100,0)::bigint FROM public.contributions c WHERE c.tenant_id=p_tenant AND c.cycle_id=p_cycle),
+ (SELECT coalesce(sum(a.balance_cents),0)::bigint FROM public.ledger_accounts a WHERE a.tenant_id=p_tenant AND a.cycle_id=p_cycle AND a.cycle_account_kind='MANUAL_DOCUMENTED'),
+ (SELECT coalesce(sum(a.balance_cents),0)::bigint FROM public.ledger_accounts a WHERE a.tenant_id=p_tenant AND a.cycle_id=p_cycle AND a.cycle_account_kind='MEMBER_CAPITAL'),
+ (SELECT coalesce(sum(r.cents),0)::bigint FROM public.fr_v23_receipts r WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND public.fr_v23_state(r.id)='PENDING'),
+ (SELECT count(*) FROM public.fr_v23_receipts r WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND public.fr_v23_state(r.id)='CONTESTED'),
+ false;
+END $$;
+CREATE FUNCTION public.fr_v23_member_summary(p_token text,p_tenant uuid,p_cycle uuid)
+RETURNS TABLE(cycle_id uuid,membership_id uuid,obligation_cents bigint,paid_cents bigint,
+ manual_pending_cents bigint,contested_receipts bigint,bank_reconciled boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;m uuid;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,false);
+ SELECT me.id INTO m FROM public.memberships me JOIN public.fr_v23_admission ad ON ad.membership_id=me.id
+ JOIN public.fr_v23_policy p ON p.cycle_id=ad.cycle_id
+ JOIN public.sessions s ON s.user_id=me.user_id AND s.active_tenant_id=me.tenant_id
+ WHERE me.user_id=a AND me.tenant_id=p_tenant AND me.role='TENANT_MEMBER' AND me.status='ATIVA'
+ AND s.token_hash=encode(public.digest(p_token,'sha256'),'hex') AND s.active_role='TENANT_MEMBER'
+ AND p.tenant_id=p_tenant AND p.cycle_id=p_cycle;
+ IF m IS NULL THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ RETURN QUERY SELECT p_cycle,m,
+ (SELECT coalesce(sum(c.amount_due)*100,0)::bigint FROM public.contributions c WHERE c.tenant_id=p_tenant AND c.cycle_id=p_cycle AND c.membership_id=m),
+ (SELECT coalesce(sum(c.amount_paid)*100,0)::bigint FROM public.contributions c WHERE c.tenant_id=p_tenant AND c.cycle_id=p_cycle AND c.membership_id=m),
+ (SELECT coalesce(sum(r.cents),0)::bigint FROM public.fr_v23_receipts r JOIN public.contributions c ON c.id=r.contribution_id WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND c.membership_id=m AND public.fr_v23_state(r.id)='PENDING'),
+ (SELECT count(*) FROM public.fr_v23_receipts r JOIN public.contributions c ON c.id=r.contribution_id WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND c.membership_id=m AND public.fr_v23_state(r.id)='CONTESTED'),
+ false;
+END $$;
 DO $$ DECLARE f regprocedure; BEGIN
  FOR f IN SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'fr_v23_%' LOOP
  EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',f);
@@ -208,5 +283,6 @@ DO $$ DECLARE f regprocedure; BEGIN
 END $$;
 GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date,bigint,int,int,int,text,uuid),
  public.fr_v23_admit(text,uuid,uuid,uuid,date,int),public.fr_v23_record(text,uuid,uuid,uuid,bigint,text,date,text,text),
- public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid) TO frcaixinha_pg18_app;
+ public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid),
+ public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid) TO frcaixinha_pg18_app;
 COMMIT;
