@@ -25,6 +25,7 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
       (f"/tenants/{tenant}/administrator-logout",{}),
       (f"/tenants/{tenant}/checkout",dict(price_version=doc,period="MONTHLY",accepted_cents=100,accepted=True)),
       (f"/tenants/{tenant}/contract-b",dict(**document,accepted=True)),
+      (f"/tenants/{tenant}/renewal",dict(**document,request_id=cycle,predecessor=doc,price_version=doc,period="ANNUAL",cents=100,accepted=True)),
       (f"/tenants/{tenant}/cycles/{cycle}/member-invitations",dict(email="ci@example.invalid",joined="2027-01-10",quotas=2)),
       ("/member/registration",dict(**register,cycle=cycle,policy_hash="b"*64,joined="2027-01-10",quotas=2)),
     ]
@@ -35,6 +36,7 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
         assert "secret-CI-test-only" not in response.text
     for path in (f'/master/documents/{doc}',f'/tenants/{tenant}/documents/{doc}',f'/tenants/{tenant}/offers',f'/tenants/{tenant}/checkout/{doc}',f'/tenants/{tenant}/preliminary-journey',f'/tenants/{tenant}/administrator-readiness/{doc}'):
         assert client.get(prefix+path).status_code==503
+    assert client.get(prefix+f'/tenants/{tenant}/renewal').status_code==503
     assert client.post(prefix+'/invitation-terms',json=dict(invitation_token='x'*32,verification_token='y'*32)).status_code==503
     # Test schema and redaction with a fixture that cannot execute a write.
     def never(*args):
@@ -50,3 +52,9 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
     response=client.post(prefix+f"/tenants/{tenant}/checkout",json=dict(price_version=doc,period="MONTHLY",accepted_cents=100,accepted=True))
     assert response.status_code==401
     assert response.headers['cache-control']=='no-store'
+
+    renewal=dict(**document,request_id=cycle,predecessor=doc,price_version=doc,period="MONTHLY",cents=100,accepted=True)
+    for change in (dict(accepted=False),dict(cents="100"),dict(cents=True),dict(payment={"status":"approved"}),dict(reviewer_token="synthetic")):
+        response=client.post(prefix+f"/tenants/{tenant}/renewal",json={**renewal,**change})
+        assert response.status_code==422 and response.headers["cache-control"]=="no-store"
+    assert client.post(prefix+f"/tenants/{tenant}/renewal",json=renewal).status_code==401

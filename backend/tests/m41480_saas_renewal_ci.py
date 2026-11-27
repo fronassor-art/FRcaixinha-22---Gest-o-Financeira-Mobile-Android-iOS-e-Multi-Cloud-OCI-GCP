@@ -7,6 +7,7 @@ from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reco
 from app.administrator_reauthentication_ci import _license_access
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
 from m41400_cycle_identity_ci import connection,reject
+from m41420_onboarding_http_ci import client_for,post,get
 
 def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,late):
     assert all(type(x) is UUID for x in (tenant,actor,reviewer_tenant,price,doc))
@@ -20,14 +21,35 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         cycles=db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()
         args=dict(token=token,tenant=tenant,request_id=uuid4(),predecessor=prev,price_version=price,
                   period="ANNUAL" if late else "MONTHLY",cents=70033 if late else 8990,document_id=doc,document_hash=digest,accepted=True)
+        client,_=client_for()
+        path=f"/tenants/{tenant}/renewal"
+        snapshot=get(client,path,token)
+        assert snapshot["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
+        assert snapshot["offer"]["predecessor"]==str(prev) and snapshot["offer"]["price_version"]==str(price)
+        assert snapshot["document"]["document_hash"]==digest and snapshot["renewals"]==[]
+        assert snapshot["production_authorized"] is False and snapshot["real_payment_authorized"] is False
+        get(client,path,reviewer_token,403)
+        http_body={k:v for k,v in args.items() if k not in ("tenant","token")}
+        post(client,path,{**http_body,"cents":1},token,403)
+        post(client,path,http_body,reviewer_token,403)
         for change in (dict(accepted=False),dict(cents=1),dict(document_hash="f"*64),dict(token=reviewer_token),dict(predecessor=uuid4()),dict(price_version=str(price)),dict(document_id=str(doc)),dict(request_id=UUID(int=0))):
             reject(prepare_renewal_ci,db,**{**args,**change})
-        def stage(_):
+        def stage(index):
+            if index==0:
+                http,_=client_for()
+                result=post(http,path,http_body,token)
+                assert result["renewals"][0]["state"]=="PENDING"
+                with connection() as c:
+                    return c.execute("SELECT preparation_id,intent_id FROM public.fr_v23_renewals WHERE request_id=%s",(args["request_id"],)).fetchone()
             with connection() as c:return prepare_renewal_ci(c,**args)
         with ThreadPoolExecutor(max_workers=2) as pool:
             a,b=list(pool.map(stage,range(2)))
         assert a==b
         prep,intent=a
+        pending=post(client,path,http_body,token)
+        assert pending["offer"] is None and len(pending["renewals"])==1
+        assert pending["renewals"][0]["state"]=="PENDING" and pending["renewals"][0]["intent_id"]==str(intent)
+        post(client,path,{**http_body,"request_id":uuid4()},token,403)
         reject(prepare_renewal_ci,db,**{**args,"request_id":uuid4()})
         reject(prepare_renewal_ci,db,**{**args,"cents":1})
         assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]==1
@@ -52,6 +74,9 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         else:assert start==old_end and paid<start
         assert end>start
         assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==(20,40)
+        paid_snapshot=get(client,path,token)
+        assert paid_snapshot["renewals"][0]["state"]=="CI_RECONCILED"
+        assert [x["state"] for x in paid_snapshot["segments"]]==(["EXPIRED","CURRENT"] if late else ["CURRENT","SCHEDULED"])
         refund={**payment,"status":"refunded","transaction_amount_refunded":payment["transaction_amount"]}
         rev=dict(reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,intent=intent,payment=refund,statement_refunded_cents=cents)
         reject(reconcile_full_refund_ci,db,**{**rev,"statement_refunded_cents":1})
@@ -64,6 +89,11 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
         assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
         assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]==2
+        refunded=get(client,path,token)
+        assert refunded["renewals"][0]["state"]=="REFUNDED"
+        assert refunded["offer"] is None
+        assert refunded["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
+        print("M41490_SCOPED_RENEWAL_HTTP_"+("LATE" if late else "EARLY")+"=PASS")
         print("M41480_RENEWAL_"+("LATE_ANNUAL" if late else "EARLY_MONTHLY")+"_REFUND_REPLAY_ISOLATION=PASS")
     from zoneinfo import ZoneInfo
     tz=ZoneInfo("America/Belem")

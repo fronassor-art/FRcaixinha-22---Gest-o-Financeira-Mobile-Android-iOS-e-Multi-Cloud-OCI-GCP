@@ -14,12 +14,16 @@ from app.preliminary_onboarding_ci import login_preliminary_ci,journey_ci,logout
 
 from app.administrator_reauthentication_ci import reauthenticate_admin_ci,administrator_readiness_ci,administrator_logout_ci
 
+from app.saas_renewal_readback_ci import renewal_overview_ci,renewal_prepare_http_ci
+
 def client_for(reviewer_token=None, reviewer_tenant=None):
     # Opaque delivery token is captured only inside this fixture, never in HTTP.
     delivery={}
     def execute(op,token,p):
         try:
             with connection() as conn:
+                if op=="RENEWAL_OVERVIEW": return renewal_overview_ci(conn,token=token,**p)
+                if op=="RENEWAL_PREPARE": return renewal_prepare_http_ci(conn,token=token,**p)
                 if op=="ADMIN_REAUTHENTICATE": return reauthenticate_admin_ci(conn,**p)
                 if op=="ADMIN_READINESS": return administrator_readiness_ci(conn,token,**p)
                 if op=="ADMIN_LOGOUT": return administrator_logout_ci(conn,token,**p)

@@ -158,3 +158,20 @@ def administrator_readiness(tenant:UUID,document_id:UUID,request:Request,execute
 @router.post("/tenants/{tenant}/administrator-logout")
 def administrator_logout(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
     return execute("ADMIN_LOGOUT",bearer_token(request),dict(tenant=tenant))
+
+# M41490: no reviewer or payment-provider fields on the mobile-facing contract.
+class RenewalInput(DocumentInput):
+    request_id: UUID
+    predecessor: UUID
+    price_version: UUID
+    period: Literal["MONTHLY","ANNUAL"]
+    cents: int=Field(strict=True,gt=0,le=100000000)
+    accepted: Accepted
+
+@router.get("/tenants/{tenant}/renewal")
+def renewal_overview(tenant:UUID,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("RENEWAL_OVERVIEW",bearer_token(request),dict(tenant=tenant))
+
+@router.post("/tenants/{tenant}/renewal")
+def renewal_prepare(tenant:UUID,p:RenewalInput,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("RENEWAL_PREPARE",bearer_token(request),dict(p.model_dump(),tenant=tenant))

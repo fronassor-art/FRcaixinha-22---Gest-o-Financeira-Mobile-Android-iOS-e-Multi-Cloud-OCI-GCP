@@ -1,0 +1,7 @@
+# M41490 — renovação SaaS: API e mobile (NO-GO)
+Base 24da6a501b43adfe4145fb8f30ed38f14f053690; V2.3 §§3.2-A, 3.7–3.9, 4.8; CP26-0094, 0137–0141. Matriz 330/2310 intacta.
+- GET/POST /v23/onboarding/tenants/{tenant}/renewal: dependência padrão 503, no-store, esquema estrito, somente executor ASGI descartável CI. Sem transporte PSP ou novo executor operacional. POST de preparação exige oferta/aceite exatos; revisão financeira permanece segregada.
+- Readback por sessão ordinária do administrador, vínculo A, preço e conciliação sintéticos; períodos atuais/futuros/vencidos/suspensos/revertidos, pedido pendente/revisão/conciliado/estornado, oferta vigente de mesmo plano quando elegível. Limite 50 segmentos e 50 pedidos (falha fechada, paginação futura).
+- Mobile no painel existente: leitura GET com fencing de sessão e validação dos campos, hash integral A, preços mensais/anuais, datas Belém, preparação local sem POST, limpar no logout/troca de conta; sem fallback para demo. Não há confirmação jurídica ou financeira.
+- Testes HTTP 503, schema, escopo, replay, antecipada/tardia, estorno, parser mobile e transporte somente GET. Evidência exigida em CI integral SHA exato e APK.
+- Limites herdados: mesmo plano, predecessor revogado/suspenso e oferta expirada sem recuperação automática, estorno parcial/chargeback, capacidade, paginação, notificações, revisão legal/externa, runtime e instalação física não homologados. Issue #5 aberta; sem alteração SQL deployável ou de testes, sem operações reais.

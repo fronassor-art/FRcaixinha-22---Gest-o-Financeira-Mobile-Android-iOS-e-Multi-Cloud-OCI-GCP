@@ -298,7 +298,9 @@ jobs:
       - name: M41450 — sessão preliminar mobile e retomada sem acesso operacional
         run: npx tsx src/tests/m41450_preliminary_journey_ci.test.ts
       - name: M41460 — autenticação administrativa e aceite B por escopo
-        run: npx tsx src/tests/m41460_administrator_readiness_ci.test.ts
+        run: |
+          npx tsx src/tests/m41460_administrator_readiness_ci.test.ts
+          npx tsx src/tests/m41490_saas_renewal_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
