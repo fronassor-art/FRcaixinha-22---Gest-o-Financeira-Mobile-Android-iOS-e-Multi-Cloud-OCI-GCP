@@ -376,6 +376,30 @@ async def main():
             assert new_ws["membership_id"]==str(new_member) and new_ws["summary"] is None and new_ws["items"]==[]
             await get(f"/cycles/{c2}/workspace",new_headers,403)
             await post(f"/cycles/{c}/admissions",dict(membership_id=str(new_member),joined="2027-01-10",quotas=2),h,409)
+            # M41410: initial administrator, exact A, checkout and independent B.
+            from m41410_admin_license_ci import exercise as exercise_admin, accept_b_and_member
+            admin_results=await asyncio.to_thread(exercise_admin,other_admin,other,ho["Authorization"].split()[1],contract_a,price,doc)
+            for new_admin,new_tenant,admin_raw in admin_results:
+                ap=f"/tenants/{new_tenant}/v23"
+                ah={"Authorization":"Bearer "+admin_raw}
+                form={**cycle,"request_id":str(uuid4())}
+                denied=await client.post(ap+"/policies/preview",json=form,headers=ah)
+                assert denied.status_code==403
+                await asyncio.to_thread(accept_b_and_member,"B",new_tenant,admin_raw,doc)
+                preview=await client.post(ap+"/policies/preview",json=form,headers=ah)
+                assert preview.status_code==200,preview.text
+                digest=preview.json()["policy_hash"]
+                opened=await client.post(ap+"/cycles",json={**form,"policy_hash":digest,"accepted":True},headers=ah)
+                assert opened.status_code==200,opened.text
+                nc=opened.json()["cycle_id"]
+                assert (await client.get(ap+f"/cycles/{nc}/workspace",headers=ho)).status_code==403
+                assert (await client.get(ap+"/cycles",headers=ah)).json()["items"][0]["cycle_id"]==nc
+                person,mid=await asyncio.to_thread(accept_b_and_member,"MEMBER",new_tenant,admin_raw,doc,UUID(nc),digest)
+                mh=await token(new_tenant,person,"TENANT_MEMBER")
+                assert (await client.get(ap+"/cycles",headers=mh)).json()["items"][0]["membership_state"]=="CONSENTED"
+                admitted=await client.post(ap+f"/cycles/{nc}/admissions",json=dict(membership_id=str(mid),joined="2027-01-10",quotas=2),headers=ah)
+                assert admitted.status_code==200,admitted.text
+                assert admitted.json()["obligations"]==11
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
             await get("/form-options",h,403)
@@ -387,6 +411,7 @@ async def main():
         print("M41380_SCOPED_FORM_OPTIONS_READBACK=PASS")
         print("M41390_NOMINAL_CYCLE_INVITE_PRECONSENT_REVOCATION_SCOPE_RACE=PASS")
         print("M41400_NEW_IDENTITY_REISSUE_DUAL_PROOF_ATOMIC_CONSENT_RACE=PASS")
+        print("M41410_PRELIMINARY_ADMIN_A_INDEPENDENT_SAAS_PERIODS_DRAFT_GATE_B=PASS")
     finally:
         await pool.close()
         await owner.close()

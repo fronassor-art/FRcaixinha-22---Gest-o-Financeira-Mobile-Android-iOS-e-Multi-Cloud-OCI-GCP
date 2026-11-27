@@ -96,6 +96,15 @@ CREATE TABLE public.fr_v23_identity_invite_bindings(
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  FOREIGN KEY(cycle_id,tenant_id) REFERENCES public.cycles(id,tenant_id)
 );
+CREATE TABLE public.fr_v23_admin_invite_bindings(
+ invitation_id uuid PRIMARY KEY REFERENCES public.invitations(id),
+ master_id uuid NOT NULL REFERENCES public.users(id),
+ reviewer_id uuid NOT NULL REFERENCES public.users(id),
+ document_id uuid NOT NULL REFERENCES public.contract_documents(id),
+ document_hash text NOT NULL CHECK(document_hash ~ '^[0-9a-f]{64}$'),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ CHECK(master_id<>reviewer_id)
+);
 CREATE TABLE public.fr_v23_member_consent(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),cycle_id uuid NOT NULL REFERENCES public.fr_v23_policy(cycle_id),
  membership_id uuid NOT NULL REFERENCES public.memberships(id),acceptance_id uuid NOT NULL REFERENCES public.contract_acceptances(id),
@@ -143,7 +152,7 @@ CREATE TABLE public.fr_v23_reservation_events(
 CREATE FUNCTION public.fr_v23_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 BEGIN RAISE EXCEPTION 'immutable V23'; END $$;
 DO $$ DECLARE t regclass; BEGIN
- FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass,'public.fr_v23_cycle_invites'::regclass,'public.fr_v23_cycle_invite_revocations'::regclass,'public.fr_v23_identity_invite_bindings'::regclass]) LOOP
+ FOR t IN SELECT unnest(ARRAY['public.fr_v23_policy'::regclass,'public.fr_v23_member_consent'::regclass,'public.fr_v23_admission'::regclass,'public.fr_v23_receipts'::regclass,'public.fr_v23_events'::regclass,'public.fr_v23_reservation_events'::regclass,'public.fr_v23_cycle_invites'::regclass,'public.fr_v23_cycle_invite_revocations'::regclass,'public.fr_v23_identity_invite_bindings'::regclass,'public.fr_v23_admin_invite_bindings'::regclass]) LOOP
  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY',t);
  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY',t);
  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',t);
@@ -748,6 +757,45 @@ CREATE CONSTRAINT TRIGGER fr_v23_identity_binding_acceptance AFTER UPDATE ON pub
  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
  WHEN (OLD.accepted_at IS NULL AND NEW.accepted_at IS NOT NULL)
  EXECUTE FUNCTION public.fr_v23_identity_binding_check();
+
+CREATE FUNCTION public.fr_v23_admin_binding_check() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE b record;
+BEGIN
+ SELECT * INTO b FROM public.fr_v23_admin_invite_bindings WHERE invitation_id=NEW.id;
+ IF NOT FOUND THEN RETURN NEW; END IF;
+ IF NEW.target_role<>'TENANT_ADMIN' OR NEW.inviter_user_id<>b.master_id
+ OR NEW.required_document_id IS DISTINCT FROM b.document_id OR NEW.tenant_id IS NULL
+ OR NOT EXISTS(SELECT 1 FROM public.tenants t JOIN public.memberships m ON m.tenant_id=t.id
+ JOIN public.users u ON u.id=m.user_id JOIN public.contract_acceptances a ON a.user_id=u.id
+ JOIN public.contract_documents d ON d.id=a.document_id
+ WHERE t.id=NEW.tenant_id AND t.admin_user_id=NEW.accepted_user_id AND t.status='RASCUNHO_INATIVO'
+ AND m.id=NEW.accepted_membership_id AND m.user_id=t.admin_user_id AND m.role='TENANT_ADMIN' AND m.status='ATIVA'
+ AND NOT u.is_master AND u.email_verified_at IS NOT NULL AND lower(u.email)=lower(NEW.target_email)
+ AND a.document_id=b.document_id AND a.document_kind='PLATFORM_LICENSE' AND a.tenant_id IS NULL
+ AND d.sha256=b.document_hash AND d.published_at IS NOT NULL AND a.accepted_at>=d.published_at)
+ OR NOT EXISTS(SELECT 1 FROM public.invite_email_verification v WHERE v.invitation_id=NEW.id
+ AND v.consumed_at IS NOT NULL AND v.revoked_at IS NULL AND lower(v.recipient_email)=lower(NEW.target_email))
+ THEN RAISE EXCEPTION 'preliminary invitation requires exact A and draft' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+CREATE CONSTRAINT TRIGGER fr_v23_admin_binding_acceptance AFTER UPDATE ON public.invitations
+ DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (OLD.accepted_at IS NULL AND NEW.accepted_at IS NOT NULL)
+ EXECUTE FUNCTION public.fr_v23_admin_binding_check();
+CREATE FUNCTION public.fr_v23_admin_draft_activation() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ IF OLD.status='RASCUNHO_INATIVO' AND NEW.status='ATIVO' AND EXISTS(
+ SELECT 1 FROM public.invitations i JOIN public.fr_v23_admin_invite_bindings b ON b.invitation_id=i.id
+ WHERE i.tenant_id=NEW.id AND i.accepted_at IS NOT NULL)
+ THEN
+ IF NEW.admin_user_id IS DISTINCT FROM OLD.admin_user_id THEN RAISE EXCEPTION 'admin changed' USING ERRCODE='42501'; END IF;
+ PERFORM * FROM public.fr_v23_license(NEW.id,NEW.admin_user_id);
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER fr_v23_admin_draft_activation BEFORE UPDATE OF status ON public.tenants
+ FOR EACH ROW EXECUTE FUNCTION public.fr_v23_admin_draft_activation();
 
 DO $$ DECLARE f regprocedure; BEGIN
  FOR f IN SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'fr_v23_%' LOOP
