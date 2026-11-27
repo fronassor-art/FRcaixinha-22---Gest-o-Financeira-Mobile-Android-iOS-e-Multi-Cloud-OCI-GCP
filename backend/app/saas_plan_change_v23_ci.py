@@ -63,14 +63,16 @@ def _decision(current,target,members,quotas,ml,ql,total):
     if RANK[target]<RANK[current]:return "DOWNGRADE_NEXT_RENEWAL"
     return "UPGRADE_REVIEW" if total>0 else "ZERO_DIFFERENCE_REVIEW"
 
-def _snapshot(conn,token,tenant,target,at=None):
+def _snapshot(conn,token,tenant,target,at=None,*,settlement_review=False):
     _lock(conn,tenant)
     if target not in RANK:raise LifecycleDenied("Plano comercial indisponível.")
     view=renewal_overview_ci(conn,token=token,tenant=tenant)
     now=_instant(view["observed_at"])
     at=now if at is None else _instant(at)
-    if at>now or view["access"]!="CURRENT" or view["offer"] is None:
+    if at>now or view["access"]!="CURRENT" or (view["offer"] is None and not settlement_review):
         raise LifecycleDenied("Vigência ou ação pendente exige revisão.")
+    if settlement_review and view.get("upgrade",{}).get("state")!="SETTLEMENT_REVIEW":
+        raise LifecycleDenied("Revisão de liquidação indisponível.")
     if any(x["state"] in ("PENDING","REVIEW_REQUIRED","PAYMENT_REVIEW") for x in view["renewals"]):
         raise LifecycleDenied("Pagamento pendente.")
     current=next(x for x in view["segments"] if x["state"]=="CURRENT")
@@ -220,3 +222,68 @@ def record_upgrade_settlement_review_ci(conn,*,token,reviewer_token,reviewer_ten
             _audit(conn,reviewer,"SYSTEM",tenant,"CI_UPGRADE_SETTLEMENT_REVIEW",request_id,proof)
         return dict(request_id=str(request_id),evidence_hash=proof,state="SETTLEMENT_REVIEW",
                     entitlement_applied=False,real_payment_authorized=False)
+
+
+def apply_reviewed_upgrade_ci(conn,*,token,reviewer_token,reviewer_tenant,tenant,request_id,offer_hash,evidence_hash):
+    """M41540: atomic synthetic capacity overlay, never a new paid term or payment."""
+    if any(type(x) is not UUID or not x.int for x in (tenant,reviewer_tenant,request_id)):
+        raise LifecycleDenied("Escopo inválido.")
+    with conn.transaction():
+        _lock(conn,tenant)
+        from .admin_license_onboarding_ci import _session
+        actor,_=_session(conn,token,"TENANT_ADMIN",tenant)
+        reviewer=_reviewer(conn,reviewer_token,reviewer_tenant,tenant,actor)
+        row=conn.execute("SELECT q.snapshot,q.snapshot_hash,q.calculated_at,q.expires_at,q.accepted_at,"
+                         "r.evidence,r.evidence_hash,r.gross_cents,r.reviewer,r.provider_payment_id,r.recorded_at "
+                         "FROM public.fr_v23_plan_change_quotes q JOIN public.fr_v23_upgrade_settlement_reviews r ON r.request_id=q.request_id "
+                         "WHERE q.request_id=%s AND q.tenant_id=%s AND r.tenant_id=q.tenant_id AND q.actor=%s AND r.actor=q.actor FOR UPDATE OF q,r",
+                         (request_id,tenant,actor)).fetchone()
+        if not row:raise LifecycleDenied("Liquidação em revisão indisponível.")
+        snap,digest,at,expiry,accepted,evidence,proof,gross,original_reviewer,provider_id,recorded=row
+        if (digest!=offer_hash or proof!=evidence_hash or _hash(snap)!=digest or _hash(evidence)!=proof
+            or evidence.get("offer_hash")!=digest or evidence.get("provider_id")!=provider_id or evidence.get("gross")!=gross
+            or snap.get("total_cents")!=gross or not 0<gross<=MAX_CENTS or original_reviewer!=reviewer
+            or snap.get("current_tier")!="ESSENCIAL" or snap.get("target_tier")!="INTERMEDIARIO" or snap.get("decision")!="UPGRADE_REVIEW"
+            or accepted is None or not at<=accepted<=recorded<expiry
+            or not conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
+                                "AND action='CI_UPGRADE_SETTLEMENT_REVIEW' AND object_id=%s AND evidence_ref=%s",
+                                (tenant,reviewer,str(request_id),proof)).fetchone()
+            or not conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
+                                "AND action='CI_PLAN_CHANGE_REVIEW_ACCEPTED' AND object_id=%s AND evidence_ref=%s",
+                                (tenant,actor,str(request_id),digest)).fetchone()):
+            raise LifecycleDenied("Prova de liquidação incompatível.")
+        lines=snap["segments"]
+        if not 1<=len(lines)<=50 or len({v["entitlement_id"] for v in lines})!=len(lines) or sum(v["difference_cents"] for v in lines)!=gross:
+            raise LifecycleDenied("Segmentos incompatíveis.")
+        expected=sorted((UUID(v["entitlement_id"]),v["period"],datetime.fromisoformat(v["period_start"]),
+                         datetime.fromisoformat(v["period_end"]),UUID(v["price_version"]),v["paid_cents"],
+                         v["target_cents"],v["difference_cents"]) for v in lines)
+        existing=conn.execute("SELECT entitlement_id,period,period_start,period_end,base_price_version,paid_cents,target_cents,difference_cents "
+                              "FROM public.fr_v23_upgrade_segments WHERE request_id=%s ORDER BY entitlement_id",(request_id,)).fetchall()
+        applied=conn.execute("SELECT offer_hash,settlement_hash,reviewer FROM public.fr_v23_upgrade_applications WHERE request_id=%s AND tenant_id=%s",
+                             (request_id,tenant)).fetchone()
+        if applied:
+            if applied!=(digest,proof,reviewer) or existing!=expected or not conn.execute(
+                "SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s AND action='CI_UPGRADE_APPLIED' AND object_id=%s AND evidence_ref=%s",
+                (tenant,reviewer,str(request_id),proof)).fetchone():
+                raise LifecycleDenied("Histórico de upgrade incompleto.")
+        else:
+            # The review receipt suppresses new offers. Recompute the frozen
+            # inputs under the same tenant lock, not a new commercial offer.
+            if existing or conn.execute("SELECT clock_timestamp()").fetchone()[0]>=expiry or _snapshot(
+                conn,token,tenant,snap["target_tier"],at,settlement_review=True)!=snap:
+                raise LifecycleDenied("Alteração ou prazo exige nova revisão.")
+            old_limits=conn.execute("SELECT members_limit,quotas_limit FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()
+            if snap["members_limit"]<old_limits[0] or snap["quotas_limit"]<old_limits[1]:
+                raise LifecycleDenied("Upgrade não pode reduzir capacidade adquirida.")
+            conn.execute("INSERT INTO public.fr_v23_upgrade_applications(request_id,tenant_id,actor,reviewer,offer_hash,settlement_hash,target_price_version,members_limit,quotas_limit) "
+                         "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                         (request_id,tenant,actor,reviewer,digest,proof,UUID(snap["target_price_version"]),snap["members_limit"],snap["quotas_limit"]))
+            for line in expected:
+                conn.execute("INSERT INTO public.fr_v23_upgrade_segments(request_id,entitlement_id,period,period_start,period_end,base_price_version,paid_cents,target_cents,difference_cents) "
+                             "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(request_id,*line))
+            _audit(conn,reviewer,"SYSTEM",tenant,"CI_UPGRADE_APPLIED",request_id,proof)
+            if conn.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()!=(snap["members_limit"],snap["quotas_limit"]):
+                raise LifecycleDenied("Capacidade efetiva incompatível.")
+        return dict(request_id=str(request_id),state="CI_APPLIED",segments=len(expected),difference_cents=gross,
+                    real_payment_authorized=False,production_authorized=False)

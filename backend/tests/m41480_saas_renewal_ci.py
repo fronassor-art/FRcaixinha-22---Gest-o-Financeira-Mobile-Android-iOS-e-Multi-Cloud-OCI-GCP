@@ -6,7 +6,7 @@ from uuid import UUID,uuid4
 from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci
 from app.administrator_reauthentication_ci import _license_access
 from app.saas_billing_ci import reconcile_approved_saas_payment_ci
-from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci
+from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci,apply_reviewed_upgrade_ci
 from app.saas_renewal_readback_ci import renewal_overview_ci
 from psycopg.types.json import Jsonb
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
@@ -219,6 +219,26 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             assert db.execute("SELECT count(*) FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone()[0]==1
             assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_UPGRADE_SETTLEMENT_REVIEW'",(tenant,str(request))).fetchone()[0]==1
             assert renewal_overview_ci(db,token=token,tenant=tenant)["offer"] is None
+            assert renewal_overview_ci(db,token=token,tenant=tenant)["upgrade"]["state"]=="SETTLEMENT_REVIEW"
+            apply_args={k:upgrade[k] for k in ("token","reviewer_token","reviewer_tenant","tenant","request_id","offer_hash")}
+            apply_args["evidence_hash"]=receipt["evidence_hash"]
+            anchor_before=db.execute("SELECT request_id,anchor_day FROM public.fr_v23_renewals WHERE tenant_id=%s ORDER BY request_id",(tenant,)).fetchall()
+            for bad in (dict(evidence_hash="f"*64),dict(offer_hash="f"*64),dict(request_id=uuid4()),
+                        dict(tenant=uuid4()),dict(reviewer_token=token,reviewer_tenant=tenant)):
+                reject(apply_reviewed_upgrade_ci,db,**{**apply_args,**bad})
+            applied=apply_reviewed_upgrade_ci(db,**apply_args)
+            assert applied==apply_reviewed_upgrade_ci(db,**apply_args)
+            assert applied["state"]=="CI_APPLIED" and applied["difference_cents"]==gross and applied["real_payment_authorized"] is False
+            assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==(snap["members_limit"],snap["quotas_limit"])
+            assert db.execute("SELECT request_id,anchor_day FROM public.fr_v23_renewals WHERE tenant_id=%s ORDER BY request_id",(tenant,)).fetchall()==anchor_before
+            read=renewal_overview_ci(db,token=token,tenant=tenant)
+            assert read["offer"] is None and read["upgrade"]["state"]=="CI_APPLIED"
+            assert set(map(str,read["upgrade"]["entitlement_ids"]))=={v["entitlement_id"] for v in snap["segments"]}
+            assert db.execute("SELECT sum(difference_cents),count(*) FROM public.fr_v23_upgrade_segments WHERE request_id=%s",(request,)).fetchone()==(gross,len(snap["segments"]))
+            assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_UPGRADE_APPLIED'",(tenant,str(request))).fetchone()[0]==1
+            with db.transaction(force_rollback=True):
+                reject(db.execute,"DELETE FROM public.fr_v23_upgrade_segments WHERE request_id=%s",(request,))
+            print("M41540_UPGRADE_CAPACITY_"+("ANNUAL" if late else "MIXED")+"=PASS")
             reject(plan_change_preview_ci,db,token=token,tenant=tenant,target=target)
             reject(prepare_renewal_ci,db,**{**future_args,"request_id":uuid4(),"predecessor":future})
             for sql in ("UPDATE public.fr_v23_upgrade_settlement_reviews SET fee_cents=1 WHERE tenant_id=%s",

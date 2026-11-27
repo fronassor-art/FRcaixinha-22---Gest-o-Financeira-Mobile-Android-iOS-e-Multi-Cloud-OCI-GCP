@@ -65,3 +65,13 @@ assert.equal((await parsePlanChange(wrap(planSnap),s,'INTERMEDIARIO')).total_cen
 for(const bad of [{...planSnap,tenant_id:id(9)},{...planSnap,production_authorized:true},{...planSnap,target_tier:'AMPLIADO'},{...planSnap,total_cents:101},{...planSnap,expires_at:'2026-11-27T20:16:00.000000+00:00'},{...planSnap,members_in_use:51},{...planSnap,segments:[{...planSnap.segments[0],difference_cents:99}]}])await assert.rejects(parsePlanChange(wrap(bad),s,'INTERMEDIARIO'));
 await assert.rejects(parsePlanChange({...wrap(planSnap),offer_hash:'f'.repeat(64)},s,'INTERMEDIARIO'));
 console.log('M41520_MOBILE_PLAN_CHANGE_NO_POST=PASS');
+const upgrade={request_id:id(17),state:'CI_APPLIED',difference_cents:100,members_limit:50,quotas_limit:50,entitlement_ids:[id(4)]};
+const upgraded=await parseRenewalOverview({...raw,offer:null,upgrade},s);
+assert.equal(upgraded.upgrade?.state,'CI_APPLIED');
+assert.equal(upgraded.segments[0].cents,8990);
+assert.throws(()=>prepareRenewal(s,upgraded,id(7),'MONTHLY',true));
+const reviewUpgrade={...upgrade,state:'SETTLEMENT_REVIEW',members_limit:null,quotas_limit:null,entitlement_ids:[]};
+assert.equal((await parseRenewalOverview({...raw,offer:null,upgrade:reviewUpgrade},s)).upgrade?.state,'SETTLEMENT_REVIEW');
+for(const bad of [{...upgrade,entitlement_ids:[]},{...upgrade,entitlement_ids:[id(9)]},{...upgrade,entitlement_ids:[id(4),id(4)]},{...upgrade,difference_cents:0},{...upgrade,members_limit:201},{...reviewUpgrade,members_limit:50}])await assert.rejects(parseRenewalOverview({...raw,offer:null,upgrade:bad},s));
+await assert.rejects(parseRenewalOverview({...raw,upgrade},s));
+console.log('M41540_MOBILE_UPGRADE_READBACK_NO_POST=PASS');

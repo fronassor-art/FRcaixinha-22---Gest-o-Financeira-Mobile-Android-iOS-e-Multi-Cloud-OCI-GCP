@@ -11,7 +11,8 @@ function id(v:unknown){const x=uuid(v);if(x==='00000000-0000-0000-0000-000000000
 function key(s:AdminScope){if(s.role!=='TENANT_ADMIN')deny();return JSON.stringify([id(s.userId),id(s.tenantId),s.role]);}
 const periods=['MONTHLY','ANNUAL'] as const,tiers=['ESSENCIAL','INTERMEDIARIO'] as const;
 export async function parseRenewalOverview(raw:unknown,s:AdminScope){
- const x=exact(raw,'user_id tenant_id role ci_only production_authorized real_payment_authorized observed_at access document segments renewals offer');
+ const hasUpgrade=!!raw&&typeof raw==='object'&&Object.hasOwn(raw,'upgrade');
+ const x=exact(raw,'user_id tenant_id role ci_only production_authorized real_payment_authorized observed_at access document segments renewals offer'+(hasUpgrade?' upgrade':''));
  if(key({userId:id(x.user_id),tenantId:id(x.tenant_id),role:x.role as 'TENANT_ADMIN'})!==key(s)||x.ci_only!==true||x.production_authorized!==false||x.real_payment_authorized!==false)deny();
  const observed_at=stamp(x.observed_at),now=Date.parse(observed_at),access=one(x.access,['CURRENT','CONTINUITY_ONLY'] as const);
  const document=await parseDocument(x.document,'PLATFORM_LICENSE');
@@ -61,7 +62,20 @@ export async function parseRenewalOverview(raw:unknown,s:AdminScope){
   if(!prev||prev.tier!==tier||!['CURRENT','SCHEDULED','EXPIRED','REFUNDED'].includes(prev.state)||predecessors.has(predecessor)||leaves[0].entitlement_id!==predecessor)deny();
   offer=Object.freeze({predecessor,tier,price_version:id(q.price_version),members_limit:cents(q.members_limit,200),quotas_limit:cents(q.quotas_limit,400),monthly_cents:cents(q.monthly_cents),annual_cents:cents(q.annual_cents)});
  }
- return Object.freeze({scope:key(s),observed_at,access,document,segments:Object.freeze(segments),renewals:Object.freeze(renewals),offer});
+ let upgrade=null;
+ if(hasUpgrade){
+  const u=exact(x.upgrade,'request_id state difference_cents members_limit quotas_limit entitlement_ids');
+  const state=one(u.state,['SETTLEMENT_REVIEW','CI_APPLIED'] as const);
+  if(offer!==null||!Array.isArray(u.entitlement_ids)||u.entitlement_ids.length>50)return deny();
+  const entitlement_ids=u.entitlement_ids.map(id);
+  if(new Set(entitlement_ids).size!==entitlement_ids.length||entitlement_ids.some(v=>!ids.has(v)))deny();
+  if(state==='SETTLEMENT_REVIEW'&&(entitlement_ids.length!==0||u.members_limit!==null||u.quotas_limit!==null))deny();
+  if(state==='CI_APPLIED'&&entitlement_ids.length===0)deny();
+  upgrade=Object.freeze({request_id:id(u.request_id),state,difference_cents:cents(u.difference_cents),
+   members_limit:state==='CI_APPLIED'?cents(u.members_limit,200):null,quotas_limit:state==='CI_APPLIED'?cents(u.quotas_limit,400):null,
+   entitlement_ids:Object.freeze(entitlement_ids)});
+ }
+ return Object.freeze({scope:key(s),observed_at,access,document,segments:Object.freeze(segments),renewals:Object.freeze(renewals),offer,upgrade});
 }
 export type RenewalOverview=Awaited<ReturnType<typeof parseRenewalOverview>>;
 export function prepareRenewal(s:AdminScope,view:RenewalOverview,requestId:unknown,choice:unknown,accepted:unknown){

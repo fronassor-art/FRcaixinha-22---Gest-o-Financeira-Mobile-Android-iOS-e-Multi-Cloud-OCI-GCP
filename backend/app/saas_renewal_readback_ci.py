@@ -104,10 +104,24 @@ def renewal_overview_ci(conn,*,token,tenant):
                     offer=dict(predecessor=last["entitlement_id"],price_version=price[0],tier=price[1],members_limit=price[2],
                                quotas_limit=price[3],monthly_cents=_cents(price[4]),annual_cents=_cents(price[5]))
         # No further commercial offer while the synthetic upgrade is unresolved.
-        if conn.execute("SELECT 1 FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone():
-            offer=None
-        return dict(user_id=actor,tenant_id=tenant,role="TENANT_ADMIN",ci_only=True,production_authorized=False,
+        review=conn.execute("SELECT r.request_id,r.gross_cents,a.request_id,a.members_limit,a.quotas_limit "
+                            "FROM public.fr_v23_upgrade_settlement_reviews r LEFT JOIN public.fr_v23_upgrade_applications a "
+                            "ON a.request_id=r.request_id AND a.tenant_id=r.tenant_id AND a.actor=r.actor WHERE r.tenant_id=%s AND r.actor=%s",
+                            (tenant,actor)).fetchone()
+        if not review and conn.execute("SELECT 1 FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone():
+            raise LifecycleDenied("Revisão de upgrade fora do escopo.")
+        result=dict(user_id=actor,tenant_id=tenant,role="TENANT_ADMIN",ci_only=True,production_authorized=False,
                     real_payment_authorized=False,observed_at=now,access=access,document=doc,segments=segments,renewals=items,offer=offer)
+        if review:
+            result["offer"]=None
+            req,gross,applied,ml,ql=review
+            covered=conn.execute("SELECT entitlement_id FROM public.fr_v23_upgrade_segments WHERE request_id=%s ORDER BY entitlement_id",(req,)).fetchall()
+            if bool(covered)!=bool(applied) or any(row[0] not in by_id for row in covered):
+                raise LifecycleDenied("Histórico de upgrade inconsistente.")
+            result["upgrade"]=dict(request_id=req,state="CI_APPLIED" if applied else "SETTLEMENT_REVIEW",
+                                   difference_cents=gross,members_limit=ml,quotas_limit=ql,
+                                   entitlement_ids=[row[0] for row in covered])
+        return result
 
 def renewal_prepare_http_ci(conn,*,token,tenant,**body):
     _guard(conn)

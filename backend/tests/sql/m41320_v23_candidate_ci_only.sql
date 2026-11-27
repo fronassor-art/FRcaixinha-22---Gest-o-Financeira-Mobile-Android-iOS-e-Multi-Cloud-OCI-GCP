@@ -81,6 +81,37 @@ CREATE FUNCTION public.fr_v23_upgrade_review_immutable() RETURNS trigger LANGUAG
 BEGIN RAISE EXCEPTION 'immutable upgrade settlement review' USING ERRCODE='23514'; END $$;
 CREATE TRIGGER fr_v23_upgrade_review_row BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_settlement_reviews FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 CREATE TRIGGER fr_v23_upgrade_review_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_settlement_reviews FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+-- M41540: append-only capacity overlay, never rewrite the original paid entitlement.
+CREATE TABLE public.fr_v23_upgrade_applications(
+ request_id uuid PRIMARY KEY REFERENCES public.fr_v23_upgrade_settlement_reviews(request_id),
+ tenant_id uuid NOT NULL UNIQUE REFERENCES public.tenants(id),
+ actor uuid NOT NULL REFERENCES public.users(id),reviewer uuid NOT NULL REFERENCES public.users(id),
+ offer_hash text NOT NULL CHECK(offer_hash ~ '^[0-9a-f]{64}$'),
+ settlement_hash text NOT NULL CHECK(settlement_hash ~ '^[0-9a-f]{64}$'),
+ target_price_version uuid NOT NULL REFERENCES public.platform_license_price_versions(id),
+ members_limit int NOT NULL CHECK(members_limit BETWEEN 1 AND 200),
+ quotas_limit int NOT NULL CHECK(quotas_limit BETWEEN 1 AND 400),
+ applied_at timestamptz NOT NULL DEFAULT clock_timestamp(),CHECK(actor<>reviewer)
+);
+CREATE TABLE public.fr_v23_upgrade_segments(
+ request_id uuid NOT NULL REFERENCES public.fr_v23_upgrade_applications(request_id),
+ entitlement_id uuid PRIMARY KEY REFERENCES public.saas_license_entitlements(id),
+ period text NOT NULL CHECK(period IN ('MONTHLY','ANNUAL')),
+ period_start timestamptz NOT NULL,period_end timestamptz NOT NULL CHECK(period_end>period_start),
+ base_price_version uuid NOT NULL REFERENCES public.platform_license_price_versions(id),
+ paid_cents bigint NOT NULL CHECK(paid_cents BETWEEN 1 AND 100000000),
+ target_cents bigint NOT NULL CHECK(target_cents BETWEEN 1 AND 100000000),
+ difference_cents bigint NOT NULL CHECK(difference_cents BETWEEN 0 AND 100000000)
+);
+ALTER TABLE public.fr_v23_upgrade_applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_upgrade_applications FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_upgrade_segments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_upgrade_segments FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fr_v23_upgrade_applications,public.fr_v23_upgrade_segments FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+CREATE TRIGGER fr_v23_upgrade_application_immutable BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_applications FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_upgrade_application_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_applications FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_upgrade_segment_immutable BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_segments FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_upgrade_segment_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_segments FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 ALTER TABLE public.cycles DROP CONSTRAINT uq_tenant_cycle_year;
 ALTER TABLE public.contributions DROP CONSTRAINT uq_membership_competence;
 ALTER TABLE public.contributions ADD UNIQUE(tenant_id,cycle_id,membership_id,competence);
@@ -252,9 +283,10 @@ END $$;
 -- preparation, price version, Contract A and payer. Never treats a pending payment as a license.
 CREATE FUNCTION public.fr_v23_license(p_tenant uuid,p_admin uuid)
 RETURNS TABLE(members_limit int,quotas_limit int) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE row_data record;n int:=0;
+DECLARE row_data record;upgrade_row record;n int:=0;
 BEGIN
- FOR row_data IN SELECT pl.members_limit ml,pl.quotas_limit ql,e.valid_from vf,e.valid_until vu
+ FOR row_data IN SELECT pl.members_limit ml,pl.quotas_limit ql,e.valid_from vf,e.valid_until vu,
+ e.id eid,e.plan_tier tier,sp.billing_period period,sp.price_version_id price_version,pi.expected_amount_cents paid
  FROM public.saas_license_entitlements e
  JOIN public.saas_subscription_preparations sp ON sp.id=e.preparation_id
  JOIN public.saas_payment_intents pi ON pi.id=e.payment_intent_id AND pi.preparation_id=sp.id
@@ -278,6 +310,38 @@ BEGIN
  LOOP
  IF row_data.vf<=clock_timestamp() AND row_data.vu>clock_timestamp() THEN
  n:=n+1;members_limit:=row_data.ml;quotas_limit:=row_data.ql;
+ -- A capacity overlay can only extend a currently verified original paid term.
+ IF EXISTS(SELECT 1 FROM public.fr_v23_upgrade_segments u WHERE u.entitlement_id=row_data.eid) THEN
+  SELECT a.members_limit ml,a.quotas_limit ql INTO upgrade_row
+  FROM public.fr_v23_upgrade_segments u JOIN public.fr_v23_upgrade_applications a ON a.request_id=u.request_id
+  JOIN public.fr_v23_upgrade_settlement_reviews r ON r.request_id=a.request_id
+  JOIN public.fr_v23_plan_change_quotes q ON q.request_id=r.request_id
+  JOIN public.platform_license_price_versions v ON v.id=a.target_price_version
+  WHERE u.entitlement_id=row_data.eid AND a.tenant_id=p_tenant AND r.tenant_id=p_tenant AND q.tenant_id=p_tenant
+   AND a.actor=p_admin AND r.actor=p_admin AND q.actor=p_admin AND a.reviewer=r.reviewer
+   AND a.offer_hash=q.snapshot_hash AND a.settlement_hash=r.evidence_hash AND q.accepted_at IS NOT NULL
+   AND q.accepted_at<=r.recorded_at AND r.recorded_at<=a.applied_at AND a.applied_at<q.expires_at
+   AND a.applied_at<=clock_timestamp() AND row_data.tier='ESSENCIAL' AND v.plan_tier='INTERMEDIARIO'
+   AND q.snapshot->>'target_price_version'=v.id::text AND q.snapshot->>'target_tier'='INTERMEDIARIO'
+   AND q.snapshot->>'current_tier'='ESSENCIAL' AND q.snapshot->>'decision'='UPGRADE_REVIEW'
+   AND (q.snapshot->>'members_limit')::int=a.members_limit AND (q.snapshot->>'quotas_limit')::int=a.quotas_limit
+   AND u.period=row_data.period AND u.period_start=row_data.vf AND u.period_end=row_data.vu
+   AND u.base_price_version=row_data.price_version AND u.paid_cents=row_data.paid
+   AND a.members_limit>=row_data.ml AND a.quotas_limit>=row_data.ql
+   AND EXISTS(SELECT 1 FROM public.audit_events au WHERE au.tenant_id=p_tenant AND au.actor_id=a.reviewer
+    AND au.action='CI_UPGRADE_APPLIED' AND au.object_id=a.request_id::text AND au.evidence_ref=a.settlement_hash)
+   AND EXISTS(SELECT 1 FROM public.audit_events au WHERE au.tenant_id=p_tenant AND au.actor_id=r.reviewer
+    AND au.action='CI_UPGRADE_SETTLEMENT_REVIEW' AND au.object_id=r.request_id::text AND au.evidence_ref=r.evidence_hash)
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(q.snapshot->'segments') x
+    WHERE x->>'entitlement_id'=u.entitlement_id::text AND x->>'price_version'=u.base_price_version::text
+    AND x->>'period'=u.period AND (x->>'period_start')::timestamptz=u.period_start AND (x->>'period_end')::timestamptz=u.period_end
+    AND (x->>'paid_cents')::bigint=u.paid_cents AND (x->>'target_cents')::bigint=u.target_cents
+    AND (x->>'difference_cents')::bigint=u.difference_cents)
+   AND r.gross_cents=(SELECT sum(z.difference_cents) FROM public.fr_v23_upgrade_segments z WHERE z.request_id=a.request_id)
+   AND jsonb_array_length(q.snapshot->'segments')=(SELECT count(*) FROM public.fr_v23_upgrade_segments z WHERE z.request_id=a.request_id);
+  IF NOT FOUND THEN RAISE EXCEPTION 'upgrade evidence incompatible' USING ERRCODE='42501'; END IF;
+  members_limit:=upgrade_row.ml;quotas_limit:=upgrade_row.ql;
+ END IF;
  END IF;
  END LOOP;
  IF n<>1 THEN RAISE EXCEPTION 'license missing or ambiguous' USING ERRCODE='42501'; END IF;
