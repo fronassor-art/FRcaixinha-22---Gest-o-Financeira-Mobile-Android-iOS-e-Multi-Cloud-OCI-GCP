@@ -2,13 +2,14 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID,uuid4
 from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term
 from app.administrator_reauthentication_ci import _license_access
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
 from m41400_cycle_identity_ci import connection,reject
 
 def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,late):
+    assert all(type(x) is UUID for x in (tenant,actor,reviewer_tenant,price,doc))
     with connection() as db:
         prev,old_intent,old_from,old_end=db.execute(
             "SELECT id,payment_intent_id,valid_from,valid_until FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()
@@ -19,7 +20,7 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         cycles=db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()
         args=dict(token=token,tenant=tenant,request_id=uuid4(),predecessor=prev,price_version=price,
                   period="ANNUAL" if late else "MONTHLY",cents=70033 if late else 8990,document_id=doc,document_hash=digest,accepted=True)
-        for change in (dict(accepted=False),dict(cents=1),dict(document_hash="f"*64),dict(token=reviewer_token),dict(predecessor=uuid4())):
+        for change in (dict(accepted=False),dict(cents=1),dict(document_hash="f"*64),dict(token=reviewer_token),dict(predecessor=uuid4()),dict(price_version=str(price)),dict(document_id=str(doc)),dict(request_id=UUID(int=0))):
             reject(prepare_renewal_ci,db,**{**args,**change})
         def stage(_):
             with connection() as c:return prepare_renewal_ci(c,**args)

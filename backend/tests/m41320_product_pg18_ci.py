@@ -426,7 +426,12 @@ async def main():
                 assert admitted.status_code==200,admitted.text
                 assert admitted.json()["obligations"]==11
                 from m41480_saas_renewal_ci import exercise as exercise_renewal
-                await asyncio.to_thread(exercise_renewal,new_tenant,new_admin,admin_raw,other,ho["Authorization"].split()[1],price,doc_a,a_hash,bool(index))
+                # asyncpg UUID objects can be subclasses of uuid.UUID. At this
+                # trusted fixture boundary normalize to the native UUID expected
+                # by the strict psycopg-based renewal service, not user strings.
+                await asyncio.to_thread(exercise_renewal,UUID(str(new_tenant)),UUID(str(new_admin)),admin_raw,
+                                        UUID(str(other)),ho["Authorization"].split()[1],UUID(str(price)),
+                                        UUID(str(doc_a)),a_hash,bool(index))
             await owner.execute("UPDATE public.sessions SET revoked_at=now() WHERE token_hash=encode(public.digest($1,'sha256'),'hex')",h["Authorization"].split()[1])
             await post("/manual-receipts",selected,h,403)
             await get("/form-options",h,403)
