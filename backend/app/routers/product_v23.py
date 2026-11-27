@@ -49,9 +49,9 @@ class ReviewInput(Strict):
     occurred: date
     evidence_ref: str=Field(min_length=3,max_length=160)
 
-async def call(conn,query,*args):
+async def call(operation):
     try:
-        result=await conn.fetchrow(query,*args)
+        result=await operation
     except asyncpg.PostgresError as exc:
         if exc.sqlstate=="42501": raise HTTPException(403,"Operação fora do escopo autorizado.") from None
         if exc.sqlstate in ("23505","23514","P0001"): raise HTTPException(409,"Conflito ou pendência financeira.") from None
@@ -67,24 +67,24 @@ async def capabilities(tenant_id:UUID):
 
 @router.post("/cycles")
 async def create_cycle(tenant_id:UUID,p:CycleInput,request:Request,conn=Depends(unreleased_transaction)):
-    return await call(conn,"SELECT public.fr_v23_cycle($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) AS cycle_id",
-        bearer_token(request),tenant_id,p.request_id,p.start,p.first_due,p.last_due,p.closing,p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode,p.document_id)
+    return await call(conn.fetchrow("SELECT public.fr_v23_cycle($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) AS cycle_id",
+        bearer_token(request),tenant_id,p.request_id,p.start,p.first_due,p.last_due,p.closing,p.quota_cents,p.admin_bps,p.late_days,p.late_competences,p.mode,p.document_id))
 
 @router.post("/cycles/{cycle_id}/admissions")
 async def admit(tenant_id:UUID,cycle_id:UUID,p:AdmissionInput,request:Request,conn=Depends(unreleased_transaction)):
-    return await call(conn,"SELECT public.fr_v23_admit($1,$2,$3,$4,$5,$6) AS obligations",
-        bearer_token(request),tenant_id,cycle_id,p.membership_id,p.joined,p.quotas)
+    return await call(conn.fetchrow("SELECT public.fr_v23_admit($1,$2,$3,$4,$5,$6) AS obligations",
+        bearer_token(request),tenant_id,cycle_id,p.membership_id,p.joined,p.quotas))
 
 @router.post("/manual-receipts")
 async def record(tenant_id:UUID,p:ReceiptInput,request:Request,conn=Depends(unreleased_transaction)):
-    return await call(conn,"SELECT public.fr_v23_record($1,$2,$3,$4,$5,$6,$7,$8,$9) AS receipt_id",
-        bearer_token(request),tenant_id,p.request_id,p.contribution_id,p.cents,p.method,p.occurred,p.reference,p.evidence_ref)
+    return await call(conn.fetchrow("SELECT public.fr_v23_record($1,$2,$3,$4,$5,$6,$7,$8,$9) AS receipt_id",
+        bearer_token(request),tenant_id,p.request_id,p.contribution_id,p.cents,p.method,p.occurred,p.reference,p.evidence_ref))
 
 @router.post("/manual-receipts/{receipt_id}/{action}")
 async def review(tenant_id:UUID,receipt_id:UUID,action:Literal["CONFIRM","REVERSE","CONTEST"],p:ReviewInput,request:Request,conn=Depends(unreleased_transaction)):
-    return await call(conn,"SELECT public.fr_v23_review($1,$2,$3,$4,$5,$6,$7) AS state",
-        bearer_token(request),tenant_id,receipt_id,action,p.request_id,p.occurred,p.evidence_ref)
+    return await call(conn.fetchrow("SELECT public.fr_v23_review($1,$2,$3,$4,$5,$6,$7) AS state",
+        bearer_token(request),tenant_id,receipt_id,action,p.request_id,p.occurred,p.evidence_ref))
 
 @router.get("/manual-receipts/{receipt_id}")
 async def read_receipt(tenant_id:UUID,receipt_id:UUID,request:Request,conn=Depends(unreleased_transaction)):
-    return await call(conn,"SELECT * FROM public.fr_v23_receipt($1,$2,$3)",bearer_token(request),tenant_id,receipt_id)
+    return await call(conn.fetchrow("SELECT * FROM public.fr_v23_receipt($1,$2,$3)",bearer_token(request),tenant_id,receipt_id))
