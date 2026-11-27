@@ -30,20 +30,23 @@ export async function parseRenewalOverview(raw:unknown,s:AdminScope){
  const renewals=x.renewals.map(v=>{
   const q=exact(v,'request_id predecessor intent_id price_version period cents expires_at entitlement_id state');
   const request_id=id(q.request_id),predecessor=id(q.predecessor),intent_id=id(q.intent_id),price_version=id(q.price_version),period=one(q.period,periods),amount=cents(q.cents),expires_at=stamp(q.expires_at);
-  const state=one(q.state,['PENDING','REVIEW_REQUIRED','CI_RECONCILED','REFUNDED'] as const);
+  const state=one(q.state,['PENDING','REVIEW_REQUIRED','CI_RECONCILED','REFUNDED','CANCELED'] as const);
   const entitlement_id=q.entitlement_id===null?null:id(q.entitlement_id),seg=segments.find(a=>a.entitlement_id===entitlement_id);
-  if(requests.has(request_id)||predecessors.has(predecessor)||intents.has(intent_id)||!ids.has(predecessor)||predecessor===entitlement_id)deny();
-  if(state==='PENDING'||state==='REVIEW_REQUIRED'){
+  if(requests.has(request_id)||(state!=='CANCELED'&&predecessors.has(predecessor))||intents.has(intent_id)||!ids.has(predecessor)||predecessor===entitlement_id)deny();
+  if(state==='PENDING'||state==='REVIEW_REQUIRED'||state==='CANCELED'){
    if(entitlement_id!==null||payments.has(intent_id)||(state==='PENDING')!==(now<Date.parse(expires_at)))deny();
   }else if(!seg||seg.intent_id!==intent_id||seg.period!==period||seg.cents!==amount||(state==='REFUNDED')!==(seg.state==='REFUNDED'))deny();
-  requests.add(request_id);predecessors.add(predecessor);intents.add(intent_id);
+  requests.add(request_id);if(state!=='CANCELED')predecessors.add(predecessor);intents.add(intent_id);
   return Object.freeze({request_id,predecessor,intent_id,price_version,period,cents:amount,expires_at,entitlement_id,state});
  });
+ const used=new Set(renewals.filter(v=>v.entitlement_id!==null).map(v=>v.predecessor));
+ const leaves=segments.filter(v=>!used.has(v.entitlement_id));
+ if(leaves.length!==1)deny();
  let offer=null;
  if(x.offer!==null){
   const q=exact(x.offer,'predecessor price_version tier members_limit quotas_limit monthly_cents annual_cents'),predecessor=id(q.predecessor),tier=one(q.tier,tiers);
   const prev=segments.find(a=>a.entitlement_id===predecessor);
-  if(!prev||prev.tier!==tier||!['CURRENT','SCHEDULED','EXPIRED'].includes(prev.state)||predecessors.has(predecessor)||segments.some(a=>Date.parse(a.valid_until)>Date.parse(prev.valid_until)))deny();
+  if(!prev||prev.tier!==tier||!['CURRENT','SCHEDULED','EXPIRED','REFUNDED'].includes(prev.state)||predecessors.has(predecessor)||leaves[0].entitlement_id!==predecessor)deny();
   offer=Object.freeze({predecessor,tier,price_version:id(q.price_version),members_limit:cents(q.members_limit,200),quotas_limit:cents(q.quotas_limit,400),monthly_cents:cents(q.monthly_cents),annual_cents:cents(q.annual_cents)});
  }
  return Object.freeze({scope:key(s),observed_at,access,document,segments:Object.freeze(segments),renewals:Object.freeze(renewals),offer});

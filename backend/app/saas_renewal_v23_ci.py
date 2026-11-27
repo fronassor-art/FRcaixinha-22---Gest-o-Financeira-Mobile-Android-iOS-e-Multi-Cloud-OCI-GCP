@@ -32,7 +32,7 @@ def _lock(conn,tenant):
     _guard(conn)
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text,41320))",(str(tenant),))
 
-def _previous(conn,tenant,actor,predecessor,acceptance):
+def _previous(conn,tenant,actor,predecessor,acceptance,*,ancestor=False):
     row=conn.execute(
         "SELECT e.id,e.plan_tier,e.status,e.valid_from,e.valid_until,s.contract_acceptance_id,p.status,"
         "p.live_mode,p.reconciled_at,p.paid_at FROM public.saas_license_entitlements e "
@@ -47,13 +47,54 @@ def _previous(conn,tenant,actor,predecessor,acceptance):
         "AND p.expected_amount_cents=(CASE s.billing_period WHEN 'MONTHLY' THEN v.monthly_price ELSE v.annual_price END)*100 "
         "AND s.status='PENDING_PAYMENT' AND p.reconciled_at<=clock_timestamp() FOR SHARE OF e,s,p,v",
         (predecessor,tenant,actor,acceptance,COLLECTOR_CI)).fetchone()
-    if not row or row[2] not in ("ACTIVE","EXPIRED") or row[6]!="APPROVED" or not row[8] or not row[9] or row[8]<row[9]:
+    if not row or not row[8] or not row[9] or row[8]<row[9]:
         raise LifecycleDenied("Período anterior indisponível para renovação.")
-    # No skipping a paid future segment or overlapping a different branch.
-    if conn.execute("SELECT 1 FROM public.saas_license_entitlements WHERE tenant_id=%s AND id<>%s "
-                    "AND valid_until>%s AND status<>'REVOKED'",(tenant,predecessor,row[4])).fetchone():
-        raise LifecycleDenied("Existe período posterior.")
+    if row[2]=="REVOKED" and row[6]=="REFUNDED":
+        if not conn.execute("SELECT 1 FROM public.saas_license_entitlements e JOIN public.saas_payment_intents p ON p.id=e.payment_intent_id "
+                            "JOIN public.audit_events a ON a.tenant_id=e.tenant_id AND a.object_id=p.id::text "
+                            "WHERE e.id=%s AND e.tenant_id=%s AND a.action='CI_SAAS_REFUND_REVOKED' "
+                            "AND a.evidence_ref=p.provider_payment_id",(predecessor,tenant)).fetchone():
+            raise LifecycleDenied("Estorno sem prova.")
+    elif row[2] not in ("ACTIVE","EXPIRED") or row[6]!="APPROVED":
+        raise LifecycleDenied("Período anterior indisponível para renovação.")
+    if not ancestor:
+        leaves=conn.execute("SELECT e.id FROM public.saas_license_entitlements e WHERE e.tenant_id=%s "
+                            "AND NOT EXISTS(SELECT 1 FROM public.fr_v23_renewals r WHERE r.tenant_id=e.tenant_id "
+                            "AND r.predecessor=e.id AND r.entitlement_id IS NOT NULL AND r.canceled_at IS NULL)",(tenant,)).fetchall()
+        if leaves!=[(predecessor,)]:raise LifecycleDenied("Predecessor não é a ponta única da cadeia.")
+        if conn.execute("SELECT 1 FROM public.fr_v23_renewals r JOIN public.saas_payment_intents p ON p.id=r.intent_id "
+                        "WHERE r.tenant_id=%s AND r.predecessor=%s AND r.canceled_at IS NOT NULL "
+                        "AND (p.status<>'CANCELED' OR p.paid_at IS NOT NULL OR p.reconciled_at IS NOT NULL "
+                        "OR NOT EXISTS(SELECT 1 FROM public.audit_events a WHERE a.tenant_id=r.tenant_id "
+                        "AND a.action='CI_RENEWAL_EXPIRED_CANCELED' AND a.object_id=r.request_id::text "
+                        "AND a.evidence_ref=p.provider_payment_id))",(tenant,predecessor)).fetchone():
+            raise LifecycleDenied("Cancelamento anterior sem prova.")
+        if conn.execute("SELECT 1 FROM public.saas_license_entitlements WHERE tenant_id=%s AND status='SUSPENDED'",(tenant,)).fetchone():
+            raise LifecycleDenied("Suspensão exige revisão própria.")
     return row
+
+def _term_base(conn,tenant,actor,prev,acceptance,now):
+    """Follow only verified predecessors. Refunded time is never paid time."""
+    visited=set()
+    while prev[2]=="REVOKED":
+        if prev[0] in visited or len(visited)>=50:raise LifecycleDenied("Histórico circular ou extenso.")
+        visited.add(prev[0])
+        parent=conn.execute("SELECT predecessor FROM public.fr_v23_renewals WHERE tenant_id=%s AND actor=%s "
+                            "AND entitlement_id=%s AND canceled_at IS NULL",(tenant,actor,prev[0])).fetchone()
+        if not parent:
+            # Only an original checkout may lack a predecessor.
+            if not conn.execute("SELECT 1 FROM public.saas_license_entitlements e JOIN public.saas_subscription_preparations s "
+                                "ON s.id=e.preparation_id WHERE e.id=%s AND s.renewal_request_id IS NULL",(prev[0],)).fetchone():
+                raise LifecycleDenied("Histórico sem predecessor.")
+            if conn.execute("SELECT 1 FROM public.saas_license_entitlements WHERE tenant_id=%s AND status<>'REVOKED' AND valid_until>%s",
+                            (tenant,now)).fetchone():raise LifecycleDenied("Existe período pago posterior.")
+            return now,now.astimezone(ZONE).day
+        prev=_previous(conn,tenant,actor,parent[0],acceptance,ancestor=True)
+    if conn.execute("SELECT 1 FROM public.saas_license_entitlements WHERE tenant_id=%s AND id<>%s "
+                    "AND valid_until>%s AND status<>'REVOKED'",(tenant,prev[0],prev[4])).fetchone():
+        raise LifecycleDenied("Existe período posterior.")
+    prior=conn.execute("SELECT anchor_day FROM public.fr_v23_renewals WHERE entitlement_id=%s",(prev[0],)).fetchone()
+    return prev[4],prior[0] if prior else prev[3].astimezone(ZONE).day
 
 def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,period,cents,document_id,document_hash,accepted):
     _guard(conn)
@@ -78,7 +119,8 @@ def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,
             if saved[:8]!=exact:raise LifecycleDenied("Colisão de renovação.")
             return saved[8],saved[9]
         prev=_previous(conn,tenant,actor,predecessor,acceptance)
-        if conn.execute("SELECT 1 FROM public.fr_v23_renewals WHERE predecessor=%s",(predecessor,)).fetchone():
+        _term_base(conn,tenant,actor,prev,acceptance,conn.execute("SELECT clock_timestamp()").fetchone()[0])
+        if conn.execute("SELECT 1 FROM public.fr_v23_renewals WHERE predecessor=%s AND canceled_at IS NULL",(predecessor,)).fetchone():
             raise LifecycleDenied("Renovação anterior já registrada.")
         price=conn.execute(
             "SELECT v.id,v.monthly_price,v.annual_price FROM public.platform_license_price_versions v "
@@ -147,9 +189,8 @@ def reconcile_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,pay
         now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
         if now>=expiry:raise LifecycleDenied("Oferta expirada; conciliação em revisão.")
         prev=_previous(conn,tenant,actor,previous,acceptance)
-        prior_anchor=conn.execute("SELECT anchor_day FROM public.fr_v23_renewals WHERE entitlement_id=%s",(previous,)).fetchone()
-        anchor=prior_anchor[0] if prior_anchor else prev[3].astimezone(ZONE).day
-        start,end,anchor=renewal_term(prev[4],anchor,now,period)
+        base,anchor=_term_base(conn,tenant,actor,prev,acceptance,now)
+        start,end,anchor=renewal_term(base,anchor,now,period)
         if stored_id is None and not attach_mp_payment_identifier_ci(conn,intent_id=intent,provider_payment_id=provider_id):
             raise LifecycleDenied("Vínculo de pagamento indisponível.")
         ent=uuid4()
@@ -181,3 +222,47 @@ def reconcile_full_refund_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent
         if not revoke_after_verified_refund_ci(conn,intent_id=intent,authoritative_payment=payment):
             raise LifecycleDenied("Estorno não registrado.")
         return True
+
+
+def cancel_expired_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,payment,statement_settled_cents):
+    """CI only: a terminal canceled PSP record plus independent zero settlement.
+    An expired or missing response alone never authorizes a new charge.
+    """
+    _guard(conn)
+    if type(statement_settled_cents) is not int or statement_settled_cents!=0 or type(payment) is not dict or payment.get("status")!="cancelled":
+        raise LifecycleDenied("Cancelamento sem prova de não liquidação.")
+    if payment.get("transaction_amount_refunded") not in ("0","0.00",0) or type(payment.get("transaction_amount_refunded")) not in (str,int):
+        raise LifecycleDenied("Cancelamento incompatível.")
+    with conn.transaction():
+        _lock(conn,tenant)
+        row=conn.execute(
+            "SELECT r.actor,r.request_id,r.expires_at,r.canceled_at,r.entitlement_id,r.cents,p.status,p.provider_payment_id,"
+            "p.external_reference,p.paid_at,p.reconciled_at,s.contract_acceptance_id "
+            "FROM public.fr_v23_renewals r JOIN public.saas_payment_intents p ON p.id=r.intent_id AND p.preparation_id=r.preparation_id "
+            "JOIN public.saas_subscription_preparations s ON s.id=r.preparation_id AND s.renewal_request_id=r.request_id "
+            "WHERE r.tenant_id=%s AND r.intent_id=%s AND p.tenant_id=r.tenant_id AND s.tenant_id=r.tenant_id "
+            "AND p.admin_user_id=r.actor AND s.admin_user_id=r.actor AND p.price_version_id=r.price_version "
+            "AND s.price_version_id=r.price_version AND s.billing_period=r.period AND p.expected_amount_cents=r.cents "
+            "AND p.live_mode=false AND p.platform_collector_id=%s AND p.provider='MERCADO_PAGO' AND p.currency='BRL' "
+            "AND s.status='PENDING_PAYMENT' FOR UPDATE OF r,p,s",(tenant,intent,COLLECTOR_CI)).fetchone()
+        if not row:raise LifecycleDenied("Renovação fora do escopo.")
+        actor,request,expiry,canceled,ent,cents,state,stored,ref,paid,reconciled,acceptance=row
+        reviewer=_reviewer(conn,reviewer_token,reviewer_tenant,tenant,actor)
+        if _binding(conn,actor,tenant)!=(acceptance,"ATIVO") or ent is not None or paid is not None or reconciled is not None:
+            raise LifecycleDenied("Pagamento já constituído ou vínculo inválido.")
+        now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
+        provider_id=str(payment.get("id",""))
+        if (now<expiry or not provider_id.isascii() or not provider_id.isdecimal() or len(provider_id)>40
+            or not matches_approved_payment(ExpectedPayment(stored or provider_id,COLLECTOR_CI,ref,cents,False),{**payment,"status":"approved"})):
+            raise LifecycleDenied("Prova de cancelamento incompatível.")
+        if state=="CANCELED" and canceled and stored==provider_id:
+            if conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND action='CI_RENEWAL_EXPIRED_CANCELED' "
+                            "AND object_id=%s AND evidence_ref=%s",(tenant,str(request),provider_id)).fetchone():return request
+            raise LifecycleDenied("Cancelamento sem trilha.")
+        if state!="PENDING" or canceled:raise LifecycleDenied("Estado incompatível.")
+        if stored is None and not attach_mp_payment_identifier_ci(conn,intent_id=intent,provider_payment_id=provider_id):
+            raise LifecycleDenied("Vínculo de pagamento indisponível.")
+        conn.execute("UPDATE public.saas_payment_intents SET status='CANCELED' WHERE id=%s",(intent,))
+        conn.execute("UPDATE public.fr_v23_renewals SET canceled_at=%s WHERE request_id=%s",(now,request))
+        _audit(conn,reviewer,"SYSTEM",tenant,"CI_RENEWAL_EXPIRED_CANCELED",request,provider_id)
+        return request

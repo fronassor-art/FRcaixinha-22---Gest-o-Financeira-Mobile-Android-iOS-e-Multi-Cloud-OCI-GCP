@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from uuid import UUID,uuid4
-from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term
+from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci
 from app.administrator_reauthentication_ci import _license_access
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
 from m41400_cycle_identity_ci import connection,reject
@@ -91,7 +91,52 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]==2
         refunded=get(client,path,token)
         assert refunded["renewals"][0]["state"]=="REFUNDED"
-        assert refunded["offer"] is None
+        assert refunded["offer"]["predecessor"]==str(ent)
+        # Expired replacement cannot be paid or superseded until terminal
+        # provider cancellation and independent zero settlement are verified.
+        recover={**args,"request_id":uuid4(),"predecessor":ent}
+        rp,ri=prepare_renewal_ci(db,**recover)
+        premature={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{ri}","status":"cancelled"}
+        reject(cancel_expired_renewal_ci,db,reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,
+               intent=ri,payment=premature,statement_settled_cents=0)
+        db.execute("UPDATE public.fr_v23_renewals SET accepted_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' WHERE request_id=%s",(recover["request_id"],))
+        pending_recovery=get(client,path,token)
+        assert pending_recovery["offer"] is None and next(x for x in pending_recovery["renewals"] if x["request_id"]==str(recover["request_id"]))["state"]=="REVIEW_REQUIRED"
+        again={**recover,"request_id":uuid4()}
+        reject(prepare_renewal_ci,db,**again)
+        canceled={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{ri}","status":"cancelled"}
+        proof=dict(reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,intent=ri,payment=canceled,statement_settled_cents=0)
+        reject(cancel_expired_renewal_ci,db,**{**proof,"statement_settled_cents":1})
+        reject(cancel_expired_renewal_ci,db,**{**proof,"payment":{**canceled,"external_reference":"other"}})
+        reject(cancel_expired_renewal_ci,db,**{**proof,"tenant":uuid4()})
+        reject(cancel_expired_renewal_ci,db,**{**proof,"payment":{**canceled,"status":"pending"}})
+        reject(cancel_expired_renewal_ci,db,**{**proof,"reviewer_token":token,"reviewer_tenant":tenant})
+        reject(reconcile_renewal_ci,db,**{**review,"intent":ri,"payment":{**canceled,"status":"approved"}})
+        def cancel(_):
+            with connection() as c:return cancel_expired_renewal_ci(c,**proof)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assert list(pool.map(cancel,range(2)))==[recover["request_id"]]*2
+        reject(reconcile_renewal_ci,db,**{**review,"intent":ri,"payment":{**canceled,"status":"approved"}})
+        reopened=get(client,path,token)
+        assert reopened["offer"]["predecessor"]==str(ent) and next(x for x in reopened["renewals"] if x["request_id"]==str(recover["request_id"]))["state"]=="CANCELED"
+        def retry(_):
+            with connection() as c:return prepare_renewal_ci(c,**again)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a,b=list(pool.map(retry,range(2)))
+        assert a==b and a[1]!=ri
+        reject(prepare_renewal_ci,db,**{**again,"request_id":uuid4()})
+        replacement={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{a[1]}"}
+        new=reconcile_renewal_ci(db,**{**review,"intent":a[1],"payment":replacement})
+        nstart,npaid=db.execute("SELECT e.valid_from,p.paid_at FROM public.saas_license_entitlements e JOIN public.saas_payment_intents p "
+                                "ON p.id=e.payment_intent_id WHERE e.id=%s",(new,)).fetchone()
+        assert nstart==(npaid if late else old_end)
+        assert db.execute("SELECT status FROM public.saas_license_entitlements WHERE id=%s",(ent,)).fetchone()[0]=="REVOKED"
+        assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
+        assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        restored=get(client,path,token)
+        assert restored["access"]=="CURRENT" and restored["offer"]["predecessor"]==str(new)
+        assert {x["request_id"]:x["state"] for x in restored["renewals"]}=={str(args["request_id"]):"REFUNDED",str(recover["request_id"]):"CANCELED",str(again["request_id"]):"CI_RECONCILED"}
+        print("M41500_RECOVERY_EXPIRED_REFUND_"+("LATE" if late else "EARLY")+"=PASS")
         assert refunded["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
         print("M41490_SCOPED_RENEWAL_HTTP_"+("LATE" if late else "EARLY")+"=PASS")
         print("M41480_RENEWAL_"+("LATE_ANNUAL" if late else "EARLY_MONTHLY")+"_REFUND_REPLAY_ISOLATION=PASS")

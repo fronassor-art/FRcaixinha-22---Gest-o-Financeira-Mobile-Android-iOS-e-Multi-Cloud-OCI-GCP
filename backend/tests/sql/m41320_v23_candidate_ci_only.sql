@@ -19,7 +19,7 @@ CREATE UNIQUE INDEX fr_v23_initial_preparation_unique ON public.saas_subscriptio
  (tenant_id,admin_user_id,contract_acceptance_id) WHERE renewal_request_id IS NULL;
 CREATE TABLE public.fr_v23_renewals (
  request_id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES public.tenants(id),
- actor uuid NOT NULL REFERENCES public.users(id), predecessor uuid NOT NULL UNIQUE REFERENCES public.saas_license_entitlements(id),
+ actor uuid NOT NULL REFERENCES public.users(id), predecessor uuid NOT NULL REFERENCES public.saas_license_entitlements(id),
  preparation_id uuid NOT NULL UNIQUE REFERENCES public.saas_subscription_preparations(id),
  intent_id uuid NOT NULL UNIQUE REFERENCES public.saas_payment_intents(id),
  price_version uuid NOT NULL REFERENCES public.platform_license_price_versions(id),
@@ -28,11 +28,16 @@ CREATE TABLE public.fr_v23_renewals (
  document_hash text NOT NULL CHECK(document_hash ~ '^[0-9a-f]{64}$'),
  accepted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  expires_at timestamptz NOT NULL,
+ canceled_at timestamptz,
  CHECK(expires_at>accepted_at),
+ CHECK(canceled_at IS NULL OR canceled_at>=expires_at),
  anchor_day int CHECK(anchor_day BETWEEN 1 AND 31),
  entitlement_id uuid UNIQUE REFERENCES public.saas_license_entitlements(id),
- CHECK((anchor_day IS NULL)=(entitlement_id IS NULL))
+ CHECK((anchor_day IS NULL)=(entitlement_id IS NULL)),
+ CHECK(canceled_at IS NULL OR entitlement_id IS NULL)
 );
+-- M41500: one non-canceled successor; canceled history remains immutable in service.
+CREATE UNIQUE INDEX fr_v23_renewal_open_predecessor ON public.fr_v23_renewals(predecessor) WHERE canceled_at IS NULL;
 REVOKE ALL ON public.fr_v23_renewals FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
 ALTER TABLE public.cycles DROP CONSTRAINT uq_tenant_cycle_year;
 ALTER TABLE public.contributions DROP CONSTRAINT uq_membership_competence;

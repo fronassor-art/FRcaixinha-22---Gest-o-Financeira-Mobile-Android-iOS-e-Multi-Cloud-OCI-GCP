@@ -6,7 +6,7 @@ import type {Transport} from '../services/productTransactionalBoundaryV23';
 const transport:Transport={origin:getApiBaseUrl,captureSession:()=>authService.captureSession(),isCurrent:s=>authService.isSessionSnapshotCurrent(s),getUser:()=>authService.getUser(),invalidateIfCurrent:s=>authService.invalidateSessionIfCurrent(s),send:(u,o)=>fetch(u,o)};
 const money=(n:number)=>(n/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const when=(v:string)=>new Date(v).toLocaleString('pt-BR',{timeZone:'America/Belem'});
-const labels:Record<string,string>={CURRENT:'Vigente',SCHEDULED:'Período futuro pago',EXPIRED:'Vencida',SUSPENDED:'Suspensa',REFUNDED:'Estorno integral',PENDING:'Aguardando conciliação',REVIEW_REQUIRED:'Revisão necessária',CI_RECONCILED:'Conciliada em CI'};
+const labels:Record<string,string>={CURRENT:'Vigente',SCHEDULED:'Período futuro pago',EXPIRED:'Vencida',SUSPENDED:'Suspensa',REFUNDED:'Estorno integral',PENDING:'Aguardando conciliação',REVIEW_REQUIRED:'Revisão necessária',CI_RECONCILED:'Conciliada em CI',CANCELED:'Oferta expirada cancelada com prova em CI'};
 const btn='min-h-11 rounded border border-emerald-700 px-3 text-sm disabled:opacity-50';
 function scope():AdminScope{const u=authService.getUser();if(!u||u.role!=='TENANT_ADMIN'||!u.tenantId)throw Error('Sessão alterada.');return {userId:u.id,tenantId:u.tenantId,role:u.role};}
 export function SaasRenewalV23(){
@@ -30,7 +30,7 @@ export function SaasRenewalV23(){
    {view.segments.map(s=><article key={s.entitlement_id} className="border rounded p-2 text-sm"><p>{s.tier} · {s.period==='MONTHLY'?'Mensal':'Anual'} · {money(s.cents)}</p><p>{labels[s.state]} · {when(s.valid_from)} até {when(s.valid_until)} (fim exclusivo)</p></article>)}
    {view.renewals.map(s=><article key={s.request_id} className="border rounded p-2 text-sm"><p>Renovação {s.period==='MONTHLY'?'mensal':'anual'} · {money(s.cents)}</p><p>{labels[s.state]}</p>{s.state==='PENDING'&&<p>Validade da oferta de teste: {when(s.expires_at)}</p>}</article>)}
    {view.offer?<div className="space-y-2">
-    <p className="text-sm">Oferta {view.offer.tier} · {view.offer.members_limit} membros / {view.offer.quotas_limit} cotas</p>
+    <p className="text-sm">{view.segments.some(s=>s.entitlement_id===view.offer?.predecessor&&s.state==='REFUNDED')?'Regularização após estorno — nova oferta':'Oferta'} {view.offer.tier} · {view.offer.members_limit} membros / {view.offer.quotas_limit} cotas</p>
     <p className="text-sm">Mensal {money(view.offer.monthly_cents)} · Anual {money(view.offer.annual_cents)}</p>
     <article className="text-sm"><p>Contrato A · {view.document.version} · somente CI</p><p className="break-all text-xs">{view.document.document_hash}</p><p>{view.document.text}</p></article>
     <label className="block text-sm">Periodicidade<select className="w-full min-h-11 border rounded p-2" value={period} onChange={e=>{setPeriod(e.target.value as typeof period);setAccepted(false);setPrepared('');}}><option value="MONTHLY">Mensal</option><option value="ANNUAL">Anual</option></select></label>

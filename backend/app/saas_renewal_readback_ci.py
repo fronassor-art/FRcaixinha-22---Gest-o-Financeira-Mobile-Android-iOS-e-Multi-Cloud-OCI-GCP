@@ -4,7 +4,7 @@ from .cycle_identity_registration_ci import _guard
 from .admin_license_onboarding_ci import _session,COLLECTOR_CI
 from .preliminary_onboarding_ci import _binding
 from .administrator_reauthentication_ci import _license_access
-from .saas_renewal_v23_ci import _lock,_previous,prepare_renewal_ci
+from .saas_renewal_v23_ci import _lock,_previous,_term_base,prepare_renewal_ci
 from .onboarding_readback_ci import _document
 from .saas_billing_ci import _cents
 
@@ -50,7 +50,7 @@ def renewal_overview_ci(conn,*,token,tenant):
         if sum(x["state"]=="CURRENT" for x in segments)!=(1 if access=="CURRENT" else 0):
             raise LifecycleDenied("Vigência inconsistente.")
         renewals=conn.execute(
-            "SELECT r.request_id,r.predecessor,r.intent_id,r.price_version,r.period,r.cents,r.expires_at,r.entitlement_id,p.status "
+            "SELECT r.request_id,r.predecessor,r.intent_id,r.price_version,r.period,r.cents,r.expires_at,r.entitlement_id,p.status,r.canceled_at,p.provider_payment_id,p.paid_at,p.reconciled_at "
             "FROM public.fr_v23_renewals r JOIN public.saas_payment_intents p ON p.id=r.intent_id AND p.preparation_id=r.preparation_id "
             "JOIN public.saas_subscription_preparations s ON s.id=r.preparation_id AND s.renewal_request_id=r.request_id "
             "WHERE r.tenant_id=%s AND r.actor=%s AND p.tenant_id=r.tenant_id AND s.tenant_id=r.tenant_id "
@@ -63,21 +63,31 @@ def renewal_overview_ci(conn,*,token,tenant):
             raise LifecycleDenied("Histórico de renovação inconsistente.")
         items=[]
         by_id={x["entitlement_id"]:x for x in segments}
-        for req,prev,intent,price,period,cents,expiry,ent,pay in renewals:
+        for req,prev,intent,price,period,cents,expiry,ent,pay,canceled,provider_id,paid,reconciled in renewals:
             if prev not in by_id:raise LifecycleDenied("Predecessor indisponível.")
-            if pay=="PENDING" and ent is None:label="PENDING" if now<expiry else "REVIEW_REQUIRED"
-            elif pay in ("APPROVED","REFUNDED") and ent in by_id and by_id[ent]["intent_id"]==intent and by_id[ent]["cents"]==cents and by_id[ent]["period"]==period:
+            if pay=="CANCELED" and ent is None and canceled and expiry<=canceled<=now and provider_id and paid is None and reconciled is None:
+                if not conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND action='CI_RENEWAL_EXPIRED_CANCELED' "
+                                    "AND object_id=%s AND evidence_ref=%s",(tenant,str(req),provider_id)).fetchone():
+                    raise LifecycleDenied("Cancelamento sem prova.")
+                label="CANCELED"
+            elif pay=="PENDING" and ent is None and canceled is None:label="PENDING" if now<expiry else "REVIEW_REQUIRED"
+            elif pay in ("APPROVED","REFUNDED") and canceled is None and ent in by_id and by_id[ent]["intent_id"]==intent and by_id[ent]["cents"]==cents and by_id[ent]["period"]==period:
                 label="REFUNDED" if pay=="REFUNDED" else "CI_RECONCILED"
                 if (label=="REFUNDED")!=(by_id[ent]["state"]=="REFUNDED"):raise LifecycleDenied("Estorno inconsistente.")
             else:raise LifecycleDenied("Pagamento incompatível.")
             items.append(dict(request_id=req,predecessor=prev,intent_id=intent,price_version=price,period=period,cents=cents,
                               expires_at=expiry,entitlement_id=ent,state=label))
         offer=None
-        # No renewal of a revoked/suspended predecessor, expired pending offer,
-        # or change of plan. These cases need separate reviewed recovery.
-        last=max(segments,key=lambda x:x["valid_until"])
-        if last["state"] in ("CURRENT","EXPIRED","SCHEDULED") and not any(x["predecessor"]==last["entitlement_id"] for x in items):
-            try:prev=_previous(conn,tenant,actor,last["entitlement_id"],acceptance)
+        # History is a lineage, not a maximum date (a refunded annual period
+        # can extend beyond a replacement monthly period).
+        used={x["predecessor"] for x in items if x["entitlement_id"] is not None}
+        leaves=[x for x in segments if x["entitlement_id"] not in used]
+        if len(leaves)!=1:raise LifecycleDenied("Histórico de vigência ambíguo.")
+        last=leaves[0]
+        if last["state"] in ("CURRENT","EXPIRED","SCHEDULED","REFUNDED") and not any(x["predecessor"]==last["entitlement_id"] and x["state"]!="CANCELED" for x in items):
+            try:
+                prev=_previous(conn,tenant,actor,last["entitlement_id"],acceptance)
+                _term_base(conn,tenant,actor,prev,acceptance,now)
             except LifecycleDenied:prev=None
             if prev:
                 price=conn.execute(
