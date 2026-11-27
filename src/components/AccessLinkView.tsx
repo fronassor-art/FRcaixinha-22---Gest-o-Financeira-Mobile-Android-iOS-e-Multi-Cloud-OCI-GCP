@@ -1,3 +1,4 @@
+import {OnboardingGateV23} from './OnboardingGateV23';
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
 
@@ -80,6 +81,7 @@ export const AccessLinkView: React.FC<AccessLinkViewProps> = ({link, onBack}) =>
             ? 'Escolha uma nova senha. O link é de uso único.'
             : 'Confirme o acesso à caixa de e-mail. Isso não ativa sua conta automaticamente.'}
         </p>
+        {link.mode==='convite'&&<OnboardingGateV23 audience="INVITED"/>}
         {!token && !success ? <p role="alert" className="mt-4 text-sm text-amber-100">
           Link inválido ou incompleto. Solicite outro pelo aplicativo.
         </p> : null}

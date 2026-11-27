@@ -1,3 +1,4 @@
+import {OnboardingGateV23} from './OnboardingGateV23';
 import React,{useEffect,useRef,useState} from 'react';
 import {authService} from '../services/authService';
 import {productTransactionalApiV23 as api} from '../services/productTransactionalApiV23';
@@ -39,6 +40,7 @@ export function ProductTransactionalPanelV23(scope:Scope){
    {directory.items.length===0?<p>Nenhum ciclo V2.3 nesta página.</p>:<label className="block text-sm">Ciclo disponível<select className={field} value={cycle} disabled={busy} onChange={e=>choose(e.target.value)}><option value="">Selecione</option>{directory.items.map(c=><option key={c.cycle_id} value={c.cycle_id}>{c.start_date} a {c.closing} · {c.mode} · {c.status} · {money(c.quota_cents)}/cota{c.membership_state==='INVITED'?' · convite para aceite':c.membership_state==='CONSENTED'?' · adesão pendente':''}</option>)}</select></label>}
    <div className="flex flex-wrap gap-2">{directoryOffset>0&&<button className={btn} disabled={busy} onClick={()=>void load('directory',directoryOffset-50)}>Ciclos anteriores</button>}{directory.has_more&&directoryOffset<10000&&<button className={btn} disabled={busy} onClick={()=>void load('directory',directoryOffset+50)}>Mais ciclos</button>}</div>
   </>}
+  <OnboardingGateV23 audience={role}/>
   <ProductTransactionalFormsV23 key={JSON.stringify([userId,tenantId,role,cycle,offset])} scope={scope} cycle={cycle} workspace={workspace}/>
   {workspace&&<>
    <div className="space-y-1 text-sm"><h4 className="font-semibold">Política registrada</h4>

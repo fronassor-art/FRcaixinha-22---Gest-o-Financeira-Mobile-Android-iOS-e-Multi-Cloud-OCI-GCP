@@ -289,6 +289,8 @@ jobs:
         run: npx tsx src/tests/m41370_product_transactional_forms_ci.test.ts
       - name: M41380 — referências V2.3 por sessão, ciclo, perfil e limites
         run: npx tsx src/tests/m41380_product_selection_ci.test.ts
+      - name: M41420 — fronteira mobile de contratação bloqueada
+        run: npx tsx src/tests/m41420_onboarding_boundary_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
@@ -513,7 +515,7 @@ jobs:
           ATIVACAO_REAL: 'OFF'
         run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m41150_fastapi_rls_context_ci.py
       - name: M41320 — contrato API V2.3 e bloqueio de runtime
-        run: PYTHONPATH=backend python -B -m pytest -q -p no:cacheprovider backend/tests/test_m41320_product_api_ci.py
+        run: PYTHONPATH=backend python -B -m pytest -q -p no:cacheprovider backend/tests/test_m41320_product_api_ci.py backend/tests/test_m41420_onboarding_api_ci.py
       - name: M38992 — sintaxe do instalador aditivo original (sem executar)
         run: bash -n backend/scripts/frfinance_m38992_apply_m047_original_pg18.sh
       - name: M38994 — validar sintaxe M048, sem aplicar no banco

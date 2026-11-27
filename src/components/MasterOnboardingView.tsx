@@ -1,3 +1,4 @@
+import {OnboardingGateV23} from './OnboardingGateV23';
 import React,{useEffect,useRef,useState} from 'react';
 import {authService} from '../services/authService';
 import {createMasterOnboardingFence,type MasterOnboardingTicket} from '../services/masterOnboardingRequestFence';
@@ -150,6 +151,7 @@ export const MasterOnboardingView:React.FC<{state:AppState}>=({state})=>{
     </header>
 
     <FirstCaixinhaCalendarDraftPanel/>
+    <OnboardingGateV23 audience="MASTER"/>
 
     {current.status==='loading'&&<p role="status">Consultando requisitos do servidor...</p>}
     {current.status==='error'&&<div role="alert" className="fr-light-card rounded-xl p-4">

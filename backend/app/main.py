@@ -89,6 +89,8 @@ app.include_router(_saas_promotions.tenant_router, prefix=settings.API_V1_STR)
 app.include_router(contributions.router, prefix=settings.API_V1_STR)
 from .routers import product_v23
 app.include_router(product_v23.router, prefix=settings.API_V1_STR)
+from .routers import onboarding_v23
+app.include_router(onboarding_v23.router, prefix=settings.API_V1_STR)
 app.include_router(cycle_contribution_price.router, prefix=settings.API_V1_STR)
 app.include_router(member_cycle_previews.router, prefix=settings.API_V1_STR)
 app.include_router(financial_integrity_previews.router, prefix=settings.API_V1_STR)
