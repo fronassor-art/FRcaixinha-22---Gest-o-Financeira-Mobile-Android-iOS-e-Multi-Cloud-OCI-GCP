@@ -90,6 +90,9 @@ on:
       - 'src/services/productTransactionalBoundaryV23.ts'
       - 'src/services/productTransactionalApiV23.ts'
       - 'src/tests/m41360_product_transactional_mobile_ci.test.ts'
+      - 'src/services/productTransactionalFormsV23.ts'
+      - 'src/components/ProductTransactionalFormsV23.tsx'
+      - 'src/tests/m41370_product_transactional_forms_ci.test.ts'
       - 'docs/FR_FINANCE_M41310_SUPERPACOTE_FUNCIONAL_V23.md'
       - 'backend/app/routers/product_v23.py'
       - 'backend/app/main.py'
@@ -101,6 +104,7 @@ on:
       - 'docs/FR_FINANCE_M41340_POLICY_LICENSE_CI_NO_GO.md'
       - 'docs/FR_FINANCE_M41350_RESERVES_PIX_EXCLUSION_CI_NO_GO.md'
       - 'docs/FR_FINANCE_M41360_MOBILE_READBACK_CI_NO_GO.md'
+      - 'docs/FR_FINANCE_M41370_FORMS_CANDIDATE_NO_GO.md'
       - 'docs/FR_Finance_Caderno_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_Finance_Contrato_Tecnico_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
@@ -278,6 +282,8 @@ jobs:
         run: npx tsx src/tests/m41310_integrated_product_flow_ci.test.ts
       - name: M41360 — leitura V2.3 Android por sessão, centavos e HTTP fail-closed
         run: npx tsx src/tests/m41360_product_transactional_mobile_ci.test.ts
+      - name: M41370 — formulários V2.3, payloads, aceite, tentativa idempotente e bloqueio real
+        run: npx tsx src/tests/m41370_product_transactional_forms_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso

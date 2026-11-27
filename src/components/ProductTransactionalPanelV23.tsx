@@ -3,6 +3,7 @@ import {authService} from '../services/authService';
 import {productTransactionalApiV23 as api} from '../services/productTransactionalApiV23';
 import type {Scope,Directory,Workspace} from '../services/productTransactionalBoundaryV23';
 import {formatBRL} from '../services/financialEngine';
+import {ProductTransactionalFormsV23} from './ProductTransactionalFormsV23';
 const money=(n:number)=>formatBRL(n/100);
 const btn='min-h-11 rounded-lg border border-emerald-700 px-3 py-2 text-sm font-semibold disabled:opacity-50';
 const field='w-full min-h-11 rounded-lg border border-slate-300 bg-white p-2';
@@ -38,6 +39,7 @@ export function ProductTransactionalPanelV23(scope:Scope){
    {directory.items.length===0?<p>Nenhum ciclo V2.3 nesta página.</p>:<label className="block text-sm">Ciclo disponível<select className={field} value={cycle} disabled={busy} onChange={e=>choose(e.target.value)}><option value="">Selecione</option>{directory.items.map(c=><option key={c.cycle_id} value={c.cycle_id}>{c.start_date} a {c.closing} · {c.mode} · {c.status} · {money(c.quota_cents)}/cota{c.membership_state==='CONSENTED'?' · adesão pendente':''}</option>)}</select></label>}
    <div className="flex flex-wrap gap-2">{directoryOffset>0&&<button className={btn} disabled={busy} onClick={()=>void load('directory',directoryOffset-50)}>Ciclos anteriores</button>}{directory.has_more&&directoryOffset<10000&&<button className={btn} disabled={busy} onClick={()=>void load('directory',directoryOffset+50)}>Mais ciclos</button>}</div>
   </>}
+  <ProductTransactionalFormsV23 scope={scope} cycle={cycle} workspace={workspace}/>
   {workspace&&<>
    <div className="space-y-1 text-sm"><h4 className="font-semibold">Política registrada</h4>
     <p>Cota: {money(workspace.policy.quota_cents)} · Administração: {workspace.policy.admin_bps/100}% · Atraso: {workspace.policy.late_days} dias / {workspace.policy.late_competences} competências.</p>
