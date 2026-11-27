@@ -12,6 +12,7 @@ import {CycleContributionPolicy,parseCyclePriceInput} from '../services/cyclePri
 import {CyclePriceAttempt,reuseOrCreateCyclePriceAttempt} from '../services/cyclePriceAttempt';
 import {CycleOpeningPreviewPanel} from './CycleOpeningPreviewPanel';
 import {ProductHomologationPanel} from './ProductHomologationPanel';
+import {ProductTransactionalPanelV23} from './ProductTransactionalPanelV23';
 
 interface ContributionsViewProps {
   state: AppState;
@@ -195,7 +196,11 @@ export const ContributionsView: React.FC<ContributionsViewProps> = ({ state }) =
         </button>
       </div>
       {state.currentUserId && state.currentTenantId && (state.currentRole==='TENANT_ADMIN'||state.currentRole==='TENANT_MEMBER') &&
-        <ProductHomologationPanel key={key} role={state.currentRole}/>}
+        <React.Fragment key={key}>
+          <ProductTransactionalPanelV23 userId={state.currentUserId} tenantId={state.currentTenantId} role={state.currentRole}/>
+          <ProductHomologationPanel role={state.currentRole}/>
+          <p className="text-xs text-slate-600">As consultas e políticas históricas abaixo são distintas da V2.3 prospectiva; não alteram contratos aceitos.</p>
+        </React.Fragment>}
       {!pixEnabled && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         Pagamentos por Pix ainda não estão disponíveis. Nenhum valor é marcado como pago sem conciliação.
       </p>}

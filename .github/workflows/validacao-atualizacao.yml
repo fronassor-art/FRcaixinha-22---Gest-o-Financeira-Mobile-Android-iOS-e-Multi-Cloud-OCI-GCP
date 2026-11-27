@@ -86,6 +86,10 @@ on:
       - 'src/services/integratedProductFlowV23.ts'
       - 'src/components/IntegratedProductWorkspaceV23.tsx'
       - 'src/tests/m41310_integrated_product_flow_ci.test.ts'
+      - 'src/components/ProductTransactionalPanelV23.tsx'
+      - 'src/services/productTransactionalBoundaryV23.ts'
+      - 'src/services/productTransactionalApiV23.ts'
+      - 'src/tests/m41360_product_transactional_mobile_ci.test.ts'
       - 'docs/FR_FINANCE_M41310_SUPERPACOTE_FUNCIONAL_V23.md'
       - 'backend/app/routers/product_v23.py'
       - 'backend/app/main.py'
@@ -96,6 +100,7 @@ on:
       - 'docs/FR_FINANCE_M41330_CYCLE_LEDGER_CI_NO_GO.md'
       - 'docs/FR_FINANCE_M41340_POLICY_LICENSE_CI_NO_GO.md'
       - 'docs/FR_FINANCE_M41350_RESERVES_PIX_EXCLUSION_CI_NO_GO.md'
+      - 'docs/FR_FINANCE_M41360_MOBILE_READBACK_CI_NO_GO.md'
       - 'docs/FR_Finance_Caderno_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_Finance_Contrato_Tecnico_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
@@ -271,6 +276,8 @@ jobs:
         run: npx tsx src/tests/m41300_product_homologation_ci.test.ts
       - name: M41310 — jornada integrada V2.3 do convite ao encerramento fictício
         run: npx tsx src/tests/m41310_integrated_product_flow_ci.test.ts
+      - name: M41360 — leitura V2.3 Android por sessão, centavos e HTTP fail-closed
+        run: npx tsx src/tests/m41360_product_transactional_mobile_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
@@ -1343,7 +1350,7 @@ jobs:
           PGDATABASE: frcaixinha_ci
         run: bash backend/scripts/aistudio_staging_chain_ci.sh
 
-      - name: M41320/M41330/M41340/M41350 — V2.3 transacional, ledger, aceite, licença e reservas no PG18 descartável
+      - name: M41320/M41330/M41340/M41350/M41360 — V2.3 transacional e readback mobile no PG18 descartável
         env:
           GITHUB_ACTIONS: 'true'
           FRCAIXINHA_CI_ISOLATED: '1'

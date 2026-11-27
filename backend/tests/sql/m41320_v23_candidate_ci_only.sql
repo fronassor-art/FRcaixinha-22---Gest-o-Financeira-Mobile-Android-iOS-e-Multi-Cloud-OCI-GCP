@@ -507,6 +507,60 @@ BEGIN
  (SELECT count(*) FROM public.fr_v23_receipts r JOIN public.contributions c ON c.id=r.contribution_id WHERE r.tenant_id=p_tenant AND r.cycle_id=p_cycle AND c.membership_id=m AND public.fr_v23_state(r.id)='CONTESTED'),
  false;
 END $$;
+-- M41360: scoped readback for the existing Android contributions screen.
+-- Offset is bounded; no fake rows and no fallback to historical contribution rules.
+CREATE FUNCTION public.fr_v23_cycle_directory(p_token text,p_tenant uuid,p_offset int)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;r text;m uuid;items jsonb;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,false);
+ SELECT s.active_role INTO r FROM public.sessions s WHERE s.token_hash=encode(public.digest(p_token,'sha256'),'hex');
+ IF p_offset IS NULL OR p_offset NOT BETWEEN 0 AND 10000 THEN RAISE EXCEPTION 'page' USING ERRCODE='22023'; END IF;
+ IF r='TENANT_MEMBER' THEN
+ SELECT me.id INTO m FROM public.memberships me WHERE me.user_id=a AND me.tenant_id=p_tenant AND me.role=r AND me.status='ATIVA';
+ END IF;
+ SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.start_date DESC,q.cycle_id),'[]'::jsonb) INTO items
+ FROM (SELECT p.cycle_id,c.start_date,p.first_due,p.last_due,c.settlement_date AS closing,p.quota_cents,p.mode,c.status,
+ CASE WHEN r='TENANT_ADMIN' THEN NULL WHEN EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p.cycle_id AND ad.membership_id=m) THEN 'ADMITTED' ELSE 'CONSENTED' END AS membership_state
+ FROM public.fr_v23_policy p JOIN public.cycles c ON c.id=p.cycle_id AND c.tenant_id=p.tenant_id
+ WHERE p.tenant_id=p_tenant AND (r='TENANT_ADMIN'
+ OR EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p.cycle_id AND ad.membership_id=m)
+ OR EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p.cycle_id AND co.membership_id=m))
+ ORDER BY c.start_date DESC,p.cycle_id OFFSET p_offset LIMIT 51) q;
+ RETURN jsonb_build_object('tenant_id',p_tenant,'user_id',a,'role',r,'offset',p_offset,
+ 'has_more',jsonb_array_length(items)>50,'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
+END $$;
+CREATE FUNCTION public.fr_v23_workspace(p_token text,p_tenant uuid,p_cycle uuid,p_offset int)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE a uuid;r text;m uuid;admitted boolean;pol jsonb;summary jsonb;reserves jsonb;items jsonb;
+BEGIN
+ a:=public.fr_v23_actor(p_token,p_tenant,false);
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant::text,41320));
+ SELECT s.active_role INTO r FROM public.sessions s WHERE s.token_hash=encode(public.digest(p_token,'sha256'),'hex');
+ IF p_offset IS NULL OR p_offset NOT BETWEEN 0 AND 10000 THEN RAISE EXCEPTION 'page' USING ERRCODE='22023'; END IF;
+ IF r='TENANT_MEMBER' THEN
+ SELECT me.id INTO m FROM public.memberships me WHERE me.user_id=a AND me.tenant_id=p_tenant AND me.role=r AND me.status='ATIVA';
+ admitted:=EXISTS(SELECT 1 FROM public.fr_v23_admission ad WHERE ad.cycle_id=p_cycle AND ad.membership_id=m);
+ IF NOT admitted AND NOT EXISTS(SELECT 1 FROM public.fr_v23_member_consent co WHERE co.cycle_id=p_cycle AND co.membership_id=m)
+ THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ END IF;
+ SELECT to_jsonb(q) INTO pol FROM public.fr_v23_read_policy(p_token,p_tenant,p_cycle) q;
+ IF r='TENANT_ADMIN' THEN
+ SELECT to_jsonb(q) INTO summary FROM public.fr_v23_cycle_summary(p_token,p_tenant,p_cycle) q;
+ SELECT to_jsonb(q) INTO reserves FROM public.fr_v23_reserves(p_token,p_tenant,p_cycle) q;
+ ELSIF admitted THEN SELECT to_jsonb(q) INTO summary FROM public.fr_v23_member_summary(p_token,p_tenant,p_cycle) q;
+ END IF;
+ SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.due_date,q.contribution_id),'[]'::jsonb) INTO items FROM (
+ SELECT co.id AS contribution_id,co.membership_id,co.competence,co.due_date,
+ (co.amount_due*100)::bigint AS due_cents,(co.amount_paid*100)::bigint AS paid_cents,co.payment_status,
+ (SELECT coalesce(sum(re.cents),0)::bigint FROM public.fr_v23_receipts re WHERE re.contribution_id=co.id AND public.fr_v23_state(re.id)='PENDING') AS pending_manual_cents
+ FROM public.contributions co JOIN public.fr_v23_admission ad ON ad.cycle_id=co.cycle_id AND ad.membership_id=co.membership_id
+ WHERE co.tenant_id=p_tenant AND co.cycle_id=p_cycle AND (r='TENANT_ADMIN' OR (admitted AND co.membership_id=m))
+ ORDER BY co.due_date,co.id OFFSET p_offset LIMIT 51) q;
+ RETURN jsonb_build_object('tenant_id',p_tenant,'user_id',a,'role',r,'cycle_id',p_cycle,'membership_id',m,
+ 'policy',pol,'summary',summary,'reserves',reserves,'offset',p_offset,
+ 'has_more',jsonb_array_length(items)>50,'items',CASE WHEN jsonb_array_length(items)>50 THEN items-50 ELSE items END);
+END $$;
 DO $$ DECLARE f regprocedure; BEGIN
  FOR f IN SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'fr_v23_%' LOOP
  EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role',f);
@@ -518,5 +572,6 @@ GRANT EXECUTE ON FUNCTION public.fr_v23_cycle(text,uuid,uuid,date,date,date,date
  public.fr_v23_admit(text,uuid,uuid,uuid,date,int),public.fr_v23_record(text,uuid,uuid,uuid,bigint,text,date,text,text),
  public.fr_v23_review(text,uuid,uuid,text,uuid,date,text),public.fr_v23_receipt(text,uuid,uuid),
  public.fr_v23_cycle_summary(text,uuid,uuid),public.fr_v23_member_summary(text,uuid,uuid),
- public.fr_v23_reserves(text,uuid,uuid),public.fr_v23_reserve_event(text,uuid,uuid,uuid,text,bigint,uuid,text) TO frcaixinha_pg18_app;
+ public.fr_v23_reserves(text,uuid,uuid),public.fr_v23_reserve_event(text,uuid,uuid,uuid,text,bigint,uuid,text),
+ public.fr_v23_cycle_directory(text,uuid,int),public.fr_v23_workspace(text,uuid,uuid,int) TO frcaixinha_pg18_app;
 COMMIT;

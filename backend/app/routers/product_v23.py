@@ -1,11 +1,12 @@
 """V2.3 transactional API; default runtime has no authorized provider.
 CI overrides only in its isolated test application, never in production.
 """
+import json
 from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from ..dependencies import bearer_token
 
@@ -143,3 +144,13 @@ async def read_reserves(tenant_id:UUID,cycle_id:UUID,request:Request,conn=Depend
 async def reserve_event(tenant_id:UUID,cycle_id:UUID,p:ReservationInput,request:Request,conn=Depends(unreleased_transaction)):
     return await call(conn.fetchrow("SELECT public.fr_v23_reserve_event($1,$2,$3,$4,$5,$6,$7,$8) AS event_id",
         bearer_token(request),tenant_id,cycle_id,p.request_id,p.action,p.cents,p.related_hold,p.reason))
+
+@router.get("/cycles")
+async def cycle_directory(tenant_id:UUID,request:Request,offset:int=Query(0,ge=0,le=10000),conn=Depends(unreleased_transaction)):
+    row=await call(conn.fetchrow("SELECT public.fr_v23_cycle_directory($1,$2,$3)::text AS payload",bearer_token(request),tenant_id,offset))
+    return json.loads(row["payload"])
+
+@router.get("/cycles/{cycle_id}/workspace")
+async def workspace(tenant_id:UUID,cycle_id:UUID,request:Request,offset:int=Query(0,ge=0,le=10000),conn=Depends(unreleased_transaction)):
+    row=await call(conn.fetchrow("SELECT public.fr_v23_workspace($1,$2,$3,$4)::text AS payload",bearer_token(request),tenant_id,cycle_id,offset))
+    return json.loads(row["payload"])

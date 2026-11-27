@@ -269,6 +269,30 @@ async def main():
                 return (await client.post(prefix+"/manual-receipts",json=new_receipt(ob3,1000),headers=h)).status_code
             assert sorted(await asyncio.gather(pix_attempt(),manual_attempt()))==[200,409]
             assert await owner.fetchval("SELECT amount_paid FROM public.contributions WHERE id=$1",ob3)==0
+            # M41360 real API readback for mobile: no unrelated cycle or member data.
+            directory=await get("/cycles")
+            assert directory["tenant_id"]==str(t) and directory["role"]=="TENANT_ADMIN" and directory["user_id"]==str(admin)
+            assert {x["cycle_id"] for x in directory["items"]}=={c,c2,*extras}
+            own_dir=await get("/cycles",ha)
+            assert own_dir["role"]=="TENANT_MEMBER" and all(x["membership_state"] in ("ADMITTED","CONSENTED") for x in own_dir["items"])
+            assert (await get("/cycles",hb))["items"]==[]
+            await get("/cycles",ho,403)
+            admin_workspace=await get(f"/cycles/{c2}/workspace")
+            assert admin_workspace["policy"]["quota_cents"]==5000
+            assert admin_workspace["reserves"]["bank_available_cents"]==0
+            assert admin_workspace["summary"]["paid_cents"]==1000
+            assert len(admin_workspace["items"])==11
+            own_workspace=await get(f"/cycles/{c2}/workspace",ha)
+            assert own_workspace["membership_id"]==str(ma) and own_workspace["reserves"] is None
+            assert "manual_documented_cents" not in own_workspace["summary"]
+            assert all(x["membership_id"]==str(ma) for x in own_workspace["items"])
+            assert (await get(f"/cycles/{c2}/workspace?offset=10",ha))["items"][0]["due_date"]=="2027-11-10"
+            await get(f"/cycles/{c2}/workspace",hb,403)
+            await get(f"/cycles/{c2}/workspace",ho,403)
+            await get(f"/cycles/{uuid4()}/workspace",h,403)
+            pending_cycle=extras[1] if (await owner.fetchval("SELECT count(*) FROM public.fr_v23_admission WHERE cycle_id=$1",UUID(extras[0]))) else extras[0]
+            pending_workspace=await get(f"/cycles/{pending_cycle}/workspace",ha)
+            assert pending_workspace["summary"] is None and pending_workspace["items"]==[] and pending_workspace["reserves"] is None
             async with pool.acquire() as conn:
                 try: await conn.fetchval("SELECT count(*) FROM public.fr_v23_reservation_events")
                 except asyncpg.InsufficientPrivilegeError: pass
@@ -285,6 +309,7 @@ async def main():
         print("M41330_CANONICAL_LEDGER_CYCLE_SCOPE_SUMMARIES_REVERSAL=PASS")
         print("M41340_CANONICAL_POLICY_CONSENT_LICENSE_CAPACITY_RACE=PASS")
         print("M41350_CYCLE_RESERVES_DEFICIT_CANONICAL_PIX_EXCLUSION=PASS")
+        print("M41360_CANONICAL_MOBILE_DIRECTORY_WORKSPACE_SCOPE=PASS")
     finally:
         await pool.close()
         await owner.close()
