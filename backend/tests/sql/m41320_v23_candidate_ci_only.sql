@@ -39,6 +39,28 @@ CREATE TABLE public.fr_v23_renewals (
 -- M41500: one non-canceled successor; canceled history remains immutable in service.
 CREATE UNIQUE INDEX fr_v23_renewal_open_predecessor ON public.fr_v23_renewals(predecessor) WHERE canceled_at IS NULL;
 REVOKE ALL ON public.fr_v23_renewals FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+-- M41520: immutable synthetic offer snapshot; acceptance is review only.
+CREATE TABLE public.fr_v23_plan_change_quotes(
+ request_id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+ actor uuid NOT NULL REFERENCES public.users(id),snapshot jsonb NOT NULL CHECK(jsonb_typeof(snapshot)='object'),
+ snapshot_hash text NOT NULL CHECK(snapshot_hash ~ '^[0-9a-f]{64}$'),
+ calculated_at timestamptz NOT NULL,expires_at timestamptz NOT NULL,accepted_at timestamptz,
+ CHECK(expires_at=calculated_at+interval '15 minutes'),
+ CHECK(accepted_at IS NULL OR (accepted_at>=calculated_at AND accepted_at<expires_at))
+);
+ALTER TABLE public.fr_v23_plan_change_quotes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_plan_change_quotes FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fr_v23_plan_change_quotes FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+CREATE FUNCTION public.fr_v23_plan_change_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ IF TG_OP='UPDATE' THEN
+  IF OLD.accepted_at IS NULL AND NEW.accepted_at IS NOT NULL
+   AND (to_jsonb(OLD)-'accepted_at')=(to_jsonb(NEW)-'accepted_at') THEN RETURN NEW; END IF;
+ END IF;
+ RAISE EXCEPTION 'immutable plan change quote' USING ERRCODE='23514';
+END $$;
+CREATE TRIGGER fr_v23_plan_change_immutable_row BEFORE UPDATE OR DELETE ON public.fr_v23_plan_change_quotes FOR EACH ROW EXECUTE FUNCTION public.fr_v23_plan_change_immutable();
+CREATE TRIGGER fr_v23_plan_change_immutable_truncate BEFORE TRUNCATE ON public.fr_v23_plan_change_quotes FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_plan_change_immutable();
 ALTER TABLE public.cycles DROP CONSTRAINT uq_tenant_cycle_year;
 ALTER TABLE public.contributions DROP CONSTRAINT uq_membership_competence;
 ALTER TABLE public.contributions ADD UNIQUE(tenant_id,cycle_id,membership_id,competence);

@@ -175,3 +175,26 @@ def renewal_overview(tenant:UUID,request:Request,execute=Depends(unreleased_onbo
 @router.post("/tenants/{tenant}/renewal")
 def renewal_prepare(tenant:UUID,p:RenewalInput,request:Request,execute=Depends(unreleased_onboarding)):
     return execute("RENEWAL_PREPARE",bearer_token(request),dict(p.model_dump(),tenant=tenant))
+
+
+# M41520: candidate only; unreleased_onboarding remains unconditional 503.
+class PlanChangeQuoteInput(Strict):
+    request_id: UUID
+    target: Literal["ESSENCIAL","INTERMEDIARIO"]
+
+class PlanChangeAcceptInput(DocumentInput):
+    request_id: UUID
+    offer_hash: str=Field(pattern=r"^[0-9a-f]{64}$")
+    accepted: Accepted
+
+@router.get("/tenants/{tenant}/plan-change/{target}")
+def plan_change_preview(tenant:UUID,target:Literal["ESSENCIAL","INTERMEDIARIO"],request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("PLAN_CHANGE_PREVIEW",bearer_token(request),dict(tenant=tenant,target=target))
+
+@router.post("/tenants/{tenant}/plan-change/quotes")
+def plan_change_quote(tenant:UUID,p:PlanChangeQuoteInput,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("PLAN_CHANGE_QUOTE",bearer_token(request),dict(p.model_dump(),tenant=tenant))
+
+@router.post("/tenants/{tenant}/plan-change/accept")
+def plan_change_accept(tenant:UUID,p:PlanChangeAcceptInput,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("PLAN_CHANGE_ACCEPT",bearer_token(request),dict(p.model_dump(),tenant=tenant))

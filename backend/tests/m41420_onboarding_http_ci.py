@@ -15,6 +15,7 @@ from app.preliminary_onboarding_ci import login_preliminary_ci,journey_ci,logout
 from app.administrator_reauthentication_ci import reauthenticate_admin_ci,administrator_readiness_ci,administrator_logout_ci
 
 from app.saas_renewal_readback_ci import renewal_overview_ci,renewal_prepare_http_ci
+from app.saas_plan_change_v23_ci import plan_change_preview_ci,freeze_plan_change_ci,accept_plan_change_ci
 
 def client_for(reviewer_token=None, reviewer_tenant=None):
     # Opaque delivery token is captured only inside this fixture, never in HTTP.
@@ -22,6 +23,9 @@ def client_for(reviewer_token=None, reviewer_tenant=None):
     def execute(op,token,p):
         try:
             with connection() as conn:
+                if op=="PLAN_CHANGE_PREVIEW": return plan_change_preview_ci(conn,token=token,**p)
+                if op=="PLAN_CHANGE_QUOTE": return freeze_plan_change_ci(conn,token=token,**p)
+                if op=="PLAN_CHANGE_ACCEPT": return accept_plan_change_ci(conn,token=token,**p)
                 if op=="RENEWAL_OVERVIEW": return renewal_overview_ci(conn,token=token,**p)
                 if op=="RENEWAL_PREPARE": return renewal_prepare_http_ci(conn,token=token,**p)
                 if op=="ADMIN_REAUTHENTICATE": return reauthenticate_admin_ci(conn,**p)

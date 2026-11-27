@@ -6,6 +6,8 @@ from uuid import UUID,uuid4
 from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci
 from app.administrator_reauthentication_ci import _license_access
 from app.saas_billing_ci import reconcile_approved_saas_payment_ci
+from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci
+from psycopg.types.json import Jsonb
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
 from m41400_cycle_identity_ci import connection,reject
 from m41420_onboarding_http_ci import client_for,post,get
@@ -138,11 +140,63 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert restored["access"]=="CURRENT" and restored["offer"]["predecessor"]==str(new)
         assert {x["request_id"]:x["state"] for x in restored["renewals"]}=={str(args["request_id"]):"REFUNDED",str(recover["request_id"]):"CANCELED",str(again["request_id"]):"CI_RECONCILED"}
         # Pay a future segment, then refund the non-terminal predecessor.
-        future_args={**args,"request_id":uuid4(),"predecessor":new}
+        # Early monthly tenant also prepays one annual segment; each keeps its period.
+        future_args={**args,"request_id":uuid4(),"predecessor":new,"period":"ANNUAL","cents":70033}
         _,fi=prepare_renewal_ci(db,**future_args)
-        fp={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{fi}"}
-        future=reconcile_renewal_ci(db,**{**review,"intent":fi,"payment":fp})
+        fp={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{fi}","transaction_amount":"700.33"}
+        future=reconcile_renewal_ci(db,**{**review,"intent":fi,"payment":fp,"gross":70033,"net":70023})
         future_before=db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()
+        # The same current and future paid intervals are priced separately.
+        target="INTERMEDIARIO"
+        quote_path=f"/tenants/{tenant}/plan-change"
+        preview=get(client,quote_path+"/"+target,token)
+        get(client,quote_path+"/"+target,reviewer_token,403)
+        get(client,quote_path+"/ESSENCIAL",token,403)
+        snap=preview["snapshot"]
+        assert snap["current_tier"]=="ESSENCIAL" and snap["target_tier"]==target
+        assert snap["decision"]=="UPGRADE_REVIEW" and snap["real_payment_authorized"] is False
+        assert len(snap["segments"])== (2 if late else 3)
+        assert {x["period"] for x in snap["segments"]}==({"ANNUAL"} if late else {"MONTHLY","ANNUAL"})
+        assert snap["total_cents"]==sum(x["difference_cents"] for x in snap["segments"])
+        assert snap["segments"][-1]["difference_cents"]==max(0,snap["segments"][-1]["target_cents"]-snap["segments"][-1]["paid_cents"])
+        counts=db.execute("SELECT count(*) FROM public.saas_payment_intents WHERE tenant_id=%s",(tenant,)).fetchone()[0]
+        request=uuid4()
+        quote_args=dict(token=token,tenant=tenant,target=target,request_id=request)
+        def freeze(_):
+            with connection() as c:return freeze_plan_change_ci(c,**quote_args)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            q1,q2=list(pool.map(freeze,range(2)))
+        assert q1==q2 and q1["accepted"] is False
+        quote=post(client,quote_path+"/quotes",dict(request_id=request,target=target),token)
+        assert quote==q1
+        body=dict(request_id=request,offer_hash=quote["offer_hash"],document_id=doc,document_hash=digest,accepted=True)
+        post(client,quote_path+"/accept",{**body,"offer_hash":"f"*64},token,403)
+        post(client,quote_path+"/accept",body,reviewer_token,403)
+        def accept(_):
+            with connection() as c:return accept_plan_change_ci(c,token=token,tenant=tenant,**body)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a1,a2=list(pool.map(accept,range(2)))
+        assert a1==a2 and a1["accepted"] is True and a1["real_payment_authorized"] is False
+        assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_PLAN_CHANGE_REVIEW_ACCEPTED'",(tenant,str(request))).fetchone()[0]==1
+        # Synthetic stale quote: preserve a new snapshot, then change only its
+        # deadline in the disposable fixture to demonstrate fail-closed expiry.
+        expired=uuid4()
+        at=db.execute("SELECT clock_timestamp()-interval '1 hour'").fetchone()[0]
+        expiry=at+timedelta(minutes=15)
+        past={**quote["snapshot"],"calculated_at":_stamp(at),"expires_at":_stamp(expiry)}
+        past_hash=_hash(past)
+        db.execute("INSERT INTO public.fr_v23_plan_change_quotes(request_id,tenant_id,actor,snapshot,snapshot_hash,calculated_at,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                   (expired,tenant,actor,Jsonb(past),past_hash,at,expiry))
+        reject(accept_plan_change_ci,db,token=token,tenant=tenant,**{**body,"request_id":expired,"offer_hash":past_hash})
+        reject(db.execute,"UPDATE public.fr_v23_plan_change_quotes SET snapshot_hash=%s WHERE request_id=%s",("f"*64,request))
+        reject(db.execute,"DELETE FROM public.fr_v23_plan_change_quotes WHERE request_id=%s",(request,))
+        assert db.execute("SELECT count(*) FROM public.saas_payment_intents WHERE tenant_id=%s",(tenant,)).fetchone()[0]==counts
+        assert db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()==future_before
+        assert _decision("INTERMEDIARIO","ESSENCIAL",20,40,20,40,0)=="DOWNGRADE_NEXT_RENEWAL"
+        assert _decision("INTERMEDIARIO","ESSENCIAL",21,40,20,40,0)=="CAPACITY_REVIEW"
+        assert _decision("INTERMEDIARIO","ESSENCIAL",20,41,20,40,0)=="CAPACITY_REVIEW"
+        assert _decision("ESSENCIAL","INTERMEDIARIO",20,40,50,50,0)=="ZERO_DIFFERENCE_REVIEW"
+        print("M41520_FROZEN_PLAN_CHANGE_"+("ANNUAL" if late else "MIXED")+"=PASS")
         assert reconcile_full_refund_ci(db,**{**rev,"intent":a[1],"payment":{**replacement,"status":"refunded","transaction_amount_refunded":replacement["transaction_amount"]}})
         gap=get(client,path,token)
         assert gap["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
@@ -190,6 +244,11 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
     from zoneinfo import ZoneInfo
     tz=ZoneInfo("America/Belem")
     feb=datetime(2027,2,28,10,tzinfo=tz)
+    assert prorata_cents(100,101,feb,feb+timedelta(seconds=2),feb+timedelta(seconds=1))==1
+    assert prorata_cents(100,101,feb,feb+timedelta(seconds=2),feb+timedelta(seconds=1,microseconds=1))==0
+    assert prorata_cents(100,200,feb,feb+timedelta(days=1),feb-timedelta(days=1))==100
+    assert prorata_cents(100,200,feb,feb+timedelta(days=1),feb+timedelta(days=1))==0
+    assert prorata_cents(200,100,feb,feb+timedelta(days=1),feb)==0
     start,end,anchor=renewal_term(feb,31,feb-timedelta(days=1),"MONTHLY")
     assert (start,end.day,end.month,anchor)==(feb,31,3,31)
     _,end,anchor=renewal_term(feb,31,feb+timedelta(days=2),"ANNUAL")

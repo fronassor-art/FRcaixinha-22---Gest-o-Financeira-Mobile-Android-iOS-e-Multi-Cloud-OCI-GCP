@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash,webcrypto} from 'node:crypto';
 import {parseRenewalOverview,prepareRenewal,readRenewal} from '../services/saasRenewalV23';
+import {parsePlanChange} from '../services/saasPlanChangeV23';
 import type {AdminScope} from '../services/onboardingReadbackV23';
 import type {Transport} from '../services/productTransactionalBoundaryV23';
 if(!globalThis.crypto)Object.defineProperty(globalThis,'crypto',{value:webcrypto});
@@ -56,3 +57,11 @@ status=503;await assert.rejects(readRenewal(transport,s));
 status=401;await assert.rejects(readRenewal(transport,s));assert.equal(invalidated,1);
 status=200;current=false;await assert.rejects(readRenewal(transport,s));assert.equal(sendCount,3);
 console.log('M41490_MOBILE_RENEWAL_SCOPE_ACCEPTANCE_NO_POST=PASS');
+
+const planSnap={user_id:s.userId,tenant_id:s.tenantId,role:s.role,ci_only:true,production_authorized:false,real_payment_authorized:false,current_tier:'ESSENCIAL',target_tier:'INTERMEDIARIO',target_price_version:id(16),document_id:id(3),document_hash:hash,calculated_at:'2026-11-27T20:00:00.000000+00:00',expires_at:'2026-11-27T20:15:00.000000+00:00',members_in_use:20,quotas_in_use:40,members_limit:50,quotas_limit:50,decision:'UPGRADE_REVIEW',total_cents:100,segments:[{entitlement_id:id(4),price_version:id(6),period:'MONTHLY',period_start:'2026-11-27T20:00:00.000000+00:00',period_end:'2026-12-27T20:00:00.000000+00:00',paid_cents:8990,target_cents:9090,difference_cents:100}]};
+const canonicalPlan=(v:unknown):string=>Array.isArray(v)?'['+v.map(canonicalPlan).join(',')+']':v!==null&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonicalPlan((v as Record<string,unknown>)[k])).join(',')+'}':JSON.stringify(v);
+const wrap=(snapshot:unknown)=>({snapshot,offer_hash:createHash('sha256').update(canonicalPlan(snapshot)).digest('hex')});
+assert.equal((await parsePlanChange(wrap(planSnap),s,'INTERMEDIARIO')).total_cents,100);
+for(const bad of [{...planSnap,tenant_id:id(9)},{...planSnap,production_authorized:true},{...planSnap,target_tier:'AMPLIADO'},{...planSnap,total_cents:101},{...planSnap,expires_at:'2026-11-27T20:16:00.000000+00:00'},{...planSnap,members_in_use:51},{...planSnap,segments:[{...planSnap.segments[0],difference_cents:99}]}])await assert.rejects(parsePlanChange(wrap(bad),s,'INTERMEDIARIO'));
+await assert.rejects(parsePlanChange({...wrap(planSnap),offer_hash:'f'.repeat(64)},s,'INTERMEDIARIO'));
+console.log('M41520_MOBILE_PLAN_CHANGE_NO_POST=PASS');
