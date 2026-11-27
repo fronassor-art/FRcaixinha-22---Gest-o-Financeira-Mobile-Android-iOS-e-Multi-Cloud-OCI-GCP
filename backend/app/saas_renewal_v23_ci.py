@@ -151,6 +151,8 @@ def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,
         if saved:
             if saved[:8]!=exact:raise LifecycleDenied("Colisão de renovação.")
             return saved[8],saved[9]
+        if conn.execute("SELECT 1 FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone():
+            raise LifecycleDenied("Alteração de plano em revisão de liquidação.")
         prev=_previous(conn,tenant,actor,predecessor,acceptance)
         _term_base(conn,tenant,actor,prev,acceptance,conn.execute("SELECT clock_timestamp()").fetchone()[0])
         if conn.execute("SELECT 1 FROM public.fr_v23_renewals WHERE predecessor=%s AND canceled_at IS NULL",(predecessor,)).fetchone():

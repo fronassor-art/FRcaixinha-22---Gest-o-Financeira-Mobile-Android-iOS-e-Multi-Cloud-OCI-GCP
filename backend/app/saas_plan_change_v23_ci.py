@@ -7,7 +7,9 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 from .account_lifecycle import LifecycleDenied
 from .saas_renewal_readback_ci import renewal_overview_ci
-from .saas_renewal_v23_ci import _lock
+from .saas_renewal_v23_ci import _lock,_reviewer
+from .mercado_pago_safety import ExpectedPayment,matches_approved_payment
+from .admin_license_onboarding_ci import COLLECTOR_CI
 from .saas_billing_ci import _cents
 from .admin_license_onboarding_ci import _audit
 
@@ -161,3 +163,60 @@ def accept_plan_change_ci(conn,*,token,tenant,request_id,offer_hash,document_id,
         conn.execute("UPDATE public.fr_v23_plan_change_quotes SET accepted_at=clock_timestamp() WHERE request_id=%s",(request_id,))
         _audit(conn,actor,"TENANT_ADMIN",tenant,"CI_PLAN_CHANGE_REVIEW_ACCEPTED",request_id,digest)
         return dict(request_id=str(request_id),offer_hash=digest,accepted=True,real_payment_authorized=False)
+
+
+# M41530: a synthetic settlement evidence receipt, NOT a paid upgrade.
+def record_upgrade_settlement_review_ci(conn,*,token,reviewer_token,reviewer_tenant,tenant,request_id,offer_hash,payment,gross,fee,net):
+    if any(type(x) is not UUID or not x.int for x in (tenant,reviewer_tenant,request_id)):
+        raise LifecycleDenied("Escopo inválido.")
+    if type(payment) is not dict or any(type(x) is not int for x in (gross,fee,net)) or not 0<=fee<gross<=MAX_CENTS or net!=gross-fee:
+        raise LifecycleDenied("Extrato sintético incompatível.")
+    if type(payment.get("transaction_amount_refunded")) not in (str,int) or payment["transaction_amount_refunded"] not in ("0","0.00",0):
+        raise LifecycleDenied("Pagamento revertido.")
+    provider_id=str(payment.get("id",""))
+    if not provider_id.isascii() or not provider_id.isdecimal() or len(provider_id)>40:
+        raise LifecycleDenied("Identificador inválido.")
+    with conn.transaction():
+        _lock(conn,tenant)
+        from .admin_license_onboarding_ci import _session
+        actor,_=_session(conn,token,"TENANT_ADMIN",tenant)
+        reviewer=_reviewer(conn,reviewer_token,reviewer_tenant,tenant,actor)
+        row=conn.execute("SELECT snapshot,snapshot_hash,calculated_at,expires_at,accepted_at FROM public.fr_v23_plan_change_quotes "
+                         "WHERE request_id=%s AND tenant_id=%s AND actor=%s FOR UPDATE",(request_id,tenant,actor)).fetchone()
+        if not row:raise LifecycleDenied("Oferta indisponível.")
+        snap,digest,at,expiry,accepted_at=row
+        if (accepted_at is None or _hash(snap)!=digest or offer_hash!=digest or snap["decision"]!="UPGRADE_REVIEW"
+            or snap["tenant_id"]!=str(tenant) or snap["user_id"]!=str(actor) or snap["calculated_at"]!=_stamp(at)
+            or snap["expires_at"]!=_stamp(expiry) or not at<=accepted_at<expiry or snap["total_cents"]!=gross
+            or not conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
+                                "AND action='CI_PLAN_CHANGE_REVIEW_ACCEPTED' AND object_id=%s AND evidence_ref=%s",
+                                (tenant,actor,str(request_id),digest)).fetchone()):
+            raise LifecycleDenied("Oferta ou aceite incompatível.")
+        # Separate reference namespace; no generic renewal/checkout can consume it.
+        reference=f"saas-upgrade-review:{request_id}"
+        if not matches_approved_payment(ExpectedPayment(provider_id,COLLECTOR_CI,reference,gross,False),payment):
+            raise LifecycleDenied("Pagamento não confere.")
+        evidence=dict(offer_hash=digest,provider_id=provider_id,collector=COLLECTOR_CI,reference=reference,
+                      gross=gross,fee=fee,net=net,currency="BRL",live_mode=False)
+        proof=_hash(evidence)
+        saved=conn.execute("SELECT request_id,actor,reviewer,provider_payment_id,evidence_hash FROM public.fr_v23_upgrade_settlement_reviews "
+                           "WHERE tenant_id=%s FOR UPDATE",(tenant,)).fetchone()
+        if saved:
+            if saved!=(request_id,actor,reviewer,provider_id,proof) or not conn.execute(
+                "SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
+                "AND action='CI_UPGRADE_SETTLEMENT_REVIEW' AND object_id=%s AND evidence_ref=%s",
+                (tenant,reviewer,str(request_id),proof)).fetchone():
+                raise LifecycleDenied("Liquidação em revisão ou colisão.")
+        else:
+            now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
+            if now>=expiry or _snapshot(conn,token,tenant,snap["target_tier"],at)!=snap:
+                raise LifecycleDenied("Oferta expirada ou alterada; revisão separada necessária.")
+            if conn.execute("SELECT 1 FROM public.saas_payment_intents WHERE provider_payment_id=%s",(provider_id,)).fetchone():
+                raise LifecycleDenied("Identificador já usado em outra cobrança.")
+            conn.execute("INSERT INTO public.fr_v23_upgrade_settlement_reviews "
+                         "(request_id,tenant_id,actor,reviewer,provider_payment_id,evidence,evidence_hash,gross_cents,fee_cents,net_cents) "
+                         "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                         (request_id,tenant,actor,reviewer,provider_id,Jsonb(evidence),proof,gross,fee,net))
+            _audit(conn,reviewer,"SYSTEM",tenant,"CI_UPGRADE_SETTLEMENT_REVIEW",request_id,proof)
+        return dict(request_id=str(request_id),evidence_hash=proof,state="SETTLEMENT_REVIEW",
+                    entitlement_applied=False,real_payment_authorized=False)

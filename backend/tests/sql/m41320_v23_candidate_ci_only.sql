@@ -61,6 +61,26 @@ BEGIN
 END $$;
 CREATE TRIGGER fr_v23_plan_change_immutable_row BEFORE UPDATE OR DELETE ON public.fr_v23_plan_change_quotes FOR EACH ROW EXECUTE FUNCTION public.fr_v23_plan_change_immutable();
 CREATE TRIGGER fr_v23_plan_change_immutable_truncate BEFORE TRUNCATE ON public.fr_v23_plan_change_quotes FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_plan_change_immutable();
+-- M41530: evidence quarantine only; no entitlement or payable is created.
+CREATE TABLE public.fr_v23_upgrade_settlement_reviews(
+ request_id uuid PRIMARY KEY REFERENCES public.fr_v23_plan_change_quotes(request_id),
+ tenant_id uuid NOT NULL UNIQUE REFERENCES public.tenants(id),
+ actor uuid NOT NULL REFERENCES public.users(id),reviewer uuid NOT NULL REFERENCES public.users(id),
+ provider_payment_id text NOT NULL UNIQUE CHECK(provider_payment_id ~ '^[0-9]{1,40}$'),
+ evidence jsonb NOT NULL CHECK(jsonb_typeof(evidence)='object'),
+ evidence_hash text NOT NULL CHECK(evidence_hash ~ '^[0-9a-f]{64}$'),
+ gross_cents bigint NOT NULL CHECK(gross_cents BETWEEN 1 AND 100000000),
+ fee_cents bigint NOT NULL CHECK(fee_cents>=0 AND fee_cents<gross_cents),
+ net_cents bigint NOT NULL CHECK(net_cents=gross_cents-fee_cents),
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),CHECK(actor<>reviewer)
+);
+ALTER TABLE public.fr_v23_upgrade_settlement_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_upgrade_settlement_reviews FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fr_v23_upgrade_settlement_reviews FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+CREATE FUNCTION public.fr_v23_upgrade_review_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN RAISE EXCEPTION 'immutable upgrade settlement review' USING ERRCODE='23514'; END $$;
+CREATE TRIGGER fr_v23_upgrade_review_row BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_settlement_reviews FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_upgrade_review_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_settlement_reviews FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 ALTER TABLE public.cycles DROP CONSTRAINT uq_tenant_cycle_year;
 ALTER TABLE public.contributions DROP CONSTRAINT uq_membership_competence;
 ALTER TABLE public.contributions ADD UNIQUE(tenant_id,cycle_id,membership_id,competence);

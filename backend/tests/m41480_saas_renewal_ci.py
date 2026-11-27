@@ -6,7 +6,8 @@ from uuid import UUID,uuid4
 from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci
 from app.administrator_reauthentication_ci import _license_access
 from app.saas_billing_ci import reconcile_approved_saas_payment_ci
-from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci
+from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci
+from app.saas_renewal_readback_ci import renewal_overview_ci
 from psycopg.types.json import Jsonb
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
 from m41400_cycle_identity_ci import connection,reject
@@ -196,6 +197,39 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert _decision("INTERMEDIARIO","ESSENCIAL",21,40,20,40,0)=="CAPACITY_REVIEW"
         assert _decision("INTERMEDIARIO","ESSENCIAL",20,41,20,40,0)=="CAPACITY_REVIEW"
         assert _decision("ESSENCIAL","INTERMEDIARIO",20,40,50,50,0)=="ZERO_DIFFERENCE_REVIEW"
+        # Exercise the new review in a rollback-only subscenario so the existing
+        # independent refund/gap/recovery tests below still run unchanged.
+        gross=quote["snapshot"]["total_cents"]
+        upgrade_payment={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas-upgrade-review:{request}",
+                         "transaction_amount":str(Decimal(gross)/100)}
+        upgrade=dict(token=token,reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,
+                     request_id=request,offer_hash=quote["offer_hash"],payment=upgrade_payment,gross=gross,fee=0,net=gross)
+        original_terms=db.execute("SELECT id,plan_tier,valid_from,valid_until,status FROM public.saas_license_entitlements WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()
+        for change in (dict(offer_hash="f"*64),dict(request_id=expired),dict(tenant=uuid4()),dict(reviewer_token=token,reviewer_tenant=tenant),
+                       dict(payment={**upgrade_payment,"live_mode":True}),dict(payment={**upgrade_payment,"collector_id":"999"}),
+                       dict(payment={**upgrade_payment,"transaction_amount_refunded":"0.01"}),dict(payment={**upgrade_payment,"external_reference":"other"}),
+                       dict(payment={**upgrade_payment,"transaction_amount":"0.01"}),dict(net=gross-1)):
+            reject(record_upgrade_settlement_review_ci,db,**{**upgrade,**change})
+        with db.transaction(force_rollback=True):
+            receipt=record_upgrade_settlement_review_ci(db,**upgrade)
+            assert receipt==record_upgrade_settlement_review_ci(db,**upgrade)
+            assert receipt["state"]=="SETTLEMENT_REVIEW" and receipt["entitlement_applied"] is False and receipt["real_payment_authorized"] is False
+            reject(record_upgrade_settlement_review_ci,db,**{**upgrade,"fee":1,"net":gross-1})
+            reject(record_upgrade_settlement_review_ci,db,**{**upgrade,"payment":{**upgrade_payment,"id":str(uuid4().int)[:38]}})
+            assert db.execute("SELECT count(*) FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone()[0]==1
+            assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_UPGRADE_SETTLEMENT_REVIEW'",(tenant,str(request))).fetchone()[0]==1
+            assert renewal_overview_ci(db,token=token,tenant=tenant)["offer"] is None
+            reject(plan_change_preview_ci,db,token=token,tenant=tenant,target=target)
+            reject(prepare_renewal_ci,db,**{**future_args,"request_id":uuid4(),"predecessor":future})
+            for sql in ("UPDATE public.fr_v23_upgrade_settlement_reviews SET fee_cents=1 WHERE tenant_id=%s",
+                        "DELETE FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s"):
+                with db.transaction(force_rollback=True):reject(db.execute,sql,(tenant,))
+            assert db.execute("SELECT id,plan_tier,valid_from,valid_until,status FROM public.saas_license_entitlements WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==original_terms
+            assert db.execute("SELECT count(*) FROM public.saas_payment_intents WHERE tenant_id=%s",(tenant,)).fetchone()[0]==counts
+            assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
+            assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        assert db.execute("SELECT count(*) FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone()[0]==0
+        print("M41530_UPGRADE_SETTLEMENT_REVIEW_"+("ANNUAL" if late else "MIXED")+"=PASS")
         print("M41520_FROZEN_PLAN_CHANGE_"+("ANNUAL" if late else "MIXED")+"=PASS")
         assert reconcile_full_refund_ci(db,**{**rev,"intent":a[1],"payment":{**replacement,"status":"refunded","transaction_amount_refunded":replacement["transaction_amount"]}})
         gap=get(client,path,token)
