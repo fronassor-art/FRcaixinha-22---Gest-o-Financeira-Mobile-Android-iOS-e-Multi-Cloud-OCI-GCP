@@ -216,6 +216,20 @@ def build_context_schema(owner) -> None:
     owner.execute("ALTER TABLE m41050.target_challenge_secret OWNER TO m40650_owner")
     owner.execute("REVOKE ALL ON m41050.target_challenge_secret FROM PUBLIC,m40680_auth,m40650_app")
     owner.execute("INSERT INTO m41050.target_challenge_secret VALUES(true,m40700.gen_random_bytes(32))")
+    # Disposable authority: committed reservation survives worker replacement
+    # and rollback of the target read transaction; no raw ticket is stored.
+    owner.execute("""
+        CREATE TABLE m41050.read_target_reservations (
+          ticket_digest text PRIMARY KEY REFERENCES m40700.ticket_context(ticket_digest),
+          tenant_id uuid NOT NULL,
+          backend_pid integer NOT NULL CHECK(backend_pid>0),
+          virtual_xid text NOT NULL CHECK(virtual_xid ~ '^[0-9]+/[0-9]+$'),
+          transaction_started_at timestamptz NOT NULL,
+          challenge text NOT NULL CHECK(challenge ~ '^[0-9a-f]{64}$')
+        )
+    """)
+    owner.execute("ALTER TABLE m41050.read_target_reservations OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON m41050.read_target_reservations FROM PUBLIC,m40680_auth,m40650_app")
     owner.execute("""
         CREATE TABLE m41050.session_caps (
           token_hash bytea PRIMARY KEY
@@ -459,6 +473,68 @@ def build_context_schema(owner) -> None:
     owner.execute("REVOKE ALL ON FUNCTION m41050.read_target_challenge(text,uuid) FROM PUBLIC,m40680_auth")
     owner.execute("GRANT EXECUTE ON FUNCTION m41050.read_target_challenge(text,uuid) TO m40650_app")
     owner.execute("""
+        CREATE FUNCTION m40700.reserve_read_target(
+          p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz,p_challenge text
+        ) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        DECLARE v_digest text; v_key bytea; v_expected text;
+        BEGIN
+          IF session_user <> 'm40680_auth_login'
+             OR p_ticket IS NULL OR p_ticket !~ '^[0-9a-f]{64}$'
+             OR p_tenant IS NULL OR p_pid IS NULL OR p_pid<=0
+             OR p_pid=pg_catalog.pg_backend_pid()
+             OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+$'
+             OR p_started IS NULL OR p_started>pg_catalog.clock_timestamp()
+             OR p_started<pg_catalog.clock_timestamp()-interval '30 seconds'
+             OR p_challenge IS NULL OR p_challenge !~ '^[0-9a-f]{64}$'
+             OR NOT EXISTS (
+               SELECT 1 FROM pg_catalog.pg_locks AS l
+               WHERE l.pid=p_pid AND l.locktype='virtualxid'
+                 AND l.virtualxid=p_vxid AND l.virtualtransaction=p_vxid
+                 AND l.mode='ExclusiveLock' AND l.granted)
+          THEN RETURN false; END IF;
+          v_digest:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_ticket,'UTF8')),'hex');
+          SELECT key INTO v_key FROM m41050.target_challenge_secret WHERE singleton=true;
+          IF NOT FOUND THEN RETURN false; END IF;
+          v_expected:=pg_catalog.encode(m40700.hmac(pg_catalog.convert_to(
+              'FRF-M41260|v1|'||v_digest||'|'||p_tenant::text||'|'||p_pid::text||'|'||
+              p_vxid||'|'||(EXTRACT(EPOCH FROM p_started)*1000000)::bigint::text,'UTF8'),
+              v_key,'sha256'),'hex');
+          IF p_challenge<>v_expected THEN RETURN false; END IF;
+          -- Serialize reservations of the same unconsumed ticket across auth connections.
+          -- Consumption and current claims still independently revalidate authorization.
+          PERFORM 1 FROM m40650.m40680_tickets AS t
+            JOIN m40700.ticket_scopes AS x ON x.ticket_digest=t.digest
+            JOIN m40700.ticket_context AS c ON c.ticket_digest=t.digest
+            JOIN m40650.sessions AS s ON s.token_digest=t.session_digest
+            JOIN m40650.users AS u ON u.id=s.user_id AND u.status='ACTIVE'
+            JOIN m40650.memberships AS m ON m.user_id=s.user_id
+              AND m.tenant_id=s.active_tenant_id AND m.role=s.active_role AND m.status='ATIVA'
+           WHERE t.digest=v_digest AND t.tenant_id=p_tenant AND t.used_at IS NULL
+             AND t.expires_at>pg_catalog.clock_timestamp() AND x.scope_name='READ_ENTRIES'
+             AND s.user_id=c.bound_user_id AND s.active_role=c.bound_role
+             AND s.active_role='TENANT_ADMIN' AND s.active_tenant_id=p_tenant
+             AND s.context_generation=c.context_generation AND s.revoked_at IS NULL
+             AND s.expires_at>pg_catalog.clock_timestamp()
+           FOR UPDATE OF t;
+          IF NOT FOUND THEN RETURN false; END IF;
+          INSERT INTO m41050.read_target_reservations
+            (ticket_digest,tenant_id,backend_pid,virtual_xid,transaction_started_at,challenge)
+          VALUES(v_digest,p_tenant,p_pid,p_vxid,p_started,p_challenge)
+          ON CONFLICT(ticket_digest) DO NOTHING;
+          RETURN EXISTS (
+            SELECT 1 FROM m41050.read_target_reservations AS r
+             WHERE r.ticket_digest=v_digest AND r.tenant_id=p_tenant
+               AND r.backend_pid=p_pid AND r.virtual_xid=p_vxid
+               AND r.transaction_started_at=p_started AND r.challenge=p_challenge);
+        END
+        $body$
+    """)
+    reservation_sig="m40700.reserve_read_target(text,uuid,integer,text,timestamptz,text)"
+    owner.execute("ALTER FUNCTION "+reservation_sig+" OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON FUNCTION "+reservation_sig+" FROM PUBLIC,m40650_app")
+    owner.execute("GRANT EXECUTE ON FUNCTION "+reservation_sig+" TO m40680_auth")
+    owner.execute("""
         CREATE FUNCTION m41050.bind_read_transaction(
           p_ticket text,p_tenant uuid,p_pid integer,p_vxid text,p_started timestamptz,p_proof text,p_challenge text
         ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
@@ -494,6 +570,12 @@ def build_context_schema(owner) -> None:
               pg_catalog.convert_to('FRF-M41260|v1|'||v_payload,'UTF8'),
               v_challenge_key,'sha256'),'hex');
           IF p_challenge<>v_challenge_expected THEN RETURN NULL; END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM m41050.read_target_reservations AS r
+             WHERE r.ticket_digest=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_ticket,'UTF8')),'hex')
+               AND r.tenant_id=p_tenant AND r.backend_pid=p_pid AND r.virtual_xid=p_vxid
+               AND r.transaction_started_at=p_started AND r.challenge=p_challenge)
+          THEN RETURN NULL; END IF;
           v_cap:=m41050.bind_ticket(p_ticket,p_tenant);
           IF v_cap IS NULL THEN RETURN NULL; END IF;
           UPDATE m41050.session_caps

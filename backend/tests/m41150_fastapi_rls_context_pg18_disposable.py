@@ -137,6 +137,26 @@ async def exercise(dsn: str) -> None:
                     else:
                         raise AssertionError("M41260_AUTH_CAN_MINT_CHALLENGE")
         print("M41260_SQL_CHALLENGE_ACL_AND_READONLY=PASS")
+        for dsn_, role in ((auth_dsn, "m40680_auth"), (app_dsn, "m40650_app")):
+            with psycopg.connect(dsn_, autocommit=True) as denied:
+                denied.execute("SET ROLE " + role)
+                for sql in ("SELECT * FROM m41050.read_target_reservations",
+                            "DELETE FROM m41050.read_target_reservations"):
+                    try:
+                        denied.execute(sql)
+                    except psycopg.errors.InsufficientPrivilege:
+                        pass
+                    else:
+                        raise AssertionError("M41290_RESERVATION_TABLE_EXPOSED")
+                if role == "m40650_app":
+                    try:
+                        denied.execute("SELECT m40700.reserve_read_target(%s,%s,%s,%s,%s,%s)",
+                                       ("a"*64, uuid4(), 1, "1/2", datetime.now(timezone.utc), "b"*64))
+                    except psycopg.errors.InsufficientPrivilege:
+                        pass
+                    else:
+                        raise AssertionError("M41290_APP_CAN_RESERVE")
+        print("M41290_RESERVATION_ACL=PASS")
 
         tenant_a, tenant_b = uuid4(), uuid4()
         admin_id, member_id, admin_b_id = uuid4(), uuid4(), uuid4()
@@ -269,8 +289,18 @@ async def exercise(dsn: str) -> None:
             "GRANT EXECUTE ON FUNCTION m41050.current_claims() TO m40650_app"
         )
 
+        def reserve_read(ticket, tenant, pid, vxid, started, challenge):
+            with psycopg.connect(auth_dsn, autocommit=True) as auth:
+                auth.execute("SET ROLE m40680_auth")
+                return auth.execute(
+                    "SELECT m40700.reserve_read_target(%s,%s,%s,%s,%s,%s)",
+                    (ticket, tenant, pid, vxid, started, challenge),
+                ).fetchone()[0] is True
+
         def bind_read(ticket, tenant, pid, vxid, started, *, challenge, proof=None):
             if proof is None:
+                if not reserve_read(ticket, tenant, pid, vxid, started, challenge):
+                    return None
                 try:
                     proof = signer.sign(ticket, tenant, pid, vxid, started, challenge=challenge)
                 except TargetProofDenied:
@@ -602,6 +632,10 @@ async def exercise(dsn: str) -> None:
                     challenge = await gateway._read_target_challenge(first, ticket, tenant_a)
                     assert bind_read(ticket, tenant_a, pid, "0/0", started, challenge=challenge) is None
                     proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=challenge)
+                    assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=proof) is None
+                    assert reserve_read(ticket, tenant_a, pid, vxid, started, challenge)
+                    assert reserve_read(ticket, tenant_a, pid, vxid, started, challenge)
+                    print("M41290_UNRESERVED_PROOF_DENIED=PASS")
                     issuer_proof = fixture.sign_read_transaction(key, ticket, tenant_a, pid, vxid, started, challenge=challenge)
                     # Disposable owner constructs a negative legacy-domain proof only.
                     legacy_key = owner.execute('SELECT key FROM m41050.target_verifier_secret WHERE singleton=true').fetchone()[0]
@@ -655,7 +689,22 @@ async def exercise(dsn: str) -> None:
                         assert other_challenge != challenge
                         assert bind_read(ticket, tenant_a, other_pid, other_vxid,
                                          other_started, challenge=other_challenge) is None
+                        # A valid proof from an independent verifier-key holder
+                        # cannot bypass the committed authority reservation.
+                        independent_key = owner.execute(
+                            "SELECT key FROM m41050.target_verifier_secret WHERE singleton=true"
+                        ).fetchone()[0]
+                        alternate_proof = fixture.sign_read_transaction(
+                            independent_key, ticket, tenant_a, other_pid, other_vxid,
+                            other_started, challenge=other_challenge,
+                        )
+                        del independent_key
+                        assert not reserve_read(ticket, tenant_a, other_pid, other_vxid,
+                                                other_started, other_challenge)
+                        assert bind_read(ticket, tenant_a, other_pid, other_vxid,
+                                         other_started, challenge=other_challenge, proof=alternate_proof) is None
                         assert not await second.fetch("SELECT id FROM public.ledger_accounts")
+                        print("M41290_ALTERNATE_VALID_PROOF_DENIED=PASS")
                         print("M41280_SECOND_AUTHENTIC_TARGET_DENIED=PASS")
                     print("M41260_SQL_CHALLENGE_TARGET_SUBSTITUTION_DENIED=PASS")
                     print("M41230_TICKET_ONLY_AND_TARGET_SUBSTITUTION_DENIED=PASS")
@@ -702,6 +751,32 @@ async def exercise(dsn: str) -> None:
                     await gateway.install_session_capability(first, unbound)
                     for name in expected_tenant_rows:
                         assert not await first.fetch(f"SELECT id FROM public.{name}")
+            # Race two independently authenticated issuer connections for a
+            # single ticket while both read transactions are live.
+            async with pool.acquire() as first, pool.acquire() as second:
+                async with first.transaction(readonly=True), second.transaction(readonly=True):
+                    ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_digest, tenant_a)
+                    assert ticket
+                    targets = [await gateway._read_transaction_identity(c) for c in (first, second)]
+                    challenges = [await gateway._read_target_challenge(c, ticket, tenant_a)
+                                  for c in (first, second)]
+                    results = await asyncio.gather(*(
+                        asyncio.to_thread(reserve_read, ticket, tenant_a, *target, challenge)
+                        for target, challenge in zip(targets, challenges)
+                    ))
+                    assert sorted(results) == [False, True]
+                    winner = results.index(True)
+                    assert reserve_read(ticket, tenant_a, *targets[winner], challenges[winner])
+                    assert not reserve_read(ticket, tenant_a, *targets[1-winner], challenges[1-winner])
+                    cap = bind_read(ticket, tenant_a, *targets[winner], challenge=challenges[winner])
+                    assert cap
+                    assert not reserve_read(ticket, tenant_a, *targets[winner], challenges[winner])
+                    connections = (first, second)
+                    await gateway.install_session_capability(connections[winner], cap)
+                    assert len(await connections[winner].fetch("SELECT id FROM public.ledger_accounts")) == 2
+                    await gateway.install_session_capability(connections[1-winner], cap)
+                    assert not await connections[1-winner].fetch("SELECT id FROM public.ledger_accounts")
+            print("M41290_CONCURRENT_RESERVATIONS_ONE_WINNER=PASS")
             print("M41220_CROSS_BACKEND_AND_SAME_BACKEND_REPLAY_DENIED=PASS")
             print("M41220_ROLLBACK_AND_UNBOUND_LEDGER_REPLAY_DENIED=PASS")
             print("M41160_RLS_TENANT_ISOLATION=PASS")
@@ -908,6 +983,7 @@ async def exercise(dsn: str) -> None:
                     assert ticket
                     challenge = await gateway._read_target_challenge(connection, ticket, tenant_a)
                     proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=challenge)
+                    assert reserve_read(ticket, tenant_a, pid, vxid, started, challenge)
                     owner.execute("DELETE FROM m41050.target_verifier_secret")
                     assert bind_read(ticket, tenant_a, pid, vxid, started, challenge=challenge, proof=proof) is None
                     assert not await connection.fetch("SELECT id FROM public.ledger_accounts")

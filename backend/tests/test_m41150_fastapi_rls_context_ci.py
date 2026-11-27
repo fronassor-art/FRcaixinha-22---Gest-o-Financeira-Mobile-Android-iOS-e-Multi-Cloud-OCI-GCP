@@ -639,3 +639,27 @@ def test_m41280_integrated_worker_regression_contract():
     assert "M41280_WORKER_AUTHENTICATES_SQL_CHALLENGE=PASS" in runner
     assert "M41280_SECOND_AUTHENTIC_TARGET_DENIED=PASS" in runner
     assert "other_challenge = await gateway._read_target_challenge(second, ticket, tenant_a)" in runner
+
+
+
+def test_m41290_reservation_acl_and_consumption_order():
+    source = (ROOT / "backend/tests/m41050_sql_sealed_context_pg18_disposable.py").read_text(encoding="utf-8")
+    reserve = source.split("CREATE FUNCTION m40700.reserve_read_target(", 1)[1].split(
+        "CREATE FUNCTION m41050.bind_read_transaction(", 1)[0]
+    bind = source.split("CREATE FUNCTION m41050.bind_read_transaction(", 1)[1].split(
+        "CREATE FUNCTION m41050.current_claims_v4()", 1)[0]
+    assert "session_user <> 'm40680_auth_login'" in reserve
+    assert "t.used_at IS NULL" in reserve
+    assert "s.context_generation=c.context_generation" in reserve
+    assert "FOR UPDATE OF t" in reserve
+    assert reserve.index("p_challenge<>v_expected") < reserve.index("INSERT INTO m41050.read_target_reservations")
+    assert "ON CONFLICT(ticket_digest) DO NOTHING" in reserve
+    assert "GRANT EXECUTE ON FUNCTION "+'"'+"+reservation_sig+"+'"'+" TO m40680_auth" in reserve
+    assert "REVOKE ALL ON m41050.read_target_reservations FROM PUBLIC,m40680_auth,m40650_app" in source
+    assert bind.index("FROM m41050.read_target_reservations") < bind.index("v_cap:=m41050.bind_ticket")
+    runner = RUNNER.read_text(encoding="utf-8")
+    assert runner.index("if not reserve_read(ticket") < runner.index("proof = signer.sign(ticket")
+    for marker in ("M41290_RESERVATION_ACL=PASS", "M41290_UNRESERVED_PROOF_DENIED=PASS",
+                   "M41290_ALTERNATE_VALID_PROOF_DENIED=PASS",
+                   "M41290_CONCURRENT_RESERVATIONS_ONE_WINNER=PASS"):
+        assert marker in runner

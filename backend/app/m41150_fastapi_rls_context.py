@@ -46,7 +46,10 @@ class SessionCapabilityProvider(Protocol):
     M41270: the disposable signer authenticates the exact SQL challenge as part
     of the target proof. M41280 disposable worker verifies the SQL challenge and
     pins the first valid target per ticket; the initial target and bootstrap are
-    still trusted fixture inputs. Real custody is pending; no provider is enabled.
+    still trusted fixture inputs. M41290 reserves the exact read target via the
+    disposable issuer SQL identity before signing and rechecks the committed
+    reservation before ticket consumption. Real custody is pending; no provider
+    is enabled.
     """
 
     async def issue_ticket(
