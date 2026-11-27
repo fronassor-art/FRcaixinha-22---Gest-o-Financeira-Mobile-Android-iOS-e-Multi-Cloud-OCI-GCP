@@ -10,6 +10,7 @@ from app.admin_license_onboarding_ci import (stage_admin_invite_ci,register_admi
 from m41400_cycle_identity_ci import connection,reject
 from m41420_onboarding_http_ci import client_for,post,get
 from hashlib import sha256
+from m41440_onboarding_form_bridge_ci import form_request,scope_of
 from uuid import UUID
 
 def _cpf():
@@ -46,13 +47,18 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             reject(stage_admin_invite_ci,conn,**{**stage,"document_id":contract_b})
             stage_body={k:v for k,v in stage.items() if k not in ('master_token','reviewer_token','reviewer_tenant')}
             post(client,'/master/invitations',stage_body,reviewer_token,403)
-            response=post(client,'/master/invitations',stage_body,master_token)
+            prepared=form_request("MASTER",scope=scope_of(full),raw=full,id=doc,
+                                  form=dict(email=email,master_password=pwd,confirmed=True))
+            assert prepared==dict(path="/master/invitations",body={**stage_body,"document_id":str(doc)})
+            response=post(client,prepared["path"],prepared["body"],master_token)
             inv=UUID(response['invitation_id']);raw=delivery.pop(str(inv))
             reject(stage_admin_invite_ci,conn,**stage)
             assert simulate_invitation_delivery_ci(conn,inv)
             proof=prepare_invite_email_verification_ci(conn,invitation_id=inv)
             proof_body=dict(invitation_token=raw,verification_token=proof)
-            terms=post(client,'/invitation-terms',proof_body)
+            prepared=form_request("PROOFS",proofs=proof_body)
+            assert prepared==dict(path="/invitation-terms",body=proof_body)
+            terms=post(client,prepared["path"],prepared["body"])
             assert terms['document']==full['document'] and terms['terms'] is None and terms['role']=='TENANT_ADMIN'
             post(client,'/invitation-terms',{**proof_body,'verification_token':raw},status=403)
             args=dict(invitation_token=raw,verification_token=proof,document_id=doc,document_hash=a_hash,
@@ -61,10 +67,13 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             for changes in ({"accepted":False},{"accepted":1},{"document_id":contract_b},{"document_hash":"f"*64},{"invitation_token":proof}):
                 reject(register_admin_ci,conn,**{**args,**changes})
             assert conn.execute("SELECT count(*) FROM public.users WHERE email=%s",(email,)).fetchone()[0]==0
+            form={k:args[k] for k in ("name","cpf","phone","password","tenant_name","accepted")}
+            prepared=form_request("REGISTER",raw=terms,proofs=proof_body,form={**form,"confirm_password":args["password"]})
+            assert prepared==dict(path="/admin/registration",body={**args,"document_id":str(doc)})
             def attempt():
                 from fastapi.encoders import jsonable_encoder
                 local,_=client_for()
-                res=local.post('/v23/onboarding/admin/registration',json=jsonable_encoder(args))
+                res=local.post('/v23/onboarding'+prepared['path'],json=prepared['body'])
                 assert res.status_code in (200,403,409)
                 if res.status_code!=200:return None
                 assert res.headers['cache-control']=='no-store'
@@ -93,7 +102,9 @@ def exercise(reviewer,reviewer_tenant,reviewer_token,doc,price,contract_b,a_hash
             checkout_body={k:v for k,v in offer.items() if k not in ('admin_token','tenant')}
             path=f'/tenants/{tenant}/checkout'
             post(client,path,checkout_body,reviewer_token,403)
-            checkout=post(client,path,checkout_body,admin_token)
+            prepared=form_request("CHECKOUT",scope=scope_of(offers),raw=offers,id=price,period=period,accepted=True)
+            assert prepared==dict(path=path,body={**checkout_body,"price_version":str(price)})
+            checkout=post(client,prepared["path"],prepared["body"],admin_token)
             prep,intent=UUID(checkout['preparation_id']),UUID(checkout['intent_id'])
             status_path=path+'/'+str(intent)
             assert get(client,status_path,admin_token)['state']=='PENDING'
@@ -143,17 +154,24 @@ def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, diges
             reject(accept_admin_b_ci,conn,**{**args,"document_hash":"f"*64})
             reject(accept_admin_b_ci,conn,**{**args,"document_id":uuid4()})
             client,_=client_for()
-            document=get(client,f'/tenants/{tenant}/documents/{doc}',admin_raw)['document']
+            readback=get(client,f'/tenants/{tenant}/documents/{doc}',admin_raw)
+            document=readback['document']
             assert sha256(document['text'].encode()).hexdigest()==b_hash
             body={k:v for k,v in args.items() if k not in ('admin_token','tenant')}
-            accepted=UUID(post(client,f'/tenants/{tenant}/contract-b',body,admin_raw)['acceptance_id'])
+            prepared=form_request("B",scope=scope_of(readback),raw=readback,id=doc,accepted=True)
+            assert prepared==dict(path=f'/tenants/{tenant}/contract-b',body={**body,"document_id":str(doc)})
+            accepted=UUID(post(client,prepared["path"],prepared["body"],admin_raw)['acceptance_id'])
             assert accept_admin_b_ci(conn,**args)==accepted
             return accepted
         assert phase=="MEMBER"
         joined=date(2027,1,10)
         client,delivery=client_for()
-        invite=post(client,f'/tenants/{tenant}/cycles/{cycle}/member-invitations',
-                    dict(email=f'm41410-member-{uuid4()}@example.invalid',joined=joined,quotas=2),admin_raw)
+        actor=conn.execute("SELECT admin_user_id FROM public.tenants WHERE id=%s",(tenant,)).fetchone()[0]
+        readback=get(client,f'/tenants/{tenant}/documents/{doc}',admin_raw)
+        prepared=form_request("MEMBER_INVITE",scope=scope_of(readback),cycle=cycle,
+                              form=dict(email=f'm41410-member-{uuid4()}@example.invalid',joined=joined,quotas=2,previous_id=None,confirmed=True))
+        assert readback["user_id"]==str(actor)
+        invite=post(client,prepared["path"],prepared["body"],admin_raw)
         inv=UUID(invite['invitation_id']);raw=delivery.pop(str(inv))
         assert simulate_invitation_delivery_ci(conn,inv)
         proof=prepare_invite_email_verification_ci(conn,invitation_id=inv)
@@ -164,10 +182,16 @@ def accept_b_and_member(phase, tenant, admin_raw, doc, b_hash, cycle=None, diges
                   document_hash=b_hash,joined=joined,quotas=2,accepted=True,name='Membro sintético',cpf=_cpf(),
                   phone='11999990000',password='M41410-CI-Only-Member!')
         post(client,'/member/registration',{**body,'policy_hash':'f'*64},status=403)
-        registered=post(client,'/member/registration',body)
+        form={k:body[k] for k in ("name","cpf","phone","password","accepted")}
+        prepared=form_request("REGISTER",raw=terms,proofs=dict(invitation_token=raw,verification_token=proof),
+                              form={**form,"confirm_password":body["password"]})
+        from fastapi.encoders import jsonable_encoder
+        assert prepared==dict(path="/member/registration",body=jsonable_encoder(body))
+        registered=post(client,prepared["path"],prepared["body"])
         person,member,consent=map(UUID,(registered['user_id'],registered['membership_id'],registered['consent_id']))
         post(client,'/member/registration',body,status=403)
         print('M41420_ONBOARDING_HTTP_MEMBER_B_AND_REPLAY=PASS')
         print('M41430_SCOPED_DOCUMENT_TERMS_OFFERS_STATUS=PASS')
+        print('M41440_MOBILE_FORMS_CANONICAL_HTTP_PG18=PASS')
         assert conn.execute("SELECT count(*) FROM public.contributions WHERE membership_id=%s",(member,)).fetchone()[0]==0
         return person,member

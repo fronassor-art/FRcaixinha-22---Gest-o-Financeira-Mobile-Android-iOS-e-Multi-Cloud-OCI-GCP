@@ -17,6 +17,10 @@ class PrivateValidationRoute(APIRoute):
                 response=await handler(request)
             except RequestValidationError:
                 raise HTTPException(422,"Dados de contratação inválidos.",headers={"Cache-Control":"no-store"}) from None
+            except HTTPException as exc:
+                # Preserve authentication headers without allowing private failures to be cached.
+                raise HTTPException(exc.status_code,exc.detail,
+                                    headers={**(exc.headers or {}),"Cache-Control":"no-store"}) from None
             response.headers["Cache-Control"]="no-store"
             return response
         return guarded

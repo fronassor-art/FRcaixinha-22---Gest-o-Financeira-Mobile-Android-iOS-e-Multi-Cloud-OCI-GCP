@@ -293,6 +293,8 @@ jobs:
         run: npx tsx src/tests/m41420_onboarding_boundary_ci.test.ts
       - name: M41430 — hash documental, ofertas versionadas e conciliação por escopo
         run: npx tsx src/tests/m41430_onboarding_readback_ci.test.ts
+      - name: M41440 — formulários mobile, escopo, provas e aceite explícito
+        run: npx tsx src/tests/m41440_onboarding_forms_ci.test.ts
       - name: M20300 histórico de abas por perfil
         run: npx tsx src/tests/m20300_tab_history_ci.test.ts
       - name: M20400 política de valor por ciclo sem repricing silencioso
@@ -1365,7 +1367,13 @@ jobs:
           PGDATABASE: frcaixinha_ci
         run: bash backend/scripts/aistudio_staging_chain_ci.sh
 
-      - name: M41320–M41410 — V2.3 transacional, identidade, SaaS e readback mobile no PG18 descartável
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependências TypeScript fixadas para ponte de formulários CI
+        run: npm ci
+      - name: M41320–M41440 — V2.3 transacional, identidade, SaaS e formulários mobile no PG18 descartável
         env:
           GITHUB_ACTIONS: 'true'
           FRCAIXINHA_CI_ISOLATED: '1'

@@ -45,3 +45,4 @@ def test_runtime_always_blocks_even_with_ci_environment(monkeypatch):
     assert response.status_code==422
     response=client.post(prefix+f"/tenants/{tenant}/checkout",json=dict(price_version=doc,period="MONTHLY",accepted_cents=100,accepted=True))
     assert response.status_code==401
+    assert response.headers['cache-control']=='no-store'

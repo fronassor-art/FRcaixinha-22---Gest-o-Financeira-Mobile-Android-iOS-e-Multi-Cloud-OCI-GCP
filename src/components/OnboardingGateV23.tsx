@@ -1,3 +1,4 @@
+import {OnboardingFormsV23} from './OnboardingFormsV23';
 import {OnboardingReadbackV23} from './OnboardingReadbackV23';
 import React,{useEffect,useRef,useState} from 'react';
 import {getApiBaseUrl,authService} from '../services/authService';
@@ -21,6 +22,7 @@ export function OnboardingGateV23({audience}:{audience:OnboardingAudience}){
   <p className="text-xs">Etapas previstas, não concluídas. Nenhuma criação de conta, convite, aceite ou pagamento real por este painel.</p>
   <button type="button" disabled={status==='LOADING'} onClick={()=>void check()} className="min-h-11 rounded border border-emerald-700 px-3 text-sm">Consultar bloqueio no servidor</button>
   {(audience==='MASTER'||audience==='TENANT_ADMIN')&&<OnboardingReadbackV23 audience={audience}/>}
+  {audience!=='TENANT_MEMBER'&&<OnboardingFormsV23 audience={audience}/>}
   <p role="status" className="text-sm">{status==='BLOCKED'?'Bloqueio V2.3 confirmado pelo servidor.':status==='UNAVAILABLE'?'Servidor indisponível ou incompatível. Operações continuam bloqueadas.':status==='LOADING'?'Consultando…':'Operações reais bloqueadas; disponibilidade não consultada.'}</p>
  </section>;
 }
