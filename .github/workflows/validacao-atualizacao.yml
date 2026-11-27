@@ -87,6 +87,12 @@ on:
       - 'src/components/IntegratedProductWorkspaceV23.tsx'
       - 'src/tests/m41310_integrated_product_flow_ci.test.ts'
       - 'docs/FR_FINANCE_M41310_SUPERPACOTE_FUNCIONAL_V23.md'
+      - 'backend/app/routers/product_v23.py'
+      - 'backend/app/main.py'
+      - 'backend/tests/sql/m41320_v23_candidate_ci_only.sql'
+      - 'backend/tests/test_m41320_product_api_ci.py'
+      - 'backend/tests/m41320_product_pg18_ci.py'
+      - 'docs/FR_FINANCE_M41320_TRANSACTIONAL_V23_NO_GO.md'
       - 'docs/FR_Finance_Caderno_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_Finance_Contrato_Tecnico_Mestre_V2_3_2026-11-26.md'
       - 'docs/FR_FINANCE_M41030_FIRST_CAIXINHA_CLOSING_INTERVAL.md'
@@ -485,6 +491,8 @@ jobs:
           PAGAMENTOS_REAIS: 'OFF'
           ATIVACAO_REAL: 'OFF'
         run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m41150_fastapi_rls_context_ci.py
+      - name: M41320 — contrato API V2.3 e bloqueio de runtime
+        run: PYTHONPATH=backend python -B -m pytest -q -p no:cacheprovider backend/tests/test_m41320_product_api_ci.py
       - name: M38992 — sintaxe do instalador aditivo original (sem executar)
         run: bash -n backend/scripts/frfinance_m38992_apply_m047_original_pg18.sh
       - name: M38994 — validar sintaxe M048, sem aplicar no banco
@@ -1331,6 +1339,23 @@ jobs:
           PGPASSWORD: ci-test-only
           PGDATABASE: frcaixinha_ci
         run: bash backend/scripts/aistudio_staging_chain_ci.sh
+
+      - name: M41320 — V2.3 transacional no esquema canônico PG18 descartável
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRCAIXINHA_CI_ISOLATED: '1'
+          PIX_REAL: 'OFF'
+          PAGAMENTOS_REAIS: 'OFF'
+          ATIVACAO_REAL: 'OFF'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-test-only
+          PGDATABASE: frcaixinha_ci
+        run: |
+          set -euo pipefail
+          PGOPTIONS='-c frfinance.m41320_ci=DISPOSABLE_ONLY' psql -X -v ON_ERROR_STOP=1 -f backend/tests/sql/m41320_v23_candidate_ci_only.sql
+          PYTHONPATH=backend python -B backend/tests/m41320_product_pg18_ci.py
 
   m37500-sql-disposable:
     name: M37500 SQL 066-068 PostgreSQL 18 descartavel
