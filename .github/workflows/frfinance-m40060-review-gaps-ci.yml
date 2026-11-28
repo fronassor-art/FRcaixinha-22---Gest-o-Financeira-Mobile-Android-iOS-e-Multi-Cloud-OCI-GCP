@@ -1,0 +1,65 @@
+name: FR Finance M40060 — Authenticated read-only reviewer policy gaps
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/routers/exclusive_cashbox_review_gaps.py'
+      - 'backend/app/main.py'
+      - 'backend/tests/test_m40060_review_policy_api_ci.py'
+      - '.github/workflows/frfinance-m40060-review-gaps-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/routers/exclusive_cashbox_review_gaps.py'
+      - 'backend/app/main.py'
+      - 'backend/tests/test_m40060_review_policy_api_ci.py'
+      - '.github/workflows/frfinance-m40060-review-gaps-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40060-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authenticated-readonly-policy-gaps:
+    name: Main FastAPI routes, ownership and no financial authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend:.
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Main FastAPI read-only review gaps and predecessor gates
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40060_review_policy_api_ci.py \
+            backend/tests/test_m39960_exclusive_cashbox_readiness_ci.py \
+            backend/tests/test_m39980_review_policy_draft_ci.py \
+            backend/tests/test_m39990_mandate_lifecycle_draft_ci.py \
+            backend/tests/test_m39090_exclusive_cashboxes_ci.py
+          echo M40060_FASTAPI_READONLY_REVIEW_GAPS=PASS
+          echo M40060_AUTHENTICATED_VIEW_ONLY=TRUE
+          echo M40060_REVIEW_POLICY_RATIFIED=FALSE
+          echo M40060_EFFECTIVE_REVOCATION=NOT_ATTESTED
+          echo M40060_REAL_REVIEW_APPROVAL=FALSE
+          echo M40060_ORIGINAL_DB_ACCESS=NONE
+          echo M40060_MIGRATIONS=NONE
+          echo M40060_FASTAPI_RESTART=NONE
+          echo M40060_PIX_REAL=OFF
+          echo M40060_PRODUCTION=BLOCKED

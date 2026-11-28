@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+  <!-- M40500: true FR monogram replacing former isolated R, centered in adaptive safe area. -->
+  <path android:fillColor="#F4C861" android:pathData="M26,29 L48,29 L48,36 L34,36 L34,46 L45,46 L45,53 L34,53 L34,78 L26,78 Z"/>
+  <path android:fillColor="#FFE9A0" android:pathData="M27,29 L28.5,29 L28.5,75 L27,75 Z M28,30 L47,30 L47,32 L28,32 Z"/>
+  <path android:fillColor="#DDAE4B" android:pathData="M51,29 L67,29 C83,29 85,47 69,53 L84,78 L74,78 L60,55 L59,55 L59,78 L51,78 Z M59,37 L66,37 C74,37 75,47 66,47 L59,47 Z"/>
+  <path android:fillColor="#FFE9A0" android:pathData="M52,29 L54,29 L54,76 L52,76 Z M59,29 L66,29 C76,29 81,34 81,41 C78,34 73,32 66,32 L59,32 Z"/>
+  <path android:fillColor="#65BF39" android:pathData="M67,57 C69,44 79,37 87,38 C83,48 77,54 67,57 Z"/>
+  <path android:fillColor="#AEEA5D" android:pathData="M70,53 C73,45 79,40 84,40 C81,46 76,51 70,53 Z"/>
+  <path android:strokeColor="#F3CA76" android:strokeWidth="1.6"
+      android:fillColor="#00000000" android:pathData="M22,81 Q54,88 88,80"/>
+</vector>

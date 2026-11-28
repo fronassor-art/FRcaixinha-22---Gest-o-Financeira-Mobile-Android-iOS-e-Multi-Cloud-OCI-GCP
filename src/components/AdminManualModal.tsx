@@ -194,7 +194,7 @@ export const AdminManualModal: React.FC<AdminManualModalProps> = ({ isOpen, onCl
                   Entregável MVP • Cláusula 11.4
                 </span>
               </div>
-              <p className="text-slate-400 text-xs">FRcaixinha 2.2 • Guia Prático Passo a Passo (18 Etapas incluindo Mobile & Multi-Cloud)</p>
+              <p className="text-slate-400 text-xs">FR Finance • Guia Prático Passo a Passo (18 Etapas incluindo Mobile & Multi-Cloud)</p>
             </div>
           </div>
           <button

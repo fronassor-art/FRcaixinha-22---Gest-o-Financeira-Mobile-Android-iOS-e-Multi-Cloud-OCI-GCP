@@ -1,0 +1,99 @@
+"""M29810: distinctive FR Finance identity without rewriting old legal evidence."""
+import json
+from pathlib import Path
+
+ROOT=Path(__file__).resolve().parents[2]
+
+def text(p): return (ROOT/p).read_text()
+
+def test_current_caderno_and_contract_use_fr_finance_identity():
+    readme=text("README.md")
+    assert "FR Finance é o nome do produto e a única marca pública" in readme
+    paths=("docs/FR_Finance_Caderno_Mestre_V2_2_2026-11-24.md",
+           "docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md")
+    for p in paths:
+        assert f"({p})" in readme
+        body=text(p)
+        assert "FR Finance" in body
+        assert "Ajuste de identidade de 25/11/2026" in body
+        assert "AI Studio" not in body
+        assert "FR Caixinha 2.2" not in body
+        assert "hist" in body.lower()
+        assert "produção" in body.lower()
+    assert "$HOME/fr-finance" in readme
+
+def test_visible_metadata_backend_and_package_identity():
+    meta=json.loads(text("metadata.json"))
+    pkg=json.loads(text("package.json"))
+    lock=json.loads(text("package-lock.json"))
+    assert meta["name"]=="FR Finance — Gestão Financeira"
+    assert pkg["name"]==lock["name"]==lock["packages"][""]["name"]=="fr-finance"
+    assert 'PROJECT_NAME: str = "FR Finance — API de homologação"' in text("backend/app/config.py")
+    main=text("backend/app/main.py")
+    assert "FR Caixinha — backend" not in main
+    assert '"FR Caixinha"' not in main
+    assert '"FR Finance"' in main
+
+def test_active_onboarding_copy_uses_fr_finance_without_changing_audit_ids():
+    policy=text("backend/app/admin_onboarding_policy.py")
+    onboarding=text("backend/app/aistudio_onboarding.py")
+    assert "FR Finance" in policy
+    assert "AI Studio" not in policy
+    assert "AI Studio" not in onboarding
+    # Keep existing gate and audit event keys until a separate compatibility migration.
+    assert 'AI_STUDIO_ALLOW_ROLE_ONBOARDING' in onboarding
+    assert 'AI_STUDIO_LOCAL_ROLE_ENROLLED' in onboarding
+    assert 'AI_STUDIO_LOCAL_TENANT_CREATED' in onboarding
+
+
+def test_current_app_code_uses_fr_finance_product_name():
+    paths=(
+        "backend/app/main.py", "backend/app/config.py",
+        "backend/app/database.py", "backend/app/routers/contributions.py",
+        "backend/app/routers/loans.py", "src/components/MobileInstallModal.tsx",
+        "src/components/RaffleModuleView.tsx", "src/services/financialEngine.ts",
+        "src/services/financialApiService.ts",
+    )
+    import re
+    for path in paths:
+        body=text(path)
+        assert not re.search(r"AI\s+Studio|FR\s*Caixinha\s*2\.2|FRcaixinha\s*2\.2",body,re.I), path
+
+
+def test_legacy_identifiers_and_pdfs_remain_untouched():
+    cap=text("capacitor.config.ts")
+    cfg=text("backend/app/config.py")
+    assert "com.frcaixinha.app" in cap
+    # Technical identifiers remain stable across the public brand rename.
+    assert "frcaixinha.notifications_staging_ci" in text("backend/app/notification_ci_reader.py")
+    atomic = text("backend/app/saas_atomic_api_adapter_ci.py")
+    assert "frcaixinha.saas_atomic_ci" in atomic and "frcaixinha.saas_preprep_ci" in atomic
+    assert "frcaixinha:session-expired" in text("src/App.tsx")
+    assert "X-FRcaixinha-Client" in text("src/services/financialApiService.ts")
+    assert "com.frcaixinha.app" in text("src/components/MobileInstallModal.tsx")
+    assert "FR Finance.notifications_staging_ci" not in text("backend/app/notification_ci_reader.py")
+    assert "FR Finance.saas_atomic_ci" not in atomic
+    assert 'SESSION_COOKIE_NAME: str = "frcaixinha_session"' in cfg
+    assert "frcaixinha_aistudio_dev" in text("docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md")
+    files=list((ROOT/"public/assets/aistudio").glob("FRcaixinha_2.2*.pdf"))
+    assert len(files)==2
+    assert all(p.stat().st_size > 100_000 for p in files)
+
+def test_renaming_script_is_local_only_and_not_database():
+    script=text("backend/scripts/frfinance_rename_termux_directory.sh")
+    assert 'OLD="$HOME/frcaixinha-aistudio-mobile"' in script
+    assert 'NEW="$HOME/fr-finance"' in script
+    for forbidden in ("git clone","git push","DROP DATABASE","psql ","oci compute","rm -rf"):
+        assert forbidden not in script
+
+def test_current_termux_runbooks_use_fr_finance_directory():
+    paths=(
+        "docs/AI_STUDIO_MASTER_TERMUX.md",
+        "docs/FR_FINANCE_SUPER_MACRO_M28700_M29000_RELEASE_EVIDENCE.md",
+        "docs/FR_FINANCE_SUPER_MACRO_M29100_M29400_ONBOARDING_CHAIN.md",
+        "docs/FR_FINANCE_SUPER_MACRO_M29500_M29800_TWO_TENANT_CLOSING.md",
+    )
+    for path in paths:
+        content=text(path)
+        assert "$HOME/fr-finance" in content or "~/fr-finance" in content
+        assert "frcaixinha-aistudio-mobile" not in content

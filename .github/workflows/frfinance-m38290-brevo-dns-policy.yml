@@ -1,0 +1,32 @@
+name: FR Finance M38290 Brevo-specific DNS validation CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  brevo-domain-auth-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Verificar SPF opcional, DMARC monitoramento e DKIM por variante
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38290_brevo_dns_policy_ci.py \
+            backend/tests/test_m38250_mail_dns_readonly_ci.py \
+            backend/tests/test_m27700_public_provider_intake_ci.py
+          echo "M38329_DNS_EXTERNAL_QUERIES=NONE"
+          echo "M38329_BREVO_ACCOUNT_AUTH=NOT_VERIFIED"
+          echo "M38329_SMTP_EMAIL_SEND=NONE"
+          echo "M38329_PIX_REAL=OFF"
+          echo "M38329_REAL_USERS=OFF"
+          echo "M38329_PRODUCTION=BLOCKED"

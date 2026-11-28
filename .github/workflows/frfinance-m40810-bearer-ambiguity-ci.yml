@@ -1,0 +1,35 @@
+name: FR Finance M40810 ambiguous Bearer offline CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/dependencies.py'
+      - 'backend/app/m40810_bearer_input_guard.py'
+      - 'backend/tests/test_m40810_bearer_input_no_go_ci.py'
+      - '.github/workflows/frfinance-m40810-bearer-ambiguity-ci.yml'
+      - 'docs/FR_FINANCE_M40810_BEARER_AMBIGUITY_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/dependencies.py'
+      - 'backend/app/m40810_bearer_input_guard.py'
+      - 'backend/tests/test_m40810_bearer_input_no_go_ci.py'
+      - '.github/workflows/frfinance-m40810-bearer-ambiguity-ci.yml'
+permissions:
+  contents: read
+jobs:
+  bearer-parser-isolated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40810_bearer_input_no_go_ci.py

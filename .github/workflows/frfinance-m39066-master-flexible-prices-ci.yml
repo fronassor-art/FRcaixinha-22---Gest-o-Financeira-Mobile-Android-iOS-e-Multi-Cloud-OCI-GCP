@@ -1,0 +1,73 @@
+name: FR Finance M39066 SQL112 precos Master independentes CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/migrations/112_frfinance_master_independent_saas_prices.sql'
+      - 'backend/migration_catalog_ai_studio.json'
+      - 'backend/app/routers/master.py'
+      - 'backend/app/saas_checkout_chain_ci.py'
+      - 'backend/scripts/frfinance_m39066_master_prices_sql112_termux.py'
+      - 'backend/tests/test_m39066_master_independent_saas_prices_ci.py'
+      - 'backend/tests/test_aistudio_master_catalog.py'
+      - 'backend/tests/test_m37452_saas_checkout_chain_ci.py'
+      - 'src/components/MasterLicensingView.tsx'
+      - 'src/services/financialApiService.ts'
+      - 'src/tests/m39003_apk_ui_screenshot_regressions_ci.test.ts'
+      - '.github/workflows/frfinance-m39066-master-flexible-prices-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fr-finance-m39066-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  independent-saas-pricing:
+    name: Testar preco Master sem gravar PG original
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_ENABLE: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias fixadas do backend
+        run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
+      - name: Conferir catalogo SQL e hashes
+        run: python -B backend/scripts/aistudio_migration_inventory.py repo-check
+      - name: Testar API, precos independentes e integridade no checkout CI
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39066_master_independent_saas_prices_ci.py \
+            backend/tests/test_aistudio_master_catalog.py \
+            backend/tests/test_m37452_saas_checkout_chain_ci.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: TypeScript e revisao visual de precos
+        run: |
+          npm ci
+          npm run lint
+          npx tsx src/tests/m39003_apk_ui_screenshot_regressions_ci.test.ts
+          npx tsx src/tests/m37451_master_no_fictitious_prorata_ci.test.ts
+      - name: Resumo do escopo
+        run: |
+          echo "M39066_ORIGINAL_PG18_ACCESS=NONE"
+          echo "M39066_PRODUCTION_MIGRATION=NOT_APPLIED_BY_CI"
+          echo "M39066_MASTER_PRICES=INDEPENDENT_MONTHLY_ANNUAL"
+          echo "M39066_OLD_PRICE_VERSIONS=IMMUTABLE"
+          echo "M39066_REAL_PIX=OFF"
+          echo "M39066_REAL_EMAIL=OFF"

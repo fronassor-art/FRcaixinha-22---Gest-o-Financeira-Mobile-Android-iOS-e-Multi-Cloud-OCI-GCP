@@ -1,0 +1,33 @@
+name: FR Finance M40540 SQL112-113 catalog-only CI
+on:
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40540_sql112_113_catalog_readonly.sql'
+      - 'backend/scripts/frfinance_m40540_sql112_113_catalog_readonly.sh'
+      - 'backend/tests/test_frfinance_m40540_sql112_113_ci.py'
+      - '.github/workflows/frfinance-m40540-sql112-113-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: '.'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - name: M40540 source-only no external PostgreSQL
+        run: |
+          python -B -m pytest -q -p no:cacheprovider backend/tests/test_frfinance_m40540_sql112_113_ci.py
+          echo M40540_CI=OFFLINE_ONLY
+          echo M40540_ORIGINAL_DB=NOT_ACCESSED
+          echo M40540_PRODUCTION=BLOCKED

@@ -1,0 +1,60 @@
+name: FR Finance M40090 — Diagnostic old FastAPI runtime no process changes
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40090_old_fastapi_diagnosis.py'
+      - 'backend/tests/test_m40090_old_fastapi_diagnosis_ci.py'
+      - 'backend/scripts/frfinance_m40080_loaded_source_readonly.py'
+      - 'backend/scripts/frfinance_m39800_running_process_origin_readonly.py'
+      - '.github/workflows/frfinance-m40090-old-runtime-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40090_old_fastapi_diagnosis.py'
+      - 'backend/tests/test_m40090_old_fastapi_diagnosis_ci.py'
+      - 'backend/scripts/frfinance_m40080_loaded_source_readonly.py'
+      - 'backend/scripts/frfinance_m39800_running_process_origin_readonly.py'
+      - '.github/workflows/frfinance-m40090-old-runtime-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m40090-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  noninvasive-runtime-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Fail-closed 404, Android proc denied, non-loopback and stable identity tests
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40090_old_fastapi_diagnosis_ci.py \
+            backend/tests/test_m40080_loaded_source_ci.py \
+            backend/tests/test_m39800_original_fastapi_process_origin_ci.py \
+            backend/tests/test_m39700_runtime_attestation_ci.py
+          python -B backend/scripts/frfinance_m40090_old_fastapi_diagnosis.py --source-only
+          echo M40090_COMPATIBILITY_AND_FAIL_CLOSED=PASS
+          echo M40090_PROCESSES_TOUCHED=NONE
+          echo M40090_DATABASE_CONNECTIONS=NONE
+          echo M40090_FASTAPI_RESTART=NONE
+          echo M40090_LOCAL_MIGRATIONS=NONE
+          echo M40090_PIX_REAL=OFF
+          echo M40090_PRODUCTION=BLOCKED

@@ -1,0 +1,38 @@
+name: FR Finance M40760 provider GET no-network offline CI
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/mp_readonly_gateway.py'
+      - 'backend/app/mp_pix_execution.py'
+      - 'backend/app/mp_connect_http_runtime.py'
+      - 'backend/tests/test_m40760_readonly_egress_ci.py'
+      - '.github/workflows/frfinance-m40760-readonly-egress-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40760_READONLY_PROVIDER_NO_NETWORK.md'
+  pull_request:
+    paths:
+      - 'backend/app/mp_readonly_gateway.py'
+      - 'backend/app/mp_pix_execution.py'
+      - 'backend/app/mp_connect_http_runtime.py'
+      - 'backend/tests/test_m40760_readonly_egress_ci.py'
+      - '.github/workflows/frfinance-m40760-readonly-egress-no-go-ci.yml'
+      - 'docs/FR_FINANCE_M40760_READONLY_PROVIDER_NO_NETWORK.md'
+permissions:
+  contents: read
+jobs:
+  offline-gateway-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4 httpx==0.28.1
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40760_readonly_egress_ci.py

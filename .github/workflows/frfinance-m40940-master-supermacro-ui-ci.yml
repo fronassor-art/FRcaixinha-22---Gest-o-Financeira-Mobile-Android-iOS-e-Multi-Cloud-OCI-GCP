@@ -1,0 +1,50 @@
+name: FR Finance M40940 supermacropacote plan in Master application
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/launch_readiness.py'
+      - 'src/services/launchReadiness.ts'
+      - 'src/components/LaunchReadinessPanel.tsx'
+      - 'backend/tests/test_m40940_master_supermacro_readiness_ci.py'
+      - 'src/tests/m40940_master_supermacro_ui_ci.test.ts'
+      - '.github/workflows/frfinance-m40940-master-supermacro-ui-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/launch_readiness.py'
+      - 'src/services/launchReadiness.ts'
+      - 'src/components/LaunchReadinessPanel.tsx'
+      - 'backend/tests/test_m40940_master_supermacro_readiness_ci.py'
+      - 'src/tests/m40940_master_supermacro_ui_ci.test.ts'
+permissions:
+  contents: read
+jobs:
+  backend-master-single-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40940_master_supermacro_readiness_ci.py backend/tests/test_m40939_supermacropacote_gates_ci.py
+  frontend-master-six-phases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx tsx src/tests/m40940_master_supermacro_ui_ci.test.ts
+      - run: npx tsx src/tests/m40937_master_sql_no_go_ui_ci.test.ts
+      - run: npm run lint

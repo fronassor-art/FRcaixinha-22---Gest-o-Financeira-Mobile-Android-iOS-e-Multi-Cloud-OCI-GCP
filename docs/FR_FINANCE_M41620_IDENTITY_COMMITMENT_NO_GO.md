@@ -1,0 +1,11 @@
+# FR Finance M41620 — compromissos descartáveis de identidade (NO-GO)
+
+Base M41610 9489b957db0b3d983c5196453ef3cf464c331636; retorno M40600/M40941 confirmado, 155/155 workflows, CI geral push/PR 7/7. CP26-0061/CTM-07, CP26-0062/CTM-08, CP26-0257/TENANT_RLS. Matriz 330/2310 preservada.
+
+Fase adicional na mesma fixture PG18 M41150. Processo efêmero filho sem DSN e sem listener de rede, canal UNIX seqpacket herdado com SCM_CREDENTIALS por mensagem. Política congelada de uma sessão fictícia, escopo READ_ENTRIES, limite de 128 nonces sem reemissão; gera segredo de 256 bits por solicitação, retorna primeiro compromisso SHA-256 do contexto+segredo, depois segredo uma única vez. Não exporta chave simétrica duradoura. Parent/owner CI registra compromisso, nonce e expiração; login emissor e executor não podem inserir, ler ou alterar. v4 exige compromisso íntegro, sessão viva e primeira prova v2, bloqueia linha, consome atomicamente com ticket. Revoga acesso direto v3 e remove chave simétrica anterior apenas nesta fixture. Sem nova role, DB ou serviço operacional.
+
+Testes previstos: ACL v2/v3/v4 e tabela, ausência da chave anterior, segredo desconhecido ou digest apresentado como segredo, primeira prova inválida, dupla preparação/liberação, troca de identidade, tenant, sessão, nonce, escopo, geração, expiração, corrida de duas conexões com consumo único, compromisso revogado/expirado, seis GET e indisponibilidade da autoridade sem novo compromisso. Regressões anteriores preservadas. CI ainda não executada.
+
+Limites: o pai CI escolhe a política e possui owner que pode fabricar compromissos, reatribuir ACL e observar segredo liberado; mesma UID e acesso privilegiado ao processo não atestam custódia real. O segredo de uso único aparece como parâmetro SQL; captura antes de consumo pode vencer corrida; TLS, logs, enrollment independente, proteção de memória, revogação operacional e revisão de retenção ainda pendentes. Não é prova de resistência ao owner nem substituição da autenticação real. Sem alteração de regra comercial, runtime FastAPI, arquivos de migração ou SQL original. Não migrar para produção.
+
+M40840=NO_GO; M40930=HTTP503; ORIGINAL_DATABASE=NOT_ACCESSED; MIGRATIONS=NONE; DB_WRITES=NONE; SERVICE_RESTARTS=NONE; RUNTIME_RELOAD=NONE; PIX_REAL=OFF; PAGAMENTOS_REAIS=OFF; ATIVACAO_REAL=OFF; PRODUCTION=BLOCKED.

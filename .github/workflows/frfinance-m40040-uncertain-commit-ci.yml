@@ -1,0 +1,161 @@
+name: FR Finance M40040 — Commit response uncertainty and read-only reconciliation CI
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40040_*'
+      - 'backend/tests/test_m40040_uncertain_commit_source_ci.py'
+      - '.github/workflows/frfinance-m40040-uncertain-commit-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40040_*'
+      - 'backend/tests/test_m40040_uncertain_commit_source_ci.py'
+      - '.github/workflows/frfinance-m40040-uncertain-commit-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40040-ci
+  cancel-in-progress: true
+
+jobs:
+  source-only:
+    name: Source guard and no-financial-authority contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify SQL source and only disposable paths
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m40040_uncertain_commit_source_ci.py' -v
+          echo M40040_SOURCE_CONTRACT=PASS
+
+  ephemeral-pg18:
+    name: PG18 atomic ACK and uncertain response reconciliation in separate connections
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m40010_ci=DISPOSABLE_ONLY -c frfinance.m40020_ci=DISPOSABLE_ONLY -c frfinance.m40030_ci=DISPOSABLE_ONLY -c frfinance.m40040_ci=DISPOSABLE_ONLY'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client on disposable runner only
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Create isolated CI database and synthetic reviewer schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$PGPORT" = 5432
+          test "$PGDATABASE" = frcaixinha_ci
+          PGDATABASE=postgres psql -X -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE frcaixinha_ci"
+          d=backend/tests/sql
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -f "$d/m40010_disposable_init_pg18_ci.sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 \
+            -f "$d/m40020_disposable_lock_init_pg18_ci.sql"
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f "$d/m40040_disposable_ack_init_pg18_ci.sql"
+      - name: Bad ACK must abort its receipt transaction, no orphan in fresh connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/m40040_expected_rejection.log"
+          set +e
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_atomic_failure_pg18_ci.sql \
+            >"$log" 2>&1
+          rc=$?
+          set -e
+          test "$rc" -eq 3 || { cat "$log"; exit 1; }
+          grep -q M40040_ACK_NOT_MATCHED_TO_COMMITTED_RECEIPT "$log"
+          if grep -q M40040_UNEXPECTED_MISMATCH_ACCEPTED "$log"; then
+            cat "$log"; exit 1
+          fi
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_verify_atomic_rollback_pg18_ci.sql
+      - name: Commit valid receipt plus ACK, deliberately suppress detailed response
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 \
+            -v CI_M40010_DISPOSABLE=1 -v CI_M40020_DISPOSABLE=1 \
+            -v CI_M40030_DISPOSABLE=1 -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_commit_without_ack_pg18_ci.sql \
+            > /dev/null
+          echo M40040_COMMITTED_RESPONSE_BODY_DISCARDED_BY_CI=TRUE
+      - name: Fresh connection resolves same key and rejects altered payload read-only
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_retry_resolution_pg18_ci.sql
+      - name: Second reviewer, other tenant, and Master cannot inspect original ACK
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_visibility_pg18_ci.sql
+      - name: Proposed stop blocks NEW receipt but allows reading former status
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_stop_after_ack_pg18_ci.sql
+      - name: Final independent audit of single receipt, RLS and authority flags
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40010_DISPOSABLE=1 \
+            -v CI_M40020_DISPOSABLE=1 -v CI_M40030_DISPOSABLE=1 \
+            -v CI_M40040_DISPOSABLE=1 \
+            -f backend/tests/sql/m40040_disposable_final_audit_pg18_ci.sql
+          echo M40040_UNCERTAIN_COMMIT_RECONCILIATION=PASS
+          echo M40040_SIMULATED_REPLY_LOSS_ONLY=TRUE
+          echo M40040_REAL_HUMAN_AUTHENTICATION=FALSE
+          echo M40040_APPROVAL_AND_PAYOUT=OFF
+          echo M40040_TERMUX_ACCESS=NONE
+          echo M40040_ORIGINAL_DB_ACCESS=NONE
+          echo M40040_LOCAL_MIGRATIONS=NONE
+          echo M40040_PRODUCTION=BLOCKED

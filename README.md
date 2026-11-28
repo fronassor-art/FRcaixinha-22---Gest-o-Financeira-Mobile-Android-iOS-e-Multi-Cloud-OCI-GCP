@@ -1,94 +1,36 @@
-# FRcaixinha 2.2 — Gestão Financeira Mobile (Android & iOS) e Multi-Cloud (OCI + GCP)
+# FR Finance
 
-Sistema financeiro completo para caixinhas de empréstimos (Tabela Price), cotas, rifas com rateio proporcional, bolões oficiais (Quina de São João, Lotofácil da Independência, Mega da Virada) e arquitetura em nuvem híbrida com custódia e auditoria imutável (Oracle Cloud Infrastructure WORM SHA-256 + Google Cloud Platform).
+FR Finance é o nome do produto e a única marca pública deste aplicativo. O código ativo, a interface e os documentos vigentes devem apresentar somente essa identidade.
 
----
+## Repositório e operação
 
-## 📱 Execução no Celular via Termux (Android)
+- Repositório remoto já configurado: [FR Finance no GitHub](https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP).
+- Branch atual: `atualizacao-ai-studio-9b46a63187`; PR #2 permanece em rascunho.
+- Diretório nativo do Termux: `$HOME/fr-finance`.
+- PostgreSQL original: `127.0.0.1:5433/frcaixinha_aistudio_dev`.
+- Identificador Android existente: `com.frcaixinha.app`.
 
-Você pode rodar o **FRcaixinha 2.2** 100% nativo dentro do seu celular Android utilizando o **Termux**, sem precisar de computador.
+Os identificadores acima permanecem por compatibilidade com o repositório remoto, a sincronização existente, a base já configurada e a atualização do aplicativo instalado. Eles são dados operacionais, não nomes de produto. Esta revisão não renomeia repositório, branch, banco ou pacote Android.
 
-### Passo 1: Instale os pacotes necessários no Termux
-Abra o Termux e digite:
-```bash
-pkg update -y && pkg install -y nodejs git unzip curl
-```
+## Documentos vigentes
 
-### Passo 2: Dê permissão de acesso aos arquivos
-```bash
-termux-setup-storage
-```
-*(Toque em "Permitir" na janela que abrir no Android)*
+- [Caderno Mestre FR Finance](docs/FR_Finance_Caderno_Mestre_V2_2_2026-11-24.md)
+- [Contrato Técnico Mestre FR Finance](docs/FR_Finance_Contrato_Tecnico_Mestre_V2_2_2026-11-24.md)
+- [Checkpoint Termux M40941 de sincronização somente-fonte](docs/FR_FINANCE_M40941_TERMUX_CHECKPOINT_SOURCE_ONLY.md)
+- [Bloqueios P0 de produção — issue #5](https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP/issues/5)
 
-### Passo 3: Baixe e extraia o projeto
-Se você baixou o arquivo `FRcaixinha_2.2_Projeto_Completo.zip` pelo navegador do celular:
-```bash
-mkdir -p ~/frcaixinha && cd ~/frcaixinha
-cp ~/storage/downloads/FRcaixinha_2.2_Projeto_Completo.zip .
-unzip -o FRcaixinha_2.2_Projeto_Completo.zip
-```
+Arquivos de evidência e documentos históricos permanecem preservados para rastreabilidade. Eles não substituem os dois documentos mestres vigentes nem alteram a identidade do produto.
 
-### Passo 4: Como Rodar no Celular (2 Métodos)
+## Estado comprovado em 25/11/2026
 
-#### Método A (Recomendado — Sem Node.js, Sem Erros de C++):
-Como o projeto já inclui a pasta `dist/` pré-compilada, você pode usar o servidor embutido do Python que não requer compilação:
-```bash
-pkg install -y python
-cd ~/frcaixinha/dist
-python -m http.server 3000
-```
+O operador confirmou no Termux nativo a sincronização do commit `6e78b270233b299d330a9505dd835b9c20e096f2`. O checkpoint M40941 confirmou a branch fixada, repositório esperado e árvore rastreada limpa. Nenhum banco foi acessado, nenhum SQL foi aplicado, nenhum serviço foi reiniciado e o runtime não foi recarregado ou atestado.
 
-#### Método B (Com Node.js):
-```bash
-cd ~/frcaixinha
-npm install
-npm run dev
-```
+Naquele commit, a CI geral estava em 7/7 e os 148 workflows associados estavam concluídos com sucesso. Isso não aprova produção: a issue #5 continua aberta e `PRODUCTION=BLOCKED`.
 
-> **Apareceu o erro "CANNOT LINK EXECUTABLE node"?**
-> Esse erro ocorre quando a biblioteca `libc++` do Termux está desatualizada. Para corrigir:
-> ```bash
-> pkg update -y && pkg upgrade -y
-> pkg install -y libc++ nodejs-lts
-> ```
-> *(Dica: Se o seu Termux veio da Google Play Store, ele foi descontinuado em 2020. Instale a versão moderna pelo F-Droid ou GitHub).*
+## Fluxo seguro
 
-### Passo 5: Abra no celular
-Abra o **Google Chrome** no seu celular e acesse:
-```
-http://localhost:3000
-```
-O aplicativo abrirá instantaneamente em alta performance, funcionando mesmo sem internet (offline).
+O desenvolvimento segue código e testes na branch autorizada, CI integral no SHA exato e, após validação, um comando de sincronização source-only para o Termux. A sincronização utiliza `backend/scripts/frfinance_m40600_source_sync_only.py`; o checkpoint posterior é somente leitura em `backend/scripts/frfinance_m40941_termux_post_sync_checkpoint_readonly.py`.
 
----
+A sincronização de fonte não autoriza acesso ou escrita no PostgreSQL, migrations, mudanças de ACL/roles, reinícios ou reload de serviços. Qualquer operação real permanece separada e exige autorização específica.
 
-## 💻 Execução no Computador (Windows / macOS / Linux)
-
-### Pré-requisitos
-- **Node.js LTS (v18+)**
-- **Git**
-
-### Comandos
-```bash
-npm install
-npm run dev
-```
-Acesse `http://localhost:3000`.
-
----
-
-## 🚀 Publicar no seu GitHub a partir do Termux ou PC
-
-```bash
-git remote add origin https://github.com/SEU_USUARIO/frcaixinha-22.git
-git branch -M main
-git push -u origin main
-```
-
----
-
-## 🛡️ Cláusulas e Regras de Negócio Implementadas
-- **Empréstimo Tabela Price:** 5 parcelas de R$ 167,19 com taxa de juros 20% a.m. decrescente sobre saldo devedor, juros totais R$ 335,96, sem taxas administrativas.
-- **Módulo de Rifas:** 3 campanhas anuais (Março, Junho, Setembro - dia 20), R$ 50,00 por cota (10 bilhetes de R$ 5,00), premiação configurável.
-- **Bolões Oficiais:** Quina de São João, Lotofácil da Independência e Mega da Virada com margem de 20% para a caixinha e rateio estrito de prêmios.
-- **Multi-Cloud Híbrido:** Failover automático GCP <-> OCI e logs de auditoria imutável (WORM).
+Flags permanecem `PIX_REAL=OFF`, `PAGAMENTOS_REAIS=OFF`, `ATIVACAO_REAL=OFF` e `PRODUCTION=BLOCKED`.

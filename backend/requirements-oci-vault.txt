@@ -1,0 +1,5 @@
+# M26900 FR Finance AI Studio - optional OCI compute ONLY.
+# This file is NOT installed by GitHub Actions or Termux.
+# Install only on a provisioned, authorized OCI instance principal service
+# after IAM review, secret lifecycle approval and maintenance window.
+oci==2.190.0

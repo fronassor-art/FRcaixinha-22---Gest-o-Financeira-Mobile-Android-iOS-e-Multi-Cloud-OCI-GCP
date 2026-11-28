@@ -23,7 +23,7 @@ interface GitHubSyncModalProps {
 }
 
 export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({ isOpen, onClose }) => {
-  const [repoUrl, setRepoUrl] = useState('https://github.com/SEU_USUARIO/frcaixinha-22.git');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP.git');
   const [githubToken, setGithubToken] = useState('');
   const [copiedScript, setCopiedScript] = useState(false);
   const [isZipping, setIsZipping] = useState(false);
@@ -33,9 +33,9 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const terminalScript = `# 1. Acesse https://github.com/new e crie o repositório "frcaixinha-22"
+  const terminalScript = `# 1. Acesse https://github.com/new e crie o repositório "FRcaixinha-22"
 # 2. No terminal do projeto, execute:
-git remote add origin ${repoUrl || 'https://github.com/SEU_USUARIO/frcaixinha-22.git'}
+git remote add origin ${repoUrl || 'https://github.com/fronassor-art/FRcaixinha-22---Gest-o-Financeira-Mobile-Android-iOS-e-Multi-Cloud-OCI-GCP.git'}
 git branch -M main
 git push -u origin main`;
 
@@ -117,7 +117,7 @@ git push -u origin main`;
 
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
             <span>Repositório GitHub do Projeto</span>
-            <span className="text-indigo-400 font-mono text-xs">FRcaixinha 2.2</span>
+            <span className="text-indigo-400 font-mono text-xs">FR Finance</span>
           </h2>
           <p className="text-xs text-slate-300 mt-1">
             Envie todo o código-fonte, contratos técnicos, testes e módulos para sua conta do GitHub.
@@ -140,11 +140,11 @@ git push -u origin main`;
             </div>
             <div className="text-[11px] text-slate-300">
               <span className="text-slate-400">Mensagem: </span>
-              <span className="text-white font-medium">feat: FRcaixinha 2.2 - Gestão Financeira Mobile (Android/iOS) e Multi-Cloud (OCI + GCP)</span>
+              <span className="text-white font-medium">feat: FR Finance - Gestão Financeira Mobile (Android/iOS) e Multi-Cloud (OCI + GCP)</span>
             </div>
             <div className="flex flex-wrap justify-between text-[10px] text-slate-400 pt-1">
               <span>Arquivos commitados: <strong className="text-white">42 arquivos</strong></span>
-              <span>Autor: <strong className="text-emerald-300">FRcaixinha Team &lt;fr.onassor@gmail.com&gt;</strong></span>
+              <span>Autor: <strong className="text-emerald-300">FR Finance Team &lt;fr.onassor@gmail.com&gt;</strong></span>
             </div>
           </div>
 
@@ -186,7 +186,7 @@ git push -u origin main`;
                   type="text"
                   value={repoUrl}
                   onChange={e => setRepoUrl(e.target.value)}
-                  placeholder="https://github.com/seu-usuario/frcaixinha-22.git"
+                  placeholder="https://github.com/seu-usuario/FRcaixinha-22.git"
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:border-indigo-500 focus:outline-none"
                 />
               </div>

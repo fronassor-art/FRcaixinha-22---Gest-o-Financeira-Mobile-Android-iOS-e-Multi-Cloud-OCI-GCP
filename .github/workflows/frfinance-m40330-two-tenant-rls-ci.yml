@@ -1,0 +1,99 @@
+name: FR Finance M40330 - Two-tenant data-plane RLS on disposable PG18
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40330_two_tenant_rls_matrix_disposable_ci.sql'
+      - '.github/workflows/frfinance-m40330-two-tenant-rls-ci.yml'
+      - 'docs/FR_FINANCE_M40330_TWO_TENANT_DATA_PLANE.md'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40330_two_tenant_rls_matrix_disposable_ci.sql'
+      - '.github/workflows/frfinance-m40330-two-tenant-rls-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-pg18-two-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_ci_disposable
+          POSTGRES_DB: frfinance_ci_credit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: only_ci_disposable
+      PGDATABASE: frfinance_ci_credit
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'NO'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require disposable CI identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = "true"
+          test "$PGDATABASE" = "frfinance_ci_credit"
+          test "$PGPORT" = "5432"
+      - name: Prepare minimal synthetic schema
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE frc_ai_app NOLOGIN;
+          CREATE TABLE public.users (id uuid PRIMARY KEY);
+          CREATE TABLE public.tenants (
+            id uuid PRIMARY KEY,
+            admin_user_id uuid NOT NULL REFERENCES public.users(id),
+            status text NOT NULL DEFAULT 'ATIVO'
+          );
+          CREATE TABLE public.cycles (
+            id uuid PRIMARY KEY,
+            tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            status text NOT NULL DEFAULT 'ABERTO'
+          );
+          CREATE TABLE public.memberships (
+            id uuid PRIMARY KEY,
+            tenant_id uuid NOT NULL REFERENCES public.tenants(id),
+            user_id uuid NOT NULL REFERENCES public.users(id),
+            role text NOT NULL DEFAULT 'TENANT_MEMBER',
+            status text NOT NULL DEFAULT 'ATIVA'
+          );
+          GRANT SELECT ON public.users,public.tenants,
+            public.cycles,public.memberships TO frc_ai_app;
+          SQL
+      - name: Apply existing SQL110-111 only in disposable PG18
+        run: |
+          psql -X -v ON_ERROR_STOP=1 --single-transaction \
+            -c "SET frfinance.m39020_migration_mode='CI_DISPOSABLE'" \
+            -f backend/migrations/110_fr_finance_special_credit_offline.sql \
+            -f backend/migrations/111_frfinance_special_credit_integrity_guards.sql
+      - name: Reuse existing M39020 two-tenant synthetic fixture
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -f backend/tests/sql/m39020_special_credit_integrity_ci.sql
+      - name: Exercise 60 positive and negative RLS checks with rollback
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 \
+            -c "SET frfinance.m40330_test_mode='CI_DISPOSABLE'" \
+            -f backend/tests/sql/m40330_two_tenant_rls_matrix_disposable_ci.sql
+          echo 'M40330_ORIGINAL_POSTGRESQL_5433=NOT_CONNECTED'
+          echo 'M40330_DATABASE_MIGRATIONS_LOCAL=NONE'
+          echo 'M40330_PIX_REAL=OFF'
+          echo 'M40330_REAL_NOTIFICATIONS=OFF'
+          echo 'M40330_PRODUCTION=BLOCKED'

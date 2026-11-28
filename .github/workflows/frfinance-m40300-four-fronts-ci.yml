@@ -1,0 +1,108 @@
+name: FR Finance M40300 - Four fronts single-repo no-VM package
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/routers/special_credit.py'
+      - 'backend/app/member_cycle_rules.py'
+      - 'src/services/specialCreditRequestBoundary.ts'
+      - 'src/components/SpecialCreditView.tsx'
+      - 'backend/tests/test_m40300_four_fronts_ci.py'
+      - 'src/tests/m40300_android_credit_resilience_ci.test.ts'
+      - 'backend/scripts/frfinance_m40300_termux_readonly.sh'
+      - '.github/workflows/frfinance-m40300-four-fronts-ci.yml'
+      - 'docs/FR_FINANCE_M40300_UNICO_MACROPACOTE.md'
+      - 'docs/FR_FINANCE_M40300_ADITIVO_CONTRATUAL_MIGRACAO.md'
+  pull_request:
+    paths:
+      - 'backend/app/routers/special_credit.py'
+      - 'backend/app/member_cycle_rules.py'
+      - 'src/services/specialCreditRequestBoundary.ts'
+      - 'src/components/SpecialCreditView.tsx'
+      - 'backend/tests/test_m40300_four_fronts_ci.py'
+      - 'src/tests/m40300_android_credit_resilience_ci.test.ts'
+      - 'backend/scripts/frfinance_m40300_termux_readonly.sh'
+      - '.github/workflows/frfinance-m40300-four-fronts-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frfinance-m40300-four-fronts
+  cancel-in-progress: false
+jobs:
+  backend-synthetic-and-oracles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      ENVIRONMENT: development
+      FR_FINANCE_SPECIAL_CREDIT_SANDBOX: 'OFF'
+      FRCAIXINHA_TEST_AUTH: '0'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FRF_OCI_LAUNCH_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing backend requirements
+        run: python -m pip install -r backend/requirements.txt
+      - name: Validate source and native Termux shell syntax
+        run: |
+          set -euo pipefail
+          python -B -m compileall -q backend/app/routers/special_credit.py backend/app/member_cycle_rules.py
+          bash -n backend/scripts/frfinance_m40300_termux_readonly.sh
+      - name: Integrated M40300 plus original finance and security regressions
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40300_four_fronts_ci.py \
+            backend/tests/test_m39033_special_credit_route_flow_ci.py \
+            backend/tests/test_m39082_special_credit_cycle_actions_ci.py \
+            backend/tests/test_m40230_role_tenant_boundaries_ci.py \
+            backend/tests/test_annual_closing_contract_ci.py \
+            backend/tests/test_member_cycle_contract_ci.py \
+            backend/tests/test_m29500_m29800_two_tenant_closing_ci.py \
+            backend/tests/test_price_contract.py
+          echo M40300_BACKEND=PASS_EXISTING_MODULES_AND_SYNTHETIC_ORACLES
+          echo M40300_ORIGINAL_PG18=NOT_CONNECTED
+          echo M40300_SQL_MIGRATIONS=NONE
+          echo M40300_EXTERNAL_CHANNELS=OFF
+          echo M40300_PRODUCTION=BLOCKED
+  frontend-and-android-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FRCAIXINHA_ANDROID_LOCAL_TEST: '1'
+      VITE_API_URL: 'http://127.0.0.1:8000'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install lockfile
+        run: npm ci
+      - name: Android session and credit boundary regressions, no network
+        run: |
+          set -euo pipefail
+          npx --no-install tsx src/tests/m40300_android_credit_resilience_ci.test.ts
+          npx --no-install tsx src/tests/m39048_credit_auth_boundary_ci.test.ts
+          npx --no-install tsx src/tests/session_resume_guard_ci.test.ts
+          npx --no-install tsx src/tests/session_resilience_ci.test.ts
+          npx --no-install tsx src/tests/m39020_credit_push_ui_ci.test.ts
+          npx --no-install tsx src/tests/m21700_android_release_gate_ci.test.ts
+      - name: Typecheck and compile Capacitor web assets only
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run build
+          echo M40300_ANDROID_SOURCE=PASS_TESTS_TYPECHECK_BUNDLE
+          echo M40300_APK_PHYSICAL=NOT_ATTESTED
+          echo M40300_PRODUCTION=BLOCKED

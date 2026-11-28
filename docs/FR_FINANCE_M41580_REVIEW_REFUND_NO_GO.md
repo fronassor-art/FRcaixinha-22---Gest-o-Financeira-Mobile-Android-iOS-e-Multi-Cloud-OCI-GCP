@@ -1,0 +1,8 @@
+# M41580 — Resolução de recebimento em revisão e serialização SaaS (NO-GO)
+
+Base: M41571 7aaa3bbb534bdffcf7c3ac42f22823d85497a1b8. Escopo exclusivo de CI descartável, sem novo endpoint de pagamento, sem transporte PSP, sem migração operacional (somente fixture SQL descartável), sem alteração de direitos de ciclos. V2.3 §3.10; CP26-0094, CP26-0137 a CP26-0142, CP26-0151; AT-20. Matriz preservada, aceite independente pendente.
+
+- Conciliação de renovação exige replay exato de extrato (gross/fee/net, identificador, revisor); nenhuma segunda licença.
+- Recebimento tardio/divergente pode sair de revisão apenas com prova sintética de estorno integral do valor efetivamente recebido, mesmo identificador/conta/moeda/ambiente e mesmo revisor independente. A oferta sem licença passa a CANCELED com marcador review_refunded; a restrição de expiração ordinária é mantida, e o fato econômico é preservado em auditoria separada e leitura REVIEW_REFUNDED. Sem reembolso parcial, concessão de licença ou movimento real. A nova oferta tem novo pedido; replay da prova original não cria efeito adicional.
+- Testes: disputa entre preparação de renovação e cancelamento em conexões independentes; replays concorrentes do estorno, extrato divergente, escopo cruzado e valores incorretos; conservação de segmentos, ciclos e ledger; parser mobile sem POST real. Revisão de upgrade/estorno concorrente em conexões independentes continua pendente.
+- Sem acesso ao PostgreSQL autoritativo, sem reinício, sem reload. PIX_REAL=OFF, PAGAMENTOS_REAIS=OFF, ATIVACAO_REAL=OFF, PRODUCTION=BLOCKED; issue #5 aberta. Resultados de CI devem ser conferidos no SHA publicado, não inferidos deste documento.

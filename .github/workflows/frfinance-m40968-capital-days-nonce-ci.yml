@@ -1,0 +1,44 @@
+name: FR Finance M40968 Capital-Dias preview nonce binding
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'src/services/capitalDaysV22.ts'
+      - 'src/tests/m40965_capital_days_v22.test.ts'
+      - 'src/tests/m40966_capital_days_scope_v22.test.ts'
+      - 'src/tests/m40967_capital_days_envelope_v22.test.ts'
+      - 'src/tests/m40968_capital_days_nonce_v22.test.ts'
+      - '.github/workflows/frfinance-m40968-capital-days-nonce-ci.yml'
+      - 'docs/FR_FINANCE_M40968_CAPITAL_DIAS_PREVIEW_NONCE.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/services/capitalDaysV22.ts'
+      - 'src/tests/m40965_capital_days_v22.test.ts'
+      - 'src/tests/m40966_capital_days_scope_v22.test.ts'
+      - 'src/tests/m40967_capital_days_envelope_v22.test.ts'
+      - 'src/tests/m40968_capital_days_nonce_v22.test.ts'
+      - '.github/workflows/frfinance-m40968-capital-days-nonce-ci.yml'
+      - 'docs/FR_FINANCE_M40968_CAPITAL_DIAS_PREVIEW_NONCE.md'
+permissions:
+  contents: read
+jobs:
+  preview-nonce-binding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/m40965_capital_days_v22.test.ts
+      - run: npx tsx src/tests/m40966_capital_days_scope_v22.test.ts
+      - run: npx tsx src/tests/m40967_capital_days_envelope_v22.test.ts
+      - run: npx tsx src/tests/m40968_capital_days_nonce_v22.test.ts

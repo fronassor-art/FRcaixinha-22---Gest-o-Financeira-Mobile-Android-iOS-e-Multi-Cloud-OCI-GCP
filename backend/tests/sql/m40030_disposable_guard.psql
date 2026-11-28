@@ -1,0 +1,19 @@
+-- M40030 safeguard: ephemeral CI PostgreSQL 18, never an original DB migration.
+\set ON_ERROR_STOP on
+\ir m40020_disposable_guard.psql
+\if :{?CI_M40030_DISPOSABLE}
+\else
+\echo M40030_BLOCKED_MISSING_CI_FLAG
+\quit 2
+\endif
+SELECT CASE WHEN current_database()='frcaixinha_ci'
+ AND inet_server_port()=5432
+ AND session_user='postgres'
+ AND current_setting('frfinance.m40030_ci',true)='DISPOSABLE_ONLY'
+ THEN 'true' ELSE 'false' END AS m40030_disposable_identity
+\gset
+\if :m40030_disposable_identity
+\else
+\echo M40030_BLOCKED_WRONG_CLUSTER
+\quit 2
+\endif

@@ -1,0 +1,39 @@
+name: FR Finance M40962 independent contract models and review binding
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  backend-contract-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: backend
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest pytest-asyncio
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40962_contract_scope_ci.py backend/tests/test_m25400_canonical_contract_delivery_ci.py backend/tests/test_m25200_contract_text_integrity_ci.py
+  frontend-contract-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/m40962_contract_models_ci.test.ts
+      - run: npx tsx src/tests/m25400_canonical_contract_ui_ci.test.ts
+      - run: npx tsx src/tests/m38014_contract_review_scope_ci.test.ts
+      - run: npx tsx src/tests/m40500_consolidated_ui_identity_ci.test.ts

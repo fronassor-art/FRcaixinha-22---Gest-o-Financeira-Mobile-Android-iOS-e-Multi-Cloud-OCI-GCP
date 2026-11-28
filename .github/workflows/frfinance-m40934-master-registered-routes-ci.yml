@@ -1,0 +1,43 @@
+name: FR Finance M40934 real FastAPI Master route registry NO-GO
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/main.py'
+      - 'backend/app/routers/**'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/m40930_master_write_no_go.py'
+      - 'backend/app/m40840_financial_sql_release_no_go.py'
+      - 'backend/tests/test_m40934_fastapi_real_master_route_registry_ci.py'
+      - '.github/workflows/frfinance-m40934-master-registered-routes-ci.yml'
+      - 'docs/FR_FINANCE_M40934_REAL_FASTAPI_MASTER_ROUTES_NO_GO.md'
+  pull_request:
+    paths:
+      - 'backend/app/main.py'
+      - 'backend/app/routers/**'
+      - 'backend/app/dependencies.py'
+      - 'backend/app/m40930_master_write_no_go.py'
+      - 'backend/tests/test_m40934_fastapi_real_master_route_registry_ci.py'
+      - '.github/workflows/frfinance-m40934-master-registered-routes-ci.yml'
+permissions:
+  contents: read
+jobs:
+  real-fastapi-route-graph:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      ENVIRONMENT: ci
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual API import dependencies (no runtime service)
+        run: python -m pip install -r backend/requirements.txt
+      - name: Import actual FastAPI registry, reject unguarded Master POSTs
+        run: python -B -m unittest discover -s backend/tests -p 'test_m40934_fastapi_real_master_route_registry_ci.py' -v

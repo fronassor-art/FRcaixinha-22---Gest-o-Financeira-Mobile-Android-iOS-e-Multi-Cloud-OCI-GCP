@@ -1,0 +1,32 @@
+name: FR Finance M38170 public API health attestation offline CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-health-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Testar DNS TLS e API publica com respostas falsas sem rede
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38170_public_api_health_attestation_ci.py \
+            backend/tests/test_m28200_public_tls_probe_ci.py \
+            backend/tests/test_m37980_health_cache_ci.py
+          echo "M38209_PUBLIC_NETWORK_REQUESTS_BY_CI=NONE"
+          echo "M38209_REAL_VM_IDENTITY=NOT_ATTESTED"
+          echo "M38209_REAL_DATABASE_TLS_RLS=NOT_ATTESTED"
+          echo "M38209_EMAIL_REAL=OFF"
+          echo "M38209_PIX_REAL=OFF"
+          echo "M38209_PRODUCTION=BLOCKED"

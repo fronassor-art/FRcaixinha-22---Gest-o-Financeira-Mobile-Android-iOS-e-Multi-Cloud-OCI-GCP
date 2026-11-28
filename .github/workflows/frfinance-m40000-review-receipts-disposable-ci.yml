@@ -1,0 +1,99 @@
+name: FR Finance M40000 — Disposable review receipts idempotency and RLS
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/tests/sql/m40000_disposable_review_receipts_pg18_ci.sql'
+      - 'backend/tests/test_m40000_review_receipts_source_ci.py'
+      - '.github/workflows/frfinance-m40000-review-receipts-disposable-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/tests/sql/m40000_disposable_review_receipts_pg18_ci.sql'
+      - 'backend/tests/test_m40000_review_receipts_source_ci.py'
+      - '.github/workflows/frfinance-m40000-review-receipts-disposable-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m40000-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-safety:
+    name: CI-only identity and schema contract (no database connection)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Audit SQL and workflow source gates
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m40000_review_receipts_source_ci.py' -v
+          echo 'M40000_SQL_SOURCE_GATES=PASS'
+          echo 'M40000_ORIGINAL_DATABASE_ACCESS=NONE'
+          echo 'M40000_LOCAL_MIGRATIONS=NONE'
+
+  postgres18-disposable:
+    name: PostgreSQL18 atomic uniqueness, append-only, reader RLS and rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m40000_ci=DISPOSABLE_ONLY'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Create isolated disposable CI database
+        env:
+          PGDATABASE: postgres
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE frcaixinha_ci"
+      - name: Assert atomic receipt constraints and rollback
+        run: |
+          test "$PGDATABASE" = frcaixinha_ci
+          test "$PGPORT" = 5432
+          psql -X -v ON_ERROR_STOP=1 -v CI_M40000_DISPOSABLE=1 \
+            -f backend/tests/sql/m40000_disposable_review_receipts_pg18_ci.sql
+          echo 'M40000_RECEIPT_UNIQUENESS=PASS'
+          echo 'M40000_TWO_SESSIONS_NOT_SIGNED=TRUE'
+          echo 'M40000_REAL_REVIEW_APPROVAL=FALSE'
+          echo 'M40000_ORIGINAL_DATABASE_ACCESS=NONE'
+          echo 'M40000_TERMUX_ACCESS=NONE'
+          echo 'M40000_LOCAL_MIGRATIONS=NONE'
+          echo 'M40000_REAL_PAYMENTS=OFF'
+          echo 'M40000_PRODUCTION=BLOCKED'

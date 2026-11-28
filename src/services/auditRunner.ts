@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Suíte Oficial de Auditoria Contratual
+ * FR Finance - Suíte Oficial de Auditoria Contratual
  * Implementa verificação automatizada dos 50 Cenários de Prova (AT-01 a AT-50)
  * especificados nas Cláusulas 16.4, 16.4-A, 16.4-C e 16.4-E do Contrato Técnico Mestre.
  */

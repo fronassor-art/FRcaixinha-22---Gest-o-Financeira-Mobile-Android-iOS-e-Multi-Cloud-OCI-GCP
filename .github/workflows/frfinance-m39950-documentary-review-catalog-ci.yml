@@ -1,0 +1,104 @@
+name: FR Finance M39950 — Documentary review chain and disposable RLS catalog
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/exclusive_cashbox_documentary_review.py'
+      - 'backend/tests/test_m39950_documentary_review_chain_ci.py'
+      - 'backend/tests/test_m39950_documentary_catalog_source_ci.py'
+      - 'backend/tests/sql/m39950_documentary_review_catalog_disposable_ci.sql'
+      - '.github/workflows/frfinance-m39950-documentary-review-catalog-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/exclusive_cashbox_documentary_review.py'
+      - 'backend/tests/test_m39950_documentary_review_chain_ci.py'
+      - 'backend/tests/test_m39950_documentary_catalog_source_ci.py'
+      - 'backend/tests/sql/m39950_documentary_review_catalog_disposable_ci.sql'
+      - '.github/workflows/frfinance-m39950-documentary-review-catalog-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39950-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-claims:
+    name: Two claimed reviewers and source safety, no database
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pure structural review chain and SQL source tests
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39950_documentary_review_chain_ci.py' -v
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39950_documentary_catalog_source_ci.py' -v
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39940_cashbox_evidence_preflight_ci.py' -v
+          echo 'M39950_REVIEW_CLAIMS_ONLY=PASS'
+          echo 'M39950_AUTHENTICATED_APPROVAL=FALSE'
+          echo 'M39950_DB_WRITES_ORIGINAL=NONE'
+          echo 'M39950_REAL_PAYMENTS=OFF'
+
+  pg18-disposable:
+    name: PG18 RLS, immutable evidence, no-self-review, replay and rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: frcaixinha_ci
+      PGOPTIONS: '-c frfinance.m39950_ci=DISPOSABLE_ONLY'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure disposable PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Make CI-only database in ephemeral GitHub service
+        env:
+          PGDATABASE: postgres
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE frcaixinha_ci"
+      - name: Test synthetic evidence, two reviewers, separation and rollback
+        run: |
+          test "$PGDATABASE" = frcaixinha_ci
+          test "$PGPORT" = 5432
+          psql -X -v ON_ERROR_STOP=1 -v CI_M39950_DISPOSABLE=1 \
+            -f backend/tests/sql/m39950_documentary_review_catalog_disposable_ci.sql
+          echo 'M39950_ORIGINAL_POSTGRESQL=UNTOUCHED'
+          echo 'M39950_MIGRATIONS=NONE'
+          echo 'M39950_TERMUX_ACCESS=NONE'
+          echo 'M39950_PRODUCTION=BLOCKED'

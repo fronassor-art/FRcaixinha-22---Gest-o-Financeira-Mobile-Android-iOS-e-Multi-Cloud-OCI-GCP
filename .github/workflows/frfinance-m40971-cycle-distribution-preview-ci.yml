@@ -1,0 +1,39 @@
+name: FR Finance M40971 cycle distribution preview CI
+
+on:
+  push:
+    branches:
+      - atualizacao-ai-studio-9b46a63187
+    paths:
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/tests/m40971_cycle_distribution_preview_v22.test.ts"
+      - ".github/workflows/frfinance-m40971-cycle-distribution-preview-ci.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/services/cycleDistributionPreviewV22.ts"
+      - "src/services/eligibleProfitBasisV22.ts"
+      - "src/services/capitalDaysV22.ts"
+      - "src/tests/m40971_cycle_distribution_preview_v22.test.ts"
+      - ".github/workflows/frfinance-m40971-cycle-distribution-preview-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cycle-distribution-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/m40971_cycle_distribution_preview_v22.test.ts

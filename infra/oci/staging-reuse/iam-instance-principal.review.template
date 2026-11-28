@@ -1,0 +1,15 @@
+# FR Finance AI Studio | M37341-M37350 | IAM REVIEW ONLY
+# This is a NON-EXECUTABLE template. Do NOT paste these lines into OCI CLI.
+# Only after staging VM, Vault software key + secret exist, review identity
+# domain, precise instance membership, secret scope, permissions and cost.
+# Never store real OCIDs, matching rules, keys, tokens or secrets in Git.
+DYNAMIC_GROUP_NAME=fr-finance-staging-runtime
+DYNAMIC_GROUP_MATCHING_RULE=all {instance.compartment.id = '__STAGING_COMPARTMENT_OCID__', instance.id = '__STAGING_INSTANCE_OCID__'}
+POLICY_NAME=fr-finance-staging-read-single-secret
+POLICY_STATEMENT=Allow dynamic-group '__IDENTITY_DOMAIN__'/'fr-finance-staging-runtime' to read secret-bundles in compartment id __STAGING_COMPARTMENT_OCID__ where target.secret.id = '__APP_SECRET_OCID__'
+INSTANCE_PRINCIPAL_TESTED=NO
+EFFECTIVE_SECRET_READ_TESTED=NO
+MANUAL_OPERATOR_REVIEW_REQUIRED=YES
+OCI_RESOURCE_CREATION_AUTHORIZED=NO
+PIX_REAL=OFF
+REAL_USER_ACTIVATION=OFF

@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Multi-Cloud Infrastructure Service (OCI + GCP)
+ * FR Finance - Multi-Cloud Infrastructure Service (OCI + GCP)
  * Gerencia a topologia híbrida de nuvem soberana:
  * - Google Cloud Platform (GCP): Cloud Run, Firebase Auth, GCS, Cloud Monitoring (São Paulo)
  * - Oracle Cloud Infrastructure (OCI): OCI Autonomous DB, OCI WORM Storage (Vinhedo), OCI Vault

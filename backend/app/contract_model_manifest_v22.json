@@ -1,0 +1,10 @@
+{
+  "schema": "FR_FINANCE_CONTRACT_MODEL_MANIFEST_V22",
+  "version": "2.2",
+  "state": "DRAFT_ONLY",
+  "acceptance_enabled": false,
+  "models": {
+    "SAAS_LICENSE": "3d1a91d9674bd622da47d306f7517adc3aa87690c94c21838338c4c41eed18dc",
+    "MEMBER_ADHESION": "8b4541f5c54702a33ee2172a7af369b480af00163e1f8605c2c9454b260bc6e8"
+  }
+}

@@ -1,0 +1,59 @@
+name: FR Finance M39940 — Cashbox documentary proof without real money
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/app/exclusive_cashbox_evidence_preflight.py'
+      - 'backend/app/exclusive_cashbox_journal_preflight.py'
+      - 'backend/app/exclusive_cashbox_provenance.py'
+      - 'backend/tests/test_m39940_cashbox_evidence_preflight_ci.py'
+      - 'backend/tests/test_m39920_exclusive_cashbox_journal_preflight_ci.py'
+      - '.github/workflows/frfinance-m39940-evidence-preflight-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/app/exclusive_cashbox_evidence_preflight.py'
+      - 'backend/app/exclusive_cashbox_journal_preflight.py'
+      - 'backend/app/exclusive_cashbox_provenance.py'
+      - 'backend/tests/test_m39940_cashbox_evidence_preflight_ci.py'
+      - 'backend/tests/test_m39920_exclusive_cashbox_journal_preflight_ci.py'
+      - '.github/workflows/frfinance-m39940-evidence-preflight-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frfinance-m39940-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  documentary-proof-no-io:
+    name: Unverified evidence, independent review and 15/85 preview no payments
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_REAL_PAYMENTS: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Independent pure journal/evidence tests
+        run: |
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39920_exclusive_cashbox_journal_preflight_ci.py' -v
+          python -B -m unittest discover -s backend/tests \
+            -p 'test_m39940_cashbox_evidence_preflight_ci.py' -v
+          echo 'M39940_CASHBOX_EVIDENCE_PREFLIGHT=PASS'
+          echo 'M39940_DOCUMENT_AUTHENTICATED=FALSE'
+          echo 'M39940_MIGRATIONS=NONE'
+          echo 'M39940_DATABASE_WRITES=NONE'
+          echo 'M39940_PIX_REAL=OFF'
+          echo 'M39940_PRODUCTION=BLOCKED'

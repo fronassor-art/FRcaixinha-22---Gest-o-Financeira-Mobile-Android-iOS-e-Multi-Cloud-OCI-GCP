@@ -1,0 +1,35 @@
+name: FR Finance M37987 sinais de inadimplencia sem sancao
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend-risk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Testar dois criterios e autorizacao
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q -p no:cacheprovider backend/tests/test_m37987_registered_risk_signals_ci.py backend/tests/test_member_cycle_risk_api_ci.py
+          echo "M38000_FINANCIAL_SANCTIONS=NONE"
+  frontend-risk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsx src/tests/member_cycle_risk_ci.test.ts

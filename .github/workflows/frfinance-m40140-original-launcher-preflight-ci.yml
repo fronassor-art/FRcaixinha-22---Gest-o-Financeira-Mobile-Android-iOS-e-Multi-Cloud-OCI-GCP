@@ -1,0 +1,53 @@
+name: FR Finance M40140 — Original launcher static/read-only preflight
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40140_original_launcher_preflight_readonly.py'
+      - 'backend/tests/test_m40140_original_launcher_preflight_ci.py'
+      - '.github/workflows/frfinance-m40140-original-launcher-preflight-ci.yml'
+      - 'docs/FR_FINANCE_M40140_RECOVERY_PREFLIGHT.md'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40140_original_launcher_preflight_readonly.py'
+      - 'backend/tests/test_m40140_original_launcher_preflight_ci.py'
+      - '.github/workflows/frfinance-m40140-original-launcher-preflight-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-original-launcher-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: 'backend:.'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Synthetic launcher/recovery and prior read-only regressions
+        run: |
+          set -euo pipefail
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m40140_original_launcher_preflight_ci.py \
+            backend/tests/test_m40130_loopback_tcp_health_ci.py \
+            backend/tests/test_m40120_http_health_disambiguation_ci.py \
+            backend/tests/test_m40110_listener_correlation_ci.py \
+            backend/tests/test_m40100_safe_runtime_triage_ci.py
+          python -B backend/scripts/frfinance_m40140_original_launcher_preflight_readonly.py --source-only
+          echo M40140_CI=PASS
+          echo M40140_PROCESS_CONTROL=NONE
+          echo M40140_PRODUCTION_DB_CONNECTIONS=NONE
+          echo M40140_MIGRATIONS=NONE
+          echo M40140_PIX_REAL=OFF
+          echo M40140_PRODUCTION=BLOCKED

@@ -1,5 +1,5 @@
 /**
- * FRcaixinha 2.2 - Módulo de Rifas (Proposta Consolidada)
+ * FR Finance - Módulo de Rifas (Proposta Consolidada)
  * Dados iniciais e gerador de cartelas digitais vinculadas às cotas ativas.
  */
 
@@ -11,7 +11,7 @@ export const SEED_RAFFLE_CAMPAIGNS: RaffleCampaign[] = [
     tenant_id: 'tenant-inaugural',
     cycle_id: 'cycle-2027-inaugural',
     campaign_number: 1,
-    title: '1ª Rifa de Março - FRcaixinha 2027',
+    title: '1ª Rifa de Março - FR Finance 2027',
     month_name: 'Março',
     due_date: '2027-03-20',
     draw_date: '2027-03-27',
@@ -32,7 +32,7 @@ export const SEED_RAFFLE_CAMPAIGNS: RaffleCampaign[] = [
     tenant_id: 'tenant-inaugural',
     cycle_id: 'cycle-2027-inaugural',
     campaign_number: 2,
-    title: '2ª Rifa de Junho - FRcaixinha 2027',
+    title: '2ª Rifa de Junho - FR Finance 2027',
     month_name: 'Junho',
     due_date: '2027-06-20',
     draw_date: '2027-06-26',
@@ -53,7 +53,7 @@ export const SEED_RAFFLE_CAMPAIGNS: RaffleCampaign[] = [
     tenant_id: 'tenant-inaugural',
     cycle_id: 'cycle-2027-inaugural',
     campaign_number: 3,
-    title: '3ª Rifa de Setembro - FRcaixinha 2027',
+    title: '3ª Rifa de Setembro - FR Finance 2027',
     month_name: 'Setembro',
     due_date: '2027-09-20',
     draw_date: '2027-09-25',

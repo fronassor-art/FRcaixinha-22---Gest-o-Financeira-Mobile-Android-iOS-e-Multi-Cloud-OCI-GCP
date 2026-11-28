@@ -1,0 +1,32 @@
+name: FR Finance M40941 native Termux post-sync read-only checkpoint
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m40941_termux_post_sync_checkpoint_readonly.py'
+      - 'backend/tests/test_m40941_termux_readonly_checkpoint_ci.py'
+      - 'docs/FR_FINANCE_M40941_TERMUX_CHECKPOINT_SOURCE_ONLY.md'
+      - '.github/workflows/frfinance-m40941-termux-readonly-checkpoint-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/scripts/frfinance_m40941_termux_post_sync_checkpoint_readonly.py'
+      - 'backend/tests/test_m40941_termux_readonly_checkpoint_ci.py'
+permissions:
+  contents: read
+jobs:
+  fail-closed-termux-checkpoint-synthetic-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIX_REAL: 'OFF'
+      PAGAMENTOS_REAIS: 'OFF'
+      ATIVACAO_REAL: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.4
+      - run: python -B -m pytest -q -p no:cacheprovider backend/tests/test_m40941_termux_readonly_checkpoint_ci.py

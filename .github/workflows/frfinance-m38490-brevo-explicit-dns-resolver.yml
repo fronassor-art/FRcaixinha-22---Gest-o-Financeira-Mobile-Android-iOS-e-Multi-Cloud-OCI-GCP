@@ -1,0 +1,37 @@
+name: FR Finance M38490 explicit public DNS resolver for Brevo CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-brevo-dns-explicit-resolver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r backend/requirements.txt pytest
+      - name: Homologar resolucao externa autorizada com DNS inteiramente simulado
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m38490_brevo_explicit_dns_resolver_ci.py \
+            backend/tests/test_m38450_mail_dns_transport_ci.py \
+            backend/tests/test_m38410_brevo_code_variants_ci.py \
+            backend/tests/test_m38370_public_mail_dns_failure_diagnosis_ci.py \
+            backend/tests/test_m38330_brevo_dkim_txt_live_path_ci.py \
+            backend/tests/test_m38290_brevo_dns_policy_ci.py \
+            backend/tests/test_m38250_mail_dns_readonly_ci.py
+          echo "M38529_DNS_PUBLIC_EXTERNAL_CI=NONE"
+          echo "M38529_THIRD_PARTY_REAL_CALLS=NONE"
+          echo "M38529_OS_DNS_CHANGES=NONE"
+          echo "M38529_EMAIL_REAL=OFF"
+          echo "M38529_PIX_REAL=OFF"
+          echo "M38529_REAL_ACTIVATION=OFF"
+          echo "M38529_PRODUCTION=BLOCKED"

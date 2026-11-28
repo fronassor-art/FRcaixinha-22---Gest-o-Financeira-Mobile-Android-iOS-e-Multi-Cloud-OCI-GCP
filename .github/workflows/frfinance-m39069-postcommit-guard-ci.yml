@@ -1,0 +1,42 @@
+name: FR Finance M39069 corrigir falso bloqueio postcommit SQL112 SQL113
+
+on:
+  push:
+    branches: [atualizacao-ai-studio-9b46a63187]
+    paths:
+      - 'backend/scripts/frfinance_m39067_apply_saas_prices_promotions_pg18.py'
+      - 'backend/scripts/frfinance_m39068_postcommit_sql112_113_readonly_diagnostic.py'
+      - 'backend/tests/test_m39068_postcommit_sql112_113_readonly_ci.py'
+      - 'backend/tests/test_m39069_original_postcommit_guard_ci.py'
+      - '.github/workflows/frfinance-m39069-postcommit-guard-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sql112-113-postcommit-false-negative:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      FR_FINANCE_PIX_REAL: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_ENABLE: 'OFF'
+      FR_FINANCE_ACCESS_MAIL_WORKER: 'OFF'
+      FR_FINANCE_REAL_USER_ACTIVATION: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar somente pytest
+        run: python -m pip install --disable-pip-version-check pytest==8.3.4
+      - name: Reproduzir PG18 e checagens RLS sem banco real
+        run: |
+          python -B -m pytest -q -p no:cacheprovider \
+            backend/tests/test_m39068_postcommit_sql112_113_readonly_ci.py \
+            backend/tests/test_m39069_original_postcommit_guard_ci.py
+          echo 'M39069_POSTCOMMIT_FORMATTING=CHECKED'
+          echo 'M39069_PG18_ORIGINAL_CONNECTED=NO'
+          echo 'M39069_MIGRATIONS_APPLIED=NONE'
+          echo 'M39069_PIX_REAL=OFF'

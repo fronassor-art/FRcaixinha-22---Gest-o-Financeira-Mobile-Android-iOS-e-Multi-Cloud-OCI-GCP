@@ -1,0 +1,10 @@
+{
+	"appId": "com.frcaixinha.app",
+	"appName": "FR Finance",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https",
+		"cleartext": false
+	},
+	"plugins": {}
+}
