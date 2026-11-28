@@ -19,6 +19,8 @@ on:
       - '.github/workflows/frfinance-m40760-readonly-egress-no-go-ci.yml'
       - 'backend/app/database.py'
       - 'backend/app/m41150_fastapi_rls_context.py'
+      - 'docs/FR_FINANCE_M41630_TARGET_IDENTITY_COMMITMENT_NO_GO.md'
+      - '.github/workflows/frfinance-m41150-fastapi-rls-context-pg18.yml'
       - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
       - 'docs/FR_FINANCE_M41200_INDIVIDUAL_SESSION_SQL_BINDING_NO_GO.md'
       - 'docs/FR_FINANCE_M41210_REQUEST_NONCE_REPLAY_NO_GO.md'

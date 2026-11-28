@@ -4,6 +4,7 @@ on:
     branches: [atualizacao-ai-studio-9b46a63187]
     paths:
       - 'backend/app/m41150_fastapi_rls_context.py'
+      - '.github/workflows/validacao-atualizacao.yml'
       - 'backend/tests/m41050_sql_sealed_context_pg18_disposable.py'
       - 'docs/FR_FINANCE_M41200_INDIVIDUAL_SESSION_SQL_BINDING_NO_GO.md'
       - 'docs/FR_FINANCE_M41210_REQUEST_NONCE_REPLAY_NO_GO.md'
