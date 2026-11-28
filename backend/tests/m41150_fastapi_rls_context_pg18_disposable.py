@@ -1033,6 +1033,7 @@ async def exercise(dsn: str) -> None:
                 admin_b_digest=admin_b_digest, admin_b_session_id=admin_b_session_id,
                 admin_b_id=admin_b_id, admin_b_headers=admin_b_headers,
                 tenant_a=tenant_a, tenant_b=tenant_b,
+                account_a_id=account_a_id, account_b_id=account_b_id,
                 app=app, client=client, read_paths=read_paths, second_headers=second_headers,
             )
         await pool.close()
@@ -1049,7 +1050,8 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                                             bind_read, key, second_digest, second_session_id,
                                             admin_id, admin_b_digest, admin_b_session_id,
                                             admin_b_id, admin_b_headers,
-                                            tenant_a, tenant_b, app, client, read_paths, second_headers):
+                                            tenant_a, tenant_b, account_a_id, account_b_id,
+                                            app, client, read_paths, second_headers):
     """CP26-0061/CTM-07, CP26-0062/CTM-08, CP26-0257/TENANT_RLS; TEC-09/12.
     Disposable proof only: pre-ticket SQL challenge, authority commitment bound
     to target, and ticket reservation in one issuer transaction.
