@@ -1344,7 +1344,12 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
 
             # Concurrently exercise all six target-first reads for two different
             # admins and tenants. Each result must retain its own session and RLS scope.
-            tenant_b_paths = [path.replace(str(tenant_a), str(tenant_b), 1) for path in read_paths]
+            tenant_b_paths = [
+                path.replace(str(tenant_a), str(tenant_b), 1).replace(
+                    str(account_a_id), str(account_b_id), 1
+                )
+                for path in read_paths
+            ]
             concurrent_requests = (
                 [(path, second_headers) for path in read_paths]
                 + [(path, admin_b_headers) for path in tenant_b_paths]
