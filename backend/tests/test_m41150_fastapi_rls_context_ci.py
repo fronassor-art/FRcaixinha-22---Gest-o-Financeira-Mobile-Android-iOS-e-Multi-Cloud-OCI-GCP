@@ -892,3 +892,85 @@ async def test_m41639_target_protocol_never_downgrades(monkeypatch, mode, expect
                           + ([] if mode == "challenge_error" else ["target"])
                           + ["rollback", "reset", "release"])
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "live_flag", "unset_flag"),
+    [
+        ("production", None, None),
+        ("staging", "PIX_REAL", None),
+        ("development", "PAGAMENTOS_REAIS", None),
+        ("test", "ATIVACAO_REAL", None),
+        ("unrecognized", None, None),
+        (None, None, None),
+        ("staging", None, "PIX_REAL"),
+    ],
+)
+async def test_m41644_m40840_blocks_injected_target_provider_before_database_pool(
+    monkeypatch, mode, live_flag, unset_flag
+):
+    """A configured target-first provider cannot bypass the production SQL NO-GO."""
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from fastapi import HTTPException
+    from backend.app import m41150_fastapi_rls_context as gateway
+
+    now = datetime.now(timezone.utc)
+    tenant = uuid4()
+    session = SimpleNamespace(
+        user_id=str(uuid4()),
+        role="TENANT_ADMIN",
+        tenant_id=str(tenant),
+        is_master=False,
+        verified_session_id=str(uuid4()),
+        verified_session_at=now,
+        verified_session_expires_at=now + timedelta(minutes=1),
+        verification_source="POSTGRES_TOKEN_HASH_REFRESH",
+    )
+    calls = {"provider": 0, "pool": 0}
+
+    class InjectedTargetProvider:
+        capability_protocol = gateway.TARGET_BOUND_PROTOCOL
+
+        async def issue_target_ticket(self, *args, **kwargs):
+            calls["provider"] += 1
+            return "a" * 64
+
+        async def bind_ticket(self, *args, **kwargs):
+            calls["provider"] += 1
+            return "b" * 64
+
+    async def forbidden_pool():
+        calls["pool"] += 1
+        raise AssertionError("M41644_DATABASE_POOL_MUST_NOT_OPEN")
+
+    monkeypatch.setattr(gateway, "get_db_pool", forbidden_pool)
+    if mode is None:
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("ENVIRONMENT", mode)
+    for flag in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        if flag == live_flag:
+            monkeypatch.setenv(flag, "ON")
+        elif flag == unset_flag:
+            monkeypatch.delenv(flag, raising=False)
+        else:
+            monkeypatch.setenv(flag, "OFF")
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                frfinance_session_capability_provider=InjectedTargetProvider()
+            )
+        ),
+        path_params={"tenant_id": str(tenant)},
+    )
+    dependency = gateway.get_ledger_readonly_db_connection(request, session)
+
+    with pytest.raises(HTTPException) as exc:
+        await anext(dependency)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Acesso financeiro bloqueado até revisão da fronteira SQL."
+    assert calls == {"provider": 0, "pool": 0}
