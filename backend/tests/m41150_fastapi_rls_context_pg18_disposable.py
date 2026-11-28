@@ -975,11 +975,20 @@ async def exercise(dsn: str) -> None:
                         "SELECT session_id FROM m41050.current_claims_v2()"
                     )
             print("M41200_INDEPENDENT_SESSION_REVOCATION=PASS")
+            from m41610_identity_authorization_disposable import exercise_dual_identity
+            issue_authorized = await exercise_dual_identity(
+                owner=owner, auth_dsn=auth_dsn, app_dsn=app_dsn, key=key, fixture=fixture,
+                provider=provider, client=client, read_paths=read_paths, path_a=path_a,
+                admin_headers=admin_headers, second_headers=second_headers,
+                admin_id=admin_id, admin_digest=admin_digest, admin_session_id=admin_session_id,
+                second_digest=admin_second_digest, second_session_id=admin_second_session_id,
+                tenant_a=tenant_a, tenant_b=tenant_b,
+            )
             # Remove only the disposable verifier, prove no fallback to issuer.
             async with pool.acquire() as connection:
                 async with connection.transaction(readonly=True):
                     pid, vxid, started = await gateway._read_transaction_identity(connection)
-                    ticket = fixture.issue_ticket(owner, auth_dsn, key, admin_second_digest, tenant_a)
+                    ticket = issue_authorized(admin_second_digest,tenant_a,uuid4(),"READ_ENTRIES")
                     assert ticket
                     challenge = await gateway._read_target_challenge(connection, ticket, tenant_a)
                     proof = signer.sign(ticket, tenant_a, pid, vxid, started, challenge=challenge)

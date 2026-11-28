@@ -1,0 +1,11 @@
+# FR Finance M41610 — dupla prova de identidade para emissão de ticket de leitura (NO-GO)
+
+Base M41601 cd32a29d67dc9ae72c28489176b57ade9e999b3b; retorno M40600/M40941 confirmado pelo operador, 153/153 workflows e CI principal 7/7. CP26-0061/CTM-07, CP26-0062/CTM-08, CP26-0257/TENANT_RLS. Matriz 330/2310 preservada.
+
+Na fase adicional da fixture M41150 PG18 descartável, m40700.issue_bound_v3 exige segunda prova HMAC em domínio FRF-M41610, chave distinta da prova do emissor, login emissor existente, identidade de sessão UUID, digest, tenant, nonce, expiração, escopo READ_ENTRIES, usuário, papel TENANT_ADMIN e geração. Revalida a sessão viva com bloqueio FOR SHARE e reutiliza issue_bound_v2 para primeira prova, associação, vigência e consumo atômico do nonce. Revoga EXECUTE direto de v2 pelo emissor na fase nova. Tabela da chave inacessível ao emissor e executor; nenhum papel, banco ou serviço novo.
+
+Provas previstas: credencial SQL e primeira prova válidas sem segunda prova negadas; segunda prova sem primeira negada; substituição de digest, sessão, tenant, nonce, expiração, escopo, papel e geração; sessão revogada e prova vencida; duas conexões emissoras concorrentes com apenas um ticket; replay; seis rotas FastAPI com o novo emissor e falha fechada na perda da chave; regressão M41290, transação e pool. Teste de indisponibilidade do assinador anterior preservado.
+
+Limites: autoridade inicial ainda sintética, chave simétrica gerada e provisionada pelo pai/owner da fixture; HMAC não comprova identidade humana, isolamento de processo, custódia independente nem resistência à captura do owner. Autorização congelada de uma sessão de teste, sem criar fluxo real ou alterar FastAPI implantado. Provas anteriores permanecem em fase anterior, sem alegar que passaram pela nova fronteira. Não é migração candidata de produção. Próximo: separar a autoridade de identidade da posse do emissor/owner, validar origem independente e revogação em staging autorizado. Aguardar CI do SHA exato.
+
+M40840=NO_GO; M40930=HTTP503; ORIGINAL_DATABASE=NOT_ACCESSED; MIGRATIONS=NONE; DB_WRITES=NONE; SERVICE_RESTARTS=NONE; RUNTIME_RELOAD=NONE; PIX_REAL=OFF; PAGAMENTOS_REAIS=OFF; ATIVACAO_REAL=OFF; PRODUCTION=BLOCKED.

@@ -663,3 +663,20 @@ def test_m41290_reservation_acl_and_consumption_order():
                    "M41290_ALTERNATE_VALID_PROOF_DENIED=PASS",
                    "M41290_CONCURRENT_RESERVATIONS_ONE_WINNER=PASS"):
         assert marker in runner
+
+
+def test_m41610_dual_identity_fixture_retains_legacy_checks_and_no_go():
+    source=(RUNNER.parent/"m41610_identity_authorization_disposable.py").read_text(encoding="utf-8")
+    for marker in (
+        "CREATE FUNCTION m40700.issue_bound_v3", "m40700.identity_authorization_secret",
+        "session_user<>'m40680_auth_login'", "FRF-M41610|v1|",
+        "s.id=p_session AND s.token_digest=p_digest",
+        "s.context_generation=p_generation AND s.revoked_at IS NULL",
+        "RETURN m40700.issue_bound_v2", "REVOKE EXECUTE ON FUNCTION "+'"+V2',
+        "M41610_DUAL_KEY_ACL_LEGACY_ISSUER_DENIED=PASS",
+        "M41610_DUAL_PROOF_SCOPE_EXPIRY_REVOCATION_REPLAY=PASS",
+        "M41610_DUAL_PROOF_FASTAPI_SIX_READS_AND_KEY_LOSS=PASS",
+    ):
+        assert marker in source
+    assert "exercise_dual_identity" in RUNNER.read_text(encoding="utf-8")
+    assert "issue_bound_v3" not in MODULE.read_text(encoding="utf-8")
