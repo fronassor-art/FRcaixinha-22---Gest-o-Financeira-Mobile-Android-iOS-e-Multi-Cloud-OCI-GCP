@@ -95,12 +95,12 @@ assert.equal(prepareRenewal(s,await parseRenewalOverview({...raw,upgrade:afterRe
 await assert.rejects(parseRenewalOverview({...raw,offer:upgradedOffer,upgrade:afterRefund},s));
 console.log('M41560_MOBILE_RENEWAL_AFTER_UPGRADE_NO_POST=PASS');
 
-const canceled=await parseRenewalOverview({...raw,offer:null,cancellation:{request_id:id(19),predecessor:id(4),accepted_at:raw.observed_at,state:'CANCELED'}},s);
-assert.equal(canceled.cancellation?.state,'CANCELED');
+const canceledSubscription=await parseRenewalOverview({...raw,offer:null,cancellation:{request_id:id(19),predecessor:id(4),accepted_at:raw.observed_at,state:'CANCELED'}},s);
+assert.equal(canceledSubscription.cancellation?.state,'CANCELED');
 assert.equal(prepareCancellation(s,view,id(19),true).body.predecessor,id(4));
-assert.throws(()=>prepareCancellation(s,canceled,id(19),true));
+assert.throws(()=>prepareCancellation(s,canceledSubscription,id(19),true));
 assert.throws(()=>prepareCancellation(s,view,id(19),false));
-assert.throws(()=>prepareRenewal(s,canceled,id(7),'MONTHLY',true));
+assert.throws(()=>prepareRenewal(s,canceledSubscription,id(7),'MONTHLY',true));
 await assert.rejects(parseRenewalOverview({...raw,cancellation:{request_id:id(19),predecessor:id(4),accepted_at:raw.observed_at,state:'CANCELED'}},s));
 const boundary={...raw,access:'CONTINUITY_ONLY',observed_at:'2026-12-02T00:00:00Z',segments:[{...segment,tier:'INTERMEDIARIO',state:'EXPIRED'}],offer:upgradedOffer,downgrade_offer:offer};
 const reduced=await parseRenewalOverview(boundary,s);
