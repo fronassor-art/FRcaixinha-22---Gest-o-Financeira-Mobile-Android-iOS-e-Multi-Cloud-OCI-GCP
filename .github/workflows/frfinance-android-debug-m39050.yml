@@ -6,6 +6,7 @@ on:
       - atualizacao-ai-studio-9b46a63187
     paths:
       - ".github/workflows/frfinance-android-debug-m39050.yml"
+      - "backend/scripts/frfinance_android_version_code.py"
       - "src/**"
       - "android/**"
       - "capacitor.config.ts"
@@ -39,6 +40,9 @@ jobs:
       FR_FINANCE_REAL_USER_ACTIVATION: "OFF"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -136,8 +140,8 @@ jobs:
             exit 2
           fi
           unset M39065_PRIVATE_STOREPASS
-          version_code=$((3906500 + GITHUB_RUN_NUMBER))
-          if test "$version_code" -le 1080; then
+          version_code="$(python3 -B backend/scripts/frfinance_android_version_code.py "$GITHUB_SHA")"
+          if (( version_code <= 3911027 || version_code > 2100000000 )); then
             echo "M39065_BLOCKED=NON_MONOTONIC_VERSION_CODE"
             exit 2
           fi
@@ -163,7 +167,7 @@ jobs:
           set -euo pipefail
           test "$FRCAIXINHA_ANDROID_REQUIRE_STABLE_SIGNING" = "1"
           test -s "$FRCAIXINHA_ANDROID_KEYSTORE_FILE"
-          test "$FRCAIXINHA_ANDROID_VERSION_CODE" -gt 1080
+          test "$FRCAIXINHA_ANDROID_VERSION_CODE" -gt 3911027
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace :app:assembleDebug
 
@@ -198,7 +202,7 @@ jobs:
               raise SystemExit("M39065_BLOCKED=WRONG_ANDROID_PACKAGE")
           version = int(match.group(2))
           MIN_INSTALLED_CODE = 1080
-          if version <= MIN_INSTALLED_CODE or (
+          if version <= max(MIN_INSTALLED_CODE, 3911027) or version > 2100000000 or (
               version != int(os.environ["FRCAIXINHA_ANDROID_VERSION_CODE"])
           ):
               raise SystemExit("M39065_BLOCKED=APK_VERSION_CODE_INVALID")

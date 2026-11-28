@@ -393,6 +393,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -447,10 +450,9 @@ jobs:
             echo "::error::M39089_BLOCKED=ORIGINAL_APK_SIGNING_CERT_MISMATCH"
             exit 2
           fi
-          # Never downgrade below the last proven installed main APK M39065
-          # (3906508) or the latest known M39076 candidate (3906531).
-          version_code=$((3909000 + GITHUB_RUN_NUMBER))
-          if (( version_code <= 3906531 || version_code > 2100000000 )); then
+          # Same source version for push, PR and the M39065 pipeline.
+          version_code="$(python3 -B backend/scripts/frfinance_android_version_code.py "${{ github.event.pull_request.head.sha || github.sha }}")"
+          if (( version_code <= 3911027 || version_code > 2100000000 )); then
             echo "::error::M39089_BLOCKED=ANDROID_VERSION_CODE_DOWNGRADE"
             exit 2
           fi
@@ -468,7 +470,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3906531
+          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3911027
           for attempt in 1 2 3; do
             LOG="$RUNNER_TEMP/fr-finance-gradle-$attempt.log"
             if ./gradlew --no-daemon assembleDebug 2>&1 | tee "$LOG"; then
@@ -491,7 +493,7 @@ jobs:
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/ai-studio-apk-badging.txt
           grep -F "package: name='com.frcaixinha.app.aistudio'" /tmp/ai-studio-apk-badging.txt
-          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3906531
+          test "${FRCAIXINHA_ANDROID_VERSION_CODE:-0}" -gt 3911027
           grep -F "versionCode='${FRCAIXINHA_ANDROID_VERSION_CODE}'" /tmp/ai-studio-apk-badging.txt
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"

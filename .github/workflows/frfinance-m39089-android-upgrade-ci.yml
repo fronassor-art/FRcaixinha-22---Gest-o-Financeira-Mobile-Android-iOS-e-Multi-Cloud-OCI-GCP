@@ -7,6 +7,8 @@ on:
       - '.github/workflows/validacao-atualizacao.yml'
       - '.github/workflows/frfinance-m39089-android-upgrade-ci.yml'
       - 'backend/tests/test_m39089_android_upgrade_version_ci.py'
+      - 'backend/scripts/frfinance_android_version_code.py'
+      - '.github/workflows/frfinance-android-debug-m39050.yml'
       - 'docs/AI_STUDIO_ASSINATURA_PERSISTENTE.md'
   workflow_dispatch:
 

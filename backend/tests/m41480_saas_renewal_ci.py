@@ -414,6 +414,47 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert db.execute("SELECT count(*) FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone()[0]==0
         print("M41530_UPGRADE_SETTLEMENT_REVIEW_"+("ANNUAL" if late else "MIXED")+"=PASS")
         print("M41520_FROZEN_PLAN_CHANGE_"+("ANNUAL" if late else "MIXED")+"=PASS")
+        # M41590: real committed contention, not savepoint-only simulation.
+        # Annual: apply wins then refund; mixed: refund wins then apply is denied.
+        receipt=record_upgrade_settlement_review_ci(db,**upgrade)
+        apply_args["evidence_hash"]=receipt["evidence_hash"]
+        locked,contending=Event(),Event()
+        def first():
+            with connection() as c,c.transaction():
+                _lock(c,tenant)
+                result=(apply_reviewed_upgrade_ci(c,**apply_args) if late else reconcile_upgrade_refund_ci(c,**refund_args))
+                locked.set()
+                assert contending.wait(10)
+                return result
+        def second():
+            assert locked.wait(10)
+            with connection() as c,c.transaction():
+                assert c.execute("SELECT pg_try_advisory_xact_lock(hashtextextended(%s::text,41320))",(str(tenant),)).fetchone()==(False,)
+                contending.set()
+                if late:return reconcile_upgrade_refund_ci(c,**refund_args)
+                reject(apply_reviewed_upgrade_ci,c,**apply_args)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            winner,loser=pool.submit(first),pool.submit(second)
+            first_result=winner.result(timeout=20)
+            second_result=loser.result(timeout=20)
+        assert first_result["state"]==("CI_APPLIED" if late else "REFUNDED")
+        assert (second_result["state"] if late else second_result)==("REFUNDED" if late else None)
+        assert reconcile_upgrade_refund_ci(db,**refund_args)==(second_result if late else first_result)
+        reject(apply_reviewed_upgrade_ci,db,**apply_args)
+        reject(record_upgrade_settlement_review_ci,db,**upgrade)
+        assert db.execute("SELECT count(*) FROM public.fr_v23_upgrade_applications WHERE request_id=%s",(request,)).fetchone()[0]==int(late)
+        assert db.execute("SELECT count(*) FROM public.fr_v23_upgrade_segments WHERE request_id=%s",(request,)).fetchone()[0]==(len(snap["segments"]) if late else 0)
+        assert db.execute("SELECT evidence->>'had_application' FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(request,)).fetchone()==("true" if late else "false",)
+        assert db.execute("SELECT action,count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action IN ('CI_UPGRADE_APPLIED','CI_UPGRADE_REFUNDED') GROUP BY action ORDER BY action",(tenant,str(request))).fetchall()==([("CI_UPGRADE_APPLIED",1),("CI_UPGRADE_REFUNDED",1)] if late else [("CI_UPGRADE_REFUNDED",1)])
+        assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==base_limits
+        assert db.execute("SELECT id,plan_tier,valid_from,valid_until,status FROM public.saas_license_entitlements WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==original_terms
+        assert db.execute("SELECT count(*) FROM public.saas_payment_intents WHERE tenant_id=%s",(tenant,)).fetchone()[0]==counts
+        assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
+        assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        final_upgrade=renewal_overview_ci(db,token=token,tenant=tenant)
+        assert final_upgrade["upgrade"]["state"]=="REFUNDED" and final_upgrade["offer"]["tier"]=="ESSENCIAL"
+        assert final_upgrade["upgrade"]["members_limit"] is None and final_upgrade["upgrade"]["quotas_limit"] is None
+        print("M41590_UPGRADE_REFUND_CONTENTION_"+("APPLY_FIRST" if late else "REFUND_FIRST")+"=PASS")
         assert reconcile_full_refund_ci(db,**{**rev,"intent":a[1],"payment":{**replacement,"status":"refunded","transaction_amount_refunded":replacement["transaction_amount"]}})
         gap=get(client,path,token)
         assert gap["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
