@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {authService,getApiBaseUrl} from '../services/authService';
-import {readRenewal,prepareRenewal,type RenewalOverview} from '../services/saasRenewalV23';
+import {readRenewal,prepareRenewal,prepareCancellation,type RenewalOverview} from '../services/saasRenewalV23';
 import type {AdminScope} from '../services/onboardingReadbackV23';
 import {readPlanChange,type PlanChange} from '../services/saasPlanChangeV23';
 import type {Transport} from '../services/productTransactionalBoundaryV23';
@@ -26,7 +26,8 @@ export function SaasRenewalV23(){
   catch(e){if(valid())setNotice(e instanceof Error?e.message:'Comparação indisponível.');}
   finally{if(valid())setBusy(false);}
  }
- function prepare(){try{if(!view)throw Error('Oferta indisponível.');const p=prepareRenewal(scope(),view,crypto.randomUUID(),period,accepted);setPrepared(money(p.body.cents)+' · '+(p.body.period==='MONTHLY'?'mensal':'anual')+' — seleção local descartada; não enviada.');setAccepted(false);}catch{setPrepared('');setNotice('Confira novamente a oferta e a sessão.');}}
+ function prepare(downgrade=false){try{if(!view)throw Error('Oferta indisponível.');const p=prepareRenewal(scope(),view,crypto.randomUUID(),period,accepted,downgrade);setPrepared(money(p.body.cents)+' · '+(p.body.period==='MONTHLY'?'mensal':'anual')+' — seleção local descartada; não enviada.');setAccepted(false);}catch{setPrepared('');setNotice('Confira novamente a oferta e a sessão.');}}
+ function prepareCancel(){try{if(!view)throw Error('Consulta indisponível.');prepareCancellation(scope(),view,crypto.randomUUID(),accepted);setPrepared('Cancelamento de futuras renovações — preparação local descartada; não enviada.');setAccepted(false);}catch{setPrepared('');setNotice('Confira novamente a oferta e a sessão.');}}
  return <section aria-label="Renovação da assinatura" className="border rounded-lg bg-white text-slate-900 p-3 space-y-2">
   <h5 className="font-semibold">Minha assinatura — renovação</h5>
   <p className="text-xs">Homologação candidata: sem cobrança, renovação automática, Pix ou ativação real. A assinatura não altera os ciclos das caixinhas.</p>
@@ -41,6 +42,8 @@ export function SaasRenewalV23(){
     {view.upgrade.state==='REFUNDED'&&<p>A capacidade adicional do upgrade foi revertida. Períodos pagos separadamente e obrigações existentes preservados; novas admissões respeitam a licença vigente.</p>}
     <p>{view.offer?'Nova vigência disponível para preparação local, sem cobrar novamente a diferença do upgrade.':'Nenhuma nova oferta elegível nesta consulta.'} Alteração de plano exige revisão própria. Nenhuma operação real autorizada.</p>
    </article>}
+   {view.cancellation&&<p className="text-sm">Cancelamento registrado em CI em {when(view.cancellation.accepted_at)}. Acesso pago preservado; novas renovações bloqueadas.</p>}
+   {view.downgrade_offer&&<p className="text-sm">Downgrade disponível ao término da vigência: Essencial · {money(view.downgrade_offer.monthly_cents)} mensal / {money(view.downgrade_offer.annual_cents)} anual. Nenhuma obrigação removida.</p>}
    {view.renewals.map(s=><article key={s.request_id} className="border rounded p-2 text-sm"><p>Renovação {s.period==='MONTHLY'?'mensal':'anual'} · {money(s.cents)}</p><p>{labels[s.state]}</p>{s.state==='PENDING'&&<p>Validade da oferta de teste: {when(s.expires_at)}</p>}</article>)}
    {view.offer?<div className="space-y-2">
     <p className="text-sm">{view.segments.some(s=>s.entitlement_id===view.offer?.predecessor&&s.state==='REFUNDED')?'Regularização após estorno — nova oferta':'Oferta'} {view.offer.tier} · {view.offer.members_limit} membros / {view.offer.quotas_limit} cotas</p>
@@ -48,7 +51,9 @@ export function SaasRenewalV23(){
     <article className="text-sm"><p>Contrato A · {view.document.version} · somente CI</p><p className="break-all text-xs">{view.document.document_hash}</p><p>{view.document.text}</p></article>
     <label className="block text-sm">Periodicidade<select className="w-full min-h-11 border rounded p-2" value={period} onChange={e=>{setPeriod(e.target.value as typeof period);setAccepted(false);setPrepared('');}}><option value="MONTHLY">Mensal</option><option value="ANNUAL">Anual</option></select></label>
     <label className="flex gap-2 text-sm"><input type="checkbox" checked={accepted} onChange={e=>{setAccepted(e.target.checked);setPrepared('');}}/> Conferi a oferta e o instrumento apenas para preparação local.</label>
-    <button type="button" className={btn} disabled={!accepted||busy} onClick={prepare}>Preparar renovação local</button>
+    <button type="button" className={btn} disabled={!accepted||busy} onClick={()=>prepare()}>Preparar renovação local</button>
+    {view.downgrade_offer&&<button type="button" className={btn} disabled={!accepted||busy} onClick={()=>prepare(true)}>Preparar downgrade local</button>}
+    <button type="button" className={btn} disabled={!accepted||busy} onClick={prepareCancel}>Preparar cancelamento de futuras renovações (local)</button>
     {prepared&&<p role="status" className="text-sm">{prepared}</p>}
    </div>:<p className="text-sm">Nenhuma nova oferta elegível nesta consulta. Pendências exigem revisão.</p>}
      {view.access==='CURRENT'&&view.offer&&!view.upgrade&&<button type="button" className={btn} disabled={busy} onClick={()=>void compare()}>Comparar alteração de plano</button>}

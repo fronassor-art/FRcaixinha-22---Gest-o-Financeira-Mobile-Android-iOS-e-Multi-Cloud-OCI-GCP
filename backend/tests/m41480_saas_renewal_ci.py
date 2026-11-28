@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from uuid import UUID,uuid4
-from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci
+from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci,cancel_subscription_ci
 from app.administrator_reauthentication_ci import _license_access
 from app.saas_billing_ci import reconcile_approved_saas_payment_ci
 from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci,apply_reviewed_upgrade_ci,reconcile_upgrade_refund_ci
@@ -38,6 +38,19 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         post(client,path,http_body,reviewer_token,403)
         for change in (dict(accepted=False),dict(cents=1),dict(document_hash="f"*64),dict(token=reviewer_token),dict(predecessor=uuid4()),dict(price_version=str(price)),dict(document_id=str(doc)),dict(request_id=UUID(int=0))):
             reject(prepare_renewal_ci,db,**{**args,**change})
+        cancel_args={k:args[k] for k in ("token","tenant","request_id","predecessor","document_id","document_hash","accepted")}
+        with db.transaction(force_rollback=True):
+            reject(cancel_subscription_ci,db,**{**cancel_args,"token":reviewer_token})
+            reject(cancel_subscription_ci,db,**{**cancel_args,"accepted":False})
+            stop=cancel_subscription_ci(db,**cancel_args)
+            assert stop==cancel_subscription_ci(db,**cancel_args)
+            stopped=renewal_overview_ci(db,token=token,tenant=tenant)
+            assert stopped["offer"] is None and stopped["cancellation"]==stop
+            assert stopped["access"]==snapshot["access"]
+            reject(prepare_renewal_ci,db,**args)
+            reject(cancel_subscription_ci,db,**{**cancel_args,"request_id":uuid4()})
+            with db.transaction(force_rollback=True):
+                reject(db.execute,"DELETE FROM public.fr_v23_subscription_cancellations WHERE tenant_id=%s",(tenant,))
         def stage(index):
             if index==0:
                 http,_=client_for()
@@ -50,6 +63,7 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             a,b=list(pool.map(stage,range(2)))
         assert a==b
         prep,intent=a
+        reject(cancel_subscription_ci,db,**cancel_args)
         pending=post(client,path,http_body,token)
         assert pending["offer"] is None and len(pending["renewals"])==1
         assert pending["renewals"][0]["state"]=="PENDING" and pending["renewals"][0]["intent_id"]==str(intent)
@@ -277,6 +291,45 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
                 after_paid=renewal_overview_ci(db,token=token,tenant=tenant)
                 assert after_paid["upgrade"]["state"]=="REFUNDED" and after_paid["offer"]["tier"]=="INTERMEDIARIO"
                 assert db.execute("SELECT plan_tier,status FROM public.saas_license_entitlements WHERE id=%s",(successor,)).fetchone()==("INTERMEDIARIO","ACTIVE")
+                down_args={**future_args,"request_id":uuid4(),"predecessor":successor}
+                reject(prepare_renewal_ci,db,**down_args)
+                assert "downgrade_offer" not in after_paid
+                # Move the fixture's paid periods into the past without overlap.
+                # All historical upgrade proofs stay immutable; the overlay has
+                # already been refunded. No production time is modified.
+                shift=db.execute("SELECT max(valid_until)-clock_timestamp()+interval '1 day' FROM public.saas_license_entitlements WHERE tenant_id=%s",(tenant,)).fetchone()[0]
+                db.execute("UPDATE public.saas_license_entitlements SET valid_from=valid_from-%s,valid_until=valid_until-%s,status='EXPIRED' WHERE tenant_id=%s AND status<>'REVOKED'",(shift,shift,tenant))
+                boundary=renewal_overview_ci(db,token=token,tenant=tenant)
+                assert boundary["access"]=="CONTINUITY_ONLY" and boundary["downgrade_offer"]["tier"]=="ESSENCIAL"
+                down=boundary["downgrade_offer"]
+                down_args={**down_args,"price_version":down["price_version"],"cents":down["annual_cents"]}
+                with db.transaction(force_rollback=True):
+                    db.execute("UPDATE public.platform_license_plans SET members_limit=1,quotas_limit=1 WHERE tier='ESSENCIAL'")
+                    # The fixture created two open quotas before this exercise.
+                    from app.saas_plan_change_v23_ci import _capacity
+                    assert _capacity(db,tenant)[1]>=2
+                    reject(prepare_renewal_ci,db,**down_args)
+                    assert "downgrade_offer" not in renewal_overview_ci(db,token=token,tenant=tenant)
+                _,di=prepare_renewal_ci(db,**down_args)
+                dp={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{di}","transaction_amount":str(Decimal(down_args["cents"])/100)}
+                dproof={**review,"intent":di,"payment":dp,"gross":down_args["cents"],"net":down_args["cents"]-10}
+                with db.transaction(force_rollback=True):
+                    db.execute("UPDATE public.platform_license_plans SET quotas_limit=1 WHERE tier='ESSENCIAL'")
+                    reject(reconcile_renewal_ci,db,**dproof)
+                    assert record_renewal_payment_review_ci(db,**dproof)=="CI_RENEWAL_TIER_REVIEW"
+                    assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE payment_intent_id=%s",(di,)).fetchone()[0]==0
+                decreased=reconcile_renewal_ci(db,**dproof)
+                assert decreased==reconcile_renewal_ci(db,**dproof)
+                assert db.execute("SELECT plan_tier,status FROM public.saas_license_entitlements WHERE id=%s",(decreased,)).fetchone()==("ESSENCIAL","ACTIVE")
+                # The fixture is inside a rollback-only transaction; access
+                # checks use now() and cannot attest a new clock_timestamp()
+                # settlement until commit. Test the actual successor resolver.
+                from app.saas_renewal_v23_ci import _previous,_renewal_tier
+                from app.preliminary_onboarding_ci import _binding
+                acceptance,_=_binding(db,actor,tenant)
+                assert _renewal_tier(db,tenant,actor,_previous(db,tenant,actor,decreased,acceptance))=="ESSENCIAL"
+                assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND action='CI_RENEWAL_DOWNGRADE' AND object_id=%s",(tenant,str(decreased))).fetchone()[0]==1
+                print("M41570_DOWNGRADE_BOUNDARY_"+("ANNUAL" if late else "MIXED")+"=PASS")
             with db.transaction(force_rollback=True):
                 _,ni=prepare_renewal_ci(db,**next_args)
                 np={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{ni}",
@@ -373,6 +426,7 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()==future_before
         assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
         assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        print("M41570_SUBSCRIPTION_CANCEL_"+("ANNUAL" if late else "MIXED")+"=PASS")
         print("M41510_PAYMENT_REVIEW_GAP_"+("LATE" if late else "DIVERGENT")+"=PASS")
         print("M41500_RECOVERY_EXPIRED_REFUND_"+("LATE" if late else "EARLY")+"=PASS")
         assert refunded["access"]==("CONTINUITY_ONLY" if late else "CURRENT")

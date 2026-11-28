@@ -4,7 +4,7 @@ from .cycle_identity_registration_ci import _guard
 from .admin_license_onboarding_ci import _session,COLLECTOR_CI
 from .preliminary_onboarding_ci import _binding
 from .administrator_reauthentication_ci import _license_access
-from .saas_renewal_v23_ci import _lock,_previous,_term_base,_review_exists,_assert_lineage,prepare_renewal_ci,_renewal_tier
+from .saas_renewal_v23_ci import _lock,_previous,_term_base,_review_exists,_assert_lineage,prepare_renewal_ci,_renewal_tier,_cancel_state,_downgrade_allowed,cancel_subscription_ci
 from .onboarding_readback_ci import _document
 from .saas_billing_ci import _cents
 
@@ -83,13 +83,15 @@ def renewal_overview_ci(conn,*,token,tenant):
             items.append(dict(request_id=req,predecessor=prev,intent_id=intent,price_version=price,period=period,cents=cents,
                               expires_at=expiry,entitlement_id=ent,state=label))
         offer=None
+        downgrade_offer=None
+        cancellation=_cancel_state(conn,tenant,actor)
         # History is a lineage, not a maximum date (a refunded annual period
         # can extend beyond a replacement monthly period).
         used={x["predecessor"] for x in items if x["entitlement_id"] is not None}
         leaves=[x for x in segments if x["entitlement_id"] not in used]
         if len(leaves)!=1:raise LifecycleDenied("Histórico de vigência ambíguo.")
         last=leaves[0]
-        if last["state"] in ("CURRENT","EXPIRED","SCHEDULED","REFUNDED") and not any(x["predecessor"]==last["entitlement_id"] and x["state"]!="CANCELED" for x in items):
+        if not cancellation and last["state"] in ("CURRENT","EXPIRED","SCHEDULED","REFUNDED") and not any(x["predecessor"]==last["entitlement_id"] and x["state"]!="CANCELED" for x in items):
             try:
                 prev=_previous(conn,tenant,actor,last["entitlement_id"],acceptance)
                 _term_base(conn,tenant,actor,prev,acceptance,now)
@@ -104,6 +106,13 @@ def renewal_overview_ci(conn,*,token,tenant):
                 if price:
                     offer=dict(predecessor=last["entitlement_id"],price_version=price[0],tier=price[1],members_limit=price[2],
                                quotas_limit=price[3],monthly_cents=_cents(price[4]),annual_cents=_cents(price[5]))
+                if offer and _downgrade_allowed(conn,tenant,prev,tier,now):
+                    lower=conn.execute(
+                        "SELECT v.id,p.tier,p.members_limit,p.quotas_limit,v.monthly_price,v.annual_price "
+                        "FROM public.platform_license_plans p JOIN public.platform_license_price_versions v ON v.plan_tier=p.tier "
+                        "WHERE p.tier='ESSENCIAL' AND p.status='ACTIVE' ORDER BY v.created_at DESC,v.id DESC LIMIT 1 FOR SHARE OF p,v").fetchone()
+                    if lower:downgrade_offer=dict(predecessor=last["entitlement_id"],price_version=lower[0],tier=lower[1],members_limit=lower[2],
+                                quotas_limit=lower[3],monthly_cents=_cents(lower[4]),annual_cents=_cents(lower[5]))
         # Preserve upgrade history; resolved evidence can coexist with a new term offer.
         review=conn.execute("SELECT r.request_id,r.gross_cents,a.request_id,a.members_limit,a.quotas_limit "
                             "FROM public.fr_v23_upgrade_settlement_reviews r LEFT JOIN public.fr_v23_upgrade_applications a "
@@ -133,7 +142,15 @@ def renewal_overview_ci(conn,*,token,tenant):
             result["upgrade"]=dict(request_id=req,state="REFUNDED" if refund else ("CI_APPLIED" if applied else "SETTLEMENT_REVIEW"),
                                    difference_cents=gross,members_limit=None if refund else ml,quotas_limit=None if refund else ql,
                                    entitlement_ids=[row[0] for row in covered])
+        if cancellation:result["cancellation"]=cancellation
+        if downgrade_offer:result["downgrade_offer"]=downgrade_offer
         return result
+
+def subscription_cancel_http_ci(conn,*,token,tenant,**body):
+    _guard(conn)
+    with conn.transaction():
+        cancel_subscription_ci(conn,token=token,tenant=tenant,**body)
+        return renewal_overview_ci(conn,token=token,tenant=tenant)
 
 def renewal_prepare_http_ci(conn,*,token,tenant,**body):
     _guard(conn)

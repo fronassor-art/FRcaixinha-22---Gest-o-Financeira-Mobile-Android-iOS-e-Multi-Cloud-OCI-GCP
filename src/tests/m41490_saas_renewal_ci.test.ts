@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash,webcrypto} from 'node:crypto';
-import {parseRenewalOverview,prepareRenewal,readRenewal} from '../services/saasRenewalV23';
+import {parseRenewalOverview,prepareRenewal,prepareCancellation,readRenewal} from '../services/saasRenewalV23';
 import {parsePlanChange} from '../services/saasPlanChangeV23';
 import type {AdminScope} from '../services/onboardingReadbackV23';
 import type {Transport} from '../services/productTransactionalBoundaryV23';
@@ -94,3 +94,17 @@ const afterRefund={...reviewUpgrade,state:'REFUNDED',entitlement_ids:[id(4)]};
 assert.equal(prepareRenewal(s,await parseRenewalOverview({...raw,upgrade:afterRefund},s),id(7),'MONTHLY',true).body.cents,8990);
 await assert.rejects(parseRenewalOverview({...raw,offer:upgradedOffer,upgrade:afterRefund},s));
 console.log('M41560_MOBILE_RENEWAL_AFTER_UPGRADE_NO_POST=PASS');
+
+const canceled=await parseRenewalOverview({...raw,offer:null,cancellation:{request_id:id(19),predecessor:id(4),accepted_at:raw.observed_at,state:'CANCELED'}},s);
+assert.equal(canceled.cancellation?.state,'CANCELED');
+assert.equal(prepareCancellation(s,view,id(19),true).body.predecessor,id(4));
+assert.throws(()=>prepareCancellation(s,canceled,id(19),true));
+assert.throws(()=>prepareCancellation(s,view,id(19),false));
+assert.throws(()=>prepareRenewal(s,canceled,id(7),'MONTHLY',true));
+await assert.rejects(parseRenewalOverview({...raw,cancellation:{request_id:id(19),predecessor:id(4),accepted_at:raw.observed_at,state:'CANCELED'}},s));
+const boundary={...raw,access:'CONTINUITY_ONLY',observed_at:'2026-12-02T00:00:00Z',segments:[{...segment,tier:'INTERMEDIARIO',state:'EXPIRED'}],offer:upgradedOffer,downgrade_offer:offer};
+const reduced=await parseRenewalOverview(boundary,s);
+assert.equal(prepareRenewal(s,reduced,id(7),'ANNUAL',true,true).body.cents,70033);
+assert.throws(()=>prepareRenewal(s,view,id(7),'ANNUAL',true,true));
+await assert.rejects(parseRenewalOverview({...raw,offer:upgradedOffer,upgrade,downgrade_offer:offer},s));
+console.log('M41570_MOBILE_CANCEL_DOWNGRADE_NO_POST=PASS');

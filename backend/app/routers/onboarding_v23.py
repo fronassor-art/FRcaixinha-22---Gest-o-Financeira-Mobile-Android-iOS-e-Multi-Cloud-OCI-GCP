@@ -198,3 +198,13 @@ def plan_change_quote(tenant:UUID,p:PlanChangeQuoteInput,request:Request,execute
 @router.post("/tenants/{tenant}/plan-change/accept")
 def plan_change_accept(tenant:UUID,p:PlanChangeAcceptInput,request:Request,execute=Depends(unreleased_onboarding)):
     return execute("PLAN_CHANGE_ACCEPT",bearer_token(request),dict(p.model_dump(),tenant=tenant))
+
+# M41570: same unconditional production 503; only CI injects an executor.
+class SubscriptionCancelInput(DocumentInput):
+    request_id: UUID
+    predecessor: UUID
+    accepted: Accepted
+
+@router.post("/tenants/{tenant}/renewal/cancel-subscription")
+def cancel_subscription(tenant:UUID,p:SubscriptionCancelInput,request:Request,execute=Depends(unreleased_onboarding)):
+    return execute("SUBSCRIPTION_CANCEL",bearer_token(request),dict(p.model_dump(),tenant=tenant))

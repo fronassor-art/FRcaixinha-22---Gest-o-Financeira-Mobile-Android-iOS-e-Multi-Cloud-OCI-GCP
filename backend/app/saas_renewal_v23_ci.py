@@ -199,8 +199,93 @@ def _renewal_tier(conn,tenant,actor,prev):
             raise LifecycleDenied("Preço base incompatível.")
         return "INTERMEDIARIO"
     if prev[1]!="INTERMEDIARIO":
+        # A previously reviewed downgrade also governs later independently
+        # paid Essencial renewals. Follow the scoped, validated lineage.
+        node=prev[0]
+        seen=set()
+        while node not in seen and len(seen)<50:
+            seen.add(node)
+            link=conn.execute("SELECT n.predecessor,n.intent_id,pr.plan_tier,e.plan_tier,n.entitlement_id "
+                              "FROM public.fr_v23_renewals n JOIN public.saas_license_entitlements e ON e.id=n.entitlement_id "
+                              "JOIN public.saas_license_entitlements pr ON pr.id=n.predecessor "
+                              "WHERE n.tenant_id=%s AND n.actor=%s AND e.tenant_id=n.tenant_id AND pr.tenant_id=n.tenant_id "
+                              "AND n.entitlement_id=%s AND n.canceled_at IS NULL",(tenant,actor,node)).fetchone()
+            if not link or link[3]!="ESSENCIAL":break
+            if conn.execute("SELECT 1 FROM public.audit_events au WHERE au.tenant_id=%s AND au.object_id=%s "
+                            "AND au.evidence_ref=%s AND au.action='CI_RENEWAL_DOWNGRADE'",(tenant,str(node),str(link[1]))).fetchone():
+                if link[2]=="INTERMEDIARIO" or any(v[0]==link[0] for v in lines):return prev[1]
+                break
+            if link[2]!="ESSENCIAL" or any(v[0]==link[0] for v in lines):break
+            node=link[0]
         raise LifecycleDenied("Sucessor do upgrade exige revisão.")
     return prev[1]
+
+
+def _cancel_state(conn,tenant,actor):
+    row=conn.execute("SELECT request_id,actor,predecessor,document_id,document_hash,accepted_at "
+                     "FROM public.fr_v23_subscription_cancellations WHERE tenant_id=%s FOR SHARE",(tenant,)).fetchone()
+    if not row:return None
+    req,payer,prev,doc,digest,at=row
+    if payer!=actor or not conn.execute(
+        "SELECT 1 FROM public.saas_license_entitlements e JOIN public.saas_subscription_preparations s ON s.id=e.preparation_id "
+        "JOIN public.contract_acceptances ca ON ca.id=s.contract_acceptance_id "
+        "JOIN public.contract_documents d ON d.id=ca.document_id "
+        "WHERE e.id=%s AND e.tenant_id=%s AND s.tenant_id=e.tenant_id AND s.admin_user_id=%s "
+        "AND ca.user_id=s.admin_user_id AND d.id=%s AND d.sha256=%s "
+        "AND EXISTS(SELECT 1 FROM public.audit_events a WHERE a.tenant_id=e.tenant_id AND a.actor_id=s.admin_user_id "
+        "AND a.action='CI_SUBSCRIPTION_CANCELED' AND a.object_id=%s AND a.evidence_ref=e.id::text)",
+        (prev,tenant,actor,doc,digest,str(req))).fetchone():
+        raise LifecycleDenied("Cancelamento sem prova.")
+    return dict(request_id=req,predecessor=prev,accepted_at=at,state="CANCELED")
+
+
+def cancel_subscription_ci(conn,*,token,tenant,request_id,predecessor,document_id,document_hash,accepted):
+    _guard(conn)
+    if accepted is not True or any(type(x) is not UUID or not x.int for x in (tenant,request_id,predecessor,document_id)):
+        raise LifecycleDenied("Aceite de cancelamento inválido.")
+    with conn.transaction():
+        _lock(conn,tenant)
+        actor,_=_session(conn,token,"TENANT_ADMIN",tenant)
+        acceptance,status=_binding(conn,actor,tenant)
+        doc=_document(conn,document_id,"PLATFORM_LICENSE")
+        if status!="ATIVO" or doc["document_hash"]!=document_hash or not conn.execute(
+            "SELECT 1 FROM public.contract_acceptances WHERE id=%s AND user_id=%s AND document_id=%s FOR SHARE",
+            (acceptance,actor,document_id)).fetchone():
+            raise LifecycleDenied("Contrato A incompatível.")
+        saved=_cancel_state(conn,tenant,actor)
+        if saved:
+            if (saved["request_id"],saved["predecessor"])!=(request_id,predecessor):
+                raise LifecycleDenied("Cancelamento já registrado.")
+            return saved
+        prev=_previous(conn,tenant,actor,predecessor,acceptance)
+        _renewal_tier(conn,tenant,actor,prev)
+        if conn.execute("SELECT 1 FROM public.fr_v23_renewals r JOIN public.saas_payment_intents p ON p.id=r.intent_id "
+                        "WHERE r.tenant_id=%s AND r.canceled_at IS NULL AND r.entitlement_id IS NULL",(tenant,)).fetchone():
+            raise LifecycleDenied("Pagamento pendente exige revisão antes do cancelamento.")
+        if conn.execute("SELECT 1 FROM public.fr_v23_subscription_cancellations WHERE request_id=%s",(request_id,)).fetchone():
+            raise LifecycleDenied("Colisão de cancelamento.")
+        conn.execute("INSERT INTO public.fr_v23_subscription_cancellations(request_id,tenant_id,actor,predecessor,document_id,document_hash) "
+                     "VALUES(%s,%s,%s,%s,%s,%s)",(request_id,tenant,actor,predecessor,document_id,document_hash))
+        _audit(conn,actor,"TENANT_ADMIN",tenant,"CI_SUBSCRIPTION_CANCELED",request_id,predecessor)
+        return _cancel_state(conn,tenant,actor)
+
+
+def _downgrade_allowed(conn,tenant,prev,effective,now):
+    """Only at the paid boundary; no early reservation that reduces paid rights."""
+    if effective!="INTERMEDIARIO" or prev[2]=="REVOKED" or prev[4]>now:
+        return False
+    if conn.execute("SELECT 1 FROM public.saas_license_entitlements WHERE tenant_id=%s AND status<>'REVOKED' AND valid_until>%s",(tenant,now)).fetchone():
+        return False
+    limits=conn.execute("SELECT members_limit,quotas_limit FROM public.platform_license_plans WHERE tier='ESSENCIAL' AND status='ACTIVE' FOR SHARE",( )).fetchone()
+    if not limits or any(type(x) is not int or x<=0 for x in limits):return False
+    from .saas_plan_change_v23_ci import _capacity
+    used=_capacity(conn,tenant)
+    return all(n<=cap for n,cap in zip(used,limits))
+
+
+def _renewal_choice_valid(conn,tenant,actor,prev,tier,now):
+    effective=_renewal_tier(conn,tenant,actor,prev)
+    return effective==tier or (tier=="ESSENCIAL" and _downgrade_allowed(conn,tenant,prev,effective,now))
 
 
 def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,period,cents,document_id,document_hash,accepted):
@@ -225,9 +310,14 @@ def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,
         if saved:
             if saved[:8]!=exact:raise LifecycleDenied("Colisão de renovação.")
             return saved[8],saved[9]
+        if _cancel_state(conn,tenant,actor):raise LifecycleDenied("Assinatura cancelada.")
         prev=_previous(conn,tenant,actor,predecessor,acceptance)
-        tier=_renewal_tier(conn,tenant,actor,prev)
-        _term_base(conn,tenant,actor,prev,acceptance,conn.execute("SELECT clock_timestamp()").fetchone()[0])
+        now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
+        _term_base(conn,tenant,actor,prev,acceptance,now)
+        requested=conn.execute("SELECT plan_tier FROM public.platform_license_price_versions WHERE id=%s FOR SHARE",(price_version,)).fetchone()
+        if not requested or not _renewal_choice_valid(conn,tenant,actor,prev,requested[0],now):
+            raise LifecycleDenied("Plano ou capacidade incompatível com a renovação.")
+        tier=requested[0]
         if conn.execute("SELECT 1 FROM public.fr_v23_renewals WHERE predecessor=%s AND canceled_at IS NULL",(predecessor,)).fetchone():
             raise LifecycleDenied("Renovação anterior já registrada.")
         price=conn.execute(
@@ -298,8 +388,9 @@ def reconcile_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,pay
         now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
         if now>=expiry:raise LifecycleDenied("Oferta expirada; conciliação em revisão.")
         prev=_previous(conn,tenant,actor,previous,acceptance)
-        if _renewal_tier(conn,tenant,actor,prev)!=tier:
+        if _cancel_state(conn,tenant,actor) or not _renewal_choice_valid(conn,tenant,actor,prev,tier,now):
             raise LifecycleDenied("Plano alterado após aceite: pagamento exige revisão independente.")
+        downgrade=_renewal_tier(conn,tenant,actor,prev)!=tier
         base,anchor=_term_base(conn,tenant,actor,prev,acceptance,now)
         start,end,anchor=renewal_term(base,anchor,now,period)
         if stored_id is None and not attach_mp_payment_identifier_ci(conn,intent_id=intent,provider_payment_id=provider_id):
@@ -310,6 +401,7 @@ def reconcile_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,pay
         conn.execute("UPDATE public.saas_payment_intents SET status='APPROVED',paid_at=%s,reconciled_at=%s WHERE id=%s",(now,now,intent))
         conn.execute("UPDATE public.fr_v23_renewals SET anchor_day=%s,entitlement_id=%s WHERE intent_id=%s",(anchor,ent,intent))
         _audit(conn,reviewer,"SYSTEM",tenant,"CI_RENEWAL_RECONCILED",ent,intent)
+        if downgrade:_audit(conn,reviewer,"SYSTEM",tenant,"CI_RENEWAL_DOWNGRADE",ent,intent)
         return ent
 
 def reconcile_full_refund_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,payment,statement_refunded_cents):
@@ -429,7 +521,7 @@ def record_renewal_payment_review_ci(conn,*,reviewer_token,reviewer_tenant,tenan
         elif now>=expiry:action="CI_RENEWAL_LATE_PAYMENT_REVIEW"
         else:
             prev=_previous(conn,tenant,actor,previous,acceptance)
-            if _renewal_tier(conn,tenant,actor,prev)==tier:
+            if not _cancel_state(conn,tenant,actor) and _renewal_choice_valid(conn,tenant,actor,prev,tier,now):
                 raise LifecycleDenied("Recebimento regular deve seguir conciliação própria.")
             action="CI_RENEWAL_TIER_REVIEW"
         conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text,41510))",(provider_id,))

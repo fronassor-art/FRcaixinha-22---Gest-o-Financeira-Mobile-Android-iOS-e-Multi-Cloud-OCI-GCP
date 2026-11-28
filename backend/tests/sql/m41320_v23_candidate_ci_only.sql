@@ -81,6 +81,19 @@ CREATE FUNCTION public.fr_v23_upgrade_review_immutable() RETURNS trigger LANGUAG
 BEGIN RAISE EXCEPTION 'immutable upgrade settlement review' USING ERRCODE='23514'; END $$;
 CREATE TRIGGER fr_v23_upgrade_review_row BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_settlement_reviews FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 CREATE TRIGGER fr_v23_upgrade_review_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_settlement_reviews FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+-- M41570: cancellation is a separate, immutable stop on future renewal.
+CREATE TABLE public.fr_v23_subscription_cancellations(
+ request_id uuid PRIMARY KEY,tenant_id uuid NOT NULL UNIQUE REFERENCES public.tenants(id),
+ actor uuid NOT NULL REFERENCES public.users(id),predecessor uuid NOT NULL REFERENCES public.saas_license_entitlements(id),
+ document_id uuid NOT NULL REFERENCES public.contract_documents(id),
+ document_hash text NOT NULL CHECK(document_hash ~ '^[0-9a-f]{64}$'),
+ accepted_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+ALTER TABLE public.fr_v23_subscription_cancellations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_subscription_cancellations FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fr_v23_subscription_cancellations FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+CREATE TRIGGER fr_v23_subscription_cancel_row BEFORE UPDATE OR DELETE ON public.fr_v23_subscription_cancellations FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_subscription_cancel_truncate BEFORE TRUNCATE ON public.fr_v23_subscription_cancellations FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 -- M41540: append-only capacity overlay, never rewrite the original paid entitlement.
 CREATE TABLE public.fr_v23_upgrade_applications(
  request_id uuid PRIMARY KEY REFERENCES public.fr_v23_upgrade_settlement_reviews(request_id),
