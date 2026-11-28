@@ -1071,90 +1071,8 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                 v_seed text; v_payload text; v_ticket_challenge text;
         BEGIN
           IF session_user <> 'm40680_auth_login'
-             OR p_digest IS NULL OR p_digest !~ '^[0-9a-f]{64}
-    try:
-        dsn = require_disposable()
-    except RuntimeError as exc:
-        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
-        print("M41150_DATABASE_CONNECTIONS=NONE")
-        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-        return 2
-
-    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
-    asyncio.run(exercise(dsn))
-    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
-    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
-    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
-    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41160_MIGRATIONS=NONE")
-    print("M41160_SERVICE_RESTARTS=NONE")
-    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41160_PIX_REAL=OFF")
-    print("M41160_PAGAMENTOS_REAIS=OFF")
-    print("M41160_ATIVACAO_REAL=OFF")
-    print("M41160_PRODUCTION=BLOCKED")
-    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41150_MIGRATIONS=NONE")
-    print("M41150_SERVICE_RESTARTS=NONE")
-    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41150_PIX_REAL=OFF")
-    print("M41150_PAGAMENTOS_REAIS=OFF")
-    print("M41150_ATIVACAO_REAL=OFF")
-    print("M41150_PRODUCTION=BLOCKED")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-             OR p_token IS NULL OR p_token !~ '^[0-9a-f]{64}
-    try:
-        dsn = require_disposable()
-    except RuntimeError as exc:
-        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
-        print("M41150_DATABASE_CONNECTIONS=NONE")
-        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-        return 2
-
-    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
-    asyncio.run(exercise(dsn))
-    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
-    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
-    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
-    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41160_MIGRATIONS=NONE")
-    print("M41160_SERVICE_RESTARTS=NONE")
-    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41160_PIX_REAL=OFF")
-    print("M41160_PAGAMENTOS_REAIS=OFF")
-    print("M41160_ATIVACAO_REAL=OFF")
-    print("M41160_PRODUCTION=BLOCKED")
-    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41150_MIGRATIONS=NONE")
-    print("M41150_SERVICE_RESTARTS=NONE")
-    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41150_PIX_REAL=OFF")
-    print("M41150_PAGAMENTOS_REAIS=OFF")
-    print("M41150_ATIVACAO_REAL=OFF")
-    print("M41150_PRODUCTION=BLOCKED")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
+             OR p_digest IS NULL OR p_digest !~ '^[0-9a-f]{64}$'
+             OR p_token IS NULL OR p_token !~ '^[0-9a-f]{64}$'
              OR p_tenant IS NULL OR p_nonce IS NULL OR p_session IS NULL OR p_user IS NULL
              OR p_role IS DISTINCT FROM 'TENANT_ADMIN'
              OR p_scope IS DISTINCT FROM 'READ_ENTRIES'
@@ -1163,92 +1081,10 @@ if __name__ == "__main__":
              OR p_expiry<=pg_catalog.floor(pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint
              OR p_expiry>pg_catalog.floor(pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint+30
              OR p_pid IS NULL OR p_pid<=0 OR p_pid=pg_catalog.pg_backend_pid()
-             OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+
-    try:
-        dsn = require_disposable()
-    except RuntimeError as exc:
-        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
-        print("M41150_DATABASE_CONNECTIONS=NONE")
-        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-        return 2
-
-    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
-    asyncio.run(exercise(dsn))
-    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
-    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
-    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
-    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41160_MIGRATIONS=NONE")
-    print("M41160_SERVICE_RESTARTS=NONE")
-    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41160_PIX_REAL=OFF")
-    print("M41160_PAGAMENTOS_REAIS=OFF")
-    print("M41160_ATIVACAO_REAL=OFF")
-    print("M41160_PRODUCTION=BLOCKED")
-    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41150_MIGRATIONS=NONE")
-    print("M41150_SERVICE_RESTARTS=NONE")
-    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41150_PIX_REAL=OFF")
-    print("M41150_PAGAMENTOS_REAIS=OFF")
-    print("M41150_ATIVACAO_REAL=OFF")
-    print("M41150_PRODUCTION=BLOCKED")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
+             OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+$'
              OR p_started IS NULL OR p_started>pg_catalog.clock_timestamp()
              OR p_started<pg_catalog.clock_timestamp()-interval '30 seconds'
-             OR p_challenge IS NULL OR p_challenge !~ '^[0-9a-f]{64}
-    try:
-        dsn = require_disposable()
-    except RuntimeError as exc:
-        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
-        print("M41150_DATABASE_CONNECTIONS=NONE")
-        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-        return 2
-
-    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
-    asyncio.run(exercise(dsn))
-    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
-    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
-    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
-    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
-    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41160_MIGRATIONS=NONE")
-    print("M41160_SERVICE_RESTARTS=NONE")
-    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41160_PIX_REAL=OFF")
-    print("M41160_PAGAMENTOS_REAIS=OFF")
-    print("M41160_ATIVACAO_REAL=OFF")
-    print("M41160_PRODUCTION=BLOCKED")
-    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
-    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
-    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
-    print("M41150_MIGRATIONS=NONE")
-    print("M41150_SERVICE_RESTARTS=NONE")
-    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
-    print("M41150_PIX_REAL=OFF")
-    print("M41150_PAGAMENTOS_REAIS=OFF")
-    print("M41150_ATIVACAO_REAL=OFF")
-    print("M41150_PRODUCTION=BLOCKED")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
+             OR p_challenge IS NULL OR p_challenge !~ '^[0-9a-f]{64}$'
              OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_locks AS l
                  WHERE l.pid=p_pid AND l.locktype='virtualxid' AND l.virtualxid=p_vxid
                    AND l.virtualtransaction=p_vxid AND l.mode='ExclusiveLock' AND l.granted)
