@@ -1,9 +1,10 @@
 """Canonical disposable PG18 renewal/reversal integration after real CI onboarding."""
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from uuid import UUID,uuid4
-from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci,cancel_subscription_ci
+from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci,cancel_subscription_ci,resolve_reviewed_renewal_refund_ci,_lock
 from app.administrator_reauthentication_ci import _license_access
 from app.saas_billing_ci import reconcile_approved_saas_payment_ci
 from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci,apply_reviewed_upgrade_ci,reconcile_upgrade_refund_ci
@@ -59,9 +60,31 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
                 with connection() as c:
                     return c.execute("SELECT preparation_id,intent_id FROM public.fr_v23_renewals WHERE request_id=%s",(args["request_id"],)).fetchone()
             with connection() as c:return prepare_renewal_ci(c,**args)
+        # A committed renewal and a competing cancellation cannot both win.
+        # Hold the same tenant lock until a second connection proves contention.
+        locked,contending=Event(),Event()
+        def winning_stage():
+            with connection() as c,c.transaction():
+                _lock(c,tenant)
+                result=prepare_renewal_ci(c,**args)
+                locked.set()
+                assert contending.wait(10)
+                return result
+        def losing_cancel():
+            assert locked.wait(10)
+            with connection() as c,c.transaction():
+                assert c.execute("SELECT pg_try_advisory_xact_lock(hashtextextended(%s::text,41320))",(str(tenant),)).fetchone()==(False,)
+                contending.set()
+                reject(cancel_subscription_ci,c,**cancel_args)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            a,b=list(pool.map(stage,range(2)))
-        assert a==b
+            winner=pool.submit(winning_stage)
+            loser=pool.submit(losing_cancel)
+            a=winner.result(timeout=20)
+            loser.result(timeout=20)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assert list(pool.map(stage,range(2)))==[a,a]
+        assert db.execute("SELECT count(*) FROM public.fr_v23_subscription_cancellations WHERE tenant_id=%s",(tenant,)).fetchone()[0]==0
+        print("M41580_RENEWAL_CANCEL_CONTENTION=PASS")
         prep,intent=a
         reject(cancel_subscription_ci,db,**cancel_args)
         pending=post(client,path,http_body,token)
@@ -86,6 +109,10 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             a,b=list(pool.map(reconcile,range(2)))
         assert a==b
         ent=a
+        reject(reconcile_renewal_ci,db,**{**review,"fee":11,"net":cents-11})
+        assert reconcile_renewal_ci(db,**review)==ent
+        assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_RENEWAL_SETTLEMENT_EVIDENCE'",(tenant,str(intent))).fetchone()[0]==1
+        print("M41580_SETTLEMENT_EXACT_REPLAY=PASS")
         start,end,paid=db.execute("SELECT e.valid_from,e.valid_until,p.paid_at FROM public.saas_license_entitlements e "
                                  "JOIN public.saas_payment_intents p ON p.id=e.payment_intent_id WHERE e.id=%s",(ent,)).fetchone()
         if late:assert start==paid and start>old_from
@@ -417,8 +444,9 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         reject(reconcile_renewal_ci,db,**exact)
         assert reconcile_approved_saas_payment_ci(db,intent_id=qi,authoritative_payment=exact["payment"]) is None
         reject(prepare_renewal_ci,db,**{**review_args,"request_id":uuid4()})
-        if not late:db.execute("UPDATE public.fr_v23_renewals SET accepted_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' WHERE request_id=%s",(review_args["request_id"],))
-        reject(cancel_expired_renewal_ci,db,**{**proof,"intent":qi,"payment":{**exact["payment"],"status":"cancelled"}})
+        with db.transaction(force_rollback=True):
+            if not late:db.execute("UPDATE public.fr_v23_renewals SET accepted_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' WHERE request_id=%s",(review_args["request_id"],))
+            reject(cancel_expired_renewal_ci,db,**{**proof,"intent":qi,"payment":{**exact["payment"],"status":"cancelled"}})
         quarantined=get(client,path,token)
         assert quarantined["offer"] is None and next(x for x in quarantined["renewals"] if x["intent_id"]==str(qi))["state"]=="PAYMENT_REVIEW"
         assert quarantined["access"]==gap["access"]
@@ -426,6 +454,37 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()==future_before
         assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
         assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        # Full refund of the actual receipt, not the expected offer amount.
+        refunded_payment={**qp,"status":"refunded","transaction_amount_refunded":qp["transaction_amount"]}
+        resolution=dict(reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,intent=qi,
+                        payment=refunded_payment,statement_refunded_cents=amount)
+        for bad in (dict(statement_refunded_cents=amount-1),dict(payment={**refunded_payment,"transaction_amount_refunded":"0.01"}),
+                    dict(payment={**refunded_payment,"id":str(uuid4().int)[:38]}),dict(payment={**refunded_payment,"live_mode":True}),
+                    dict(tenant=reviewer_tenant),dict(reviewer_token=token,reviewer_tenant=tenant)):
+            reject(resolve_reviewed_renewal_refund_ci,db,**{**resolution,**bad})
+        def resolve(_):
+            with connection() as c:return resolve_reviewed_renewal_refund_ci(c,**resolution)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assert list(pool.map(resolve,range(2)))==[review_args["request_id"]]*2
+        assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_RENEWAL_REVIEW_REFUNDED'",(tenant,str(qi))).fetchone()[0]==1
+        assert db.execute("SELECT status,paid_at,reconciled_at FROM public.saas_payment_intents WHERE id=%s",(qi,)).fetchone()==("CANCELED",None,None)
+        reject(reconcile_renewal_ci,db,**exact)
+        reject(record_renewal_payment_review_ci,db,**qr)
+        assert db.execute("SELECT review_refunded,canceled_at>=expires_at FROM public.fr_v23_renewals WHERE intent_id=%s",(qi,)).fetchone()==(True,late)
+        with db.transaction(force_rollback=True):
+            db.execute("UPDATE public.fr_v23_renewals SET review_refunded=false,canceled_at=GREATEST(canceled_at,expires_at) WHERE intent_id=%s",(qi,))
+            reject(renewal_overview_ci,db,token=token,tenant=tenant)
+        resolved=get(client,path,token)
+        assert resolved["offer"]["predecessor"]==str(future)
+        assert next(x for x in resolved["renewals"] if x["intent_id"]==str(qi))["state"]=="REVIEW_REFUNDED"
+        assert resolved["segments"]==quarantined["segments"] and resolved["access"]==quarantined["access"]
+        assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE payment_intent_id=%s",(qi,)).fetchone()[0]==0
+        assert db.execute("SELECT count(*) FROM public.ledger_transactions WHERE tenant_id=%s",(tenant,)).fetchone()[0]==ledger
+        assert db.execute("SELECT id,start_date,settlement_date FROM public.cycles WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()==cycles
+        with db.transaction(force_rollback=True):
+            fresh={**review_args,"request_id":uuid4()}
+            assert prepare_renewal_ci(db,**fresh)[1]!=qi
+        print("M41580_REVIEW_FULL_REFUND_"+("LATE" if late else "DIVERGENT")+"=PASS")
         print("M41570_SUBSCRIPTION_CANCEL_"+("ANNUAL" if late else "MIXED")+"=PASS")
         print("M41510_PAYMENT_REVIEW_GAP_"+("LATE" if late else "DIVERGENT")+"=PASS")
         print("M41500_RECOVERY_EXPIRED_REFUND_"+("LATE" if late else "EARLY")+"=PASS")

@@ -33,13 +33,14 @@ export async function parseRenewalOverview(raw:unknown,s:AdminScope){
  const renewals=x.renewals.map(v=>{
   const q=exact(v,'request_id predecessor intent_id price_version period cents expires_at entitlement_id state');
   const request_id=id(q.request_id),predecessor=id(q.predecessor),intent_id=id(q.intent_id),price_version=id(q.price_version),period=one(q.period,periods),amount=cents(q.cents),expires_at=stamp(q.expires_at);
-  const state=one(q.state,['PENDING','REVIEW_REQUIRED','PAYMENT_REVIEW','CI_RECONCILED','REFUNDED','CANCELED'] as const);
+  const state=one(q.state,['PENDING','REVIEW_REQUIRED','PAYMENT_REVIEW','CI_RECONCILED','REFUNDED','CANCELED','REVIEW_REFUNDED'] as const);
   const entitlement_id=q.entitlement_id===null?null:id(q.entitlement_id),seg=segments.find(a=>a.entitlement_id===entitlement_id);
-  if(requests.has(request_id)||(state!=='CANCELED'&&predecessors.has(predecessor))||intents.has(intent_id)||!ids.has(predecessor)||predecessor===entitlement_id)deny();
-  if(state==='PENDING'||state==='REVIEW_REQUIRED'||state==='PAYMENT_REVIEW'||state==='CANCELED'){
-   if(entitlement_id!==null||payments.has(intent_id)||(state!=='PAYMENT_REVIEW'&&(state==='PENDING')!==(now<Date.parse(expires_at))))deny();
+  const terminal=state==='CANCELED'||state==='REVIEW_REFUNDED';
+  if(requests.has(request_id)||(!terminal&&predecessors.has(predecessor))||intents.has(intent_id)||!ids.has(predecessor)||predecessor===entitlement_id)deny();
+  if(state==='PENDING'||state==='REVIEW_REQUIRED'||state==='PAYMENT_REVIEW'||terminal){
+   if(entitlement_id!==null||payments.has(intent_id)||(state!=='PAYMENT_REVIEW'&&state!=='REVIEW_REFUNDED'&&(state==='PENDING')!==(now<Date.parse(expires_at))))deny();
   }else if(!seg||seg.intent_id!==intent_id||seg.period!==period||seg.cents!==amount||(state==='REFUNDED')!==(seg.state==='REFUNDED'))deny();
-  requests.add(request_id);if(state!=='CANCELED')predecessors.add(predecessor);intents.add(intent_id);
+  requests.add(request_id);if(!terminal)predecessors.add(predecessor);intents.add(intent_id);
   return Object.freeze({request_id,predecessor,intent_id,price_version,period,cents:amount,expires_at,entitlement_id,state});
  });
  const edges=renewals.filter(v=>v.entitlement_id!==null);

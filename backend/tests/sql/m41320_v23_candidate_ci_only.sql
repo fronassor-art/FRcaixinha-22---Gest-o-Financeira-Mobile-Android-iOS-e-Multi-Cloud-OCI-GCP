@@ -30,7 +30,10 @@ CREATE TABLE public.fr_v23_renewals (
  expires_at timestamptz NOT NULL,
  canceled_at timestamptz,
  CHECK(expires_at>accepted_at),
- CHECK(canceled_at IS NULL OR canceled_at>=expires_at),
+ -- M41580: early termination only for a separately proven reviewed refund.
+ review_refunded boolean NOT NULL DEFAULT false,
+ CHECK(canceled_at IS NULL OR (canceled_at>=accepted_at AND (canceled_at>=expires_at OR review_refunded))),
+ CHECK(NOT review_refunded OR canceled_at IS NOT NULL),
  anchor_day int CHECK(anchor_day BETWEEN 1 AND 31),
  entitlement_id uuid UNIQUE REFERENCES public.saas_license_entitlements(id),
  CHECK((anchor_day IS NULL)=(entitlement_id IS NULL)),
