@@ -702,7 +702,11 @@ def test_m41630_disposable_target_commitment_has_atomic_reservation_boundary():
     compile(source, str(RUNNER), "exec")
     assert source.count("def main() -> int:") == 1
     section = source.split("async def exercise_m41630_target_commitment(", 1)[1].split("\ndef main()", 1)[0]
-    sql = section.split("CREATE FUNCTION m40700.issue_bound_v5(", 1)[1].split('$body$', 2)[1]
+    definition = section.split("CREATE FUNCTION m40700.issue_bound_v5(", 1)[1]
+    header, sql, remainder = definition.split('$body$', 2)
+    assert "LANGUAGE plpgsql SECURITY DEFINER" in header
+    assert "SET search_path=pg_catalog,pg_temp" in header
+    assert remainder.lstrip().startswith('""")')
     for marker in (
         "FRF-M41630-SEED|v1|", "FRF-M41630|v1|", "FRF-M41620|v1|",
         "p_digest !~ '^[0-9a-f]{64}$'",
@@ -710,7 +714,6 @@ def test_m41630_disposable_target_commitment_has_atomic_reservation_boundary():
         "p_vxid !~ '^[0-9]+/[0-9]+$'",
         "p_challenge !~ '^[0-9a-f]{64}$'",
         "session_user <> 'm40680_auth_login'",
-        "SET search_path=pg_catalog,pg_temp",
         "consumed_at IS NULL FOR UPDATE", "s.revoked_at IS NULL",
         "FOR SHARE OF s", "m40700.issue_bound_v2(",
         "m40700.reserve_read_target(", "M41630_TARGET_RESERVATION_FAILED",
