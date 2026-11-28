@@ -243,6 +243,8 @@ def evaluate_saas_staging_three_source(
         if event.kind in ("REVERSAL_HOLD","PROVIDER_UNAVAILABLE_HOLD"):
             return SaaSSettlementReview("RECONCILIATION_HOLD_ACTIVE")
         if event.digest == provider.evidence_sha256:
+            if event.created_at < provider.checked_at:
+                return SaaSSettlementReview("REVIEW_LOG_SCOPE_OR_INTEGRITY_DENIED")
             candidate_count += 1
     if candidate_count != 1:
         return SaaSSettlementReview("APPEND_ONLY_GET_CANDIDATE_ABSENT_OR_MISMATCHED")
@@ -258,7 +260,14 @@ def evaluate_saas_staging_three_source(
         "provider_digest":provider.evidence_sha256,
         "statement_digest":statement.evidence_sha256,
         "statement_ref":statement.bank_reference,
+        "administrator":str(operators.administrator_id),
+        "provider_observer":str(operators.provider_observer_id),
+        "statement_observer":str(operators.statement_observer_id),
         "independent_review":str(operators.independent_reviewer_id),
+        "provider_checked_at":provider.checked_at.astimezone(timezone.utc).isoformat(),
+        "statement_settled_at":statement.settled_at.astimezone(timezone.utc).isoformat(),
+        "statement_observed_at":statement.observed_at.astimezone(timezone.utc).isoformat(),
+        "history":sorted((event.kind,event.digest,event.created_at.astimezone(timezone.utc).isoformat()) for event in history),
     }
     digest=sha256(json.dumps(safe,sort_keys=True,separators=(",",":")).encode()).hexdigest()
     return SaaSSettlementReview(

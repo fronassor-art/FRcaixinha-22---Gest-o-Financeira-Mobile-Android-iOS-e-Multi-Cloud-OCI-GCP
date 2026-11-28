@@ -171,10 +171,10 @@ def test_valid_invalid_replay_and_conflicting_webhooks():
     conflict = webhook(op, resource="99999")
     result = preview((op,), (fixture(op),), (good, bad, replay, conflict))
     assert result.accepted_webhook_count == 1
-    assert result.rejected_webhook_count == 1
-    assert result.replayed_webhook_count == 2
+    assert result.rejected_webhook_count == 2
+    assert result.replayed_webhook_count == 1
     assert "WEBHOOK_REPLAY" in result.webhook_findings
-    assert "WEBHOOK_ID_CONFLICT" in result.webhook_findings
+    assert "WEBHOOK_INVALID_OR_UNMATCHED" in result.webhook_findings
     assert result.status == "REVIEW_REQUIRED"
 
 
@@ -325,3 +325,19 @@ def test_m1720_health_contract_never_claims_real_money():
                  "payout_authorized", "runtime_git_sha_verified"):
         assert data[name] is False
     assert data["sandbox_preview_only"] is True
+
+
+def test_m41600_invalid_first_delivery_cannot_poison_authentic_request_id():
+    op=intent()
+    result=preview((op,), (fixture(op),), (webhook(op,secret="invalid"),webhook(op),webhook(op,secret="invalid"),webhook(op)))
+    assert (result.accepted_webhook_count,result.rejected_webhook_count,result.replayed_webhook_count)==(1,2,1)
+    assert result.status=="REVIEW_REQUIRED"
+
+
+def test_m41600_authenticated_id_collision_not_a_replay():
+    a=intent(op="a",idem="stable_id_a",payment_id="901")
+    b=intent(tenant=B,op="b",idem="stable_id_b",payment_id="902")
+    result=preview((a,b),(fixture(a),fixture(b)),(webhook(a),webhook(b)))
+    assert (result.accepted_webhook_count,result.rejected_webhook_count,result.replayed_webhook_count)==(1,1,0)
+    assert "WEBHOOK_ID_CONFLICT" in result.webhook_findings
+    assert not result.bank_reconciled

@@ -146,6 +146,10 @@ def _matching_identity(expected: DuePayment, payload: Mapping[str, Any],
     # o status original determina os bloqueios, nunca é alterado no input.
     candidate = dict(payload)
     candidate["status"] = "approved"
+    # For non-approved states only, compare the original immutable amount.
+    # The original status/refund amount is evaluated separately below.
+    if payload["status"] != "approved":
+        candidate.pop("transaction_amount_refunded", None)
     return validate_payment_against_cashbox(
         expected, candidate, platform_collector_id=platform, tenant_collectors=tenants,
     )
@@ -163,13 +167,6 @@ def _webhook_checks(notices: tuple[WebhookFixture, ...], *, secret: str,
     for notice in notices:
         if not isinstance(notice, WebhookFixture):
             raise ValueError("Notificação inválida")
-        previous = seen.get(notice.request_id)
-        if previous is not None:
-            replayed += 1
-            findings.append("WEBHOOK_REPLAY" if previous == notice.resource_id
-                            else "WEBHOOK_ID_CONFLICT")
-            continue
-        seen[notice.request_id] = notice.resource_id
         pieces = [x.strip() for x in notice.signature.split(",")]
         ts_fields = [x[3:] for x in pieces if x.startswith("ts=")]
         ts_valid = (len(ts_fields) == 1 and ts_fields[0].isascii()
@@ -184,11 +181,23 @@ def _webhook_checks(notices: tuple[WebhookFixture, ...], *, secret: str,
                  and verify_webhook_signature(
                      secret=secret, signature=notice.signature,
                      request_id=notice.request_id, resource_id=notice.resource_id))
-        if valid:
-            accepted += 1
-        else:
+        if not valid:
             rejected += 1
             findings.append("WEBHOOK_INVALID_OR_UNMATCHED")
+            continue
+        # Authenticate before recording a request ID or classifying a replay.
+        # Invalid first deliveries cannot poison the replay registry.
+        previous = seen.get(notice.request_id)
+        if previous is not None:
+            if previous == notice.resource_id:
+                replayed += 1
+                findings.append("WEBHOOK_REPLAY")
+            else:
+                rejected += 1
+                findings.append("WEBHOOK_ID_CONFLICT")
+            continue
+        seen[notice.request_id] = notice.resource_id
+        accepted += 1
     return tuple(findings), accepted, rejected, replayed
 
 

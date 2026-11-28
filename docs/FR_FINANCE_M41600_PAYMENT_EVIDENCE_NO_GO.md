@@ -1,0 +1,7 @@
+# M41600 — integridade de evidência financeira e identidade de revisão (NO-GO)
+
+Base M41590 b9631bc15abb7a044d8de7700b528e8e5780ae56; CP26-0062, CP26-0069, V2.3 §§3.6, 7.5, 9.8; issue #5 aberta. Matriz 330/2310 inalterada.
+- Comparação exata de centavos independente da precisão Decimal ambiente; rejeita IDs inválidos, ambiente não booleano, aprovação com valor de estorno positivo ou ambíguo. Ausência do campo de estorno continua compatível com contratos anteriores, não é prova de ausência de estorno; a conciliação independente é obrigatória. Limite já empregado no contrato DuePayment (999.999.999.999 centavos).
+- Laboratório existente autentica antes de registrar replay, não deixa evento inválido consumir identificador; colisão autenticada entra em revisão. Não substitui inbox persistente nem prova HMAC do corpo completo.
+- Conciliação SaaS sintética rejeita histórico anterior à observação GET; digest vincula quatro atores, datas normalizadas e histórico, além das identidades e valores anteriores. Não atesta identidade real dos atores, custódia ou origem do extrato.
+- Testes positivos/negativos nas suítes existentes, sem novos serviços/roles/SQL. Execução CI pendente. P0 SQL/GUC/custódia M41290 ainda exige autorização inicial independente e validação real; M40840/M40930 preservados. Nenhuma alteração comercial ou de regra de produto. Sem operação real, acesso ao PG original, migração, reinício, reload ou release. PIX_REAL=OFF; PAGAMENTOS_REAIS=OFF; ATIVACAO_REAL=OFF; PRODUCTION=BLOCKED.

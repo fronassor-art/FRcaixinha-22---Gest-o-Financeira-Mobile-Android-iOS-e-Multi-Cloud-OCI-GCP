@@ -173,3 +173,19 @@ def test_no_real_io_or_financial_mutation():
         assert token not in source
     assert "production_authorized: bool = False" in source
     assert "all_sources_synthetic: bool = True" in source
+
+
+def test_m41600_history_cannot_predate_get_and_digest_binds_review_identity():
+    args=example()
+    baseline=evaluate_saas_staging_three_source(**args)
+    assert baseline.consistent_in_ci
+    early=replace(args["history"][0],created_at=args["provider"].checked_at-timedelta(seconds=1))
+    assert evaluate_saas_staging_three_source(**{**args,"history":(early,)}).state=="REVIEW_LOG_SCOPE_OR_INTEGRITY_DENIED"
+    for field in ("provider_observer_id","statement_observer_id","independent_reviewer_id"):
+        updated=replace(args["operators"],**{field:uuid4()})
+        result=evaluate_saas_staging_three_source(**{**args,"operators":updated})
+        assert result.consistent_in_ci and result.evidence_digest!=baseline.evidence_digest
+    shifted=replace(args["history"][0],created_at=args["history"][0].created_at+timedelta(seconds=1))
+    result=evaluate_saas_staging_three_source(**{**args,"history":(shifted,)})
+    assert result.consistent_in_ci and result.evidence_digest!=baseline.evidence_digest
+    assert not result.production_authorized

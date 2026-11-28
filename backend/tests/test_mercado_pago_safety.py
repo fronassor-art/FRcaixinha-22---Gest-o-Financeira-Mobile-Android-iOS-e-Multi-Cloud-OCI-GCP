@@ -47,3 +47,32 @@ def test_refund_requires_full_amount_and_same_platform_collector():
         {'live_mode':True},
     ):
         assert not matches_full_refund(expected, {**refund, **invalid})
+
+
+def test_m41600_exact_cent_comparison_independent_of_decimal_context():
+    from decimal import localcontext
+    expected = ExpectedPayment("123", "456", "saas:license", 10050, False)
+    payment = dict(id=123, collector_id=456, external_reference="saas:license",
+                   currency_id="BRL", live_mode=False, status="approved")
+    with localcontext() as ctx:
+        ctx.prec = 3
+        assert matches_approved_payment(expected, {**payment,"transaction_amount":"100.50"})
+        for amount in ("100.50000000000000000000000000001", "100.49999999999999999999999999999",
+                       "1e100000000", "1e-100000000", Decimal("sNaN"), True, 100.50):
+            assert not matches_approved_payment(expected,{**payment,"transaction_amount":amount})
+        refund = {**payment,"status":"refunded","transaction_amount":"100.50"}
+        assert matches_full_refund(expected,{**refund,"transaction_amount_refunded":"100.50"})
+        assert not matches_full_refund(expected,{**refund,"transaction_amount_refunded":"100.50000000000000000000001"})
+
+
+def test_m41600_approved_with_refund_or_malformed_identity_denied():
+    expected = ExpectedPayment("123","456","saas:license",10050,False)
+    payment = dict(id=123,collector_id=456,external_reference="saas:license",
+                   currency_id="BRL",live_mode=False,status="approved",transaction_amount="100.50")
+    for refund in ("0","0.00",0,Decimal("0.00")):
+        assert matches_approved_payment(expected,{**payment,"transaction_amount_refunded":refund})
+    for refund in ("0.01","100.50",None,False,0.0,Decimal("NaN")):
+        assert not matches_approved_payment(expected,{**payment,"transaction_amount_refunded":refund})
+    for changes in ({"id":123.0},{"collector_id":456.0},{"id":True},{"live_mode":0}):
+        assert not matches_approved_payment(expected,{**payment,**changes})
+    assert not matches_approved_payment(ExpectedPayment("123","456","saas:license",10050,0),{**payment,"live_mode":0})

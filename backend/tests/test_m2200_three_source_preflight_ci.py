@@ -253,3 +253,13 @@ def test_3_source_contract_health_disables_real_money():
                   "closing_authorized","ledger_written",
                   "pix_enabled","provider_connected"):
         assert body[field] is False
+
+
+@pytest.mark.parametrize("amount", ["0.01","150.00",None,False])
+def test_m41600_partial_or_ambiguous_refund_cannot_match_three_sources(amount):
+    op=intention()
+    result=preview((op,), (provider(op,transaction_amount_refunded=amount),), (settlement(op),), (accounting(op),))
+    assert result.status=="REVIEW_REQUIRED"
+    assert result.items[0].finding=="PROVIDER_FIXTURE_MISMATCH_OR_NOT_APPROVED"
+    assert result.total_synthetic_gross_cents==0
+    assert not result.bank_reconciled
