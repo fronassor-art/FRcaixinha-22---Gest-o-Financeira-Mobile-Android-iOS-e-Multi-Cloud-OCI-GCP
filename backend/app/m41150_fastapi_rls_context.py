@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+import hashlib
 import inspect
 import os
 import re
@@ -35,6 +36,7 @@ from .m41050_session_context_seal_prototype import (
 )
 
 READ_SCOPE = "READ_ENTRIES"
+TARGET_BOUND_PROTOCOL = "FRF-M41630-v1"
 PROVIDER_STATE_ATTRIBUTE = "frfinance_session_capability_provider"
 _TICKET_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -54,6 +56,27 @@ class SessionCapabilityProvider(Protocol):
 
     async def issue_ticket(
         self, session: AuthenticatedSession, *, scope: str, request_nonce: UUID
+    ) -> object: ...
+
+    async def bind_ticket(
+        self, ticket: str, *, tenant_id: UUID, backend_pid: int,
+        virtual_xid: str, transaction_started_at: datetime, target_challenge: str,
+    ) -> object: ...
+
+
+class TargetBoundSessionCapabilityProvider(Protocol):
+    """Explicit opt-in contract; no default provider or real custody is installed.
+
+    The issuer must authenticate the server session and pre-ticket challenge,
+    then commit issuance and reservation atomically. The binder must not
+    create or replace a reservation. A failure cannot downgrade to legacy.
+    """
+    capability_protocol: str
+
+    async def issue_target_ticket(
+        self, session: AuthenticatedSession, *, scope: str, request_nonce: UUID,
+        tenant_id: UUID, backend_pid: int, virtual_xid: str,
+        transaction_started_at: datetime, target_challenge: str,
     ) -> object: ...
 
     async def bind_ticket(
@@ -187,11 +210,37 @@ async def _read_target_challenge(connection: object, ticket: str, tenant: UUID) 
         ) from None
 
 
+def _require_issued_ticket(ticket_value: object) -> str:
+    if ticket_value is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão ausente, revogada ou fora do escopo.",
+        )
+    try:
+        return validate_signed_session_ticket(ticket_value)
+    except InvalidSessionTicket:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão financeira inválida.",
+        ) from None
+
+
+
+def _recheck_session(session: AuthenticatedSession) -> None:
+    try:
+        require_verified_rls_session(session)
+    except UnverifiedRLSSession:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão financeira não verificada ou expirada.",
+        ) from None
+
+
 @asynccontextmanager
 async def _capability_db_connection(
     request: Request,
     session: AuthenticatedSession,
-    provider: SessionCapabilityProvider,
+    provider: SessionCapabilityProvider | TargetBoundSessionCapabilityProvider,
     tenant: UUID,
 ) -> AsyncGenerator:
     try:
@@ -219,30 +268,28 @@ async def _capability_db_connection(
             detail="Acesso financeiro bloqueado até revisão da fronteira SQL.",
         ) from None
 
-    ticket_value = await _provider_call(
-        provider, "issue_ticket", session, scope=READ_SCOPE,
-        request_nonce=request_nonce,
-    )
-    if ticket_value is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sessão ausente, revogada ou fora do escopo.",
-        )
+    # Legacy is retained only for existing nonproduction fixtures. A declared
+    # new protocol is strict: unsupported version or missing methods fail closed.
     try:
-        ticket = validate_signed_session_ticket(ticket_value)
-    except InvalidSessionTicket:
+        protocol = getattr(provider, "capability_protocol", None)
+        target_bound = protocol == TARGET_BOUND_PROTOCOL
+        if protocol is not None and not target_bound:
+            raise ValueError("M41639_UNSUPPORTED_PROTOCOL")
+        if target_bound and (not callable(getattr(provider, "issue_target_ticket", None))
+                             or not callable(getattr(provider, "bind_ticket", None))):
+            raise ValueError("M41639_INCOMPLETE_PROVIDER")
+    except Exception:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sessão financeira inválida.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Autorização financeira indisponível.",
         ) from None
 
-    try:
-        require_verified_rls_session(session)
-    except UnverifiedRLSSession:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sessão financeira não verificada ou expirada.",
-        ) from None
+    if not target_bound:
+        ticket = _require_issued_ticket(await _provider_call(
+            provider, "issue_ticket", session, scope=READ_SCOPE,
+            request_nonce=request_nonce,
+        ))
+        _recheck_session(session)
 
     try:
         pool = await get_db_pool()
@@ -258,6 +305,21 @@ async def _capability_db_connection(
             # tenant, role, or user GUC participates in this route's RLS.
             async with connection.transaction(readonly=True):
                 backend_pid, virtual_xid, transaction_started_at = await _read_transaction_identity(connection)
+                if target_bound:
+                    # Domain separation must match the disposable SQL v5 contract.
+                    seed = hashlib.sha256(
+                        ("FRF-M41630-SEED|v1|" + str(request_nonce)).encode("ascii")
+                    ).hexdigest()
+                    pre_ticket_challenge = await _read_target_challenge(connection, seed, tenant)
+                    _recheck_session(session)
+                    ticket = _require_issued_ticket(await _provider_call(
+                        provider, "issue_target_ticket", session, scope=READ_SCOPE,
+                        request_nonce=request_nonce, tenant_id=tenant,
+                        backend_pid=backend_pid, virtual_xid=virtual_xid,
+                        transaction_started_at=transaction_started_at,
+                        target_challenge=pre_ticket_challenge,
+                    ))
+                    _recheck_session(session)
                 target_challenge = await _read_target_challenge(connection, ticket, tenant)
                 capability_value = await _provider_call(
                     provider, "bind_ticket", ticket, tenant_id=tenant,
