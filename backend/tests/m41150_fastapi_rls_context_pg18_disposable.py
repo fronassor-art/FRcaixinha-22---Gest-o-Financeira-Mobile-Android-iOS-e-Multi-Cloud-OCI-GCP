@@ -1025,6 +1025,7 @@ async def exercise(dsn: str) -> None:
                 bind_read=bind_read, key=key, second_digest=admin_second_digest,
                 second_session_id=admin_second_session_id, admin_id=admin_id,
                 tenant_a=tenant_a, tenant_b=tenant_b,
+                app=app, client=client, read_paths=read_paths, second_headers=second_headers,
             )
         await pool.close()
     finally:
@@ -1038,7 +1039,7 @@ async def exercise(dsn: str) -> None:
 
 async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, gateway,
                                             bind_read, key, second_digest, second_session_id,
-                                            admin_id, tenant_a, tenant_b):
+                                            admin_id, tenant_a, tenant_b, app, client, read_paths, second_headers):
     """CP26-0061/CTM-07, CP26-0062/CTM-08, CP26-0257/TENANT_RLS; TEC-09/12.
     Disposable proof only: pre-ticket SQL challenge, authority commitment bound
     to target, and ticket reservation in one issuer transaction.
@@ -1238,11 +1239,7 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
 
         # M41636: prove lifecycle invalidation at each boundary of v5, using
         # fresh commitments and transaction identities; never restore a revoked session.
-        async def fresh_commitment(connection):
-            identity = await gateway._read_transaction_identity(connection)
-            request_nonce = uuid4()
-            seed = hashlib.sha256(("FRF-M41630-SEED|v1|" + str(request_nonce)).encode("ascii")).hexdigest()
-            target_challenge = await gateway._read_target_challenge(connection, seed, tenant_a)
+        def commitment_for_target(identity, request_nonce, target_challenge):
             generation = fixture.fixture_context(owner, second_digest)[2]
             identity_claim = dict(digest=hashlib.sha256(
                 ("FRF-M41630|v1|" + second_digest + "|" + target_challenge).encode("ascii")).hexdigest(),
@@ -1261,6 +1258,80 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                 return request, released, identity, target_challenge
             finally:
                 authority.close()
+
+        async def fresh_commitment(connection):
+            identity = await gateway._read_transaction_identity(connection)
+            request_nonce = uuid4()
+            seed = hashlib.sha256(("FRF-M41630-SEED|v1|" + str(request_nonce)).encode("ascii")).hexdigest()
+            target_challenge = await gateway._read_target_challenge(connection, seed, tenant_a)
+            return commitment_for_target(identity, request_nonce, target_challenge)
+
+        # M41641: the actual six FastAPI GET handlers use v5 through an explicit
+        # disposable provider. No production provider or key installation.
+        class TargetFirstFixtureProvider:
+            capability_protocol = gateway.TARGET_BOUND_PROTOCOL
+
+            def __init__(self):
+                self.issued = []
+                self.bound = []
+                self.unavailable = False
+
+            async def issue_ticket(self, *args, **kwargs):
+                raise AssertionError("M41641_LEGACY_ISSUANCE_FORBIDDEN")
+
+            async def issue_target_ticket(self, session, *, scope, request_nonce, tenant_id,
+                                          backend_pid, virtual_xid, transaction_started_at, target_challenge):
+                if self.unavailable:
+                    raise RuntimeError("M41641_FIXTURE_AUTHORITY_UNAVAILABLE")
+                if (session.verified_session_id, session.user_id, session.role,
+                    session.tenant_id, scope, tenant_id) != (
+                        str(second_session_id), str(admin_id), "TENANT_ADMIN",
+                        str(tenant_a), "READ_ENTRIES", tenant_a):
+                    return None
+                target = (backend_pid, virtual_xid, transaction_started_at)
+                prepared = commitment_for_target(target, request_nonce, target_challenge)
+                ticket = submit(*prepared)
+                if ticket:
+                    self.issued.append(request_nonce)
+                return ticket
+
+            async def bind_ticket(self, ticket, *, tenant_id, backend_pid, virtual_xid,
+                                  transaction_started_at, target_challenge):
+                target = (backend_pid, virtual_xid, transaction_started_at)
+                proof = new_signer.sign(ticket,tenant_id,*target,challenge=target_challenge)
+                capability = bind_read(ticket,tenant_id,*target,challenge=target_challenge,proof=proof)
+                if capability:
+                    self.bound.append(True)
+                return capability
+
+        previous_provider = getattr(app.state, gateway.PROVIDER_STATE_ATTRIBUTE)
+        target_provider = TargetFirstFixtureProvider()
+        setattr(app.state, gateway.PROVIDER_STATE_ATTRIBUTE, target_provider)
+        try:
+            for path in read_paths:
+                response = await client.get(path, headers=second_headers)
+                assert response.status_code == 200, ("M41641_ROUTE_STATUS", response.status_code)
+            assert len(target_provider.issued) == len(set(target_provider.issued)) == 6
+            assert len(target_provider.bound) == 6
+            for request_nonce in target_provider.issued:
+                assert owner.execute(
+                    "SELECT consumed_at IS NOT NULL FROM m40700.identity_commitments WHERE nonce=%s",
+                    (request_nonce,)).fetchone() == (True,)
+                assert owner.execute(
+                    "SELECT count(*) FROM m41050.read_target_reservations r "
+                    "JOIN m40700.ticket_context c ON c.ticket_digest=r.ticket_digest WHERE c.request_nonce=%s",
+                    (request_nonce,)).fetchone() == (1,)
+            print("M41641_TARGET_FIRST_FASTAPI_SIX_READS=6_OF_6_PASS_DISPOSABLE_ONLY")
+            target_provider.unavailable = True
+            response = await client.get(read_paths[0], headers=second_headers)
+            assert response.status_code == 503 and "M41641" not in response.text
+            assert len(target_provider.issued) == len(target_provider.bound) == 6
+            async with pool.acquire() as probe:
+                assert not probe.is_in_transaction()
+                assert not await probe.fetch("SELECT * FROM m41050.current_claims_v4()")
+            print("M41641_AUTHORITY_UNAVAILABLE_NO_DOWNGRADE_POOL_CLEAN=PASS_DISPOSABLE_ONLY")
+        finally:
+            setattr(app.state, gateway.PROVIDER_STATE_ATTRIBUTE, previous_provider)
 
         def assert_unissued(request):
             request_nonce = UUID(request["nonce"])
