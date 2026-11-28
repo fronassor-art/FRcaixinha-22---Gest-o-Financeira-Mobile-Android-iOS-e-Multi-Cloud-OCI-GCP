@@ -1161,3 +1161,26 @@ def test_m41647_target_first_fastapi_concurrency_is_confined_to_pg18_fixture():
     assert "ORIGINAL_DATABASE=NOT_ACCESSED" in runner
     assert "MIGRATIONS=NONE" in runner
     assert "PRODUCTION=BLOCKED" in runner
+
+
+
+def test_m41648_target_first_concurrent_reads_cover_both_tenants_in_pg18_fixture():
+    runner = RUNNER.read_text(encoding="utf-8")
+    section = runner.split(
+        "# M41641: the actual six FastAPI GET handlers use v5 through an explicit",
+        1,
+    )[1].split("\n        finally:\n            setattr(app.state", 1)[0]
+    for marker in (
+        "admin_b_session_id = session_id_for(admin_b_digest)",
+        "Bearer m41648-admin-b",
+        "tenant_b_paths = [path.replace(str(tenant_a), str(tenant_b), 1)",
+        "client.get(path, headers=headers) for path, headers in concurrent_requests",
+        "len(target_provider.issued) == len({entry[0] for entry in target_provider.issued}) == 18",
+        "M41648_CROSS_TENANT_FASTAPI_CONCURRENT_READS=12_OF_12_PASS_DISPOSABLE_ONLY",
+        '"A-CASH", "A-OFFSET"',
+        '"B-CASH", "B-OFFSET"',
+    ):
+        assert marker in runner
+    assert "ORIGINAL_DATABASE=NOT_ACCESSED" in runner
+    assert "MIGRATIONS=NONE" in runner
+    assert "PRODUCTION=BLOCKED" in runner

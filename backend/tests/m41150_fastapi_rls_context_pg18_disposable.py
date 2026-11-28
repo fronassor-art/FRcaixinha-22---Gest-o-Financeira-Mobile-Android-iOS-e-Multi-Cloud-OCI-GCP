@@ -206,6 +206,7 @@ async def exercise(dsn: str) -> None:
 
         admin_session_id = session_id_for(admin_digest)
         admin_second_session_id = session_id_for(admin_second_digest)
+        admin_b_session_id = session_id_for(admin_b_digest)
         member_session_id = session_id_for(member_digest)
         assert admin_session_id != admin_second_session_id
 
@@ -411,6 +412,9 @@ async def exercise(dsn: str) -> None:
         admin_second_session = make_session(
             admin_id, "TENANT_ADMIN", tenant_a, session_id=admin_second_session_id
         )
+        admin_b_session = make_session(
+            admin_b_id, "TENANT_ADMIN", tenant_b, session_id=admin_b_session_id
+        )
         member_session = make_session(
             member_id, "TENANT_MEMBER", tenant_a, session_id=member_session_id
         )
@@ -422,6 +426,7 @@ async def exercise(dsn: str) -> None:
         sessions = {
             "Bearer m41150-admin": admin_session,
             "Bearer m41200-admin-second": admin_second_session,
+            "Bearer m41648-admin-b": admin_b_session,
             "Bearer m41150-member": member_session,
             "Bearer m41150-master": master_session,
             "Bearer m41150-unverified": unverified_session,
@@ -815,6 +820,7 @@ async def exercise(dsn: str) -> None:
 
             # Same account, role and tenant, different database session UUID.
             second_headers = {"Authorization": "Bearer m41200-admin-second"}
+            admin_b_headers = {"Authorization": "Bearer m41648-admin-b"}
             both = await asyncio.gather(*(
                 client.get(path, headers=headers)
                 for path in read_paths for headers in (admin_headers, second_headers)
@@ -1024,6 +1030,8 @@ async def exercise(dsn: str) -> None:
                 owner=owner, auth_dsn=auth_dsn, pool=pool, fixture=fixture, gateway=gateway,
                 bind_read=bind_read, key=key, second_digest=admin_second_digest,
                 second_session_id=admin_second_session_id, admin_id=admin_id,
+                admin_b_digest=admin_b_digest, admin_b_session_id=admin_b_session_id,
+                admin_b_id=admin_b_id, admin_b_headers=admin_b_headers,
                 tenant_a=tenant_a, tenant_b=tenant_b,
                 app=app, client=client, read_paths=read_paths, second_headers=second_headers,
             )
@@ -1039,7 +1047,9 @@ async def exercise(dsn: str) -> None:
 
 async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, gateway,
                                             bind_read, key, second_digest, second_session_id,
-                                            admin_id, tenant_a, tenant_b, app, client, read_paths, second_headers):
+                                            admin_id, admin_b_digest, admin_b_session_id,
+                                            admin_b_id, admin_b_headers,
+                                            tenant_a, tenant_b, app, client, read_paths, second_headers):
     """CP26-0061/CTM-07, CP26-0062/CTM-08, CP26-0257/TENANT_RLS; TEC-09/12.
     Disposable proof only: pre-ticket SQL challenge, authority commitment bound
     to target, and ticket reservation in one issuer transaction.
@@ -1136,18 +1146,19 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
     owner.execute("GRANT EXECUTE ON FUNCTION " + v5 + " TO m40680_auth")
     ctx = fixture.fixture_context(owner, second_digest)
     assert ctx[:2] == (admin_id, "TENANT_ADMIN")
-    def submit(p, token, target, challenge, *, proof=None, rollback=False):
-        signed = fixture.sign_context(key, second_digest, UUID(p["tenant"]), UUID(p["nonce"]),
-                                    p["expiry"], p["scope"], (admin_id, p["role"], p["generation"]))
+    def submit(p, token, target, challenge, *, proof=None, rollback=False,
+               session_digest=second_digest, session_id=second_session_id, user_id=admin_id):
+        signed = fixture.sign_context(key, session_digest, UUID(p["tenant"]), UUID(p["nonce"]),
+                                    p["expiry"], p["scope"], (user_id, p["role"], p["generation"]))
         with psycopg.connect(auth_dsn, autocommit=True) as c:
             c.execute("SET ROLE m40680_auth")
             if rollback:
                 c.execute("BEGIN")
             result = c.execute(
                 "SELECT m40700.issue_bound_v5(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                (second_digest, UUID(p["tenant"]), UUID(p["nonce"]), p["expiry"], p["scope"],
-                 admin_id, p["role"], p["generation"], signed if proof is None else proof,
-                 second_session_id, token, *target, challenge)).fetchone()[0]
+                (session_digest, UUID(p["tenant"]), UUID(p["nonce"]), p["expiry"], p["scope"],
+                 user_id, p["role"], p["generation"], signed if proof is None else proof,
+                 session_id, token, *target, challenge)).fetchone()[0]
             if rollback:
                 c.execute("ROLLBACK")
             return result
@@ -1239,12 +1250,14 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
 
         # M41636: prove lifecycle invalidation at each boundary of v5, using
         # fresh commitments and transaction identities; never restore a revoked session.
-        def commitment_for_target(identity, request_nonce, target_challenge):
-            generation = fixture.fixture_context(owner, second_digest)[2]
+        def commitment_for_target(identity, request_nonce, target_challenge, *,
+                                  session_digest=second_digest, session_id=second_session_id,
+                                  user_id=admin_id, tenant_id=tenant_a):
+            generation = fixture.fixture_context(owner, session_digest)[2]
             identity_claim = dict(digest=hashlib.sha256(
-                ("FRF-M41630|v1|" + second_digest + "|" + target_challenge).encode("ascii")).hexdigest(),
-                session=str(second_session_id), tenant=str(tenant_a), scope="READ_ENTRIES",
-                user=str(admin_id), role="TENANT_ADMIN", generation=generation)
+                ("FRF-M41630|v1|" + session_digest + "|" + target_challenge).encode("ascii")).hexdigest(),
+                session=str(session_id), tenant=str(tenant_id), scope="READ_ENTRIES",
+                user=str(user_id), role="TENANT_ADMIN", generation=generation)
             authority = Authority(identity_claim)
             try:
                 request = dict(identity_claim, nonce=str(request_nonce), expiry=int(time.time())+25)
@@ -1283,16 +1296,28 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                                           backend_pid, virtual_xid, transaction_started_at, target_challenge):
                 if self.unavailable:
                     raise RuntimeError("M41641_FIXTURE_AUTHORITY_UNAVAILABLE")
-                if (session.verified_session_id, session.user_id, session.role,
-                    session.tenant_id, scope, tenant_id) != (
-                        str(second_session_id), str(admin_id), "TENANT_ADMIN",
-                        str(tenant_a), "READ_ENTRIES", tenant_a):
+                identities = {
+                    (str(second_session_id), str(admin_id), "TENANT_ADMIN", str(tenant_a)):
+                        (second_digest, second_session_id, admin_id, tenant_a),
+                    (str(admin_b_session_id), str(admin_b_id), "TENANT_ADMIN", str(tenant_b)):
+                        (admin_b_digest, admin_b_session_id, admin_b_id, tenant_b),
+                }
+                record = identities.get((
+                    session.verified_session_id, session.user_id, session.role, session.tenant_id
+                ))
+                if record is None or scope != "READ_ENTRIES" or tenant_id != record[3]:
                     return None
+                session_digest, session_id, user_id, identity_tenant = record
                 target = (backend_pid, virtual_xid, transaction_started_at)
-                prepared = commitment_for_target(target, request_nonce, target_challenge)
-                ticket = submit(*prepared)
+                prepared = commitment_for_target(
+                    target, request_nonce, target_challenge,
+                    session_digest=session_digest, session_id=session_id,
+                    user_id=user_id, tenant_id=identity_tenant,
+                )
+                ticket = submit(*prepared, session_digest=session_digest,
+                                session_id=session_id, user_id=user_id)
                 if ticket:
-                    self.issued.append(request_nonce)
+                    self.issued.append((request_nonce, tenant_id, user_id))
                 return ticket
 
             async def bind_ticket(self, ticket, *, tenant_id, backend_pid, virtual_xid,
@@ -1301,7 +1326,7 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                 proof = new_signer.sign(ticket,tenant_id,*target,challenge=target_challenge)
                 capability = bind_read(ticket,tenant_id,*target,challenge=target_challenge,proof=proof)
                 if capability:
-                    self.bound.append(True)
+                    self.bound.append((tenant_id, backend_pid, virtual_xid, transaction_started_at))
                 return capability
 
         previous_provider = getattr(app.state, gateway.PROVIDER_STATE_ATTRIBUTE)
@@ -1317,18 +1342,23 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
             assert len(target_provider.issued) == len(set(target_provider.issued)) == 6
             assert len(target_provider.bound) == 6
 
-            # Exercise the same six target-first routes concurrently. Each
-            # request must keep its own nonce, ticket reservation and SQL target.
+            # Concurrently exercise all six target-first reads for two different
+            # admins and tenants. Each result must retain its own session and RLS scope.
+            tenant_b_paths = [path.replace(str(tenant_a), str(tenant_b), 1) for path in read_paths]
+            concurrent_requests = (
+                [(path, second_headers) for path in read_paths]
+                + [(path, admin_b_headers) for path in tenant_b_paths]
+            )
             concurrent_responses = await asyncio.gather(*(
-                client.get(path, headers=second_headers) for path in read_paths
+                client.get(path, headers=headers) for path, headers in concurrent_requests
             ))
             assert all(response.status_code == 200 for response in concurrent_responses), (
-                "M41647_CONCURRENT_ROUTE_STATUS",
+                "M41648_CROSS_TENANT_CONCURRENT_ROUTE_STATUS",
                 [response.status_code for response in concurrent_responses],
             )
-            assert len(target_provider.issued) == len(set(target_provider.issued)) == 12
-            assert len(target_provider.bound) == 12
-            for request_nonce in target_provider.issued:
+            assert len(target_provider.issued) == len({entry[0] for entry in target_provider.issued}) == 18
+            assert len(target_provider.bound) == 18
+            for request_nonce, expected_tenant, expected_user in target_provider.issued:
                 assert owner.execute(
                     "SELECT consumed_at IS NOT NULL FROM m40700.identity_commitments WHERE nonce=%s",
                     (request_nonce,)).fetchone() == (True,)
@@ -1336,12 +1366,19 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                     "SELECT count(*) FROM m41050.read_target_reservations r "
                     "JOIN m40700.ticket_context c ON c.ticket_digest=r.ticket_digest WHERE c.request_nonce=%s",
                     (request_nonce,)).fetchone() == (1,)
+            assert sorted(item["account_code"] for item in concurrent_responses[0].json()["accounts"]) == [
+                "A-CASH", "A-OFFSET"
+            ]
+            assert sorted(item["account_code"] for item in concurrent_responses[6].json()["accounts"]) == [
+                "B-CASH", "B-OFFSET"
+            ]
+            assert len(target_provider.issued) == len(target_provider.bound) == 18
             print("M41641_TARGET_FIRST_FASTAPI_SIX_READS=6_OF_6_PASS_DISPOSABLE_ONLY")
-            print("M41647_TARGET_FIRST_FASTAPI_CONCURRENT_READS=6_OF_6_PASS_DISPOSABLE_ONLY")
+            print("M41648_CROSS_TENANT_FASTAPI_CONCURRENT_READS=12_OF_12_PASS_DISPOSABLE_ONLY")
             target_provider.unavailable = True
             response = await client.get(read_paths[0], headers=second_headers)
             assert response.status_code == 503 and "M41641" not in response.text
-            assert len(target_provider.issued) == len(target_provider.bound) == 12
+            assert len(target_provider.issued) == len(target_provider.bound) == 18
             async with pool.acquire() as probe:
                 assert not probe.is_in_transaction()
                 assert not await probe.fetch("SELECT * FROM m41050.current_claims_v4()")
