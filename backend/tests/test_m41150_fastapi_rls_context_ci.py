@@ -974,3 +974,173 @@ async def test_m41644_m40840_blocks_injected_target_provider_before_database_poo
     assert exc.value.status_code == 503
     assert exc.value.detail == "Acesso financeiro bloqueado até revisão da fronteira SQL."
     assert calls == {"provider": 0, "pool": 0}
+
+
+
+@pytest.mark.asyncio
+async def test_m41646_target_bound_success_uses_the_same_sql_destination_end_to_end(monkeypatch):
+    """CP26-0061/0062/0257, TEC-09/12: fixture the exact target-first call order."""
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from uuid import UUID, uuid4
+
+    from backend.app import m41150_fastapi_rls_context as gateway
+
+    now = datetime.now(timezone.utc)
+    tenant = uuid4()
+    session = SimpleNamespace(
+        user_id=str(uuid4()),
+        role="TENANT_ADMIN",
+        tenant_id=str(tenant),
+        is_master=False,
+        verified_session_id=str(uuid4()),
+        verified_session_at=now,
+        verified_session_expires_at=now + timedelta(minutes=1),
+        verification_source="POSTGRES_TOKEN_HASH_REFRESH",
+    )
+    events = []
+    provider_calls = {}
+    claims = {}
+
+    class Connection:
+        def __init__(self):
+            self.challenge_count = 0
+            self.reset_count = 0
+
+        @asynccontextmanager
+        async def transaction(self, *, readonly):
+            assert readonly is True
+            events.append("transaction_begin")
+            try:
+                yield
+            except BaseException:
+                events.append("transaction_rollback")
+                raise
+            else:
+                events.append("transaction_end")
+
+        async def fetchrow(self, sql):
+            assert "pg_backend_pid()" in sql and "virtualxid" in sql
+            events.append("read_sql_identity")
+            return {
+                "backend_pid": 2468,
+                "virtual_xid": "7/19",
+                "transaction_started_at": now,
+            }
+
+        async def fetchval(self, sql, ticket_or_seed, tenant_id):
+            assert "read_target_challenge" in sql
+            assert tenant_id == tenant
+            self.challenge_count += 1
+            events.append("pre_ticket_challenge" if self.challenge_count == 1
+                          else "ticket_challenge")
+            return "c" * 64 if self.challenge_count == 1 else "d" * 64
+
+        async def execute(self, sql):
+            assert sql == "RESET ALL; DISCARD TEMP;"
+            self.reset_count += 1
+            events.append("pool_reset")
+
+    connection = Connection()
+
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            events.append("pool_acquire")
+            yield connection
+            events.append("pool_release")
+
+    async def get_pool():
+        events.append("pool_open")
+        return Pool()
+
+    class TargetProvider:
+        capability_protocol = gateway.TARGET_BOUND_PROTOCOL
+
+        async def issue_target_ticket(
+            self, supplied_session, *, scope, request_nonce, tenant_id,
+            backend_pid, virtual_xid, transaction_started_at, target_challenge,
+        ):
+            events.append("issue_target_ticket")
+            provider_calls["issue"] = {
+                "session": supplied_session,
+                "scope": scope,
+                "nonce": request_nonce,
+                "tenant": tenant_id,
+                "pid": backend_pid,
+                "vxid": virtual_xid,
+                "started": transaction_started_at,
+                "challenge": target_challenge,
+            }
+            return "a" * 64
+
+        async def issue_ticket(self, *args, **kwargs):
+            events.append("legacy_issue_ticket")
+            raise AssertionError("M41646_LEGACY_PROTOCOL_MUST_NOT_RUN")
+
+        async def bind_ticket(
+            self, ticket, *, tenant_id, backend_pid, virtual_xid,
+            transaction_started_at, target_challenge,
+        ):
+            events.append("bind_ticket")
+            provider_calls["bind"] = {
+                "ticket": ticket,
+                "tenant": tenant_id,
+                "pid": backend_pid,
+                "vxid": virtual_xid,
+                "started": transaction_started_at,
+                "challenge": target_challenge,
+            }
+            return "b" * 64
+
+    async def record_claims(_connection, expected):
+        events.append("verify_sql_claims")
+        claims["expected"] = expected
+
+    async def install_capability(_connection, capability):
+        events.append("install_capability")
+        assert capability == "b" * 64
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    for flag in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        monkeypatch.setenv(flag, "OFF")
+    monkeypatch.setattr(gateway, "get_db_pool", get_pool)
+    monkeypatch.setattr(gateway, "_require_bound_read_claims", record_claims)
+    monkeypatch.setattr(gateway, "install_session_capability", install_capability)
+
+    async with gateway._capability_db_connection(
+        SimpleNamespace(), session, TargetProvider(), tenant
+    ) as yielded:
+        events.append("yield_connection")
+        assert yielded is connection
+
+    issued = provider_calls["issue"]
+    bound = provider_calls["bind"]
+    destination = (tenant, 2468, "7/19", now)
+    assert issued["session"] is session
+    assert issued["scope"] == gateway.READ_SCOPE
+    assert isinstance(issued["nonce"], UUID)
+    assert (issued["tenant"], issued["pid"], issued["vxid"], issued["started"]) == destination
+    assert issued["challenge"] == "c" * 64
+    assert bound == {
+        "ticket": "a" * 64,
+        "tenant": tenant,
+        "pid": 2468,
+        "vxid": "7/19",
+        "started": now,
+        "challenge": "d" * 64,
+    }
+    expected = claims["expected"]
+    assert expected == (
+        UUID(session.user_id), session.role, tenant, gateway.READ_SCOPE,
+        UUID(session.verified_session_id), issued["nonce"],
+    )
+    assert events.index("pre_ticket_challenge") < events.index("issue_target_ticket")
+    assert events.index("issue_target_ticket") < events.index("ticket_challenge")
+    assert events.index("ticket_challenge") < events.index("bind_ticket")
+    assert events.index("bind_ticket") < events.index("install_capability")
+    assert events.index("install_capability") < events.index("verify_sql_claims")
+    assert "legacy_issue_ticket" not in events
+    assert connection.reset_count == 1
+    assert events[-1] == "pool_release"
