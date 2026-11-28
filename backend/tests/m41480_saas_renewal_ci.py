@@ -6,7 +6,7 @@ from uuid import UUID,uuid4
 from app.saas_renewal_v23_ci import prepare_renewal_ci,reconcile_renewal_ci,reconcile_full_refund_ci,renewal_term,cancel_expired_renewal_ci,record_renewal_payment_review_ci
 from app.administrator_reauthentication_ci import _license_access
 from app.saas_billing_ci import reconcile_approved_saas_payment_ci
-from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci,apply_reviewed_upgrade_ci
+from app.saas_plan_change_v23_ci import prorata_cents,_decision,_hash,_stamp,freeze_plan_change_ci,accept_plan_change_ci,record_upgrade_settlement_review_ci,plan_change_preview_ci,apply_reviewed_upgrade_ci,reconcile_upgrade_refund_ci
 from app.saas_renewal_readback_ci import renewal_overview_ci
 from psycopg.types.json import Jsonb
 from app.admin_license_onboarding_ci import reconcile_admin_checkout_ci
@@ -204,6 +204,9 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
                          "transaction_amount":str(Decimal(gross)/100)}
         upgrade=dict(token=token,reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,
                      request_id=request,offer_hash=quote["offer_hash"],payment=upgrade_payment,gross=gross,fee=0,net=gross)
+        base_limits=db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()
+        existing_provider=db.execute("SELECT provider_payment_id FROM public.saas_payment_intents WHERE id=%s",(old_intent,)).fetchone()[0]
+        reject(record_upgrade_settlement_review_ci,db,**{**upgrade,"payment":{**upgrade_payment,"id":existing_provider}})
         original_terms=db.execute("SELECT id,plan_tier,valid_from,valid_until,status FROM public.saas_license_entitlements WHERE tenant_id=%s ORDER BY id",(tenant,)).fetchall()
         for change in (dict(offer_hash="f"*64),dict(request_id=expired),dict(tenant=uuid4()),dict(reviewer_token=token,reviewer_tenant=tenant),
                        dict(payment={**upgrade_payment,"live_mode":True}),dict(payment={**upgrade_payment,"collector_id":"999"}),
@@ -222,6 +225,19 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             assert renewal_overview_ci(db,token=token,tenant=tenant)["upgrade"]["state"]=="SETTLEMENT_REVIEW"
             apply_args={k:upgrade[k] for k in ("token","reviewer_token","reviewer_tenant","tenant","request_id","offer_hash")}
             apply_args["evidence_hash"]=receipt["evidence_hash"]
+            refund_payment={**upgrade_payment,"status":"refunded","transaction_amount_refunded":upgrade_payment["transaction_amount"]}
+            refund_args=dict(reviewer_token=reviewer_token,reviewer_tenant=reviewer_tenant,tenant=tenant,request_id=request,
+                             payment=refund_payment,statement_refunded_cents=gross)
+            # Before application: full refund never creates any new coverage.
+            with db.transaction(force_rollback=True):
+                before=reconcile_upgrade_refund_ci(db,**refund_args)
+                assert before==reconcile_upgrade_refund_ci(db,**refund_args)
+                reject(apply_reviewed_upgrade_ci,db,**apply_args)
+                assert renewal_overview_ci(db,token=token,tenant=tenant)["upgrade"]["state"]=="REFUNDED"
+                assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==base_limits
+            with db.transaction(force_rollback=True):
+                reject(db.execute,"UPDATE public.saas_payment_intents SET provider_payment_id=%s WHERE id=%s",(upgrade_payment["id"],old_intent))
+            assert db.execute("SELECT source_kind,object_id,tenant_id FROM public.fr_v23_saas_provider_claims WHERE provider_payment_id=%s",(upgrade_payment["id"],)).fetchone()==("UPGRADE",request,tenant)
             anchor_before=db.execute("SELECT request_id,anchor_day FROM public.fr_v23_renewals WHERE tenant_id=%s ORDER BY request_id",(tenant,)).fetchall()
             for bad in (dict(evidence_hash="f"*64),dict(offer_hash="f"*64),dict(request_id=uuid4()),
                         dict(tenant=uuid4()),dict(reviewer_token=token,reviewer_tenant=tenant)):
@@ -239,6 +255,27 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             with db.transaction(force_rollback=True):
                 reject(db.execute,"DELETE FROM public.fr_v23_upgrade_segments WHERE request_id=%s",(request,))
             print("M41540_UPGRADE_CAPACITY_"+("ANNUAL" if late else "MIXED")+"=PASS")
+            for bad in (dict(statement_refunded_cents=1),dict(tenant=uuid4()),dict(request_id=uuid4()),
+                        dict(reviewer_token=token,reviewer_tenant=tenant),
+                        dict(payment={**refund_payment,"live_mode":True}),dict(payment={**refund_payment,"collector_id":"999"}),
+                        dict(payment={**refund_payment,"transaction_amount_refunded":"0.01"}),
+                        dict(payment={**refund_payment,"external_reference":"other"})):
+                reject(reconcile_upgrade_refund_ci,db,**{**refund_args,**bad})
+            reversed_upgrade=reconcile_upgrade_refund_ci(db,**refund_args)
+            assert reversed_upgrade==reconcile_upgrade_refund_ci(db,**refund_args)
+            assert reversed_upgrade["state"]=="REFUNDED" and reversed_upgrade["refunded_cents"]==gross
+            reject(record_upgrade_settlement_review_ci,db,**upgrade)
+            reject(apply_reviewed_upgrade_ci,db,**apply_args)
+            assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==base_limits
+            assert _license_access(db,actor,tenant)=="CURRENT"
+            reversed_read=renewal_overview_ci(db,token=token,tenant=tenant)
+            assert reversed_read["offer"] is None and reversed_read["upgrade"]["state"]=="REFUNDED"
+            assert reversed_read["upgrade"]["members_limit"] is None and reversed_read["upgrade"]["quotas_limit"] is None
+            assert reversed_read["upgrade"]["entitlement_ids"]==read["upgrade"]["entitlement_ids"]
+            assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_UPGRADE_REFUNDED'",(tenant,str(request))).fetchone()[0]==1
+            with db.transaction(force_rollback=True):
+                reject(db.execute,"DELETE FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(request,))
+            print("M41550_UPGRADE_FULL_REFUND_"+("ANNUAL" if late else "MIXED")+"=PASS")
             reject(plan_change_preview_ci,db,token=token,tenant=tenant,target=target)
             reject(prepare_renewal_ci,db,**{**future_args,"request_id":uuid4(),"predecessor":future})
             for sql in ("UPDATE public.fr_v23_upgrade_settlement_reviews SET fee_cents=1 WHERE tenant_id=%s",
@@ -295,6 +332,29 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
         assert refunded["access"]==("CONTINUITY_ONLY" if late else "CURRENT")
         print("M41490_SCOPED_RENEWAL_HTTP_"+("LATE" if late else "EARLY")+"=PASS")
         print("M41480_RENEWAL_"+("LATE_ANNUAL" if late else "EARLY_MONTHLY")+"_REFUND_REPLAY_ISOLATION=PASS")
+    # Two independent committed transactions compete in the same registry used
+    # by both actual table triggers. One wins; the other cannot claim the ID.
+    import psycopg
+    from threading import Barrier
+    provider=str(uuid4().int)[:38]
+    barrier=Barrier(2)
+    claim_objects=(uuid4(),uuid4())
+    def claim(i):
+        with connection() as c:
+            barrier.wait(timeout=10)
+            try:
+                with c.transaction():
+                    c.execute("SELECT public.fr_v23_claim_saas_provider(%s,%s,%s,%s)",
+                              ("0"*i+provider,("INTENT","UPGRADE")[i],claim_objects[i],(tenant,reviewer_tenant)[i]))
+                return i
+            except psycopg.errors.UniqueViolation:return None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        winners=[i for i in pool.map(claim,range(2)) if i is not None]
+    assert len(winners)==1
+    with connection() as db:
+        winner=winners[0]
+        assert db.execute("SELECT source_kind,object_id,tenant_id FROM public.fr_v23_saas_provider_claims WHERE provider_payment_id=%s",(provider,)).fetchone()==(("INTENT","UPGRADE")[winner],claim_objects[winner],(tenant,reviewer_tenant)[winner])
+    print("M41550_PROVIDER_REGISTRY_CONCURRENT=PASS")
     from zoneinfo import ZoneInfo
     tz=ZoneInfo("America/Belem")
     feb=datetime(2027,2,28,10,tzinfo=tz)

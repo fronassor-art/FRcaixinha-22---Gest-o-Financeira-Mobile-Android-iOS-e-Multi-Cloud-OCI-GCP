@@ -65,12 +65,13 @@ export async function parseRenewalOverview(raw:unknown,s:AdminScope){
  let upgrade=null;
  if(hasUpgrade){
   const u=exact(x.upgrade,'request_id state difference_cents members_limit quotas_limit entitlement_ids');
-  const state=one(u.state,['SETTLEMENT_REVIEW','CI_APPLIED'] as const);
+  const state=one(u.state,['SETTLEMENT_REVIEW','CI_APPLIED','REFUNDED'] as const);
   if(offer!==null||!Array.isArray(u.entitlement_ids)||u.entitlement_ids.length>50)return deny();
   const entitlement_ids=u.entitlement_ids.map(id);
   if(new Set(entitlement_ids).size!==entitlement_ids.length||entitlement_ids.some(v=>!ids.has(v)))deny();
   if(state==='SETTLEMENT_REVIEW'&&(entitlement_ids.length!==0||u.members_limit!==null||u.quotas_limit!==null))deny();
   if(state==='CI_APPLIED'&&entitlement_ids.length===0)deny();
+  if(state==='REFUNDED'&&(u.members_limit!==null||u.quotas_limit!==null))deny();
   upgrade=Object.freeze({request_id:id(u.request_id),state,difference_cents:cents(u.difference_cents),
    members_limit:state==='CI_APPLIED'?cents(u.members_limit,200):null,quotas_limit:state==='CI_APPLIED'?cents(u.quotas_limit,400):null,
    entitlement_ids:Object.freeze(entitlement_ids)});

@@ -8,7 +8,7 @@ from psycopg.types.json import Jsonb
 from .account_lifecycle import LifecycleDenied
 from .saas_renewal_readback_ci import renewal_overview_ci
 from .saas_renewal_v23_ci import _lock,_reviewer
-from .mercado_pago_safety import ExpectedPayment,matches_approved_payment
+from .mercado_pago_safety import ExpectedPayment,matches_approved_payment,matches_full_refund
 from .admin_license_onboarding_ci import COLLECTOR_CI
 from .saas_billing_ci import _cents
 from .admin_license_onboarding_ci import _audit
@@ -204,6 +204,8 @@ def record_upgrade_settlement_review_ci(conn,*,token,reviewer_token,reviewer_ten
         saved=conn.execute("SELECT request_id,actor,reviewer,provider_payment_id,evidence_hash FROM public.fr_v23_upgrade_settlement_reviews "
                            "WHERE tenant_id=%s FOR UPDATE",(tenant,)).fetchone()
         if saved:
+            if conn.execute("SELECT 1 FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(request_id,)).fetchone():
+                raise LifecycleDenied("Upgrade estornado.")
             if saved!=(request_id,actor,reviewer,provider_id,proof) or not conn.execute(
                 "SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
                 "AND action='CI_UPGRADE_SETTLEMENT_REVIEW' AND object_id=%s AND evidence_ref=%s",
@@ -252,6 +254,8 @@ def apply_reviewed_upgrade_ci(conn,*,token,reviewer_token,reviewer_tenant,tenant
                                 "AND action='CI_PLAN_CHANGE_REVIEW_ACCEPTED' AND object_id=%s AND evidence_ref=%s",
                                 (tenant,actor,str(request_id),digest)).fetchone()):
             raise LifecycleDenied("Prova de liquidação incompatível.")
+        if conn.execute("SELECT 1 FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(request_id,)).fetchone():
+            raise LifecycleDenied("Upgrade estornado.")
         lines=snap["segments"]
         if not 1<=len(lines)<=50 or len({v["entitlement_id"] for v in lines})!=len(lines) or sum(v["difference_cents"] for v in lines)!=gross:
             raise LifecycleDenied("Segmentos incompatíveis.")
@@ -287,3 +291,48 @@ def apply_reviewed_upgrade_ci(conn,*,token,reviewer_token,reviewer_tenant,tenant
                 raise LifecycleDenied("Capacidade efetiva incompatível.")
         return dict(request_id=str(request_id),state="CI_APPLIED",segments=len(expected),difference_cents=gross,
                     real_payment_authorized=False,production_authorized=False)
+
+
+def reconcile_upgrade_refund_ci(conn,*,reviewer_token,reviewer_tenant,tenant,request_id,payment,statement_refunded_cents):
+    """M41550: verified full synthetic refund, before or after application.
+    Preserve the paid base and obligations. Partial refunds need separate policy.
+    """
+    if any(type(x) is not UUID or not x.int for x in (tenant,reviewer_tenant,request_id)):
+        raise LifecycleDenied("Escopo inválido.")
+    if type(payment) is not dict or type(statement_refunded_cents) is not int or not 0<statement_refunded_cents<=MAX_CENTS:
+        raise LifecycleDenied("Extrato de estorno incompatível.")
+    with conn.transaction():
+        _lock(conn,tenant)
+        row=conn.execute("SELECT r.actor,r.reviewer,r.provider_payment_id,r.gross_cents,r.evidence,r.evidence_hash,q.snapshot,q.snapshot_hash "
+                         "FROM public.fr_v23_upgrade_settlement_reviews r JOIN public.fr_v23_plan_change_quotes q ON q.request_id=r.request_id "
+                         "WHERE r.request_id=%s AND r.tenant_id=%s AND q.tenant_id=r.tenant_id AND q.actor=r.actor AND q.accepted_at IS NOT NULL "
+                         "FOR UPDATE OF q,r",(request_id,tenant)).fetchone()
+        if not row:raise LifecycleDenied("Revisão de liquidação indisponível.")
+        actor,original_reviewer,provider_id,gross,evidence,settlement_hash,snapshot,offer_hash=row
+        reviewer=_reviewer(conn,reviewer_token,reviewer_tenant,tenant,actor)
+        if (reviewer!=original_reviewer or gross!=statement_refunded_cents or _hash(evidence)!=settlement_hash
+            or _hash(snapshot)!=offer_hash or evidence.get("offer_hash")!=offer_hash or evidence.get("provider_id")!=provider_id
+            or evidence.get("gross")!=gross or snapshot.get("total_cents")!=gross
+            or not matches_full_refund(ExpectedPayment(provider_id,COLLECTOR_CI,f"saas-upgrade-review:{request_id}",gross,False),payment)
+            or not conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
+                                "AND action='CI_UPGRADE_SETTLEMENT_REVIEW' AND object_id=%s AND evidence_ref=%s",
+                                (tenant,reviewer,str(request_id),settlement_hash)).fetchone()):
+            raise LifecycleDenied("Estorno não confere.")
+        applied=conn.execute("SELECT 1 FROM public.fr_v23_upgrade_applications WHERE request_id=%s AND tenant_id=%s",(request_id,tenant)).fetchone()
+        refund=dict(settlement_hash=settlement_hash,provider_id=provider_id,refunded_cents=gross,
+                    reference=f"saas-upgrade-review:{request_id}",collector=COLLECTOR_CI,currency="BRL",live_mode=False,
+                    had_application=bool(applied))
+        proof=_hash(refund)
+        saved=conn.execute("SELECT reviewer,evidence_hash,evidence FROM public.fr_v23_upgrade_refunds WHERE request_id=%s AND tenant_id=%s",
+                           (request_id,tenant)).fetchone()
+        if saved:
+            if saved!=(reviewer,proof,refund) or not conn.execute(
+                "SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s AND action='CI_UPGRADE_REFUNDED' AND object_id=%s AND evidence_ref=%s",
+                (tenant,reviewer,str(request_id),proof)).fetchone():
+                raise LifecycleDenied("Histórico de estorno incompatível.")
+        else:
+            conn.execute("INSERT INTO public.fr_v23_upgrade_refunds(request_id,tenant_id,reviewer,settlement_hash,refunded_cents,evidence,evidence_hash) "
+                         "VALUES(%s,%s,%s,%s,%s,%s,%s)",(request_id,tenant,reviewer,settlement_hash,gross,Jsonb(refund),proof))
+            _audit(conn,reviewer,"SYSTEM",tenant,"CI_UPGRADE_REFUNDED",request_id,proof)
+        return dict(request_id=str(request_id),state="REFUNDED",refunded_cents=gross,evidence_hash=proof,
+                    production_authorized=False,real_payment_authorized=False)

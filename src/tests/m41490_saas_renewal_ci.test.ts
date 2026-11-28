@@ -75,3 +75,13 @@ assert.equal((await parseRenewalOverview({...raw,offer:null,upgrade:reviewUpgrad
 for(const bad of [{...upgrade,entitlement_ids:[]},{...upgrade,entitlement_ids:[id(9)]},{...upgrade,entitlement_ids:[id(4),id(4)]},{...upgrade,difference_cents:0},{...upgrade,members_limit:201},{...reviewUpgrade,members_limit:50}])await assert.rejects(parseRenewalOverview({...raw,offer:null,upgrade:bad},s));
 await assert.rejects(parseRenewalOverview({...raw,upgrade},s));
 console.log('M41540_MOBILE_UPGRADE_READBACK_NO_POST=PASS');
+for(const entitlement_ids of [[],[id(4)]]){
+ const refundedUpgrade={...reviewUpgrade,state:'REFUNDED',entitlement_ids};
+ const refundedView=await parseRenewalOverview({...raw,offer:null,upgrade:refundedUpgrade},s);
+ assert.equal(refundedView.upgrade?.state,'REFUNDED');
+ assert.equal(refundedView.upgrade?.members_limit,null);
+ assert.equal(refundedView.segments[0].cents,8990);
+ await assert.rejects(parseRenewalOverview({...raw,offer:null,upgrade:{...refundedUpgrade,members_limit:50}},s));
+ assert.throws(()=>prepareRenewal(s,refundedView,id(7),'MONTHLY',true));
+}
+console.log('M41550_MOBILE_UPGRADE_REFUND_NO_POST=PASS');

@@ -112,6 +112,67 @@ CREATE TRIGGER fr_v23_upgrade_application_immutable BEFORE UPDATE OR DELETE ON p
 CREATE TRIGGER fr_v23_upgrade_application_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_applications FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 CREATE TRIGGER fr_v23_upgrade_segment_immutable BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_segments FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
 CREATE TRIGGER fr_v23_upgrade_segment_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_segments FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+-- M41550: immutable refund evidence; never revoke the original paid term.
+CREATE TABLE public.fr_v23_upgrade_refunds(
+ request_id uuid PRIMARY KEY REFERENCES public.fr_v23_upgrade_settlement_reviews(request_id),
+ tenant_id uuid NOT NULL UNIQUE REFERENCES public.tenants(id),
+ reviewer uuid NOT NULL REFERENCES public.users(id),
+ settlement_hash text NOT NULL CHECK(settlement_hash ~ '^[0-9a-f]{64}$'),
+ refunded_cents bigint NOT NULL CHECK(refunded_cents BETWEEN 1 AND 100000000),
+ evidence jsonb NOT NULL CHECK(jsonb_typeof(evidence)='object'),
+ evidence_hash text NOT NULL CHECK(evidence_hash ~ '^[0-9a-f]{64}$'),
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+ALTER TABLE public.fr_v23_upgrade_refunds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_upgrade_refunds FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fr_v23_upgrade_refunds FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+CREATE TRIGGER fr_v23_upgrade_refund_immutable BEFORE UPDATE OR DELETE ON public.fr_v23_upgrade_refunds FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_upgrade_refund_truncate BEFORE TRUNCATE ON public.fr_v23_upgrade_refunds FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+-- Unique claim across generic SaaS and upgrade review. Unique index serializes
+-- competing inserts even when separate transactions cannot see each other's rows.
+CREATE TABLE public.fr_v23_saas_provider_claims(
+ provider_payment_id text PRIMARY KEY,
+ source_kind text NOT NULL CHECK(source_kind IN ('INTENT','UPGRADE')),
+ object_id uuid NOT NULL,tenant_id uuid NOT NULL
+);
+ALTER TABLE public.fr_v23_saas_provider_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fr_v23_saas_provider_claims FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fr_v23_saas_provider_claims FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
+INSERT INTO public.fr_v23_saas_provider_claims(provider_payment_id,source_kind,object_id,tenant_id)
+ SELECT CASE WHEN provider_payment_id ~ '^[0-9]+$' THEN coalesce(nullif(ltrim(provider_payment_id,'0'),''),'0') ELSE provider_payment_id END,
+ 'INTENT',id,tenant_id FROM public.saas_payment_intents WHERE provider_payment_id IS NOT NULL;
+CREATE FUNCTION public.fr_v23_claim_saas_provider(p_provider text,p_kind text,p_object uuid,p_tenant uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE canonical_id text;
+BEGIN
+ IF p_provider IS NULL OR p_provider='' OR p_kind IS NULL OR p_kind NOT IN ('INTENT','UPGRADE') OR p_object IS NULL OR p_tenant IS NULL
+ THEN RAISE EXCEPTION 'invalid provider claim' USING ERRCODE='23514'; END IF;
+ canonical_id:=CASE WHEN p_provider ~ '^[0-9]+$' THEN coalesce(nullif(ltrim(p_provider,'0'),''),'0') ELSE p_provider END;
+ INSERT INTO public.fr_v23_saas_provider_claims VALUES(canonical_id,p_kind,p_object,p_tenant) ON CONFLICT(provider_payment_id) DO NOTHING;
+ IF NOT EXISTS(SELECT 1 FROM public.fr_v23_saas_provider_claims WHERE provider_payment_id=canonical_id
+               AND source_kind=p_kind AND object_id=p_object AND tenant_id=p_tenant)
+ THEN RAISE EXCEPTION 'provider payment already claimed' USING ERRCODE='23505'; END IF;
+END $$;
+CREATE FUNCTION public.fr_v23_saas_provider_claim_trigger() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+BEGIN
+ IF NEW.provider_payment_id IS NOT NULL THEN
+  IF TG_TABLE_NAME='saas_payment_intents' THEN
+   PERFORM public.fr_v23_claim_saas_provider(NEW.provider_payment_id,'INTENT',NEW.id,NEW.tenant_id);
+  ELSE
+   PERFORM public.fr_v23_claim_saas_provider(NEW.provider_payment_id,'UPGRADE',NEW.request_id,NEW.tenant_id);
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER fr_v23_claim_generic_saas BEFORE INSERT OR UPDATE OF provider_payment_id,tenant_id,id ON public.saas_payment_intents
+ FOR EACH ROW EXECUTE FUNCTION public.fr_v23_saas_provider_claim_trigger();
+CREATE TRIGGER fr_v23_claim_upgrade_saas BEFORE INSERT ON public.fr_v23_upgrade_settlement_reviews
+ FOR EACH ROW EXECUTE FUNCTION public.fr_v23_saas_provider_claim_trigger();
+CREATE TRIGGER fr_v23_provider_claim_immutable BEFORE UPDATE OR DELETE ON public.fr_v23_saas_provider_claims FOR EACH ROW EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+CREATE TRIGGER fr_v23_provider_claim_truncate BEFORE TRUNCATE ON public.fr_v23_saas_provider_claims FOR EACH STATEMENT EXECUTE FUNCTION public.fr_v23_upgrade_review_immutable();
+REVOKE ALL ON FUNCTION public.fr_v23_claim_saas_provider(text,text,uuid,uuid),public.fr_v23_saas_provider_claim_trigger()
+ FROM PUBLIC,frcaixinha_app_role,frcaixinha_auth_role,frcaixinha_verifier_role,frcaixinha_pg18_app;
 ALTER TABLE public.cycles DROP CONSTRAINT uq_tenant_cycle_year;
 ALTER TABLE public.contributions DROP CONSTRAINT uq_membership_competence;
 ALTER TABLE public.contributions ADD UNIQUE(tenant_id,cycle_id,membership_id,competence);
@@ -283,7 +344,7 @@ END $$;
 -- preparation, price version, Contract A and payer. Never treats a pending payment as a license.
 CREATE FUNCTION public.fr_v23_license(p_tenant uuid,p_admin uuid)
 RETURNS TABLE(members_limit int,quotas_limit int) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE row_data record;upgrade_row record;n int:=0;
+DECLARE row_data record;upgrade_row record;refund_row record;n int:=0;
 BEGIN
  FOR row_data IN SELECT pl.members_limit ml,pl.quotas_limit ql,e.valid_from vf,e.valid_until vu,
  e.id eid,e.plan_tier tier,sp.billing_period period,sp.price_version_id price_version,pi.expected_amount_cents paid
@@ -340,7 +401,24 @@ BEGIN
    AND r.gross_cents=(SELECT sum(z.difference_cents) FROM public.fr_v23_upgrade_segments z WHERE z.request_id=a.request_id)
    AND jsonb_array_length(q.snapshot->'segments')=(SELECT count(*) FROM public.fr_v23_upgrade_segments z WHERE z.request_id=a.request_id);
   IF NOT FOUND THEN RAISE EXCEPTION 'upgrade evidence incompatible' USING ERRCODE='42501'; END IF;
-  members_limit:=upgrade_row.ml;quotas_limit:=upgrade_row.ql;
+  -- The immutable full-refund proof disables only the additional capacity.
+  SELECT f.* INTO refund_row FROM public.fr_v23_upgrade_refunds f JOIN public.fr_v23_upgrade_segments u ON u.request_id=f.request_id
+   WHERE u.entitlement_id=row_data.eid;
+  IF FOUND THEN
+   IF NOT EXISTS(SELECT 1 FROM public.fr_v23_upgrade_settlement_reviews r WHERE r.request_id=refund_row.request_id
+      AND r.tenant_id=p_tenant AND refund_row.tenant_id=p_tenant AND r.reviewer=refund_row.reviewer
+      AND r.evidence_hash=refund_row.settlement_hash AND r.gross_cents=refund_row.refunded_cents
+      AND refund_row.recorded_at>=r.recorded_at AND refund_row.recorded_at<=clock_timestamp()
+      AND refund_row.evidence->>'settlement_hash'=r.evidence_hash
+      AND refund_row.evidence->>'provider_id'=r.provider_payment_id
+      AND (refund_row.evidence->>'refunded_cents')::bigint=r.gross_cents
+      AND refund_row.evidence->>'had_application'='true'
+      AND EXISTS(SELECT 1 FROM public.audit_events au WHERE au.tenant_id=p_tenant AND au.actor_id=refund_row.reviewer
+        AND au.action='CI_UPGRADE_REFUNDED' AND au.object_id=refund_row.request_id::text AND au.evidence_ref=refund_row.evidence_hash))
+   THEN RAISE EXCEPTION 'upgrade refund evidence incompatible' USING ERRCODE='42501'; END IF;
+  ELSE
+   members_limit:=upgrade_row.ml;quotas_limit:=upgrade_row.ql;
+  END IF;
  END IF;
  END IF;
  END LOOP;

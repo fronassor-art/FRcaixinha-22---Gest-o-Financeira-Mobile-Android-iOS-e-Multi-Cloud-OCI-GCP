@@ -36,8 +36,9 @@ export function SaasRenewalV23(){
    <p className="font-semibold text-sm">{view.access==='CURRENT'?'Licença vigente em CI':'Continuidade de direitos e obrigações; novos compromissos bloqueados'}</p>
    {view.segments.map(s=><article key={s.entitlement_id} className="border rounded p-2 text-sm"><p>{s.tier} · {s.period==='MONTHLY'?'Mensal':'Anual'} · {money(s.cents)}</p><p>{labels[s.state]} · {when(s.valid_from)} até {when(s.valid_until)} (fim exclusivo)</p></article>)}
    {view.upgrade&&<article className="border rounded p-2 text-sm">
-    <p>{view.upgrade.state==='CI_APPLIED'?'Upgrade registrado em homologação':'Diferença em revisão independente'} · {money(view.upgrade.difference_cents)}</p>
+    <p>{view.upgrade.state==='REFUNDED'?'Upgrade estornado em homologação':view.upgrade.state==='CI_APPLIED'?'Upgrade registrado em homologação':'Diferença em revisão independente'} · {money(view.upgrade.difference_cents)}</p>
     {view.upgrade.state==='CI_APPLIED'&&<p>Capacidade contratada em CI: {view.upgrade.members_limit} membros / {view.upgrade.quotas_limit} cotas nos segmentos identificados. Valores e datas originais acima preservados.</p>}
+    {view.upgrade.state==='REFUNDED'&&<p>A capacidade adicional não está ativa. Períodos pagos originais e obrigações existentes preservados; novas admissões respeitam o limite base.</p>}
     <p>Renovação e novas alterações exigem revisão. Nenhuma operação real autorizada.</p>
    </article>}
    {view.renewals.map(s=><article key={s.request_id} className="border rounded p-2 text-sm"><p>Renovação {s.period==='MONTHLY'?'mensal':'anual'} · {money(s.cents)}</p><p>{labels[s.state]}</p>{s.state==='PENDING'&&<p>Validade da oferta de teste: {when(s.expires_at)}</p>}</article>)}

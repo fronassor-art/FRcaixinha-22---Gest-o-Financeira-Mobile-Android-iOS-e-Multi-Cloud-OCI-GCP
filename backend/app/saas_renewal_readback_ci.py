@@ -118,8 +118,19 @@ def renewal_overview_ci(conn,*,token,tenant):
             covered=conn.execute("SELECT entitlement_id FROM public.fr_v23_upgrade_segments WHERE request_id=%s ORDER BY entitlement_id",(req,)).fetchall()
             if bool(covered)!=bool(applied) or any(row[0] not in by_id for row in covered):
                 raise LifecycleDenied("Histórico de upgrade inconsistente.")
-            result["upgrade"]=dict(request_id=req,state="CI_APPLIED" if applied else "SETTLEMENT_REVIEW",
-                                   difference_cents=gross,members_limit=ml,quotas_limit=ql,
+            refund=conn.execute("SELECT f.refunded_cents,f.evidence_hash,f.reviewer FROM public.fr_v23_upgrade_refunds f "
+                                "JOIN public.fr_v23_upgrade_settlement_reviews r ON r.request_id=f.request_id "
+                                "WHERE f.request_id=%s AND f.tenant_id=%s AND r.tenant_id=f.tenant_id AND f.reviewer=r.reviewer "
+                                "AND f.settlement_hash=r.evidence_hash AND f.refunded_cents=r.gross_cents AND f.recorded_at>=r.recorded_at "
+                                "AND f.recorded_at<=clock_timestamp() AND f.evidence->>'settlement_hash'=r.evidence_hash "
+                                "AND f.evidence->>'provider_id'=r.provider_payment_id AND (f.evidence->>'refunded_cents')::bigint=r.gross_cents "
+                                "AND f.evidence->>'had_application'=%s AND EXISTS(SELECT 1 FROM public.audit_events au "
+                                "WHERE au.tenant_id=f.tenant_id AND au.actor_id=f.reviewer AND au.action='CI_UPGRADE_REFUNDED' "
+                                "AND au.object_id=f.request_id::text AND au.evidence_ref=f.evidence_hash)",(req,tenant,"true" if applied else "false")).fetchone()
+            if not refund and conn.execute("SELECT 1 FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(req,)).fetchone():
+                raise LifecycleDenied("Histórico de estorno inconsistente.")
+            result["upgrade"]=dict(request_id=req,state="REFUNDED" if refund else ("CI_APPLIED" if applied else "SETTLEMENT_REVIEW"),
+                                   difference_cents=gross,members_limit=None if refund else ml,quotas_limit=None if refund else ql,
                                    entitlement_ids=[row[0] for row in covered])
         return result
 
