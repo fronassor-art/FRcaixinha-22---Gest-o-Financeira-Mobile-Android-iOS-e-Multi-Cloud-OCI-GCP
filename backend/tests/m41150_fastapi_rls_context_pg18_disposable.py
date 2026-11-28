@@ -80,6 +80,7 @@ async def exercise(dsn: str) -> None:
     auth_dsn, app_dsn = fixture.connection_dsns(dsn)
     owner = fixture.connect(dsn, autocommit=True)
     signer = None
+    identity_authority = None
     try:
         key = owner.execute(
             "SELECT key FROM m40700.verifier_secret WHERE singleton=true"
@@ -984,6 +985,14 @@ async def exercise(dsn: str) -> None:
                 second_digest=admin_second_digest, second_session_id=admin_second_session_id,
                 tenant_a=tenant_a, tenant_b=tenant_b,
             )
+            from m41620_identity_commitment_disposable import exercise_commitment
+            identity_authority, issue_authorized = await exercise_commitment(
+                owner=owner, auth_dsn=auth_dsn, app_dsn=app_dsn, key=key, fixture=fixture,
+                provider=provider, client=client, read_paths=read_paths, path_a=path_a,
+                admin_headers=admin_headers, second_headers=second_headers,
+                admin_id=admin_id, second_digest=admin_second_digest,
+                second_session_id=admin_second_session_id, tenant_a=tenant_a, tenant_b=tenant_b,
+            )
             # Remove only the disposable verifier, prove no fallback to issuer.
             async with pool.acquire() as connection:
                 async with connection.transaction(readonly=True):
@@ -1005,8 +1014,16 @@ async def exercise(dsn: str) -> None:
                 assert not connection.is_in_transaction()
                 assert not await connection.fetch("SELECT * FROM m41050.current_claims_v4()")
             print("M41240_SIGNER_UNAVAILABLE_HTTP503_POOL_CLEAN=PASS")
+            identity_authority.close()
+            count = owner.execute("SELECT count(*) FROM m40700.identity_commitments").fetchone()[0]
+            unavailable = await client.get(path_a, headers=second_headers)
+            assert unavailable.status_code == 503
+            assert owner.execute("SELECT count(*) FROM m40700.identity_commitments").fetchone()[0] == count
+            print("M41620_AUTHORITY_LOSS_NO_NEW_COMMITMENT=PASS")
         await pool.close()
     finally:
+        if identity_authority is not None:
+            identity_authority.close()
         if signer is not None:
             signer.close()
         owner.close()

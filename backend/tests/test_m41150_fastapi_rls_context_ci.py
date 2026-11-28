@@ -680,3 +680,17 @@ def test_m41610_dual_identity_fixture_retains_legacy_checks_and_no_go():
         assert marker in source
     assert "exercise_dual_identity" in RUNNER.read_text(encoding="utf-8")
     assert "issue_bound_v3" not in MODULE.read_text(encoding="utf-8")
+
+
+def test_m41620_commitment_fixture_preserves_protected_sql_boundary():
+    source=(RUNNER.parent/"m41620_identity_commitment_disposable.py").read_text(encoding="utf-8")
+    for marker in ("CREATE FUNCTION m40700.issue_bound_v4", "FRF-M41620|v1|",
+                   "secrets.token_hex(32)", "pending.pop(nonce)", "SOCK_SEQPACKET",
+                   "process_credentials(parent_pid)", "m40700.identity_commitments",
+                   "consumed_at IS NULL FOR UPDATE", "RETURN v_ticket",
+                   "M41620_NO_SHARED_SECOND_KEY_LEGACY_AND_ACL=PASS",
+                   "M41620_BOUND_SINGLE_RELEASE_CONCURRENT_SQL_CONSUMPTION=PASS",
+                   "M41620_COMMITMENT_EXPIRY_AND_SIX_READS=PASS"):
+        assert marker in source
+    assert "M41620_AUTHORITY_LOSS_NO_NEW_COMMITMENT=PASS" in RUNNER.read_text(encoding="utf-8")
+    assert "issue_bound_v4" not in MODULE.read_text(encoding="utf-8")
