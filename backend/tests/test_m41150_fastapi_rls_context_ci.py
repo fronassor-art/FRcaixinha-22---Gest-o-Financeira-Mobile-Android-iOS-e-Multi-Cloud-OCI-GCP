@@ -1173,7 +1173,7 @@ def test_m41648_target_first_concurrent_reads_cover_both_tenants_in_pg18_fixture
     for marker in (
         "admin_b_session_id = session_id_for(admin_b_digest)",
         "Bearer m41648-admin-b",
-        "tenant_b_paths = [path.replace(str(tenant_a), str(tenant_b), 1)",
+        "str(account_a_id), str(account_b_id), 1",
         "client.get(path, headers=headers) for path, headers in concurrent_requests",
         "len(target_provider.issued) == len({entry[0] for entry in target_provider.issued}) == 18",
         "M41648_CROSS_TENANT_FASTAPI_CONCURRENT_READS=12_OF_12_PASS_DISPOSABLE_ONLY",
