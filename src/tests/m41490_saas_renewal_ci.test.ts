@@ -85,3 +85,12 @@ for(const entitlement_ids of [[],[id(4)]]){
  assert.throws(()=>prepareRenewal(s,refundedView,id(7),'MONTHLY',true));
 }
 console.log('M41550_MOBILE_UPGRADE_REFUND_NO_POST=PASS');
+const upgradedOffer={...offer,tier:'INTERMEDIARIO',price_version:id(18),members_limit:50,quotas_limit:50,monthly_cents:12000,annual_cents:100000};
+const upgradeRenewal=await parseRenewalOverview({...raw,offer:upgradedOffer,upgrade},s);
+assert.equal(prepareRenewal(s,upgradeRenewal,id(7),'ANNUAL',true).body.cents,100000);
+await assert.rejects(parseRenewalOverview({...raw,offer:upgradedOffer},s));
+await assert.rejects(parseRenewalOverview({...raw,offer:upgradedOffer,upgrade:reviewUpgrade},s));
+const afterRefund={...reviewUpgrade,state:'REFUNDED',entitlement_ids:[id(4)]};
+assert.equal(prepareRenewal(s,await parseRenewalOverview({...raw,upgrade:afterRefund},s),id(7),'MONTHLY',true).body.cents,8990);
+await assert.rejects(parseRenewalOverview({...raw,offer:upgradedOffer,upgrade:afterRefund},s));
+console.log('M41560_MOBILE_RENEWAL_AFTER_UPGRADE_NO_POST=PASS');

@@ -38,8 +38,8 @@ export function SaasRenewalV23(){
    {view.upgrade&&<article className="border rounded p-2 text-sm">
     <p>{view.upgrade.state==='REFUNDED'?'Upgrade estornado em homologação':view.upgrade.state==='CI_APPLIED'?'Upgrade registrado em homologação':'Diferença em revisão independente'} · {money(view.upgrade.difference_cents)}</p>
     {view.upgrade.state==='CI_APPLIED'&&<p>Capacidade contratada em CI: {view.upgrade.members_limit} membros / {view.upgrade.quotas_limit} cotas nos segmentos identificados. Valores e datas originais acima preservados.</p>}
-    {view.upgrade.state==='REFUNDED'&&<p>A capacidade adicional não está ativa. Períodos pagos originais e obrigações existentes preservados; novas admissões respeitam o limite base.</p>}
-    <p>Renovação e novas alterações exigem revisão. Nenhuma operação real autorizada.</p>
+    {view.upgrade.state==='REFUNDED'&&<p>A capacidade adicional do upgrade foi revertida. Períodos pagos separadamente e obrigações existentes preservados; novas admissões respeitam a licença vigente.</p>}
+    <p>{view.offer?'Nova vigência disponível para preparação local, sem cobrar novamente a diferença do upgrade.':'Nenhuma nova oferta elegível nesta consulta.'} Alteração de plano exige revisão própria. Nenhuma operação real autorizada.</p>
    </article>}
    {view.renewals.map(s=><article key={s.request_id} className="border rounded p-2 text-sm"><p>Renovação {s.period==='MONTHLY'?'mensal':'anual'} · {money(s.cents)}</p><p>{labels[s.state]}</p>{s.state==='PENDING'&&<p>Validade da oferta de teste: {when(s.expires_at)}</p>}</article>)}
    {view.offer?<div className="space-y-2">
@@ -51,7 +51,7 @@ export function SaasRenewalV23(){
     <button type="button" className={btn} disabled={!accepted||busy} onClick={prepare}>Preparar renovação local</button>
     {prepared&&<p role="status" className="text-sm">{prepared}</p>}
    </div>:<p className="text-sm">Nenhuma nova oferta elegível nesta consulta. Pendências exigem revisão.</p>}
-     {view.access==='CURRENT'&&view.offer&&<button type="button" className={btn} disabled={busy} onClick={()=>void compare()}>Comparar alteração de plano</button>}
+     {view.access==='CURRENT'&&view.offer&&!view.upgrade&&<button type="button" className={btn} disabled={busy} onClick={()=>void compare()}>Comparar alteração de plano</button>}
    {change&&<article className="border rounded p-2 text-sm space-y-1">
     <p>Comparação de homologação: {change.current_tier} → {change.target_tier}</p>
     <p>{change.members_in_use}/{change.members_limit} membros · {change.quotas_in_use}/{change.quotas_limit} cotas</p>

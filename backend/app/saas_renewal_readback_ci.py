@@ -4,7 +4,7 @@ from .cycle_identity_registration_ci import _guard
 from .admin_license_onboarding_ci import _session,COLLECTOR_CI
 from .preliminary_onboarding_ci import _binding
 from .administrator_reauthentication_ci import _license_access
-from .saas_renewal_v23_ci import _lock,_previous,_term_base,_review_exists,_assert_lineage,prepare_renewal_ci
+from .saas_renewal_v23_ci import _lock,_previous,_term_base,_review_exists,_assert_lineage,prepare_renewal_ci,_renewal_tier
 from .onboarding_readback_ci import _document
 from .saas_billing_ci import _cents
 
@@ -93,17 +93,18 @@ def renewal_overview_ci(conn,*,token,tenant):
             try:
                 prev=_previous(conn,tenant,actor,last["entitlement_id"],acceptance)
                 _term_base(conn,tenant,actor,prev,acceptance,now)
+                tier=_renewal_tier(conn,tenant,actor,prev)
             except LifecycleDenied:prev=None
             if prev:
                 price=conn.execute(
                     "SELECT v.id,p.tier,p.members_limit,p.quotas_limit,v.monthly_price,v.annual_price "
                     "FROM public.platform_license_plans p JOIN public.platform_license_price_versions v ON v.plan_tier=p.tier "
                     "WHERE p.tier=%s AND p.status='ACTIVE' AND p.tier IN ('ESSENCIAL','INTERMEDIARIO') "
-                    "ORDER BY v.created_at DESC,v.id DESC LIMIT 1 FOR SHARE OF p,v",(prev[1],)).fetchone()
+                    "ORDER BY v.created_at DESC,v.id DESC LIMIT 1 FOR SHARE OF p,v",(tier,)).fetchone()
                 if price:
                     offer=dict(predecessor=last["entitlement_id"],price_version=price[0],tier=price[1],members_limit=price[2],
                                quotas_limit=price[3],monthly_cents=_cents(price[4]),annual_cents=_cents(price[5]))
-        # No further commercial offer while the synthetic upgrade is unresolved.
+        # Preserve upgrade history; resolved evidence can coexist with a new term offer.
         review=conn.execute("SELECT r.request_id,r.gross_cents,a.request_id,a.members_limit,a.quotas_limit "
                             "FROM public.fr_v23_upgrade_settlement_reviews r LEFT JOIN public.fr_v23_upgrade_applications a "
                             "ON a.request_id=r.request_id AND a.tenant_id=r.tenant_id AND a.actor=r.actor WHERE r.tenant_id=%s AND r.actor=%s",
@@ -113,7 +114,6 @@ def renewal_overview_ci(conn,*,token,tenant):
         result=dict(user_id=actor,tenant_id=tenant,role="TENANT_ADMIN",ci_only=True,production_authorized=False,
                     real_payment_authorized=False,observed_at=now,access=access,document=doc,segments=segments,renewals=items,offer=offer)
         if review:
-            result["offer"]=None
             req,gross,applied,ml,ql=review
             covered=conn.execute("SELECT entitlement_id FROM public.fr_v23_upgrade_segments WHERE request_id=%s ORDER BY entitlement_id",(req,)).fetchall()
             if bool(covered)!=bool(applied) or any(row[0] not in by_id for row in covered):
@@ -129,6 +129,7 @@ def renewal_overview_ci(conn,*,token,tenant):
                                 "AND au.object_id=f.request_id::text AND au.evidence_ref=f.evidence_hash)",(req,tenant,"true" if applied else "false")).fetchone()
             if not refund and conn.execute("SELECT 1 FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(req,)).fetchone():
                 raise LifecycleDenied("Histórico de estorno inconsistente.")
+            if not refund and not applied:result["offer"]=None
             result["upgrade"]=dict(request_id=req,state="REFUNDED" if refund else ("CI_APPLIED" if applied else "SETTLEMENT_REVIEW"),
                                    difference_cents=gross,members_limit=None if refund else ml,quotas_limit=None if refund else ql,
                                    entitlement_ids=[row[0] for row in covered])

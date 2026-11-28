@@ -73,6 +73,8 @@ def _snapshot(conn,token,tenant,target,at=None,*,settlement_review=False):
         raise LifecycleDenied("Vigência ou ação pendente exige revisão.")
     if settlement_review and view.get("upgrade",{}).get("state")!="SETTLEMENT_REVIEW":
         raise LifecycleDenied("Revisão de liquidação indisponível.")
+    if not settlement_review and view.get("upgrade"):
+        raise LifecycleDenied("Histórico de upgrade exige etapa própria de alteração de plano.")
     if any(x["state"] in ("PENDING","REVIEW_REQUIRED","PAYMENT_REVIEW") for x in view["renewals"]):
         raise LifecycleDenied("Pagamento pendente.")
     current=next(x for x in view["segments"] if x["state"]=="CURRENT")

@@ -2,8 +2,11 @@
 No provider transport, real money, new database or runtime dependency override.
 """
 from calendar import monthrange
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from uuid import UUID,uuid4
+from hashlib import sha256
+import json
 from .account_lifecycle import LifecycleDenied
 from .cycle_identity_registration_ci import _guard
 from .admin_license_onboarding_ci import _session,COLLECTOR_CI,_audit
@@ -34,7 +37,7 @@ def _lock(conn,tenant):
 
 def _review_exists(conn,tenant,intent):
     return bool(conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND object_id=%s "
-                             "AND object_type='SAAS_PAYMENT' AND action IN ('CI_RENEWAL_LATE_PAYMENT_REVIEW','CI_RENEWAL_AMOUNT_REVIEW')",
+                             "AND object_type='SAAS_PAYMENT' AND action IN ('CI_RENEWAL_LATE_PAYMENT_REVIEW','CI_RENEWAL_AMOUNT_REVIEW','CI_RENEWAL_TIER_REVIEW')",
                              (tenant,str(intent))).fetchone())
 
 
@@ -129,6 +132,77 @@ def _term_base(conn,tenant,actor,prev,acceptance,now):
     prior=conn.execute("SELECT anchor_day FROM public.fr_v23_renewals WHERE entitlement_id=%s",(prev[0],)).fetchone()
     return prev[4],prior[0] if prior else prev[3].astimezone(ZONE).day
 
+def _renewal_tier(conn,tenant,actor,prev):
+    """Resolve the next paid term from the verified lineage and immutable upgrade proof.
+
+    Never rewrite the base tier. A refunded upgrade cannot change the tier of
+    an independently paid successor. Unresolved evidence denies new billing.
+    Caller holds the tenant transaction lock and verified predecessor.
+    """
+    row=conn.execute("SELECT r.request_id,r.actor,r.reviewer,r.evidence,r.evidence_hash,r.gross_cents,r.provider_payment_id,r.recorded_at,"
+                     "q.snapshot,q.snapshot_hash,q.accepted_at,q.expires_at "
+                     "FROM public.fr_v23_upgrade_settlement_reviews r JOIN public.fr_v23_plan_change_quotes q ON q.request_id=r.request_id "
+                     "WHERE r.tenant_id=%s AND q.tenant_id=r.tenant_id AND q.actor=r.actor FOR SHARE OF r,q",(tenant,)).fetchone()
+    if not row:
+        if conn.execute("SELECT 1 FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone():
+            raise LifecycleDenied("Histórico de upgrade incompatível.")
+        return prev[1]
+    req,payer,reviewer,evidence,settlement,gross,provider,recorded,snap,offer,accepted,expiry=row
+    def digest(v):
+        return sha256(json.dumps(v,sort_keys=True,separators=(",",":"),ensure_ascii=True).encode()).hexdigest()
+    def audit(action,by,proof):
+        return bool(conn.execute("SELECT 1 FROM public.audit_events WHERE tenant_id=%s AND actor_id=%s "
+                                 "AND action=%s AND object_id=%s AND evidence_ref=%s",(tenant,by,action,str(req),proof)).fetchone())
+    if (payer!=actor or reviewer==actor or digest(evidence)!=settlement or digest(snap)!=offer
+        or not accepted or not accepted<=recorded<expiry or snap.get("tenant_id")!=str(tenant) or snap.get("user_id")!=str(actor)
+        or snap.get("current_tier")!="ESSENCIAL" or snap.get("target_tier")!="INTERMEDIARIO"
+        or snap.get("decision")!="UPGRADE_REVIEW" or snap.get("total_cents")!=gross
+        or evidence.get("gross")!=gross or evidence.get("provider_id")!=provider or evidence.get("offer_hash")!=offer
+        or not audit("CI_PLAN_CHANGE_REVIEW_ACCEPTED",actor,offer) or not audit("CI_UPGRADE_SETTLEMENT_REVIEW",reviewer,settlement)):
+        raise LifecycleDenied("Prova de upgrade incompatível.")
+    app=conn.execute("SELECT tenant_id,actor,reviewer,offer_hash,settlement_hash,target_price_version,members_limit,quotas_limit,applied_at "
+                     "FROM public.fr_v23_upgrade_applications WHERE request_id=%s FOR SHARE",(req,)).fetchone()
+    lines=conn.execute("SELECT entitlement_id,period,period_start,period_end,base_price_version,paid_cents,target_cents,difference_cents "
+                       "FROM public.fr_v23_upgrade_segments WHERE request_id=%s ORDER BY entitlement_id FOR SHARE",(req,)).fetchall()
+    if app:
+        expected=sorted((UUID(v["entitlement_id"]),v["period"],datetime.fromisoformat(v["period_start"]),
+                         datetime.fromisoformat(v["period_end"]),UUID(v["price_version"]),v["paid_cents"],v["target_cents"],v["difference_cents"])
+                        for v in snap["segments"])
+        if (app[:5]!=(tenant,actor,reviewer,offer,settlement) or str(app[5])!=snap["target_price_version"]
+            or app[6:8]!=(snap["members_limit"],snap["quotas_limit"]) or not recorded<=app[8]<expiry
+            or not lines or lines!=expected or sum(v[-1] for v in lines)!=gross
+            or not audit("CI_UPGRADE_APPLIED",reviewer,settlement)):
+            raise LifecycleDenied("Aplicação de upgrade incompatível.")
+    elif lines:
+        raise LifecycleDenied("Segmentos sem aplicação.")
+    refund=conn.execute("SELECT tenant_id,reviewer,settlement_hash,refunded_cents,evidence,evidence_hash,recorded_at "
+                        "FROM public.fr_v23_upgrade_refunds WHERE request_id=%s FOR SHARE",(req,)).fetchone()
+    if refund:
+        expected=dict(settlement_hash=settlement,provider_id=provider,refunded_cents=gross,
+                      reference=f"saas-upgrade-review:{req}",collector=COLLECTOR_CI,currency="BRL",live_mode=False,had_application=bool(app))
+        if (refund[:4]!=(tenant,reviewer,settlement,gross) or refund[4]!=expected or digest(expected)!=refund[5]
+            or refund[6]<(app[8] if app else recorded) or not audit("CI_UPGRADE_REFUNDED",reviewer,refund[5])):
+            raise LifecycleDenied("Estorno de upgrade incompatível.")
+        return prev[1]
+    if not app:
+        raise LifecycleDenied("Alteração de plano em revisão de liquidação.")
+    covered=next((v for v in lines if v[0]==prev[0]),None)
+    if covered:
+        if prev[1]!="ESSENCIAL" or prev[2]=="REVOKED" or covered[2:4]!=prev[3:5]:
+            raise LifecycleDenied("Período base do upgrade exige revisão.")
+        # Bind the selected historical segment to its original paid price.
+        original=conn.execute("SELECT s.billing_period,s.price_version_id,p.expected_amount_cents "
+                              "FROM public.saas_license_entitlements e JOIN public.saas_subscription_preparations s ON s.id=e.preparation_id "
+                              "JOIN public.saas_payment_intents p ON p.id=e.payment_intent_id WHERE e.id=%s AND e.tenant_id=%s",
+                              (prev[0],tenant)).fetchone()
+        if original!=(covered[1],covered[4],covered[5]):
+            raise LifecycleDenied("Preço base incompatível.")
+        return "INTERMEDIARIO"
+    if prev[1]!="INTERMEDIARIO":
+        raise LifecycleDenied("Sucessor do upgrade exige revisão.")
+    return prev[1]
+
+
 def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,period,cents,document_id,document_hash,accepted):
     _guard(conn)
     if accepted is not True or type(cents) is not int or not 0<cents<=100000000 or period not in ("MONTHLY","ANNUAL"):
@@ -151,9 +225,8 @@ def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,
         if saved:
             if saved[:8]!=exact:raise LifecycleDenied("Colisão de renovação.")
             return saved[8],saved[9]
-        if conn.execute("SELECT 1 FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s",(tenant,)).fetchone():
-            raise LifecycleDenied("Alteração de plano em revisão de liquidação.")
         prev=_previous(conn,tenant,actor,predecessor,acceptance)
+        tier=_renewal_tier(conn,tenant,actor,prev)
         _term_base(conn,tenant,actor,prev,acceptance,conn.execute("SELECT clock_timestamp()").fetchone()[0])
         if conn.execute("SELECT 1 FROM public.fr_v23_renewals WHERE predecessor=%s AND canceled_at IS NULL",(predecessor,)).fetchone():
             raise LifecycleDenied("Renovação anterior já registrada.")
@@ -161,13 +234,13 @@ def prepare_renewal_ci(conn,*,token,tenant,request_id,predecessor,price_version,
             "SELECT v.id,v.monthly_price,v.annual_price FROM public.platform_license_price_versions v "
             "JOIN public.platform_license_plans p ON p.tier=v.plan_tier "
             "WHERE p.tier=%s AND p.status='ACTIVE' AND p.tier<>'AMPLIADO' ORDER BY v.created_at DESC,v.id DESC LIMIT 1 FOR SHARE OF v,p",
-            (prev[1],)).fetchone()
+            (tier,)).fetchone()
         if not price or price[0]!=price_version or _cents(price[1] if period=="MONTHLY" else price[2])!=cents:
             raise LifecycleDenied("Oferta substituída ou preço incorreto.")
         prep=uuid4()
         conn.execute("INSERT INTO public.saas_subscription_preparations "
                      "(id,tenant_id,admin_user_id,plan_tier,price_version_id,billing_period,contract_acceptance_id,renewal_request_id) "
-                     "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",(prep,tenant,actor,prev[1],price_version,period,acceptance,request_id))
+                     "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",(prep,tenant,actor,tier,price_version,period,acceptance,request_id))
         intent=stage_saas_payment_ci(conn,preparation_id=prep,platform_collector_id=COLLECTOR_CI,live_mode=False)
         conn.execute("INSERT INTO public.fr_v23_renewals(request_id,tenant_id,actor,predecessor,price_version,period,cents,"
                      "document_id,document_hash,preparation_id,intent_id,expires_at) "
@@ -225,6 +298,8 @@ def reconcile_renewal_ci(conn,*,reviewer_token,reviewer_tenant,tenant,intent,pay
         now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
         if now>=expiry:raise LifecycleDenied("Oferta expirada; conciliação em revisão.")
         prev=_previous(conn,tenant,actor,previous,acceptance)
+        if _renewal_tier(conn,tenant,actor,prev)!=tier:
+            raise LifecycleDenied("Plano alterado após aceite: pagamento exige revisão independente.")
         base,anchor=_term_base(conn,tenant,actor,prev,acceptance,now)
         start,end,anchor=renewal_term(base,anchor,now,period)
         if stored_id is None and not attach_mp_payment_identifier_ci(conn,intent_id=intent,provider_payment_id=provider_id):
@@ -321,7 +396,7 @@ def record_renewal_payment_review_ci(conn,*,reviewer_token,reviewer_tenant,tenan
         _lock(conn,tenant)
         row=conn.execute(
             "SELECT r.actor,r.request_id,r.cents,r.expires_at,r.entitlement_id,r.canceled_at,"
-            "p.status,p.provider_payment_id,p.external_reference,p.paid_at,p.reconciled_at,s.contract_acceptance_id "
+            "p.status,p.provider_payment_id,p.external_reference,p.paid_at,p.reconciled_at,s.contract_acceptance_id,r.predecessor,s.plan_tier "
             "FROM public.fr_v23_renewals r JOIN public.saas_payment_intents p ON p.id=r.intent_id AND p.preparation_id=r.preparation_id "
             "JOIN public.saas_subscription_preparations s ON s.id=r.preparation_id AND s.renewal_request_id=r.request_id "
             "JOIN public.platform_license_price_versions v ON v.id=r.price_version AND v.plan_tier=s.plan_tier "
@@ -332,7 +407,7 @@ def record_renewal_payment_review_ci(conn,*,reviewer_token,reviewer_tenant,tenan
             "AND p.live_mode=false AND p.platform_collector_id=%s AND p.provider='MERCADO_PAGO' AND p.currency='BRL' "
             "AND s.status='PENDING_PAYMENT' FOR UPDATE OF r,p,s FOR SHARE OF v",(tenant,intent,COLLECTOR_CI)).fetchone()
         if not row:raise LifecycleDenied("Pagamento fora do escopo.")
-        actor,request,cents,expiry,ent,canceled,state,stored,ref,paid,reconciled,acceptance=row
+        actor,request,cents,expiry,ent,canceled,state,stored,ref,paid,reconciled,acceptance,previous,tier=row
         reviewer=_reviewer(conn,reviewer_token,reviewer_tenant,tenant,actor)
         if (_binding(conn,actor,tenant)!=(acceptance,"ATIVO") or state!="PENDING"
             or any(x is not None for x in (ent,canceled,paid,reconciled))):
@@ -344,7 +419,7 @@ def record_renewal_payment_review_ci(conn,*,reviewer_token,reviewer_tenant,tenan
         # No raw PSP payload, personal data, credentials or client-supplied audit.
         evidence=f"{provider_id}:{gross}:{fee}:{net}:{cents}"
         saved=conn.execute("SELECT action,evidence_ref FROM public.audit_events WHERE tenant_id=%s AND object_id=%s "
-                           "AND object_type='SAAS_PAYMENT' AND action IN ('CI_RENEWAL_LATE_PAYMENT_REVIEW','CI_RENEWAL_AMOUNT_REVIEW')",
+                           "AND object_type='SAAS_PAYMENT' AND action IN ('CI_RENEWAL_LATE_PAYMENT_REVIEW','CI_RENEWAL_AMOUNT_REVIEW','CI_RENEWAL_TIER_REVIEW')",
                            (tenant,str(intent))).fetchall()
         if saved:
             if len(saved)==1 and stored==provider_id and saved[0][1]==evidence:return saved[0][0]
@@ -352,7 +427,11 @@ def record_renewal_payment_review_ci(conn,*,reviewer_token,reviewer_tenant,tenan
         now=conn.execute("SELECT clock_timestamp()").fetchone()[0]
         if gross!=cents:action="CI_RENEWAL_AMOUNT_REVIEW"
         elif now>=expiry:action="CI_RENEWAL_LATE_PAYMENT_REVIEW"
-        else:raise LifecycleDenied("Recebimento regular deve seguir conciliação própria.")
+        else:
+            prev=_previous(conn,tenant,actor,previous,acceptance)
+            if _renewal_tier(conn,tenant,actor,prev)==tier:
+                raise LifecycleDenied("Recebimento regular deve seguir conciliação própria.")
+            action="CI_RENEWAL_TIER_REVIEW"
         conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text,41510))",(provider_id,))
         if conn.execute("SELECT 1 FROM public.saas_payment_intents WHERE provider_payment_id=%s AND id<>%s",
                         (provider_id,intent)).fetchone():

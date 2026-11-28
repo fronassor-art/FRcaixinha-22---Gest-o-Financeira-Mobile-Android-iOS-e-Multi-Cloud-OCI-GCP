@@ -59,22 +59,28 @@ export async function parseRenewalOverview(raw:unknown,s:AdminScope){
   if(renewals.some(v=>v.state==='PAYMENT_REVIEW'))deny();
   const q=exact(x.offer,'predecessor price_version tier members_limit quotas_limit monthly_cents annual_cents'),predecessor=id(q.predecessor),tier=one(q.tier,tiers);
   const prev=segments.find(a=>a.entitlement_id===predecessor);
-  if(!prev||prev.tier!==tier||!['CURRENT','SCHEDULED','EXPIRED','REFUNDED'].includes(prev.state)||predecessors.has(predecessor)||leaves[0].entitlement_id!==predecessor)deny();
+  if(!prev||!['CURRENT','SCHEDULED','EXPIRED','REFUNDED'].includes(prev.state)||predecessors.has(predecessor)||leaves[0].entitlement_id!==predecessor)deny();
   offer=Object.freeze({predecessor,tier,price_version:id(q.price_version),members_limit:cents(q.members_limit,200),quotas_limit:cents(q.quotas_limit,400),monthly_cents:cents(q.monthly_cents),annual_cents:cents(q.annual_cents)});
  }
  let upgrade=null;
  if(hasUpgrade){
   const u=exact(x.upgrade,'request_id state difference_cents members_limit quotas_limit entitlement_ids');
   const state=one(u.state,['SETTLEMENT_REVIEW','CI_APPLIED','REFUNDED'] as const);
-  if(offer!==null||!Array.isArray(u.entitlement_ids)||u.entitlement_ids.length>50)return deny();
+  if(!Array.isArray(u.entitlement_ids)||u.entitlement_ids.length>50)return deny();
   const entitlement_ids=u.entitlement_ids.map(id);
   if(new Set(entitlement_ids).size!==entitlement_ids.length||entitlement_ids.some(v=>!ids.has(v)))deny();
-  if(state==='SETTLEMENT_REVIEW'&&(entitlement_ids.length!==0||u.members_limit!==null||u.quotas_limit!==null))deny();
+  if(state==='SETTLEMENT_REVIEW'&&(offer!==null||entitlement_ids.length!==0||u.members_limit!==null||u.quotas_limit!==null))deny();
   if(state==='CI_APPLIED'&&entitlement_ids.length===0)deny();
   if(state==='REFUNDED'&&(u.members_limit!==null||u.quotas_limit!==null))deny();
   upgrade=Object.freeze({request_id:id(u.request_id),state,difference_cents:cents(u.difference_cents),
    members_limit:state==='CI_APPLIED'?cents(u.members_limit,200):null,quotas_limit:state==='CI_APPLIED'?cents(u.quotas_limit,400):null,
    entitlement_ids:Object.freeze(entitlement_ids)});
+ }
+ if(offer){
+  const prev=leaves[0],covered=upgrade?.entitlement_ids.includes(prev.entitlement_id)===true;
+  if(upgrade?.state==='CI_APPLIED'&&covered&&(prev.tier!=='ESSENCIAL'||prev.state==='REFUNDED'))deny();
+  const expected=upgrade?.state==='CI_APPLIED'&&covered?'INTERMEDIARIO':prev.tier;
+  if(offer.tier!==expected||(upgrade?.state==='CI_APPLIED'&&!covered&&prev.tier!=='INTERMEDIARIO'))deny();
  }
  return Object.freeze({scope:key(s),observed_at,access,document,segments:Object.freeze(segments),renewals:Object.freeze(renewals),offer,upgrade});
 }

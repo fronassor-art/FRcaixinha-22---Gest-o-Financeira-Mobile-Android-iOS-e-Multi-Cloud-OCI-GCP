@@ -233,7 +233,8 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
                 before=reconcile_upgrade_refund_ci(db,**refund_args)
                 assert before==reconcile_upgrade_refund_ci(db,**refund_args)
                 reject(apply_reviewed_upgrade_ci,db,**apply_args)
-                assert renewal_overview_ci(db,token=token,tenant=tenant)["upgrade"]["state"]=="REFUNDED"
+                before_view=renewal_overview_ci(db,token=token,tenant=tenant)
+                assert before_view["upgrade"]["state"]=="REFUNDED" and before_view["offer"]["tier"]=="ESSENCIAL"
                 assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==base_limits
             with db.transaction(force_rollback=True):
                 reject(db.execute,"UPDATE public.saas_payment_intents SET provider_payment_id=%s WHERE id=%s",(upgrade_payment["id"],old_intent))
@@ -248,13 +249,49 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==(snap["members_limit"],snap["quotas_limit"])
             assert db.execute("SELECT request_id,anchor_day FROM public.fr_v23_renewals WHERE tenant_id=%s ORDER BY request_id",(tenant,)).fetchall()==anchor_before
             read=renewal_overview_ci(db,token=token,tenant=tenant)
-            assert read["offer"] is None and read["upgrade"]["state"]=="CI_APPLIED"
+            assert read["offer"]["tier"]=="INTERMEDIARIO" and read["upgrade"]["state"]=="CI_APPLIED"
+            assert read["offer"]["predecessor"]==future and read["offer"]["price_version"]==UUID(quote["snapshot"]["target_price_version"])
             assert set(map(str,read["upgrade"]["entitlement_ids"]))=={v["entitlement_id"] for v in snap["segments"]}
             assert db.execute("SELECT sum(difference_cents),count(*) FROM public.fr_v23_upgrade_segments WHERE request_id=%s",(request,)).fetchone()==(gross,len(snap["segments"]))
             assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_UPGRADE_APPLIED'",(tenant,str(request))).fetchone()[0]==1
             with db.transaction(force_rollback=True):
                 reject(db.execute,"DELETE FROM public.fr_v23_upgrade_segments WHERE request_id=%s",(request,))
             print("M41540_UPGRADE_CAPACITY_"+("ANNUAL" if late else "MIXED")+"=PASS")
+            # Reuse the authoritative offer, not the upgrade difference, for
+            # the separately paid future term. Old price must be rejected.
+            next_args={**future_args,"request_id":uuid4(),"predecessor":future,
+                       "price_version":read["offer"]["price_version"],"cents":read["offer"]["annual_cents"]}
+            reject(prepare_renewal_ci,db,**{**next_args,"price_version":price,"cents":70033})
+            with db.transaction(force_rollback=True):
+                _,ni=prepare_renewal_ci(db,**next_args)
+                assert prepare_renewal_ci(db,**next_args)[1]==ni
+                np={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{ni}",
+                    "transaction_amount":str(Decimal(next_args["cents"])/100)}
+                nr={**review,"intent":ni,"payment":np,"gross":next_args["cents"],"net":next_args["cents"]-10}
+                successor=reconcile_renewal_ci(db,**nr)
+                assert successor==reconcile_renewal_ci(db,**nr)
+                assert db.execute("SELECT plan_tier,valid_from FROM public.saas_license_entitlements WHERE id=%s",(successor,)).fetchone()==("INTERMEDIARIO",future_before[1])
+                assert db.execute("SELECT valid_from,valid_until,status FROM public.saas_license_entitlements WHERE id=%s",(future,)).fetchone()==future_before
+                assert renewal_overview_ci(db,token=token,tenant=tenant)["offer"]["predecessor"]==successor
+                reconcile_upgrade_refund_ci(db,**refund_args)
+                after_paid=renewal_overview_ci(db,token=token,tenant=tenant)
+                assert after_paid["upgrade"]["state"]=="REFUNDED" and after_paid["offer"]["tier"]=="INTERMEDIARIO"
+                assert db.execute("SELECT plan_tier,status FROM public.saas_license_entitlements WHERE id=%s",(successor,)).fetchone()==("INTERMEDIARIO","ACTIVE")
+            with db.transaction(force_rollback=True):
+                _,ni=prepare_renewal_ci(db,**next_args)
+                np={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{ni}",
+                    "transaction_amount":str(Decimal(next_args["cents"])/100)}
+                reconcile_upgrade_refund_ci(db,**refund_args)
+                reject(reconcile_renewal_ci,db,**{**review,"intent":ni,"payment":np,"gross":next_args["cents"],"net":next_args["cents"]-10})
+                assert db.execute("SELECT status,paid_at FROM public.saas_payment_intents WHERE id=%s",(ni,)).fetchone()==("PENDING",None)
+                stale_review={**review,"intent":ni,"payment":np,"gross":next_args["cents"],"net":next_args["cents"]-10}
+                assert record_renewal_payment_review_ci(db,**stale_review)=="CI_RENEWAL_TIER_REVIEW"
+                assert record_renewal_payment_review_ci(db,**stale_review)=="CI_RENEWAL_TIER_REVIEW"
+                blocked=renewal_overview_ci(db,token=token,tenant=tenant)
+                assert blocked["offer"] is None
+                assert next(x for x in blocked["renewals"] if x["intent_id"]==ni)["state"]=="PAYMENT_REVIEW"
+                assert db.execute("SELECT count(*) FROM public.saas_license_entitlements WHERE payment_intent_id=%s",(ni,)).fetchone()[0]==0
+            print("M41560_UPGRADE_RENEWAL_"+("ANNUAL" if late else "MIXED")+"=PASS")
             for bad in (dict(statement_refunded_cents=1),dict(tenant=uuid4()),dict(request_id=uuid4()),
                         dict(reviewer_token=token,reviewer_tenant=tenant),
                         dict(payment={**refund_payment,"live_mode":True}),dict(payment={**refund_payment,"collector_id":"999"}),
@@ -269,7 +306,8 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
             assert db.execute("SELECT * FROM public.fr_v23_license(%s,%s)",(tenant,actor)).fetchone()==base_limits
             assert _license_access(db,actor,tenant)=="CURRENT"
             reversed_read=renewal_overview_ci(db,token=token,tenant=tenant)
-            assert reversed_read["offer"] is None and reversed_read["upgrade"]["state"]=="REFUNDED"
+            assert reversed_read["offer"]["tier"]=="ESSENCIAL" and reversed_read["upgrade"]["state"]=="REFUNDED"
+            assert reversed_read["offer"]["predecessor"]==future and reversed_read["offer"]["price_version"]==price
             assert reversed_read["upgrade"]["members_limit"] is None and reversed_read["upgrade"]["quotas_limit"] is None
             assert reversed_read["upgrade"]["entitlement_ids"]==read["upgrade"]["entitlement_ids"]
             assert db.execute("SELECT count(*) FROM public.audit_events WHERE tenant_id=%s AND object_id=%s AND action='CI_UPGRADE_REFUNDED'",(tenant,str(request))).fetchone()[0]==1
@@ -277,7 +315,15 @@ def exercise(tenant,actor,token,reviewer_tenant,reviewer_token,price,doc,digest,
                 reject(db.execute,"DELETE FROM public.fr_v23_upgrade_refunds WHERE request_id=%s",(request,))
             print("M41550_UPGRADE_FULL_REFUND_"+("ANNUAL" if late else "MIXED")+"=PASS")
             reject(plan_change_preview_ci,db,token=token,tenant=tenant,target=target)
-            reject(prepare_renewal_ci,db,**{**future_args,"request_id":uuid4(),"predecessor":future})
+            reject(prepare_renewal_ci,db,**next_args)
+            with db.transaction(force_rollback=True):
+                base_args={**future_args,"request_id":uuid4(),"predecessor":future}
+                _,ni=prepare_renewal_ci(db,**base_args)
+                np={**payment,"id":str(uuid4().int)[:38],"external_reference":f"saas:{ni}","transaction_amount":"700.33"}
+                successor=reconcile_renewal_ci(db,**{**review,"intent":ni,"payment":np,"gross":70033,"net":70023})
+                assert db.execute("SELECT plan_tier,valid_from FROM public.saas_license_entitlements WHERE id=%s",(successor,)).fetchone()==("ESSENCIAL",future_before[1])
+                assert renewal_overview_ci(db,token=token,tenant=tenant)["upgrade"]["state"]=="REFUNDED"
+            print("M41560_REFUNDED_UPGRADE_RENEWAL_"+("ANNUAL" if late else "MIXED")+"=PASS")
             for sql in ("UPDATE public.fr_v23_upgrade_settlement_reviews SET fee_cents=1 WHERE tenant_id=%s",
                         "DELETE FROM public.fr_v23_upgrade_settlement_reviews WHERE tenant_id=%s"):
                 with db.transaction(force_rollback=True):reject(db.execute,sql,(tenant,))
