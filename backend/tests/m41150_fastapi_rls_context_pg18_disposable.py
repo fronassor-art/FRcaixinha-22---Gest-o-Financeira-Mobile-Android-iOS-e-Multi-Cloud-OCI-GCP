@@ -1235,6 +1235,93 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                 await gateway.install_session_capability(dest,cap)
                 assert not await dest.fetch("SELECT id FROM public.ledger_accounts")
         print("M41630_TRANSACTION_END_REPLAY_DENIED=PASS")
+
+        # M41636: prove lifecycle invalidation at each boundary of v5, using
+        # fresh commitments and transaction identities; never restore a revoked session.
+        async def fresh_commitment(connection):
+            identity = await gateway._read_transaction_identity(connection)
+            request_nonce = uuid4()
+            seed = hashlib.sha256(("FRF-M41630-SEED|v1|" + str(request_nonce)).encode("ascii")).hexdigest()
+            target_challenge = await gateway._read_target_challenge(connection, seed, tenant_a)
+            generation = fixture.fixture_context(owner, second_digest)[2]
+            identity_claim = dict(digest=hashlib.sha256(
+                ("FRF-M41630|v1|" + second_digest + "|" + target_challenge).encode("ascii")).hexdigest(),
+                session=str(second_session_id), tenant=str(tenant_a), scope="READ_ENTRIES",
+                user=str(admin_id), role="TENANT_ADMIN", generation=generation)
+            authority = Authority(identity_claim)
+            try:
+                request = dict(identity_claim, nonce=str(request_nonce), expiry=int(time.time())+25)
+                digest = authority.request("prepare", request)
+                assert digest
+                owner.execute("INSERT INTO m40700.identity_commitments(nonce,commitment,expiry) VALUES(%s,%s,%s)",
+                              (request_nonce, digest, request["expiry"]))
+                released = authority.request("release", request)
+                assert released and commitment(request, released) == digest
+                assert authority.request("release", request) is None
+                return request, released, identity, target_challenge
+            finally:
+                authority.close()
+
+        def assert_unissued(request):
+            request_nonce = UUID(request["nonce"])
+            assert owner.execute("SELECT consumed_at FROM m40700.identity_commitments WHERE nonce=%s",
+                                 (request_nonce,)).fetchone() == (None,)
+            assert not owner.execute("SELECT 1 FROM m40700.ticket_context WHERE request_nonce=%s",
+                                     (request_nonce,)).fetchone()
+            assert not owner.execute(
+                "SELECT 1 FROM m41050.read_target_reservations r "
+                "JOIN m40700.ticket_context c ON c.ticket_digest=r.ticket_digest WHERE c.request_nonce=%s",
+                (request_nonce,)).fetchone()
+
+        async with pool.acquire() as dest:
+            async with dest.transaction(readonly=True):
+                stale = await fresh_commitment(dest)
+                generation = stale[0]["generation"]
+                assert owner.execute(
+                    "UPDATE m40650.sessions SET context_generation=context_generation+1 WHERE id=%s",
+                    (second_session_id,)).rowcount == 1
+                assert fixture.fixture_context(owner,second_digest)[2] == generation+1
+                assert submit(*stale) is None
+                assert_unissued(stale[0])
+                assert not await dest.fetch("SELECT id FROM public.ledger_accounts")
+                print("M41636_STALE_GENERATION_NO_ISSUANCE=PASS_DISPOSABLE_ONLY")
+
+            async with dest.transaction(readonly=True):
+                pending = await fresh_commitment(dest)
+                issued = await fresh_commitment(dest)
+                installed = await fresh_commitment(dest)
+                unbound_ticket = submit(*issued)
+                active_ticket = submit(*installed)
+                assert unbound_ticket and active_ticket and unbound_ticket != active_ticket
+                target = issued[2]
+                assert target == pending[2] == installed[2]
+                unbound_challenge = await gateway._read_target_challenge(dest,unbound_ticket,tenant_a)
+                unbound_proof = new_signer.sign(unbound_ticket,tenant_a,*target,challenge=unbound_challenge)
+                active_challenge = await gateway._read_target_challenge(dest,active_ticket,tenant_a)
+                active_proof = new_signer.sign(active_ticket,tenant_a,*target,challenge=active_challenge)
+                active_cap = bind_read(active_ticket,tenant_a,*target,challenge=active_challenge,proof=active_proof)
+                assert active_cap
+                await gateway.install_session_capability(dest,active_cap)
+                assert await dest.fetch("SELECT id FROM public.ledger_accounts")
+                assert owner.execute(
+                    "UPDATE m40650.sessions SET revoked_at=pg_catalog.clock_timestamp() WHERE id=%s AND revoked_at IS NULL",
+                    (second_session_id,)).rowcount == 1
+                assert submit(*pending) is None
+                assert_unissued(pending[0])
+                assert bind_read(unbound_ticket,tenant_a,*target,
+                                 challenge=unbound_challenge,proof=unbound_proof) is None
+                assert not await dest.fetch("SELECT * FROM m41050.current_claims_v4()")
+                assert not await dest.fetch("SELECT id FROM public.ledger_accounts")
+                assert not owner.execute(
+                    "SELECT 1 FROM m41050.session_caps WHERE request_nonce=%s",
+                    (UUID(issued[0]["nonce"]),)).fetchone()
+                assert owner.execute(
+                    "SELECT revoked_at IS NOT NULL FROM m41050.session_caps WHERE request_nonce=%s",
+                    (UUID(installed[0]["nonce"]),)).fetchone() == (True,)
+                print("M41636_REVOKED_PENDING_RESERVED_AND_ACTIVE_DENIED=PASS_DISPOSABLE_ONLY")
+            assert not dest.is_in_transaction()
+            assert not await dest.fetch("SELECT * FROM m41050.current_claims_v4()")
+            print("M41636_POST_REVOCATION_POOL_CLEAN=PASS_DISPOSABLE_ONLY")
     finally:
         new_signer.close()
         owner.execute("DELETE FROM m41050.target_verifier_secret")
