@@ -694,3 +694,43 @@ def test_m41620_commitment_fixture_preserves_protected_sql_boundary():
         assert marker in source
     assert "M41620_AUTHORITY_LOSS_NO_NEW_COMMITMENT=PASS" in RUNNER.read_text(encoding="utf-8")
     assert "issue_bound_v4" not in MODULE.read_text(encoding="utf-8")
+
+
+def test_m41630_disposable_target_commitment_has_atomic_reservation_boundary():
+    """Source contract, not a substitute for the adversarial PG18 execution."""
+    source = RUNNER.read_text(encoding="utf-8")
+    compile(source, str(RUNNER), "exec")
+    assert source.count("def main() -> int:") == 1
+    section = source.split("async def exercise_m41630_target_commitment(", 1)[1].split("\ndef main()", 1)[0]
+    sql = section.split("CREATE FUNCTION m40700.issue_bound_v5(", 1)[1].split('$body$', 2)[1]
+    for marker in (
+        "FRF-M41630-SEED|v1|", "FRF-M41630|v1|", "FRF-M41620|v1|",
+        "p_digest !~ '^[0-9a-f]{64}$'",
+        "p_token !~ '^[0-9a-f]{64}$'",
+        "p_vxid !~ '^[0-9]+/[0-9]+$'",
+        "p_challenge !~ '^[0-9a-f]{64}$'",
+        "session_user <> 'm40680_auth_login'",
+        "SET search_path=pg_catalog,pg_temp",
+        "consumed_at IS NULL FOR UPDATE", "s.revoked_at IS NULL",
+        "FOR SHARE OF s", "m40700.issue_bound_v2(",
+        "m40700.reserve_read_target(", "M41630_TARGET_RESERVATION_FAILED",
+    ):
+        assert marker in sql
+    assert sql.index("consumed_at IS NULL FOR UPDATE") < sql.index("m40700.issue_bound_v2(")
+    assert sql.index("m40700.issue_bound_v2(") < sql.index("m40700.reserve_read_target(")
+    assert sql.index("m40700.reserve_read_target(") < sql.index("SET consumed_at=")
+    assert sql.index("SET consumed_at=") < sql.index("RETURN v_ticket;")
+    for marker in (
+        "M41630_DISPOSABLE_ONLY", "owner.info.port != PORT",
+        'REVOKE EXECUTE ON FUNCTION " + V4',
+        'REVOKE EXECUTE ON FUNCTION " + reservation',
+        "submit(p, token, wrong, wrong_challenge) is None",
+        "rollback=True", "sum(t is not None for t in results) == 1",
+        "bind_read(ticket,tenant_a,*wrong,challenge=bad,proof=bad_proof) is None",
+        "await gateway.install_session_capability(other,cap)",
+        "M41630_TRANSACTION_END_REPLAY_DENIED=PASS",
+        "M41630_REAL_PROVIDER=NOT_INTEGRATED", "M41630_PRODUCTION=BLOCKED",
+    ):
+        assert marker in section
+    assert "await exercise_m41630_target_commitment(" in source
+    assert "backend/tests/m41150_fastapi_rls_context_pg18_disposable.py" in WORKFLOW.read_text(encoding="utf-8")
