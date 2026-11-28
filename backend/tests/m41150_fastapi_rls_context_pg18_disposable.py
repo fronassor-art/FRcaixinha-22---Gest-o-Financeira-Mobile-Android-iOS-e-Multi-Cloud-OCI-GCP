@@ -1020,6 +1020,12 @@ async def exercise(dsn: str) -> None:
             assert unavailable.status_code == 503
             assert owner.execute("SELECT count(*) FROM m40700.identity_commitments").fetchone()[0] == count
             print("M41620_AUTHORITY_LOSS_NO_NEW_COMMITMENT=PASS")
+            await exercise_m41630_target_commitment(
+                owner=owner, auth_dsn=auth_dsn, pool=pool, fixture=fixture, gateway=gateway,
+                bind_read=bind_read, key=key, second_digest=admin_second_digest,
+                second_session_id=admin_second_session_id, admin_id=admin_id,
+                tenant_a=tenant_a, tenant_b=tenant_b,
+            )
         await pool.close()
     finally:
         if identity_authority is not None:
@@ -1027,6 +1033,377 @@ async def exercise(dsn: str) -> None:
         if signer is not None:
             signer.close()
         owner.close()
+
+
+
+async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, gateway,
+                                            bind_read, key, second_digest, second_session_id,
+                                            admin_id, tenant_a, tenant_b):
+    """CP26-0061/CTM-07, CP26-0062/CTM-08, CP26-0257/TENANT_RLS; TEC-09/12.
+    Disposable proof only: pre-ticket SQL challenge, authority commitment bound
+    to target, and ticket reservation in one issuer transaction.
+    The fixture owner still controls enrollment and can observe the released token.
+    The real provider protocol is unchanged (issue before pool acquisition);
+    staging custody, same-target theft/DoS and external acceptance remain NO-GO.
+    Matrix 330/2310 unchanged. No original database, migrations or runtime reload.
+    """
+    import hashlib
+    import hmac
+    import time
+    import psycopg
+    from m41240_target_signer_disposable import allowed, TargetSigner
+    from m41620_identity_commitment_disposable import Authority, V4, commitment
+    if (not allowed() or owner.info.dbname != DATABASE or owner.info.port != PORT
+            or owner.info.host != "127.0.0.1"):
+        raise RuntimeError("M41630_DISPOSABLE_ONLY")
+    reservation = "m40700.reserve_read_target(text,uuid,integer,text,timestamptz,text)"
+    v5 = "m40700.issue_bound_v5(text,uuid,uuid,bigint,text,uuid,text,bigint,text,uuid,text,integer,text,timestamptz,text)"
+    owner.execute("REVOKE EXECUTE ON FUNCTION " + V4 + " FROM m40680_auth")
+    owner.execute("REVOKE EXECUTE ON FUNCTION " + reservation + " FROM m40680_auth")
+    owner.execute("""
+        CREATE FUNCTION m40700.issue_bound_v5(
+          p_digest text,p_tenant uuid,p_nonce uuid,p_expiry bigint,p_scope text,
+          p_user uuid,p_role text,p_generation bigint,p_proof text,p_session uuid,p_token text,
+          p_pid integer,p_vxid text,p_started timestamptz,p_challenge text
+        ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $body$
+        DECLARE v_key bytea; v_target text; v_hash text; v_ticket text;
+                v_seed text; v_payload text; v_ticket_challenge text;
+        BEGIN
+          IF session_user <> 'm40680_auth_login'
+             OR p_digest IS NULL OR p_digest !~ '^[0-9a-f]{64}
+    try:
+        dsn = require_disposable()
+    except RuntimeError as exc:
+        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
+        print("M41150_DATABASE_CONNECTIONS=NONE")
+        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+        return 2
+
+    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
+    asyncio.run(exercise(dsn))
+    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
+    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
+    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
+    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41160_MIGRATIONS=NONE")
+    print("M41160_SERVICE_RESTARTS=NONE")
+    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41160_PIX_REAL=OFF")
+    print("M41160_PAGAMENTOS_REAIS=OFF")
+    print("M41160_ATIVACAO_REAL=OFF")
+    print("M41160_PRODUCTION=BLOCKED")
+    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41150_MIGRATIONS=NONE")
+    print("M41150_SERVICE_RESTARTS=NONE")
+    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41150_PIX_REAL=OFF")
+    print("M41150_PAGAMENTOS_REAIS=OFF")
+    print("M41150_ATIVACAO_REAL=OFF")
+    print("M41150_PRODUCTION=BLOCKED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+             OR p_token IS NULL OR p_token !~ '^[0-9a-f]{64}
+    try:
+        dsn = require_disposable()
+    except RuntimeError as exc:
+        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
+        print("M41150_DATABASE_CONNECTIONS=NONE")
+        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+        return 2
+
+    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
+    asyncio.run(exercise(dsn))
+    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
+    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
+    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
+    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41160_MIGRATIONS=NONE")
+    print("M41160_SERVICE_RESTARTS=NONE")
+    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41160_PIX_REAL=OFF")
+    print("M41160_PAGAMENTOS_REAIS=OFF")
+    print("M41160_ATIVACAO_REAL=OFF")
+    print("M41160_PRODUCTION=BLOCKED")
+    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41150_MIGRATIONS=NONE")
+    print("M41150_SERVICE_RESTARTS=NONE")
+    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41150_PIX_REAL=OFF")
+    print("M41150_PAGAMENTOS_REAIS=OFF")
+    print("M41150_ATIVACAO_REAL=OFF")
+    print("M41150_PRODUCTION=BLOCKED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+             OR p_tenant IS NULL OR p_nonce IS NULL OR p_session IS NULL OR p_user IS NULL
+             OR p_role IS DISTINCT FROM 'TENANT_ADMIN'
+             OR p_scope IS DISTINCT FROM 'READ_ENTRIES'
+             OR p_generation IS NULL OR p_generation<0
+             OR p_expiry IS NULL
+             OR p_expiry<=pg_catalog.floor(pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint
+             OR p_expiry>pg_catalog.floor(pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint+30
+             OR p_pid IS NULL OR p_pid<=0 OR p_pid=pg_catalog.pg_backend_pid()
+             OR p_vxid IS NULL OR p_vxid !~ '^[0-9]+/[0-9]+
+    try:
+        dsn = require_disposable()
+    except RuntimeError as exc:
+        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
+        print("M41150_DATABASE_CONNECTIONS=NONE")
+        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+        return 2
+
+    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
+    asyncio.run(exercise(dsn))
+    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
+    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
+    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
+    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41160_MIGRATIONS=NONE")
+    print("M41160_SERVICE_RESTARTS=NONE")
+    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41160_PIX_REAL=OFF")
+    print("M41160_PAGAMENTOS_REAIS=OFF")
+    print("M41160_ATIVACAO_REAL=OFF")
+    print("M41160_PRODUCTION=BLOCKED")
+    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41150_MIGRATIONS=NONE")
+    print("M41150_SERVICE_RESTARTS=NONE")
+    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41150_PIX_REAL=OFF")
+    print("M41150_PAGAMENTOS_REAIS=OFF")
+    print("M41150_ATIVACAO_REAL=OFF")
+    print("M41150_PRODUCTION=BLOCKED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+             OR p_started IS NULL OR p_started>pg_catalog.clock_timestamp()
+             OR p_started<pg_catalog.clock_timestamp()-interval '30 seconds'
+             OR p_challenge IS NULL OR p_challenge !~ '^[0-9a-f]{64}
+    try:
+        dsn = require_disposable()
+    except RuntimeError as exc:
+        print("M41150_STATUS=BLOCKED_" + type(exc).__name__)
+        print("M41150_DATABASE_CONNECTIONS=NONE")
+        print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+        return 2
+
+    print("M41150_TARGET=POSTGRES18_DISPOSABLE_ONLY")
+    asyncio.run(exercise(dsn))
+    print("M41150_STATUS=PASS_FASTAPI_RLS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41160_STATUS=PASS_READ_ONLY_DISPOSABLE_ONLY")
+    print("M41170_STATUS=PASS_FAIL_CLOSED_DISPOSABLE_ONLY")
+    print("M41170_LEGACY_GUC_FALLBACK=REMOVED")
+    print("M41170_DATABASE_CONNECTIONS_WITHOUT_PROVIDER=NONE")
+    print("M41160_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41160_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41160_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41160_MIGRATIONS=NONE")
+    print("M41160_SERVICE_RESTARTS=NONE")
+    print("M41160_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41160_PIX_REAL=OFF")
+    print("M41160_PAGAMENTOS_REAIS=OFF")
+    print("M41160_ATIVACAO_REAL=OFF")
+    print("M41160_PRODUCTION=BLOCKED")
+    print("M41150_AUTHENTICATION=OVERRIDDEN_SYNTHETIC")
+    print("M41150_PROVIDER=CUSTODY_NOT_CONFIGURED")
+    print("M41150_ORIGINAL_DATABASE=NOT_ACCESSED")
+    print("M41150_MIGRATIONS=NONE")
+    print("M41150_SERVICE_RESTARTS=NONE")
+    print("M41150_RUNTIME=NOT_RELOADED_OR_ATTESTED")
+    print("M41150_PIX_REAL=OFF")
+    print("M41150_PAGAMENTOS_REAIS=OFF")
+    print("M41150_ATIVACAO_REAL=OFF")
+    print("M41150_PRODUCTION=BLOCKED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+             OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_locks AS l
+                 WHERE l.pid=p_pid AND l.locktype='virtualxid' AND l.virtualxid=p_vxid
+                   AND l.virtualtransaction=p_vxid AND l.mode='ExclusiveLock' AND l.granted)
+          THEN RETURN NULL; END IF;
+          SELECT key INTO v_key FROM m41050.target_challenge_secret WHERE singleton=true;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          -- Reuse the read-only SQL challenge with a domain-separated, pre-ticket seed.
+          v_seed:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+               'FRF-M41630-SEED|v1|'||p_nonce::text,'UTF8')),'hex');
+          v_payload:='|'||p_tenant::text||'|'||p_pid::text||'|'||p_vxid||'|'||
+              (EXTRACT(EPOCH FROM p_started)*1000000)::bigint::text;
+          IF p_challenge<>pg_catalog.encode(m40700.hmac(pg_catalog.convert_to(
+              'FRF-M41260|v1|'||pg_catalog.encode(pg_catalog.sha256(
+              pg_catalog.convert_to(v_seed,'UTF8')),'hex')||v_payload,'UTF8'),v_key,'sha256'),'hex')
+          THEN RETURN NULL; END IF;
+          v_target:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+              'FRF-M41630|v1|'||p_digest||'|'||p_challenge,'UTF8')),'hex');
+          v_hash:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+              'FRF-M41620|v1|'||v_target||'|'||p_session::text||'|'||p_tenant::text||'|'||
+              p_nonce::text||'|'||p_expiry::text||'|'||p_scope||'|'||p_user::text||'|'||
+              p_role||'|'||p_generation::text||'|'||p_token,'UTF8')),'hex');
+          PERFORM 1 FROM m40700.identity_commitments WHERE nonce=p_nonce
+              AND commitment=v_hash AND expiry=p_expiry AND consumed_at IS NULL FOR UPDATE;
+          IF NOT FOUND OR p_expiry<=pg_catalog.floor(pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()))::bigint
+          THEN RETURN NULL; END IF;
+          PERFORM 1 FROM m40650.sessions AS s WHERE s.id=p_session AND s.token_digest=p_digest
+              AND s.user_id=p_user AND s.active_role=p_role AND s.active_tenant_id=p_tenant
+              AND s.context_generation=p_generation AND s.revoked_at IS NULL
+              AND s.expires_at>pg_catalog.clock_timestamp() FOR SHARE OF s;
+          IF NOT FOUND THEN RETURN NULL; END IF;
+          v_ticket:=m40700.issue_bound_v2(p_digest,p_tenant,p_nonce,p_expiry,p_scope,
+                                         p_user,p_role,p_generation,p_proof);
+          IF v_ticket IS NULL THEN RETURN NULL; END IF;
+          v_ticket_challenge:=pg_catalog.encode(m40700.hmac(pg_catalog.convert_to(
+              'FRF-M41260|v1|'||pg_catalog.encode(pg_catalog.sha256(
+              pg_catalog.convert_to(v_ticket,'UTF8')),'hex')||v_payload,'UTF8'),v_key,'sha256'),'hex');
+          -- No unreserved ticket may escape, including on target termination.
+          IF NOT m40700.reserve_read_target(v_ticket,p_tenant,p_pid,p_vxid,p_started,v_ticket_challenge)
+          THEN RAISE EXCEPTION 'M41630_TARGET_RESERVATION_FAILED'; END IF;
+          UPDATE m40700.identity_commitments SET consumed_at=pg_catalog.clock_timestamp()
+             WHERE nonce=p_nonce;
+          RETURN v_ticket;
+        END
+        $body$
+    """)
+    owner.execute("ALTER FUNCTION " + v5 + " OWNER TO m40650_owner")
+    owner.execute("REVOKE ALL ON FUNCTION " + v5 + " FROM PUBLIC,m40650_app")
+    owner.execute("GRANT EXECUTE ON FUNCTION " + v5 + " TO m40680_auth")
+    ctx = fixture.fixture_context(owner, second_digest)
+    assert ctx[:2] == (admin_id, "TENANT_ADMIN")
+    def submit(p, token, target, challenge, *, proof=None, rollback=False):
+        signed = fixture.sign_context(key, second_digest, UUID(p["tenant"]), UUID(p["nonce"]),
+                                    p["expiry"], p["scope"], (admin_id, p["role"], p["generation"]))
+        with psycopg.connect(auth_dsn, autocommit=True) as c:
+            c.execute("SET ROLE m40680_auth")
+            if rollback:
+                c.execute("BEGIN")
+            result = c.execute(
+                "SELECT m40700.issue_bound_v5(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (second_digest, UUID(p["tenant"]), UUID(p["nonce"]), p["expiry"], p["scope"],
+                 admin_id, p["role"], p["generation"], signed if proof is None else proof,
+                 second_session_id, token, *target, challenge)).fetchone()[0]
+            if rollback:
+                c.execute("ROLLBACK")
+            return result
+    with psycopg.connect(auth_dsn, autocommit=True) as c:
+        c.execute("SET ROLE m40680_auth")
+        for sig, permitted in ((V4, False), (reservation, False), (v5, True)):
+            assert c.execute("SELECT has_function_privilege(current_user,%s,'EXECUTE')",
+                             (sig,)).fetchone()[0] == permitted
+    challenge_key = bytes(owner.execute(
+        "SELECT key FROM m41050.target_challenge_secret WHERE singleton=true").fetchone()[0])
+    new_signer = TargetSigner(challenge_key=challenge_key)
+    try:
+        target_key = new_signer.take_bootstrap_key()
+        owner.execute("INSERT INTO m41050.target_verifier_secret(singleton,key) VALUES(true,%s)",
+                      (target_key,))
+        async with pool.acquire() as dest, pool.acquire() as other:
+            async with dest.transaction(readonly=True), other.transaction(readonly=True):
+                target = await gateway._read_transaction_identity(dest)
+                wrong = await gateway._read_transaction_identity(other)
+                nonce = uuid4()
+                seed = hashlib.sha256(("FRF-M41630-SEED|v1|" + str(nonce)).encode("ascii")).hexdigest()
+                challenge = await gateway._read_target_challenge(dest, seed, tenant_a)
+                wrong_challenge = await gateway._read_target_challenge(other, seed, tenant_a)
+                assert challenge != wrong_challenge
+                frozen = dict(digest=hashlib.sha256(
+                    ("FRF-M41630|v1|" + second_digest + "|" + challenge).encode("ascii")).hexdigest(),
+                    session=str(second_session_id), tenant=str(tenant_a), scope="READ_ENTRIES",
+                    user=str(admin_id), role="TENANT_ADMIN", generation=ctx[2])
+                authority = Authority(frozen)
+                try:
+                    p = dict(frozen, nonce=str(nonce), expiry=int(time.time())+25)
+                    digest = authority.request("prepare", p)
+                    assert digest
+                    owner.execute("INSERT INTO m40700.identity_commitments(nonce,commitment,expiry) VALUES(%s,%s,%s)",
+                                  (nonce, digest, p["expiry"]))
+                    token = authority.request("release", p)
+                    assert token and commitment(p, token) == digest
+                    assert authority.request("release", p) is None
+                    # Captured token and valid alternate SQL challenge cannot redirect.
+                    assert submit(p, token, wrong, wrong_challenge) is None
+                    assert submit(p, token, wrong, challenge) is None
+                    assert submit(p, token, target, challenge, proof="0"*64) is None
+                    assert submit(p, digest, target, challenge) is None
+                    owner.execute("UPDATE m40700.identity_commitments SET expiry=0 WHERE nonce=%s", (nonce,))
+                    assert submit(p, token, target, challenge) is None
+                    owner.execute("UPDATE m40700.identity_commitments SET expiry=%s WHERE nonce=%s", (p["expiry"],nonce))
+                    # Rollback must undo issuance, reservation and consumption as a unit.
+                    rolled = submit(p, token, target, challenge, rollback=True)
+                    assert rolled
+                    assert owner.execute("SELECT consumed_at FROM m40700.identity_commitments WHERE nonce=%s",
+                                         (nonce,)).fetchone()[0] is None
+                    assert not owner.execute("SELECT 1 FROM m41050.read_target_reservations WHERE ticket_digest=%s",
+                                             (hashlib.sha256(rolled.encode("ascii")).hexdigest(),)).fetchone()
+                    results = await asyncio.gather(*(asyncio.to_thread(
+                        submit, p, token, target, challenge) for _ in range(2)))
+                    assert sum(t is not None for t in results) == 1
+                    ticket = next(t for t in results if t is not None)
+                    assert submit(p, token, target, challenge) is None
+                    ticket_digest = hashlib.sha256(ticket.encode("ascii")).hexdigest()
+                    assert owner.execute(
+                        "SELECT backend_pid,virtual_xid,transaction_started_at FROM m41050.read_target_reservations WHERE ticket_digest=%s",
+                        (ticket_digest,)).fetchone() == target
+                    bad = await gateway._read_target_challenge(other, ticket, tenant_a)
+                    # Authentic alternate-target proof using the fixture's bootstrap key;
+                    # binder must deny even if the signer is compromised.
+                    epoch = datetime(1970,1,1,tzinfo=timezone.utc)
+                    delta = wrong[2]-epoch
+                    micros = (delta.days*86400+delta.seconds)*1000000+delta.microseconds
+                    payload = f"FRF-M41270|v1|{ticket_digest}|{tenant_a}|{wrong[0]}|{wrong[1]}|{micros}|{bad}"
+                    bad_proof = hmac.new(target_key,payload.encode("ascii"),hashlib.sha256).hexdigest()
+                    assert bind_read(ticket,tenant_a,*wrong,challenge=bad,proof=bad_proof) is None
+                    good = await gateway._read_target_challenge(dest,ticket,tenant_a)
+                    proof = new_signer.sign(ticket,tenant_a,*target,challenge=good)
+                    cap = bind_read(ticket,tenant_a,*target,challenge=good,proof=proof)
+                    assert cap
+                    await gateway.install_session_capability(other,cap)
+                    assert not await other.fetch("SELECT id FROM public.ledger_accounts")
+                    await gateway.install_session_capability(dest,cap)
+                    rows = await dest.fetch("SELECT tenant_id FROM public.ledger_accounts")
+                    assert rows and all(row["tenant_id"] == tenant_a for row in rows)
+                    assert not await dest.fetch("SELECT id FROM public.ledger_accounts WHERE tenant_id=$1",tenant_b)
+                    print("M41630_TARGET_COMMITMENT_CAPTURE_ROLLBACK_RACE_RLS=PASS_DISPOSABLE_ONLY")
+                finally:
+                    authority.close()
+            async with dest.transaction(readonly=True):
+                await gateway.install_session_capability(dest,cap)
+                assert not await dest.fetch("SELECT id FROM public.ledger_accounts")
+        print("M41630_TRANSACTION_END_REPLAY_DENIED=PASS")
+    finally:
+        new_signer.close()
+        owner.execute("DELETE FROM m41050.target_verifier_secret")
+    print("M41630_REAL_PROVIDER=NOT_INTEGRATED")
+    print("M41630_PRODUCTION=BLOCKED")
 
 
 def main() -> int:
