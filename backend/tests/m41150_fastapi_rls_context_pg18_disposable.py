@@ -1308,11 +1308,26 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
         target_provider = TargetFirstFixtureProvider()
         setattr(app.state, gateway.PROVIDER_STATE_ATTRIBUTE, target_provider)
         try:
+            assert len(read_paths) == 6
+            sequential_responses = []
             for path in read_paths:
                 response = await client.get(path, headers=second_headers)
+                sequential_responses.append(response)
                 assert response.status_code == 200, ("M41641_ROUTE_STATUS", response.status_code)
             assert len(target_provider.issued) == len(set(target_provider.issued)) == 6
             assert len(target_provider.bound) == 6
+
+            # Exercise the same six target-first routes concurrently. Each
+            # request must keep its own nonce, ticket reservation and SQL target.
+            concurrent_responses = await asyncio.gather(*(
+                client.get(path, headers=second_headers) for path in read_paths
+            ))
+            assert all(response.status_code == 200 for response in concurrent_responses), (
+                "M41647_CONCURRENT_ROUTE_STATUS",
+                [response.status_code for response in concurrent_responses],
+            )
+            assert len(target_provider.issued) == len(set(target_provider.issued)) == 12
+            assert len(target_provider.bound) == 12
             for request_nonce in target_provider.issued:
                 assert owner.execute(
                     "SELECT consumed_at IS NOT NULL FROM m40700.identity_commitments WHERE nonce=%s",
@@ -1322,10 +1337,11 @@ async def exercise_m41630_target_commitment(*, owner, auth_dsn, pool, fixture, g
                     "JOIN m40700.ticket_context c ON c.ticket_digest=r.ticket_digest WHERE c.request_nonce=%s",
                     (request_nonce,)).fetchone() == (1,)
             print("M41641_TARGET_FIRST_FASTAPI_SIX_READS=6_OF_6_PASS_DISPOSABLE_ONLY")
+            print("M41647_TARGET_FIRST_FASTAPI_CONCURRENT_READS=6_OF_6_PASS_DISPOSABLE_ONLY")
             target_provider.unavailable = True
             response = await client.get(read_paths[0], headers=second_headers)
             assert response.status_code == 503 and "M41641" not in response.text
-            assert len(target_provider.issued) == len(target_provider.bound) == 6
+            assert len(target_provider.issued) == len(target_provider.bound) == 12
             async with pool.acquire() as probe:
                 assert not probe.is_in_transaction()
                 assert not await probe.fetch("SELECT * FROM m41050.current_claims_v4()")

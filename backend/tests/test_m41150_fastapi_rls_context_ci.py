@@ -1144,3 +1144,20 @@ async def test_m41646_target_bound_success_uses_the_same_sql_destination_end_to_
     assert "legacy_issue_ticket" not in events
     assert connection.reset_count == 1
     assert events[-1] == "pool_release"
+
+
+
+def test_m41647_target_first_fastapi_concurrency_is_confined_to_pg18_fixture():
+    runner = RUNNER.read_text(encoding="utf-8")
+    section = runner.split(
+        "# M41641: the actual six FastAPI GET handlers use v5 through an explicit",
+        1,
+    )[1].split("\n        finally:\n            setattr(app.state", 1)[0]
+    assert "assert len(read_paths) == 6" in section
+    assert "concurrent_responses = await asyncio.gather" in section
+    assert "len(target_provider.issued) == len(set(target_provider.issued)) == 12" in section
+    assert "len(target_provider.bound) == 12" in section
+    assert "M41647_TARGET_FIRST_FASTAPI_CONCURRENT_READS=6_OF_6_PASS_DISPOSABLE_ONLY" in section
+    assert "ORIGINAL_DATABASE=NOT_ACCESSED" in runner
+    assert "MIGRATIONS=NONE" in runner
+    assert "PRODUCTION=BLOCKED" in runner
