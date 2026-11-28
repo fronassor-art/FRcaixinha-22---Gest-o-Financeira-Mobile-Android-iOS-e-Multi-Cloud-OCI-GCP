@@ -26,3 +26,18 @@ M41636 (2bedd599af2cc6b1d973c5cd09d9852d950fd022) estende CP26-0061/0062/0257 e 
 ## Continuidade M41639–M41641 — interface de destino antes da emissão
 
 M41639 (82e17159bdddc649c5b89f27d7fb012b31023582) implementa em backend/app/m41150_fastapi_rls_context.py um contrato explícito FRF-M41630-v1: sessão verificada, nonce gerado no servidor, transação read-only, identidade SQL, desafio pré-ticket separado por domínio, emissão e reserva pelo provedor, desafio do ticket, vínculo, leitura de claims e limpeza. Versão desconhecida ou método ausente retorna 503 antes do pool; recusa, erro ou desafio inválido não retorna ao protocolo legado. Compatibilidade com fixtures anteriores somente sob o guard não produtivo; o provedor padrão continua ausente. Nenhum provedor real instalado. M41640 (083456912ff43bcf9af556562d3a43ad3ed29f0d) acrescenta testes offline positivos e negativos, cancelamento e limpeza. M41641 (71e90c523201e91d8762a5a5aa1a28cb321cb04a) conecta o contrato a uma fixture v5 exclusivamente descartável, exercita seis GET, confere compromisso consumido e reserva única por nonce, indisponibilidade 503 e limpeza. CI e aceite destes novos commits ainda pendentes. CP26-0061/0062/0257 e TEC-09/12 preservados, sem promoção. Custódia, autenticação não sintética, staging e provedor real permanecem NO-GO. Nenhuma migração ou alteração de flags.
+
+## Continuidade M41643–M41644 — bloqueio M40840 com provedor injetado
+
+M41643 (582cd8c7c941) alinhou a execução geral e a compilação ao SHA exato. Após retorno M40600/M40941 do operador, o Termux confirmou HEAD=582cd8c7c941, branch/repositório fixos, árvore rastreada limpa e PLAN=VALIDATED_NO_GO. Nenhuma migração, escrita no banco ou reinício foi realizado.
+
+M41644 (8a2da69f55acb61f62a1a55153a2fe183d71bb90) acrescenta regressão em backend/tests/test_m41150_fastapi_rls_context_ci.py, vinculada a CP26-0061/0062/0257 e TEC-09/TEC-12. Sete combinações negativas verificam que, com provedor target-first injetado, modo production/desconhecido/ausente, flag real ligada ou flag obrigatória ausente, a dependência financeira responde HTTP 503 antes de chamar o provedor ou abrir o pool. A resposta permanece genérica.
+
+## Evidência M41644
+
+- Execução específica M41150: offline e PostgreSQL 18 descartável PASS, run 46142284544.
+- CI integral no SHA M41644: 155/155 workflows PASS; validação geral 7/7 PASS e compilação/verificação do APK debug assinado PASS, run 46142284425.
+- Artefato frcaixinha-ai-studio-debug, SHA-256 afc06e214556f144486f5c3ae4e3c354f2654e19d0ba4384a664d800858db063; expira em 05/12/2026.
+- Diff M41644: somente o teste acima; sem alteração de código runtime, arquivos SQL de migração ou schema. Nenhum acesso ao PostgreSQL original, escrita, migração, restart ou reload.
+
+O teste prova o guard de software sob configurações inválidas; não prova custódia independente, identidade real, staging ou homologação externa. M40570/M40730, issue #5, M40840 NO-GO e M40930 HTTP 503 permanecem abertos. Preservar matriz 330 IDs/2.310 etapas, flags reais OFF e PRODUCTION=BLOCKED. Nenhum requisito/gate é promovido por CI.
