@@ -10,7 +10,6 @@ The actual live provider, OCI, IAM and ledger proofs remain unverified.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from uuid import UUID
 import hashlib
 import json
@@ -18,7 +17,7 @@ import re
 
 import httpx
 
-from .mercado_pago_safety import ExpectedPayment, matches_approved_payment
+from .mercado_pago_safety import ExpectedPayment, matches_approved_payment, _exact_cents
 from .platform_provider_adapters import (
     PlatformMpConfig, ProviderUnavailable, fetch_authoritative_saas_payment,
 )
@@ -90,17 +89,13 @@ def _well_scoped(record: SaaSPlatformPaymentRecord, config: PlatformMpConfig) ->
 
 
 def _reversal_amount(payload: dict) -> bool:
-    """Reject positive refunds (including partial) and malformed amounts."""
-    refunded=payload.get("transaction_amount_refunded")
-    if refunded is None:
-        return False
-    if type(refunded) not in (str,int,Decimal):
-        return True
-    try:
-        value=Decimal(refunded)
-        return not value.is_finite() or value < 0 or value != 0
-    except (InvalidOperation,TypeError,ValueError):
-        return True
+    """Explicit null or nonzero/malformed refund is a hold, not proof of zero.
+
+    Missing field remains a legacy review candidate only; independent
+    settlement evidence is still mandatory.
+    """
+    return ("transaction_amount_refunded" in payload
+            and not _exact_cents(payload["transaction_amount_refunded"],0))
 
 
 def _digest_without_pii(record: SaaSPlatformPaymentRecord, payload: dict) -> str:

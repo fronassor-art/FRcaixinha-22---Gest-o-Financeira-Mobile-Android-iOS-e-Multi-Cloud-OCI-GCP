@@ -94,7 +94,9 @@ async def test_valid_provider_get_is_only_a_candidate(gates):
     ({"transaction_amount_refunded":"NaN"},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
     ({"transaction_amount_refunded":-1},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
     ({"transaction_amount_refunded":False},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
-    ({"transaction_amount_refunded":None},"READBACK_MATCH_REVIEW_ONLY"),
+    ({"transaction_amount_refunded":None},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
+    ({"transaction_amount_refunded":"0.00000000000000000000000000000001"},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
+    ({"transaction_amount_refunded":"0e10"},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
 ])
 async def test_mismatch_never_enables_license(change,expected_state,gates):
     async with httpx.AsyncClient(transport=mock_http(
@@ -216,3 +218,18 @@ def test_module_is_not_a_public_endpoint_or_financial_worker():
     assert "matches_approved_payment" in source
     assert "fetch_authoritative_saas_payment" in source
     assert "production_activation_authorized: bool = False" in source
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind",["missing","explicit_zero"])
+async def test_m41601_legacy_absent_or_explicit_zero_is_review_only(kind,gates):
+    payload=response()
+    if kind=="missing":
+        del payload["transaction_amount_refunded"]
+    async with httpx.AsyncClient(transport=mock_http(
+        lambda _:httpx.Response(200,json=payload)
+    )) as client:
+        result=await review_platform_saas_payment_get(record=intent(),config=CONFIG,client=client)
+    assert result.state=="READBACK_MATCH_REVIEW_ONLY"
+    assert not result.payment_marked_paid and not result.entitlement_created
+    assert not result.production_activation_authorized and not result.writes_performed

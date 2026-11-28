@@ -120,6 +120,8 @@ async def test_no_rls_row_never_reaches_provider(gates):
     ({"external_reference":"saas:other"},"PROVIDER_ID_COLLECTOR_REFERENCE_AMOUNT_OR_MODE_MISMATCH"),
     ({"status":"refunded"},"PROVIDER_NOT_APPROVED_OR_REVERSED"),
     ({"transaction_amount_refunded":"0.01"},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
+    ({"transaction_amount_refunded":None},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
+    ({"transaction_amount_refunded":"0e10"},"REFUND_OR_PARTIAL_REFUND_BLOCKED"),
 ])
 async def test_provider_mismatch_never_activates(patch,reason,gates):
     calls=[]
