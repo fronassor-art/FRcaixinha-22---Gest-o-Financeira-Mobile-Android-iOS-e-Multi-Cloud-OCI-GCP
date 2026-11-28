@@ -1155,9 +1155,9 @@ def test_m41647_target_first_fastapi_concurrency_is_confined_to_pg18_fixture():
     )[1].split("\n        finally:\n            setattr(app.state", 1)[0]
     assert "assert len(read_paths) == 6" in section
     assert "concurrent_responses = await asyncio.gather" in section
-    assert "len(target_provider.issued) == len(set(target_provider.issued)) == 12" in section
-    assert "len(target_provider.bound) == 12" in section
-    assert "M41647_TARGET_FIRST_FASTAPI_CONCURRENT_READS=6_OF_6_PASS_DISPOSABLE_ONLY" in section
+    assert "len(target_provider.issued) == len({entry[0] for entry in target_provider.issued}) == 18" in section
+    assert "len(target_provider.bound) == 18" in section
+    assert "M41648_CROSS_TENANT_FASTAPI_CONCURRENT_READS=12_OF_12_PASS_DISPOSABLE_ONLY" in section
     assert "ORIGINAL_DATABASE=NOT_ACCESSED" in runner
     assert "MIGRATIONS=NONE" in runner
     assert "PRODUCTION=BLOCKED" in runner
