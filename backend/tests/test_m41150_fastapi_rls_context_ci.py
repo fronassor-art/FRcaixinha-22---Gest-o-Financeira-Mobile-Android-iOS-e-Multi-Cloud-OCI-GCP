@@ -243,7 +243,9 @@ async def test_m41190_readback_compares_all_claims_and_rejects_ambiguous_results
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["route", "cancel_route", "reset", "cancel_reset"])
-async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
+@pytest.mark.parametrize("target_bound", [False, True])
+async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure, target_bound):
+    import hashlib
     import asyncio
     from contextlib import asynccontextmanager
     from datetime import datetime, timedelta, timezone
@@ -284,7 +286,11 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
 
         async def fetchval(self, sql, ticket, tenant_id):
             assert sql == "SELECT m41050.read_target_challenge($1,$2)"
-            assert ticket == "a" * 64 and tenant_id == tenant
+            assert tenant_id == tenant
+            if ticket != "a" * 64:
+                assert target_bound
+                events.append(("pre_challenge", ticket))
+                return "d" * 64
             events.append("challenge")
             return "c" * 64
 
@@ -323,7 +329,24 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
         events.append("install")
 
     class Provider:
+        capability_protocol = gateway.TARGET_BOUND_PROTOCOL if target_bound else None
+
+        async def issue_target_ticket(self, session, *, scope, request_nonce, tenant_id,
+                                      backend_pid, virtual_xid, transaction_started_at, target_challenge):
+            assert target_bound and scope == "READ_ENTRIES"
+            assert tenant_id == tenant and target_challenge == "d" * 64
+            assert (backend_pid, virtual_xid, transaction_started_at) == (123, "5/42", now)
+            expected_seed = hashlib.sha256(
+                ("FRF-M41630-SEED|v1|" + str(request_nonce)).encode("ascii")
+            ).hexdigest()
+            assert events[-1] == ("pre_challenge", expected_seed)
+            issued_nonces.append(request_nonce)
+            events[-1] = "pre_challenge"
+            events.append("target_issue")
+            return "a" * 64
+
         async def issue_ticket(self, session, *, scope, request_nonce):
+            assert not target_bound
             assert scope == "READ_ENTRIES"
             assert isinstance(request_nonce, UUID) and request_nonce.version == 4
             issued_nonces.append(request_nonce)
@@ -348,7 +371,9 @@ async def test_m41190_transaction_exit_and_pool_cleanup(monkeypatch, failure):
     )
     dependency = gateway.get_ledger_readonly_db_connection(request, session)
     await anext(dependency)
-    assert events == ["acquire", "begin", "identity", "challenge", "bind", "install", "claims"]
+    assert events == (["acquire", "begin", "identity"]
+                      + (["pre_challenge", "target_issue"] if target_bound else [])
+                      + ["challenge", "bind", "install", "claims"])
 
     if failure == "route":
         with pytest.raises(ValueError, match="route failure"):
@@ -768,4 +793,102 @@ def test_m41636_disposable_lifecycle_checks_cover_each_v5_boundary():
         "SET revoked_at=pg_catalog.clock_timestamp()"
     ) < section.index("assert bind_read(unbound_ticket")
     assert "SET revoked_at=NULL" not in section
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,expected", [
+    ("unsupported", 503), ("missing", 503), ("refused", 401),
+    ("malformed", 401), ("issuer_error", 503), ("challenge_error", 503),
+])
+async def test_m41639_target_protocol_never_downgrades(monkeypatch, mode, expected):
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from fastapi import HTTPException
+    from backend.app import m41150_fastapi_rls_context as gateway
+
+    now = datetime.now(timezone.utc)
+    tenant = uuid4()
+    session = SimpleNamespace(
+        user_id=str(uuid4()), role="TENANT_ADMIN", tenant_id=str(tenant),
+        is_master=False, verified_session_id=str(uuid4()),
+        verified_session_at=now, verified_session_expires_at=now + timedelta(minutes=1),
+        verification_source="POSTGRES_TOKEN_HASH_REFRESH",
+    )
+    events = []
+
+    class Connection:
+        @asynccontextmanager
+        async def transaction(self, *, readonly):
+            assert readonly
+            events.append("begin")
+            try:
+                yield
+            except BaseException:
+                events.append("rollback")
+                raise
+
+        async def fetchrow(self, sql):
+            return dict(backend_pid=123, virtual_xid="1/2", transaction_started_at=now)
+
+        async def fetchval(self, sql, seed, tenant_id):
+            events.append("challenge")
+            return None if mode == "challenge_error" else "c" * 64
+
+        async def execute(self, sql):
+            assert sql == "RESET ALL; DISCARD TEMP;"
+            events.append("reset")
+
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            events.append("acquire")
+            try:
+                yield Connection()
+            finally:
+                events.append("release")
+
+    async def pool():
+        return Pool()
+
+    class Provider:
+        capability_protocol = ("unsupported-version" if mode == "unsupported"
+                               else gateway.TARGET_BOUND_PROTOCOL)
+
+        async def issue_ticket(self, *args, **kwargs):
+            events.append("legacy")
+            return "a" * 64
+
+        async def issue_target_ticket(self, *args, **kwargs):
+            events.append("target")
+            if mode == "issuer_error":
+                raise RuntimeError("private issuer failure")
+            return "invalid" if mode == "malformed" else None
+
+        async def bind_ticket(self, *args, **kwargs):
+            events.append("bind")
+            return "b" * 64
+
+    provider = Provider()
+    if mode == "missing":
+        provider.issue_target_ticket = None
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    for key in ("PIX_REAL", "PAGAMENTOS_REAIS", "ATIVACAO_REAL"):
+        monkeypatch.setenv(key, "OFF")
+    monkeypatch.setattr(gateway, "get_db_pool", pool)
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(frfinance_session_capability_provider=provider)),
+        path_params={"tenant_id": str(tenant)},
+    )
+    with pytest.raises(HTTPException) as exc:
+        await anext(gateway.get_ledger_readonly_db_connection(request, session))
+    assert exc.value.status_code == expected
+    assert "private issuer failure" not in str(exc.value.detail)
+    assert "legacy" not in events and "bind" not in events
+    if mode in ("unsupported", "missing"):
+        assert events == []
+    else:
+        assert events == (["acquire", "begin", "challenge"]
+                          + ([] if mode == "challenge_error" else ["target"])
+                          + ["rollback", "reset", "release"])
 
