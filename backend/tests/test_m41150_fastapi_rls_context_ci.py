@@ -737,3 +737,35 @@ def test_m41630_disposable_target_commitment_has_atomic_reservation_boundary():
         assert marker in section
     assert "await exercise_m41630_target_commitment(" in source
     assert "backend/tests/m41150_fastapi_rls_context_pg18_disposable.py" in WORKFLOW.read_text(encoding="utf-8")
+
+def test_m41636_disposable_lifecycle_checks_cover_each_v5_boundary():
+    source = RUNNER.read_text(encoding="utf-8")
+    compile(source, str(RUNNER), "exec")
+    section = source.split("# M41636: prove lifecycle invalidation", 1)[1].split(
+        "    finally:\n        new_signer.close()", 1
+    )[0]
+    for marker in (
+        "async def fresh_commitment(connection):",
+        "def assert_unissued(request):",
+        "context_generation=context_generation+1",
+        "assert submit(*stale) is None",
+        "assert_unissued(stale[0])",
+        "unbound_ticket = submit(*issued)",
+        "active_cap = bind_read(active_ticket",
+        "await gateway.install_session_capability(dest,active_cap)",
+        "SET revoked_at=pg_catalog.clock_timestamp()",
+        "assert submit(*pending) is None",
+        "assert_unissued(pending[0])",
+        "assert bind_read(unbound_ticket",
+        "SELECT revoked_at IS NOT NULL FROM m41050.session_caps",
+        "assert not dest.is_in_transaction()",
+        "M41636_STALE_GENERATION_NO_ISSUANCE=PASS_DISPOSABLE_ONLY",
+        "M41636_REVOKED_PENDING_RESERVED_AND_ACTIVE_DENIED=PASS_DISPOSABLE_ONLY",
+        "M41636_POST_REVOCATION_POOL_CLEAN=PASS_DISPOSABLE_ONLY",
+    ):
+        assert marker in section
+    assert section.index("active_cap = bind_read(active_ticket") < section.index(
+        "SET revoked_at=pg_catalog.clock_timestamp()"
+    ) < section.index("assert bind_read(unbound_ticket")
+    assert "SET revoked_at=NULL" not in section
+
